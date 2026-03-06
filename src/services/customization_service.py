@@ -9,7 +9,7 @@ from PyQt6.QtGui import QPixmap, QColor
 from PyQt6.QtWidgets import QLabel
 from config.constants import THEMES
 from utils.path_utils import resource_path
-from ui.common.styling import get_theme_color, get_border_radius
+from ui.common.styling import qt_hex_to_display_hex, install_panel_style_handler
 from services.localization_service import tr
 
 
@@ -55,14 +55,8 @@ class CustomizationManager(QObject):
         return tr('buttons.remove_logo') if self.get_custom_logo_path() else tr('buttons.change_logo')
 
     def update_translucent_backgrounds(self, *containers):
-        bg = get_theme_color(self.app_state.local_config, 'background', '#282828')
-        rgba = f'rgba({int(bg[1:3], 16)}, {int(bg[3:5], 16)}, {int(bg[5:7], 16)}, 128)' if bg.startswith('#') else 'rgba(0,0,0,128)'
-        br = get_border_radius(self.app_state.local_config)
         for container in containers:
-            if container:
-                name = container.objectName()
-                if name:
-                    container.setStyleSheet(f'QWidget#{name} {{background-color: {rgba}; border-radius: {br}px; margin: 5px;}}')
+            install_panel_style_handler(container, self.app_state.local_config, attr_name='_translucent_background_style_filter')
 
     def start_background_music(self):
         if self._music_starting or (self._bg_music_thread and self._bg_music_thread.isRunning()):
@@ -175,9 +169,17 @@ class CustomizationManager(QObject):
 
     def load_custom_style_settings(self, color_widgets: dict, apply_theme_callback: Optional[Callable] = None):
         defaults = THEMES['default']['colors']
+        placeholder_defaults = {
+            'background': defaults.get('background') or defaults.get('main_fg', '#282828'),
+            'button': defaults.get('button', '#222222'),
+            'border': defaults.get('border', '#039d5b'),
+            'button_hover': defaults.get('button_hover', '#616b78'),
+            'text': defaults.get('text', '#e8e9eb'),
+            'secondary_text': defaults.get('secondary_text', '#6de985'),
+        }
         for key, widget in color_widgets.items():
-            widget.setText(self.app_state.local_config.get(f'custom_color_{key}', ''))
-            widget.setPlaceholderText(defaults.get(key, '#000000'))
+            widget.setText(qt_hex_to_display_hex(self.app_state.local_config.get(f'custom_color_{key}', '')))
+            widget.setPlaceholderText(qt_hex_to_display_hex(placeholder_defaults.get(key, '#000000')))
         if apply_theme_callback:
             apply_theme_callback()
 

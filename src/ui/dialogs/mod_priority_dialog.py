@@ -2,8 +2,7 @@ from typing import List, Any
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QListWidgetItem, QAbstractItemView
 from services.localization_service import tr
-from ui.common.dialog_theme import apply_dialog_theme
-from ui.common.styling import get_theme_color
+from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 
 
 class ModPriorityDialog(QDialog):
@@ -26,10 +25,10 @@ class ModPriorityDialog(QDialog):
         info_label = QLabel(tr('ui.mod_priority_info'))
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
-        instructions = QLabel(tr('ui.mod_priority_instructions'))
-        instructions.setWordWrap(True)
-        instructions.setObjectName('instructionsLabel')
-        layout.addWidget(instructions)
+        self.instructions_label = QLabel(tr('ui.mod_priority_instructions'))
+        self.instructions_label.setWordWrap(True)
+        self.instructions_label.setObjectName('instructionsLabel')
+        layout.addWidget(self.instructions_label)
         self.list_widget = QListWidget()
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
@@ -87,16 +86,4 @@ class ModPriorityDialog(QDialog):
 
     def _apply_theme(self):
         apply_dialog_theme(self, self.app_state)
-        secondary_text_color = get_theme_color(self.app_state.local_config, 'secondary_text', '#888888')
-        instructions = None
-        layout = self.layout()
-        if layout is not None:
-            for i in range(layout.count()):
-                item = layout.itemAt(i)
-                if item:
-                    widget = item.widget()
-                    if widget and isinstance(widget, QLabel) and (widget.objectName() == 'instructionsLabel'):
-                        instructions = widget
-                        break
-        if instructions:
-            instructions.setStyleSheet(f'color: {secondary_text_color}; font-size: 11px;')
+        self.instructions_label.setStyleSheet(f'color: {get_dialog_theme_values(self.app_state)["secondary_text"]}; font-size: 11px;')

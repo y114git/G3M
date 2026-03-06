@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from services.localization_service import tr
 from services.blocklist_service import BlocklistManager
-from ui.common.styling import get_theme_color, get_border_radius
+from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values
 
 
 class BlocklistDialog(QDialog):
@@ -99,13 +99,16 @@ class BlocklistDialog(QDialog):
         self.apply_theme()
 
     def apply_theme(self):
-        if hasattr(self.parent(), 'app_state') and self.parent().app_state:
-            app_state = self.parent().app_state
-            bg_color = get_theme_color(app_state.local_config, 'background', '#282828')
-            text_color = get_theme_color(app_state.local_config, 'text', '#e8e9eb')
-            hover_color = get_theme_color(app_state.local_config, 'button_hover', '#616b78')
-            br = get_border_radius(app_state.local_config)
-            self.setStyleSheet(f'\n                QDialog {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border-radius: {br}px;\n                }}\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {text_color};\n                    color: {bg_color};\n                }}\n                QLabel {{\n                    color: {text_color};\n                }}\n            ')
+        parent = self.parent()
+        if parent and hasattr(parent, 'app_state') and parent.app_state:
+            theme = get_dialog_theme_values(parent.app_state)
+            bg_color = theme['background']
+            text_color = theme['text']
+            hover_color = theme['button_hover']
+            br = theme['border_radius']
+            button_radius = theme['button_radius']
+            field_radius = theme['field_radius']
+            self.setStyleSheet(build_dialog_theme_stylesheet(parent.app_state) + f'''\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {button_radius}px;\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                }}\n                QLineEdit, QComboBox {{\n                    border-radius: {field_radius}px;\n                    padding: 3px;\n                }}\n                QListWidget {{\n                    border-radius: {br}px;\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {hover_color};\n                }}\n            ''')
 
     def load_blocklist(self):
         self.game_combo.clear()

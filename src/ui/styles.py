@@ -2,6 +2,7 @@ import os
 import re
 import tempfile
 from PyQt6.QtCore import QFile, QIODevice
+from ui.common.styling import border_radius_px
 from utils.path_utils import resource_path
 
 _ARROW_DOWN_SVG = '<?xml version="1.0" encoding="utf-8"?>\n<svg fill="{color}" width="800px" height="800px" viewBox="-6.5 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">\n<path d="M18.813 11.406l-7.906 9.906c-0.75 0.906-1.906 0.906-2.625 0l-7.906-9.906c-0.75-0.938-0.375-1.656 0.781-1.656h16.875c1.188 0 1.531 0.719 0.781 1.656z"></path>\n</svg>'
@@ -34,19 +35,13 @@ def _write_arrow_svgs(icons_dir: str, text_color: str) -> tuple[str, str]:
 def _ensure_arrow_svgs(text_color: str) -> tuple[str, str]:
     """Generate arrow SVG files with the given color. Returns (down_path, up_path)."""
     global _last_arrow_color
-    down_path = resource_path('assets/icons/arrow_down.svg')
-    up_path = resource_path('assets/icons/arrow_up.svg')
+    temp_icons_dir = os.path.join(tempfile.gettempdir(), 'deltahub_arrows')
+    down_path = os.path.join(temp_icons_dir, 'arrow_down.svg')
+    up_path = os.path.join(temp_icons_dir, 'arrow_up.svg')
     if _last_arrow_color == text_color and os.path.exists(down_path) and os.path.exists(up_path):
         return down_path.replace('\\', '/'), up_path.replace('\\', '/')
     try:
-        dp, up = _write_arrow_svgs(os.path.dirname(down_path), text_color)
-        _last_arrow_color = text_color
-        return dp.replace('\\', '/'), up.replace('\\', '/')
-    except Exception:
-        pass
-    try:
-        fallback_dir = os.path.join(tempfile.gettempdir(), 'deltahub_arrows')
-        dp, up = _write_arrow_svgs(fallback_dir, text_color)
+        dp, up = _write_arrow_svgs(temp_icons_dir, text_color)
         _last_arrow_color = text_color
         return dp.replace('\\', '/'), up.replace('\\', '/')
     except Exception:
@@ -87,6 +82,13 @@ def invalidate_stylesheet_cache():
     _stylesheet_cache.clear()
 
 
+def _parse_px_value(value: str, default: int = 0) -> int:
+    try:
+        return max(0, int(str(value).replace('px', '').strip()))
+    except (TypeError, ValueError):
+        return default
+
+
 def build_stylesheet(
     frame_bg_color: str, button_color: str, border_color: str,
     button_hover_color: str, main_text_color: str,
@@ -95,7 +97,7 @@ def build_stylesheet(
     tooltip_bg_color: str = 'rgba(40, 40, 40, 230)',
     scroll_groove_color: str = 'rgba(40, 40, 40, 40)',
     zoom_factor: float = 1.0,
-    custom_border_radius: str = '0px',
+    custom_border_radius: str = '7px',
 ) -> str:
     cache_key = (
         frame_bg_color, button_color, border_color, button_hover_color,
@@ -108,8 +110,17 @@ def build_stylesheet(
     main_template = _load_qss_template('main.qss')
     scrollbar_template = _load_qss_template('scrollbar.qss')
     arrow_down_path, arrow_up_path = _ensure_arrow_svgs(main_text_color)
-    main_stylesheet = _apply_template_replacements(main_template, {'%frame_bg_color%': frame_bg_color, '%button_color%': button_color, '%border_color%': border_color, '%button_hover_color%': button_hover_color, '%main_text_color%': main_text_color, '%font_family_main%': font_family_main, '%font_size_main%': str(font_size_main), '%font_size_small%': str(font_size_small), '%checkbox_checked_color%': checkbox_checked_color, '%tooltip_bg_color%': tooltip_bg_color, '%custom_border_radius%': custom_border_radius, '%arrow_down_path%': arrow_down_path, '%arrow_up_path%': arrow_up_path})
-    scrollbar_stylesheet = _apply_template_replacements(scrollbar_template, {'%scroll_handle_color%': scroll_handle_color, '%scroll_groove_color%': scroll_groove_color})
+    border_radius_value = _parse_px_value(custom_border_radius)
+    button_border_radius = border_radius_px(border_radius_value, height=30, border_width=2)
+    add_localization_button_radius = border_radius_px(border_radius_value, width=33, height=33, border_width=2)
+    top_refresh_button_radius = border_radius_px(border_radius_value, width=40, height=40, border_width=2)
+    field_border_radius = border_radius_px(border_radius_value, height=30, border_width=2)
+    tab_border_radius = border_radius_px(border_radius_value, height=25, border_width=2)
+    editor_border_radius = border_radius_px(border_radius_value, height=100, border_width=2)
+    checkbox_indicator_radius = border_radius_px(border_radius_value, width=18, height=18, border_width=2)
+    scrollbar_radius = border_radius_px(border_radius_value, width=16, height=16, margin=1)
+    main_stylesheet = _apply_template_replacements(main_template, {'%frame_bg_color%': frame_bg_color, '%button_color%': button_color, '%border_color%': border_color, '%button_hover_color%': button_hover_color, '%main_text_color%': main_text_color, '%font_family_main%': font_family_main, '%font_size_main%': str(font_size_main), '%font_size_small%': str(font_size_small), '%checkbox_checked_color%': checkbox_checked_color, '%tooltip_bg_color%': tooltip_bg_color, '%custom_border_radius%': custom_border_radius, '%button_border_radius%': button_border_radius, '%add_localization_button_radius%': add_localization_button_radius, '%top_refresh_button_radius%': top_refresh_button_radius, '%field_border_radius%': field_border_radius, '%tab_border_radius%': tab_border_radius, '%editor_border_radius%': editor_border_radius, '%checkbox_indicator_radius%': checkbox_indicator_radius, '%arrow_down_path%': arrow_down_path, '%arrow_up_path%': arrow_up_path})
+    scrollbar_stylesheet = _apply_template_replacements(scrollbar_template, {'%scroll_handle_color%': scroll_handle_color, '%scroll_groove_color%': scroll_groove_color, '%scrollbar_radius%': scrollbar_radius})
     combined = main_stylesheet + scrollbar_stylesheet
     if zoom_factor != 1.0:
         combined = re.sub(r'(\d+)px', lambda m: f'{max(1, int(int(m.group(1)) * zoom_factor))}px', combined)

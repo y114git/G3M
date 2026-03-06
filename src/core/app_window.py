@@ -6,15 +6,15 @@ import webbrowser
 import argparse
 from typing import Optional
 import logging
-from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl, QPoint
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl, QPoint, QObject
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
-from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog
+from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QLineEdit, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QSpinBox
 from services.localization_service import localization_service, tr
 from models.game_modes import DeltaruneGame, get_game
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, CLOUD_FUNCTIONS_BASE_URL
 from ui.utils.ui_utils import DebounceTimer, UIAnimator
 from ui.widgets.shared.custom_controls import AnimatedToolTip
-from ui.common.styling import get_theme_color, get_border_radius
+from ui.common.styling import get_theme_color, get_border_radius, display_hex_to_qt_hex, clamp_border_radius
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from utils.network_utils import get_session
 from workers.presence_worker import PresenceWorker
@@ -39,6 +39,26 @@ from services.customization_service import CustomizationManager
 from services.used_mods_service import UsedModsManager
 _translator = QTranslator()
 _lock_file = None
+
+
+def _is_pure_black_color(color: QColor) -> bool:
+    return color.isValid() and color.red() == 0 and color.green() == 0 and color.blue() == 0
+
+
+def _get_black_color_picker_seed(color: QColor) -> QColor:
+    return QColor.fromHsv(0, 0, 255, color.alpha() if color.isValid() else 255)
+
+
+class _BlackColorPickerEventFilter(QObject):
+
+    def __init__(self, dialog: QColorDialog):
+        super().__init__(dialog)
+        self._dialog = dialog
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.MouseButtonPress and _is_pure_black_color(self._dialog.currentColor()):
+            self._dialog.setCurrentColor(_get_black_color_picker_seed(self._dialog.currentColor()))
+        return False
 
 
 class AppWindow(QWidget):
@@ -145,10 +165,13 @@ class AppWindow(QWidget):
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self)
         self.search_display = SearchDisplayController(self.app_state, self.feedback_service, self.mod_service, self.mod_ops, self)
-        self.search_display.ui_button_text_update.connect(lambda w, v: self._set_widget_attr(w, 'setText', v))
-        self.search_display.ui_button_tooltip_update.connect(lambda w, v: self._set_widget_attr(w, 'setToolTip', v))
-        self.search_display.ui_button_enabled_update.connect(lambda w, v: self._set_widget_attr(w, 'setEnabled', v))
-        self.search_display.ui_widget_updates_enabled.connect(lambda w, v: self._set_widget_attr(w, 'setUpdatesEnabled', v))
+        for signal_name, method_name in (
+            ('ui_button_text_update', 'setText'),
+            ('ui_button_tooltip_update', 'setToolTip'),
+            ('ui_button_enabled_update', 'setEnabled'),
+            ('ui_widget_updates_enabled', 'setUpdatesEnabled'),
+        ):
+            getattr(self.search_display, signal_name).connect(lambda w, v, method=method_name: self._set_widget_attr(w, method, v))
         self.settings_ui = SettingsUiController(self.app_state, self.feedback_service, self.settings_service, self.used_mods_service, self.customization_service, self)
         self.theme = ThemeController(self.app_state, self.feedback_service, self.settings_service, self.customization_service, self)
         self.game_launch = GameLaunchController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self.settings_service, self.game_launcher, self.customization_service, self.plugin_service, self)
@@ -475,12 +498,6 @@ class AppWindow(QWidget):
         saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
-        self.game_type_combo.blockSignals(True)
-        for i in range(self.game_type_combo.count()):
-            if self.game_type_combo.itemData(i) == saved_game_type:
-                self.game_type_combo.setCurrentIndex(i)
-                break
-        self.game_type_combo.blockSignals(False)
         self._set_checkbox_checked_silently(self.chapter_mode_checkbox, saved_chapter_mode)
         self.game_type_combo.setEnabled(not saved_chapter_mode)
         self._set_checkbox_checked_silently(self.full_install_checkbox, saved_full_install)
@@ -525,11 +542,8 @@ class AppWindow(QWidget):
         plugin_builder = PluginTabBuilder(self.app_state, self)
         self.plugin_tab_builder = plugin_builder
         self.plugins_tab = plugin_builder.build()
-        plugin_widgets = plugin_builder.get_widgets()
-        for attr, key in (('plugins_search_button', 'search_button'), ('plugins_import_button', 'import_button'),
-                          ('plugins_container', 'plugins_container'), ('plugins_scroll', 'plugins_scroll'),
-                          ('plugins_widget', 'plugins_widget'), ('plugins_layout', 'plugins_layout')):
-            setattr(self, attr, plugin_widgets[key])
+        for attr, key in (('plugins_search_button', 'search_button'), ('plugins_import_button', 'import_button'), ('plugins_container', 'plugins_container'), ('plugins_scroll', 'plugins_scroll'), ('plugins_widget', 'plugins_widget'), ('plugins_layout', 'plugins_layout')):
+            setattr(self, attr, self.plugin_tab_builder.widgets[key])
         from controllers.plugin_display_controller import PluginDisplayController
         self.plugin_display = PluginDisplayController(self.app_state, self.feedback_service, self.plugin_service, self)
         self.plugins_search_button.clicked.connect(self.plugin_display.on_search_plugins)
@@ -567,33 +581,8 @@ class AppWindow(QWidget):
         self._section_headers = settings_widgets.get('_section_headers', [])
         self._section_lines = settings_widgets.get('_section_lines', [])
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
-
-        from PyQt6.QtCore import QTimer
-        if not hasattr(self, '_ui_scale_timer'):
-            self._ui_scale_timer = QTimer(self)
-            self._ui_scale_timer.setSingleShot(True)
-            self._ui_scale_timer.setInterval(300)
-            self._ui_scale_timer.timeout.connect(lambda: self.theme.apply_theme())
-
-        def _on_ui_scale_changed_from_ui(val):
-            self.app_state.local_config['ui_scale'] = val / 100.0
-            self.settings_service.write_local_config()
-            self._ui_scale_timer.start()
-
-        self.ui_scale_spinbox.valueChanged.connect(_on_ui_scale_changed_from_ui)
-
-        if not hasattr(self, '_border_radius_timer'):
-            self._border_radius_timer = QTimer(self)
-            self._border_radius_timer.setSingleShot(True)
-            self._border_radius_timer.setInterval(300)
-            self._border_radius_timer.timeout.connect(lambda: self.theme.apply_theme())
-
-        def _on_border_radius_changed(val):
-            self.app_state.local_config['custom_border_radius'] = val
-            self.settings_service.write_local_config()
-            self._border_radius_timer.start()
-
-        self.border_radius_spinbox.valueChanged.connect(_on_border_radius_changed)
+        self._connect_theme_setting_spinbox(self.ui_scale_spinbox, timer_attr='_ui_scale_timer', config_key='ui_scale', value_transform=lambda value: value / 100.0)
+        self._connect_theme_setting_spinbox(self.border_radius_spinbox, timer_attr='_border_radius_timer', config_key='custom_border_radius')
 
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
         self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
@@ -619,9 +608,109 @@ class AppWindow(QWidget):
 
         self.theme.init_theme_list()
 
+        def color_to_display_hex(color: QColor) -> str:
+            if color.alpha() < 255:
+                return f'#{color.red():02X}{color.green():02X}{color.blue():02X}{color.alpha():02X}'
+            return color.name().upper()
+
+        def sync_color_dialog_html_value(color_name_line_edit: QLineEdit, display_hex: str, html_edit_state: dict):
+            html_edit_state['syncing'] = True
+            html_edit_state['dirty'] = False
+            was_blocked = color_name_line_edit.blockSignals(True)
+            color_name_line_edit.setText(display_hex)
+            color_name_line_edit.setCursorPosition(len(display_hex))
+            color_name_line_edit.blockSignals(was_blocked)
+            html_edit_state['syncing'] = False
+
+        def on_color_dialog_html_text_edited(_text: str, html_edit_state: dict):
+            if not html_edit_state.get('syncing'):
+                html_edit_state['dirty'] = True
+
+        def on_color_dialog_html_edited(dialog: QColorDialog, color_name_line_edit: QLineEdit, html_edit_state: dict):
+            if html_edit_state.get('syncing') or not html_edit_state.get('dirty'):
+                return
+            html_edit_state['dirty'] = False
+            updated_color = QColor(display_hex_to_qt_hex(color_name_line_edit.text().strip()))
+            if updated_color.isValid():
+                dialog.setCurrentColor(updated_color)
+
+        def prepare_color_dialog(dialog: QColorDialog):
+            zoom_factor = self.app_state.local_config.get('ui_scale', 1.0)
+            dialog.setWindowTitle(tr('ui.select_color'))
+            dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+            dialog.setOption(QColorDialog.ColorDialogOption.ShowAlphaChannel, True)
+            dialog.ensurePolished()
+            dialog.setMinimumWidth(max(dialog.minimumWidth(), int(760 * zoom_factor)))
+            spin_boxes = dialog.findChildren(QSpinBox)
+            for spin_box in spin_boxes:
+                spin_box.setMinimumWidth(max(spin_box.minimumWidth(), int(115 * zoom_factor)))
+                if line_edit := spin_box.lineEdit():
+                    line_edit.setMinimumWidth(max(line_edit.minimumWidth(), int(72 * zoom_factor)))
+                    line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            color_name_line_edit = dialog.findChild(QLineEdit, 'qt_colorname_lineedit')
+            if color_name_line_edit:
+                color_name_line_edit.setMinimumWidth(max(color_name_line_edit.minimumWidth(), int(160 * zoom_factor)))
+                color_name_line_edit.setMaxLength(9)
+                color_name_line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            html_edit_state = {'dirty': False, 'syncing': False}
+            preview_outer_radius = max(6, int(8 * zoom_factor))
+            preview_inner_radius = max(4, preview_outer_radius - 2)
+            preview_container = QWidget(dialog)
+            preview_layout = QHBoxLayout(preview_container)
+            preview_layout.setContentsMargins(0, int(8 * zoom_factor), 0, 0)
+            preview_layout.setSpacing(int(12 * zoom_factor))
+            preview_layout.addStretch()
+            preview_frames = []
+            for background_color in ('#FFFFFF', '#000000'):
+                preview_base = QFrame(preview_container)
+                preview_base.setFixedSize(int(92 * zoom_factor), int(56 * zoom_factor))
+                preview_base.setStyleSheet(
+                    f'background-color: {background_color}; border: 1px solid #808080; '
+                    f'border-radius: {preview_outer_radius}px;'
+                )
+                preview_base_layout = QVBoxLayout(preview_base)
+                preview_base_layout.setContentsMargins(1, 1, 1, 1)
+                preview_base_layout.setSpacing(0)
+                preview_fill = QFrame(preview_base)
+                preview_base_layout.addWidget(preview_fill)
+                preview_frames.append(preview_fill)
+                preview_layout.addWidget(preview_base)
+            preview_layout.addStretch()
+
+            def sync_color_dialog_ui(color: QColor):
+                if not color.isValid():
+                    return
+                for preview_frame in preview_frames:
+                    preview_frame.setStyleSheet(
+                        f'background-color: rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()}); '
+                        f'border: none; border-radius: {preview_inner_radius}px;'
+                    )
+                if color_name_line_edit:
+                    display_hex = color_to_display_hex(color)
+                    QTimer.singleShot(0, lambda text=display_hex, line_edit=color_name_line_edit: sync_color_dialog_html_value(line_edit, text, html_edit_state))
+
+            dialog.layout().insertWidget(max(0, dialog.layout().count() - 1), preview_container)
+            color_picker_widget = next((widget for widget in dialog.findChildren(QWidget) if widget.metaObject().className().endswith('QColorPicker')), None)
+            if color_picker_widget:
+                dialog._black_color_picker_filter = _BlackColorPickerEventFilter(dialog)
+                color_picker_widget.installEventFilter(dialog._black_color_picker_filter)
+            if color_name_line_edit:
+                color_name_line_edit.textEdited.connect(lambda text: on_color_dialog_html_text_edited(text, html_edit_state))
+                color_name_line_edit.editingFinished.connect(lambda: on_color_dialog_html_edited(dialog, color_name_line_edit, html_edit_state))
+            dialog.currentColorChanged.connect(sync_color_dialog_ui)
+            sync_color_dialog_ui(dialog.currentColor())
+            dialog.adjustSize()
+
         def pick_color_for_edit(target_edit):
-            if (color := QColorDialog.getColor()).isValid():
-                target_edit.setText(color.name())
+            current_text = target_edit.text().strip()
+            initial_text = current_text or target_edit.placeholderText().strip()
+            initial_color = QColor(display_hex_to_qt_hex(initial_text)) if initial_text else QColor()
+            dialog = QColorDialog(self)
+            prepare_color_dialog(dialog)
+            if initial_color.isValid():
+                dialog.setCurrentColor(initial_color)
+            if dialog.exec() == QColorDialog.DialogCode.Accepted:
+                target_edit.setText(color_to_display_hex(dialog.currentColor()))
                 self.theme.on_custom_style_edited()
         self._color_btns = {}
         for key in self.color_config.keys():
@@ -819,6 +908,26 @@ class AppWindow(QWidget):
             setattr(self, name, widgets_dict[name])
         for name in optional:
             setattr(self, name, widgets_dict.get(name))
+
+    def _get_or_create_theme_timer(self, attr_name: str):
+        timer = getattr(self, attr_name, None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(300)
+            timer.timeout.connect(self.theme.apply_theme)
+            setattr(self, attr_name, timer)
+        return timer
+
+    def _connect_theme_setting_spinbox(self, spinbox, *, timer_attr: str, config_key: str, value_transform=None):
+        timer = self._get_or_create_theme_timer(timer_attr)
+
+        def _on_changed(value):
+            self.app_state.local_config[config_key] = value_transform(value) if value_transform else value
+            self.settings_service.write_local_config()
+            timer.start()
+
+        spinbox.valueChanged.connect(_on_changed)
 
     @staticmethod
     def _localized_value(data, ru_key, en_key, fallback_key=None):
@@ -1139,7 +1248,7 @@ class AppWindow(QWidget):
         fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
         for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons, strict=True)):
             border_style = 'dashed' if direct_launch_chapter_id == tab.tab_id else 'solid'
-            br = get_border_radius(self.app_state.local_config)
+            br = clamp_border_radius(get_border_radius(self.app_state.local_config), height=max(25, btn.sizeHint().height()))
             btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: {fs}px;\n                    border-radius: {br}px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
 
     def _apply_widget_localizations(self, localizations):

@@ -5,7 +5,7 @@ from config.constants import THEMES, UI_COLORS
 from utils.path_utils import resource_path
 from workers.background_loader_worker import BgLoader
 from ui.styles import build_stylesheet
-from ui.common.styling import get_border_radius
+from ui.common.styling import get_border_radius, rgba_from_color
 from ui.utils.ui_utils import DebounceTimer
 
 
@@ -32,9 +32,8 @@ class ThemeController:
 
         user_bg_hex = self.app_state.local_config.get('custom_color_background')
         if user_bg_hex and self.settings_service.is_valid_hex_color(user_bg_hex):
-            h = user_bg_hex.lstrip('#')
-            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-            frame_bg_color, tooltip_bg_color = f"rgba({r}, {g}, {b}, 150)", f"rgba({r}, {g}, {b}, 230)"
+            frame_bg_color = rgba_from_color(user_bg_hex, alpha=150, fallback='rgba(40, 40, 40, 150)')
+            tooltip_bg_color = rgba_from_color(user_bg_hex, alpha=230, fallback='rgba(40, 40, 40, 230)')
         else:
             frame_bg_color, tooltip_bg_color = 'rgba(40, 40, 40, 150)', 'rgba(40, 40, 40, 230)'
 
@@ -134,7 +133,7 @@ class ThemeController:
         self.customization_service.update_translucent_backgrounds(search_container, library_container, plugins_container)
 
         from ui.common.styling import build_tag_checkbox_style
-        checkbox_style = build_tag_checkbox_style(text_color, font_size=scale(14), indicator_size=scale(16), spacing=scale(5))
+        checkbox_style = build_tag_checkbox_style(text_color, font_size=scale(14), indicator_size=scale(18), spacing=scale(5))
         color_only_style = f'color: {text_color};'
 
         def _deferred_style_updates():
@@ -269,8 +268,6 @@ class ThemeController:
         from PyQt6.QtWidgets import QInputDialog
         from utils.path_utils import get_user_themes_dir
         import os
-        import json
-        import zipfile
         name, ok = QInputDialog.getText(self.app, tr('dialogs.theme_save_title'), tr('dialogs.theme_save_prompt'))
         name = "".join(x for x in (name if ok else "") if x.isalnum() or x in " _-")
         if not name:
@@ -279,21 +276,8 @@ class ThemeController:
         themes_dir = get_user_themes_dir()
         os.makedirs(themes_dir, exist_ok=True)
 
-        settings = {k: self.app_state.local_config.get(k, '') for k in ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_secondary_text')}
-        settings.update({k: self.app_state.local_config.get(k, False) for k in ('background_disabled', 'disable_splash', 'disable_animations')})
-        settings['custom_border_radius'] = get_border_radius(self.app_state.local_config)
-
         try:
-            with zipfile.ZipFile(os.path.join(themes_dir, f'{name}.zip'), 'w') as zipf:
-                zipf.writestr('theme.json', json.dumps(settings, indent=2))
-                assets = [('custom_background_path', 'background')]
-                if hasattr(self.app, 'customization_service'):
-                    cs = self.app.customization_service
-                    assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo'), (cs.get_custom_font_path(), 'custom_font')]
-                for src, dest_name in assets:
-                    path = self.app_state.local_config.get(src) if isinstance(src, str) and os.path.sep not in src and '/' not in src else src
-                    if path and os.path.isfile(path):
-                        zipf.write(path, f'{dest_name}{os.path.splitext(path)[1]}')
+            self.settings_service.write_theme_archive(os.path.join(themes_dir, f'{name}.zip'))
             self.init_theme_list()
             self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
         except Exception as e:
@@ -364,23 +348,12 @@ class ThemeController:
         self._debounce_timer.call(self.apply_theme)
 
     def update_dynamic_elements(self):
-        if hasattr(self.app, 'sort_combo') and hasattr(self.app, 'sort_order_btn'):
-            search_tab = None
-            for i in range(self.app.tab_widget.count()):
-                if self.app.tab_widget.tabText(i) == tr('ui.search_tab'):
-                    search_tab = self.app.tab_widget.widget(i)
-                    break
-            if search_tab:
-                layout = search_tab.layout()
-                if layout and layout.count() > 0:
-                    item0 = layout.itemAt(0)
-                    filters = item0.widget() if item0 is not None else None
-                    if filters and filters.objectName() == 'filters':
-                        filter_bg_color = self.app_state.local_config.get('custom_color_background') or 'rgba(40, 40, 40, 150)'
-                        filter_border_color = self.app_state.local_config.get('custom_color_border') or '#039d5b'
-                        zoom_factor = self.app_state.local_config.get('ui_scale', 1.0)
-                        def scale(x): return max(1, int(x * zoom_factor))
-                        filters.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: {scale(2)}px solid {filter_border_color}; padding: {scale(8)}px; }}')
+        from ui.builders.shared_filters_builder import apply_filters_frame_style
+        for builder_name, widget_key in (('search_tab_builder', 'filters_widget'), ('library_tab_builder', 'library_filters_widget')):
+            builder = getattr(self.app, builder_name, None)
+            filters = getattr(builder, 'widgets', {}).get(widget_key) if builder else None
+            if filters and filters.objectName() == 'filters':
+                apply_filters_frame_style(filters, self.app_state)
         mod_list = getattr(self.app, 'mod_list_widget', None)
         installed_mods = getattr(self.app, 'installed_mods_widget', None)
         self.customization_service.update_mod_cards_styles(mod_list, installed_mods)

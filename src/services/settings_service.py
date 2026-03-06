@@ -15,7 +15,7 @@ from services.localization_service import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS
 
 from utils.file_utils import get_file_filter
-from ui.common.styling import get_border_radius
+from ui.common.styling import get_border_radius, display_hex_to_qt_hex
 
 
 class SettingsManager(QObject):
@@ -25,6 +25,8 @@ class SettingsManager(QObject):
     theme_changed = pyqtSignal()
     restart_required = pyqtSignal(str)
     status_changed = pyqtSignal(str, str)
+    _THEME_COLOR_KEYS = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_secondary_text')
+    _THEME_FLAG_KEYS = ('background_disabled', 'disable_splash', 'disable_animations')
     _IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.mp4', '.webm', '.avi', '.mkv', '.mov', '.m4v', '.3gp', '.mpg', '.mpeg', '.flv', '.wmv')
     _FONT_EXTENSIONS = ('.ttf', '.otf')
     _AUDIO_EXTENSIONS = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
@@ -88,7 +90,8 @@ class SettingsManager(QObject):
             'custom_color_text': '', 'custom_color_secondary_text': '', 'beta_updates_enabled': False,
             'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False,
             'merge_properties': False, 'merge_code': False, 'hide_mods_browser_tab': False,
-            'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False
+            'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False,
+            'custom_border_radius': 7,
         }
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
@@ -312,34 +315,46 @@ class SettingsManager(QObject):
             btn.setText(cs.get_font_button_text())
 
     def is_valid_hex_color(self, s: str) -> bool:
-        return bool(re.fullmatch('#[0-9a-fA-F]{6}', s or ''))
+        return bool(re.fullmatch('#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})', s or ''))
 
     def on_custom_style_edited(self, color_widgets: dict):
         for key, widget in color_widgets.items():
-            color = widget.text()
-            self.app_state.local_config[f'custom_color_{key}'] = color if color and self.is_valid_hex_color(color) else ''
+            color = widget.text().strip()
+            self.app_state.local_config[f'custom_color_{key}'] = display_hex_to_qt_hex(color) if color and self.is_valid_hex_color(color) else ''
         self.write_local_config()
         self.theme_changed.emit()
+
+    def build_theme_export_settings(self) -> dict:
+        settings = {key: self.app_state.local_config.get(key, '') for key in self._THEME_COLOR_KEYS}
+        settings.update({key: self.app_state.local_config.get(key, False) for key in self._THEME_FLAG_KEYS})
+        settings['custom_border_radius'] = get_border_radius(self.app_state.local_config)
+        return settings
+
+    def iter_theme_export_assets(self):
+        assets = [(self.app_state.local_config.get('custom_background_path'), 'background')]
+        if self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
+            cs = self.parent_widget.customization_service
+            assets.extend([
+                (cs.get_background_music_path(), 'background_music'),
+                (cs.get_startup_sound_path(), 'startup_sound'),
+                (cs.get_custom_logo_path(), 'custom_logo'),
+                (cs.get_custom_font_path(), 'custom_font'),
+            ])
+        for path, name in assets:
+            if path and os.path.isfile(path):
+                yield path, name
+
+    def write_theme_archive(self, theme_file_path: str):
+        with zipfile.ZipFile(theme_file_path, 'w') as zipf:
+            zipf.writestr('theme.json', json.dumps(self.build_theme_export_settings(), indent=2))
+            for path, name in self.iter_theme_export_assets():
+                zipf.write(path, f'{name}{os.path.splitext(path)[1]}')
 
     def export_theme(self):
         theme_file_path, _ = QFileDialog.getSaveFileName(self.parent_widget, tr('dialogs.export_theme_title'), '', f"{tr('file_descriptions.theme_files')} (*.zip)")
         if not theme_file_path:
             return
-        _color_keys = ('custom_color_background', 'custom_color_button', 'custom_color_border', 'custom_color_button_hover', 'custom_color_text', 'custom_color_secondary_text')
-        theme_settings = {k: self.app_state.local_config.get(k, '') for k in _color_keys}
-        theme_settings.update({'background_disabled': self.app_state.local_config.get('background_disabled', False), 'disable_splash': self.app_state.local_config.get('disable_splash', False), 'disable_animations': self.app_state.local_config.get('disable_animations', False), 'custom_border_radius': get_border_radius(self.app_state.local_config)})
-        with zipfile.ZipFile(theme_file_path, 'w') as zipf:
-            zipf.writestr('theme.json', json.dumps(theme_settings, indent=2))
-            assets = [('custom_background_path', 'background')]
-            if self.parent_widget and hasattr(self.parent_widget, 'customization_service'):
-                cs = self.parent_widget.customization_service
-                assets += [(cs.get_background_music_path(), 'background_music'), (cs.get_startup_sound_path(), 'startup_sound'), (cs.get_custom_logo_path(), 'custom_logo'), (cs.get_custom_font_path(), 'custom_font')]
-            else:
-                assets.append((None, None))
-            for src, name in assets:
-                path = self.app_state.local_config.get(src) if isinstance(src, str) and os.path.sep not in src and '/' not in src else src
-                if path and os.path.exists(path):
-                    zipf.write(path, f'{name}{os.path.splitext(path)[1]}')
+        self.write_theme_archive(theme_file_path)
         self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.theme_exported_success'))
 
     def import_theme(self):

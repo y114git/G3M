@@ -89,12 +89,12 @@ class SearchGameBananaModsThread(QThread):
                     if mod_id:
                         mod_id_str = str(mod_id)
                         downloads_from_gb = record.get('_nDownloadCount')
-                        downloads_value = 0
+                        downloads_value = None
                         if downloads_from_gb is not None:
                             try:
-                                downloads_value = int(downloads_from_gb)
+                                downloads_value = max(int(downloads_from_gb), 0)
                             except (ValueError, TypeError):
-                                downloads_value = 0
+                                downloads_value = None
                         mod_info.downloads = downloads_value
                         if self.metadata_cache:
                             cache_valid = self.metadata_cache.is_valid(mod_id_str)
@@ -102,9 +102,12 @@ class SearchGameBananaModsThread(QThread):
                                 cached_downloads = self.metadata_cache.get_field(mod_id_str, 'downloads')
                                 cached_tagline = self.metadata_cache.get_field(mod_id_str, 'tagline')
                                 cached_category = self.metadata_cache.get_field(mod_id_str, 'category')
-                                if cached_downloads is not None and cached_downloads > 0:
-                                    mod_info.downloads = cached_downloads
-                                elif downloads_value > 0:
+                                if cached_downloads is not None:
+                                    try:
+                                        mod_info.downloads = max(int(cached_downloads), 0)
+                                    except (TypeError, ValueError):
+                                        mod_info.downloads = None
+                                elif downloads_value is not None:
                                     mod_info.downloads = downloads_value
                                 if cached_tagline:
                                     mod_info.tagline = cached_tagline

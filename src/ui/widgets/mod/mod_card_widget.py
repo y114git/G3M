@@ -156,15 +156,15 @@ class ModCardWidget(BaseModWidget):
     def _get_downloads_text(self):
         try:
             key = get_mod_key(self.mod_data)
-            downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
+            downloads_value = getattr(self.mod_data, 'downloads', None)
             if key and key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
                     return tr('ui.loading_placeholder')
-            return f'⤓ {downloads_value}'
+            return f'⤓ {downloads_value if downloads_value is not None else "N/A"}'
         except Exception:
-            downloads_value = getattr(self.mod_data, 'downloads', 0) or 0
-            return f'⤓ {downloads_value}'
+            downloads_value = getattr(self.mod_data, 'downloads', None)
+            return f'⤓ {downloads_value if downloads_value is not None else "N/A"}'
 
     def _init_ui(self):
         super()._init_ui()

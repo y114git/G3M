@@ -36,6 +36,7 @@ class TestModInfo:
         assert mod.key == ''
         assert mod.game == 'deltarune'
         assert mod.is_verified is False
+        assert mod.downloads is None
 
     def test_from_dict_with_files(self):
         data = {

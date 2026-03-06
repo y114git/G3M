@@ -209,7 +209,7 @@
     "sort_by_date": "By date",
     "hide_library_filters": "Hide filters in library",
     "chapter_title": "Chapter {chapter_num}",
-    "search_placeholder": "Search by name and description",
+    "search_placeholder": "Search by name, description etc.",
     "secret_key_label": "Mod secret key:",
     "deltarune": "DELTARUNE",
     "deltarunedemo": "DELTARUNE DEMO",
@@ -286,7 +286,7 @@
     "universal_slot": "All Chapters",
     "mod_name_colon": "Mod name:",
     "file_replacement_label": "File Replacement",
-    "search_mods_placeholder": "Search by name and description",
+    "search_mods_placeholder": "Search by name, description etc.",
     "no_mods_to_insert": "No mods available.",
     "launcher_customization": "Customization",
     "install_button": "Install",
@@ -428,7 +428,8 @@
     "shortcut": "Shortcut",
     "import_export_themes": "Im/Export Theme",
     "save_theme": "Save Theme",
-    "delete_theme": "Delete Theme"
+    "delete_theme": "Delete Theme",
+    "open_browser": "Open Browser"
   },
   "tooltips": {
     "custom_exe": "You can select your own executable file instead of the default (e.g., DELTARUNE.exe). Useful if it's in a different location or you want to run a custom launch file.",
@@ -451,7 +452,7 @@
     "hide_library_filters": "Hide filtering options in the library tab to save space.",
     "change_mods_dir": "You can choose where the folder with mod files will be located.",
     "local_mod": "Local mod",
-    "search": "Search by name and description",
+    "search": "Search by name, description etc.",
     "clear_cache_button": "Delete the GameBanana metadata cache to force refresh information",
     "merge_properties": "Combines settings (like JSON files) so that changes from different mods are preserved, preventing lost configurations.",
     "merge_code": "Logically merges game logic code, enabling multiple mods to change the same behaviors without overwriting each other.",
@@ -964,7 +965,12 @@
     "patch_create_failed_details": "Patch creation failed, error:\\n{error}",
     "select_save_collection_body": "Select save collection to use:",
     "select_save_collection_title": "Select Save Collection",
-    "xdelta_unavailable": "xdelta executable not found. Cannot patch."
+    "xdelta_unavailable": "xdelta executable not found. Cannot patch.",
+    "copy_font_failed": "Failed to copy font.",
+    "gamebanana_install_failed": "Failed to install mod from GameBanana: {error}",
+    "mod_uninstall_failed": "Failed to uninstall mod: {error}",
+    "cannot_delete_builtin_theme": "Cannot delete a built-in theme.",
+    "uninstall_failed": "Failed to uninstall mod"
   },
   "status": {
     "vanilla": "Vanilla",
@@ -1087,7 +1093,8 @@
     "update_cancelled": "Update cancelled by user.",
     "local": "Local",
     "downloading_unrar": "Downloading UnRAR utility...",
-    "unpacking_mod": "Unpacking mod: {mod_name}..."
+    "unpacking_mod": "Unpacking mod: {mod_name}...",
+    "game_stopped": "Game stopped"
   },
   "startup": {
     "steam_deck_setup_error": "Error setting up Steam Deck compatibility: {error}",
@@ -1154,7 +1161,8 @@
     "copy_error": "Error copying archive: {error}",
     "installation_error": "Installation error: {error}",
     "open_page_error": "Failed to open plugins page",
-    "no_plugins_installed": "No plugins installed"
+    "no_plugins_installed": "No plugins installed",
+    "installing_plugin": "Installing plugin..."
   },
   "mods": {
     "import_mods": "Import Mods",

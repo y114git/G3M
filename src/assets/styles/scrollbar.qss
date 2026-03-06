@@ -2,21 +2,51 @@
 QScrollBar:vertical {
     border: none;
     background: %scroll_groove_color%;
-    width: 14px;
+    width: 16px;
     margin: 0;
+    border-radius: %scrollbar_radius%;
 }
 QScrollBar::handle:vertical {
     background-color: %scroll_handle_color%;
     min-height: 25px;
+    border: none;
+    border-radius: %scrollbar_radius%;
+    margin: 1px;
 }
 QScrollBar:horizontal {
     border: none;
     background: %scroll_groove_color%;
-    height: 14px;
+    height: 16px;
     margin: 0;
+    border-radius: %scrollbar_radius%;
 }
 QScrollBar::handle:horizontal {
     background-color: %scroll_handle_color%;
     min-width: 25px;
+    border: none;
+    border-radius: %scrollbar_radius%;
+    margin: 1px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    border: none;
+    background: transparent;
+    width: 0px;
+    height: 0px;
+}
+
+QScrollBar::up-arrow:vertical,
+QScrollBar::down-arrow:vertical,
+QScrollBar::left-arrow:horizontal,
+QScrollBar::right-arrow:horizontal,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
+    border: none;
 }
 

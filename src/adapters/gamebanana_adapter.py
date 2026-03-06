@@ -129,10 +129,11 @@ class GameBananaAPI:
                                 continue
                         mod_info = self._map_mod_data(record, game_name, is_wip=is_wip)
                         if mod_info:
+                            raw_downloads = record.get('_nDownloadCount')
                             try:
-                                mod_info.downloads = int(record.get('_nDownloadCount', 0) or 0)
+                                mod_info.downloads = None if raw_downloads is None else max(int(raw_downloads), 0)
                             except (ValueError, TypeError):
-                                mod_info.downloads = 0
+                                mod_info.downloads = None
                             downloads_value = mod_info.downloads
                             cache_valid = False
                             cached_category = None
@@ -142,20 +143,20 @@ class GameBananaAPI:
                                     cached_downloads = metadata_cache.get_field(mod_id_str, 'downloads')
                                     cached_tagline = metadata_cache.get_field(mod_id_str, 'tagline')
                                     cached_category = metadata_cache.get_field(mod_id_str, 'category')
-                                    if cached_downloads is not None and cached_downloads > 0:
+                                    if cached_downloads is not None:
                                         mod_info.downloads = cached_downloads
-                                    elif downloads_value > 0:
+                                    elif downloads_value is not None:
                                         mod_info.downloads = downloads_value
                                     if cached_tagline:
                                         mod_info.tagline = cached_tagline
                                     if cached_category:
                                         mod_info.gamebanana_category = cached_category
                             try:
-                                current_downloads = int(mod_info.downloads or 0)
+                                current_downloads = None if mod_info.downloads is None else max(int(mod_info.downloads), 0)
                             except (ValueError, TypeError):
-                                current_downloads = 0
+                                current_downloads = None
                             mod_info.downloads = current_downloads
-                            needs_meta = ((not current_downloads) or (not mod_info.tagline or mod_info.tagline == 'No description' or len(mod_info.tagline) < 10) or (not mod_info.gamebanana_category)) and not cache_valid
+                            needs_meta = ((current_downloads is None) or (not mod_info.tagline or mod_info.tagline == 'No description' or len(mod_info.tagline) < 10) or (not mod_info.gamebanana_category)) and not cache_valid
                             if needs_meta:
                                 mods_needing_metadata.append(mod_id_str)
                             mod_info.has_full_metadata = not needs_meta
@@ -488,10 +489,11 @@ class GameBananaAPI:
         submitter = gb_data.get('_aSubmitter', {})
         desc = (gb_data.get('_sDescription', '') or '').strip()
         tagline = desc[:200] if desc and len(desc) >= 10 else 'No description'
+        raw_downloads = gb_data.get('_nDownloadCount')
         try:
-            downloads = int(gb_data.get('_nDownloadCount', 0) or 0)
+            downloads = None if raw_downloads is None else max(int(raw_downloads), 0)
         except (ValueError, TypeError):
-            downloads = 0
+            downloads = None
         gbc = gb_data.get('_aCategory') or gb_data.get('Category')
         category = None
         if gbc:

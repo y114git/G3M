@@ -4,7 +4,11 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import Qt, QTimer
 from services.localization_service import tr
 from services.chat_service import ChatManager
-from ui.common.styling import get_theme_color, get_border_radius
+from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values
+from ui.common.styling import clamp_border_radius
+
+
+_MESSAGE_BG_COLOR = 'rgba(255, 255, 255, 0.1)'
 
 
 class ChatWindow(QDialog):
@@ -128,11 +132,14 @@ class ChatWindow(QDialog):
     def _sync_channel_buttons(self):
         if not self.current_channel:
             return
+        self._set_channel_buttons(self.current_channel)
+
+    def _set_channel_buttons(self, channel: str):
         self._updating_channel_buttons = True
         try:
             for ch, btn in self.channel_buttons.items():
                 btn.blockSignals(True)
-                btn.setChecked(ch == self.current_channel)
+                btn.setChecked(ch == channel)
                 btn.blockSignals(False)
         finally:
             self._updating_channel_buttons = False
@@ -146,14 +153,7 @@ class ChatWindow(QDialog):
         if self._loading_messages:
             return
         self.update_timer.stop()
-        self._updating_channel_buttons = True
-        try:
-            for ch, btn in self.channel_buttons.items():
-                btn.blockSignals(True)
-                btn.setChecked(ch == channel)
-                btn.blockSignals(False)
-        finally:
-            self._updating_channel_buttons = False
+        self._set_channel_buttons(channel)
         self._clear_messages_display()
         self.messages = []
         self._last_message_ids = set()
@@ -262,17 +262,27 @@ class ChatWindow(QDialog):
             self._refreshing_messages = False
 
     def _clear_messages_display(self):
-        for widget in list(self._message_widgets.values()):
-            if widget and widget != self.select_channel_label:
-                self.messages_layout.removeWidget(widget)
-                widget.deleteLater()
+        for widget in self._iter_message_widgets():
+            self.messages_layout.removeWidget(widget)
+            widget.deleteLater()
         self._message_widgets.clear()
+
+    def _iter_message_widgets(self):
+        for widget in self._message_widgets.values():
+            if widget and widget != self.select_channel_label:
+                yield widget
+
+    @staticmethod
+    def _style_message_widget(msg_widget, border_radius: int, text_color: str):
+        msg_radius = clamp_border_radius(border_radius, height=max(1, msg_widget.sizeHint().height()))
+        msg_widget.setStyleSheet(f'padding: 5px; background-color: {_MESSAGE_BG_COLOR}; border-radius: {msg_radius}px; color: {text_color};')
 
     def _update_messages_display(self):
         self._clear_messages_display()
         self._update_messages_display_incremental(set())
 
     def _update_messages_display_incremental(self, new_message_ids: set):
+        theme = get_dialog_theme_values(self.app_state)
         widgets_to_remove = []
         for msg_id in list(self._message_widgets):
             if msg_id not in new_message_ids:
@@ -292,10 +302,7 @@ class ChatWindow(QDialog):
                 msg_widget = QLabel(f"{msg['timestamp']}: {msg['message']}")
                 msg_widget.setWordWrap(True)
                 msg_widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
-                message_bg_color = 'rgba(255, 255, 255, 0.1)'
-                br = get_border_radius(self.app_state.local_config)
-                msg_widget.setStyleSheet(f'padding: 5px; background-color: {message_bg_color}; border-radius: {br}px; color: {text_color};')
+                self._style_message_widget(msg_widget, theme['border_radius'], theme['text'])
                 self.messages_layout.addWidget(msg_widget)
                 self._message_widgets[msg_id] = msg_widget
                 added_count += 1
@@ -469,22 +476,14 @@ class ChatWindow(QDialog):
                 self.send_button.setEnabled(True)
 
     def _apply_theme(self):
-        bg_color = get_theme_color(self.app_state.local_config, 'background', '#282828')
-        border_color = get_theme_color(self.app_state.local_config, 'border', '#039d5b')
-        button_color = get_theme_color(self.app_state.local_config, 'button', '#222222')
-        hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#616b78')
-        text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
-        secondary_text_color = get_theme_color(self.app_state.local_config, 'secondary_text', '#6de985')
-        message_bg_color = 'rgba(255, 255, 255, 0.1)'
-        self.setStyleSheet(f'\n            QDialog {{\n                background-color: {bg_color};\n                color: {text_color};\n            }}\n            QPushButton {{\n                background-color: {button_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px 15px;\n                font-weight: bold;\n            }}\n            QPushButton:hover {{\n                background-color: {hover_color};\n            }}\n            QPushButton:checked {{\n                background-color: {hover_color};\n                border: 2px solid {hover_color};\n            }}\n            QPushButton:disabled {{\n                background-color: #555;\n                color: #999;\n            }}\n            QLineEdit {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n                color: {text_color};\n                padding: 8px;\n                font-size: 13px;\n            }}\n            QLineEdit:focus {{\n                border: 2px solid {hover_color};\n            }}\n            QSpinBox {{\n                background-color: {bg_color};\n                border: 1px solid {border_color};\n                color: {secondary_text_color};\n                padding: 2px;\n                font-size: 12px;\n                min-width: 60px;\n                max-width: 80px;\n            }}\n            QSpinBox:focus {{\n                border: 1px solid {hover_color};\n            }}\n            QScrollArea {{\n                background-color: {bg_color};\n                border: 2px solid {border_color};\n            }}\n            QLabel {{\n                color: {text_color};\n            }}\n        ')
-        self.select_channel_label.setStyleSheet(f'color: {secondary_text_color}; font-size: 16px; padding: 50px;')
+        theme = get_dialog_theme_values(self.app_state)
+        self.setStyleSheet(build_dialog_theme_stylesheet(self.app_state) + f'''\n            QPushButton:checked {{\n                background-color: {theme['button_hover']};\n                border: 2px solid {theme['button_hover']};\n            }}\n            QPushButton:disabled {{\n                background-color: #555;\n                color: #999;\n            }}\n            QSpinBox {{\n                background-color: {theme['background']};\n                border: 1px solid {theme['border']};\n                color: {theme['secondary_text']};\n                padding: 2px;\n                font-size: 12px;\n                min-width: 60px;\n                max-width: 80px;\n            }}\n            QSpinBox:focus {{\n                border: 1px solid {theme['button_hover']};\n            }}\n            QScrollArea {{\n                background-color: {theme['background']};\n                border: 2px solid {theme['border']};\n            }}\n        ''')
+        self.select_channel_label.setStyleSheet(f'color: {theme["secondary_text"]}; font-size: 16px; padding: 50px;')
         self.cooldown_label.setStyleSheet('color: orange; font-size: 11px;')
-        self.status_label.setStyleSheet(f'color: {secondary_text_color}; font-size: 10px;')
-        self.limit_label.setStyleSheet(f'color: {secondary_text_color}; font-size: 12px;')
-        br = get_border_radius(self.app_state.local_config)
-        for msg_widget in self._message_widgets.values():
-            if msg_widget and msg_widget != self.select_channel_label:
-                msg_widget.setStyleSheet(f'padding: 5px; background-color: {message_bg_color}; border-radius: {br}px; color: {text_color};')
+        self.status_label.setStyleSheet(f'color: {theme["secondary_text"]}; font-size: 10px;')
+        self.limit_label.setStyleSheet(f'color: {theme["secondary_text"]}; font-size: 12px;')
+        for msg_widget in self._iter_message_widgets():
+            self._style_message_widget(msg_widget, theme['border_radius'], theme['text'])
 
     def closeEvent(self, event):
         self._closed = True

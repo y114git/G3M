@@ -4,10 +4,11 @@ Transforms web HTML (with remote images, CSS classes, font tags, etc.) into
 Qt-compatible rich text. Downloads images asynchronously and injects them as
 document resources so they render inline (including animated GIFs).
 """
+from collections import OrderedDict
 import re
 import logging
-from PyQt6.QtCore import QUrl, QRunnable, QThreadPool, QObject, pyqtSignal
-from PyQt6.QtGui import QImage, QTextDocument
+from PyQt6.QtCore import QUrl, QRunnable, QThreadPool, QObject, pyqtSignal, Qt
+from PyQt6.QtGui import QImage, QTextDocument, QColor, QPainter
 from PyQt6.QtWidgets import QTextBrowser
 from utils.network_utils import get_session
 
@@ -35,6 +36,65 @@ _FONT_COLOR_RE = re.compile(
 
 def _parse_attrs(attr_str: str) -> dict:
     return dict(_ATTR_RE.findall(attr_str))
+
+
+def _positive_int(value) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def _style_dimension(style: str, name: str) -> str:
+    if not style:
+        return ''
+    match = re.search(rf'{name}\s*:\s*([0-9.]+%?)', style, re.IGNORECASE)
+    return match.group(1) if match else ''
+
+
+def _image_requests(html: str, widget_width: int) -> list[dict]:
+    requests = []
+    for match in _IMG_RE.finditer(html):
+        attrs = _parse_attrs(match.group(1))
+        src = attrs.get('src', '').strip()
+        if not src.startswith(('http://', 'https://')):
+            continue
+        width = _positive_int(attrs.get('width')) or widget_width
+        height = _positive_int(attrs.get('height'))
+        requests.append({'src': src, 'width': max(1, min(widget_width, width)), 'height': height})
+    return requests
+
+
+def _create_loading_placeholder(width: int, height: int, text: str) -> QImage:
+    placeholder_width = max(120, min(int(width) if width else 320, 960))
+    placeholder_height = max(80, min(int(height) if height else max(120, placeholder_width // 3), 540))
+    image = QImage(placeholder_width, placeholder_height, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.fillRect(image.rect(), QColor(34, 34, 34, 235))
+    painter.setPen(QColor(3, 157, 91, 220))
+    painter.drawRoundedRect(1, 1, placeholder_width - 2, placeholder_height - 2, 12, 12)
+    painter.setPen(QColor(232, 233, 235))
+    painter.drawText(image.rect().adjusted(12, 12, -12, -12), Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap, text)
+    painter.end()
+    return image
+
+
+def _refresh_browser_document(browser: QTextBrowser, doc: QTextDocument):
+    try:
+        from PyQt6 import sip as _sip
+        if _sip.isdeleted(browser):
+            return
+    except (RuntimeError, AttributeError):
+        return
+    try:
+        cursor = browser.textCursor()
+        browser.setDocument(doc)
+        browser.setTextCursor(cursor)
+    except (RuntimeError, AttributeError):
+        pass
 
 
 def _resolve_classes(html: str) -> str:
@@ -77,8 +137,9 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
     src = attrs.get('src', '')
     if not src:
         return ''
-    width_attr = attrs.get('width', '')
-    height_attr = attrs.get('height', '')
+    style_attr = attrs.get('style', '')
+    width_attr = attrs.get('width', '') or _style_dimension(style_attr, 'width')
+    height_attr = attrs.get('height', '') or _style_dimension(style_attr, 'height')
     w = h = 0
     if width_attr:
         if width_attr.endswith('%'):
@@ -100,6 +161,13 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
                 h = int(height_attr)
             except ValueError:
                 pass
+    if w and w > widget_width:
+        if h:
+            try:
+                h = max(1, int(h * widget_width / w))
+            except (TypeError, ValueError):
+                h = 0
+        w = widget_width
     size_attrs = ''
     if w:
         size_attrs += f' width="{w}"'
@@ -150,7 +218,18 @@ class _ImageFetchRunnable(QRunnable):
             logging.debug(f'RichHTML: Failed to load image {self.url}: {e}')
 
 
-def load_remote_images(browser: QTextBrowser, html: str):
+MAX_IMAGE_CACHE_SIZE = 128
+_IMAGE_CACHE = OrderedDict()
+
+
+def _cache_image(url: str, img: QImage):
+    _IMAGE_CACHE.pop(url, None)
+    _IMAGE_CACHE[url] = img
+    if len(_IMAGE_CACHE) > MAX_IMAGE_CACHE_SIZE:
+        _IMAGE_CACHE.popitem(last=False)
+
+
+def load_remote_images(browser: QTextBrowser, html: str, widget_width: int | None = None):
     """Find all <img src="http..."> in *html*, download them in background threads,
     and register each as a QTextDocument ImageResource so Qt renders them.
 
@@ -163,15 +242,37 @@ def load_remote_images(browser: QTextBrowser, html: str):
     if doc is None:
         return
 
-    urls = list(dict.fromkeys(
-        m.group(1) for m in re.finditer(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
-        if m.group(1).startswith(('http://', 'https://'))
-    ))
-    if not urls:
+    max_width = max(200, int(widget_width or (browser.viewport().width() if browser.viewport() else 600)))
+    image_requests = _image_requests(html, max_width)
+    if not image_requests:
         return
+
+    requests_by_url = {}
+    for request in image_requests:
+        current = requests_by_url.get(request['src'])
+        if current is None:
+            requests_by_url[request['src']] = request
+            continue
+        current['width'] = max(current.get('width', 0), request.get('width', 0))
+        current['height'] = max(current.get('height', 0), request.get('height', 0))
 
     signals = _ImageSignals(browser)
     pool = QThreadPool.globalInstance()
+
+    def _apply_image_resource(url: str, image: QImage):
+        request = requests_by_url.get(url, {})
+        target_width = max(1, int(request.get('width') or max_width))
+        display_image = image
+        if display_image.width() > target_width:
+            display_image = display_image.scaledToWidth(target_width, Qt.TransformationMode.SmoothTransformation)
+        doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), display_image)
+        _refresh_browser_document(browser, doc)
+
+    for url, request in requests_by_url.items():
+        placeholder_text = 'Loading GIF preview...' if url.lower().split('?', 1)[0].endswith('.gif') else 'Loading image...'
+        placeholder = _create_loading_placeholder(request.get('width', max_width), request.get('height', 0), placeholder_text)
+        doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), placeholder)
+    _refresh_browser_document(browser, doc)
 
     def _on_loaded(url: str, data: bytes):
         try:
@@ -185,20 +286,17 @@ def load_remote_images(browser: QTextBrowser, html: str):
         if not img.loadFromData(data):
             return
 
-        doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), img)
-
-        try:
-            from PyQt6 import sip as _sip
-            if not _sip.isdeleted(browser):
-                cursor = browser.textCursor()
-                browser.setDocument(doc)
-                browser.setTextCursor(cursor)
-        except (RuntimeError, AttributeError):
-            pass
+        _cache_image(url, img)
+        _apply_image_resource(url, img)
 
     signals.loaded.connect(_on_loaded)
 
-    for url in urls:
+    for url in requests_by_url:
+        cached = _IMAGE_CACHE.get(url)
+        if isinstance(cached, QImage) and not cached.isNull():
+            _IMAGE_CACHE.move_to_end(url)
+            _apply_image_resource(url, cached)
+            continue
         runnable = _ImageFetchRunnable(url, signals)
         pool.start(runnable)
 
@@ -211,8 +309,17 @@ def set_rich_html(browser: QTextBrowser, html: str, default_color: str = '#e8e9e
         html: Raw HTML string (may contain remote images, CSS classes, font tags).
         default_color: Default text color for the wrapper div.
     """
-    widget_width = max(browser.viewport().width() - 30, 200) if browser.viewport() else 600
+    viewport_width = browser.viewport().width() if browser.viewport() else browser.width()
+    try:
+        document_margin = int(browser.document().documentMargin())
+    except (AttributeError, TypeError, ValueError):
+        document_margin = 0
+    try:
+        scrollbar_width = browser.verticalScrollBar().sizeHint().width()
+    except (AttributeError, RuntimeError, TypeError):
+        scrollbar_width = 16
+    widget_width = max((viewport_width or browser.width() or 600) - (document_margin * 2) - scrollbar_width - 24, 200)
     processed = preprocess_html(html, widget_width=widget_width)
     wrapped = f'<div style="color:{default_color};">{processed}</div>'
     browser.setHtml(wrapped)
-    load_remote_images(browser, processed)
+    load_remote_images(browser, processed, widget_width=widget_width)

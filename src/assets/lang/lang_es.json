@@ -303,7 +303,7 @@
     "universal_slot": "Todos los capítulos",
     "mod_name_colon": "Nombre del mod:",
     "file_replacement_label": "Reemplazo de archivos",
-    "search_mods_placeholder": "Buscar por nombre y descripción",
+    "search_mods_placeholder": "Buscar por nombre, descripción, autor, fecha, etiqueta o categoría",
     "no_mods_to_insert": "No hay mods disponibles.",
     "launcher_customization": "Personalización",
     "install_button": "Instalar",
@@ -428,7 +428,8 @@
     "shortcut": "Acceso directo",
     "import_export_themes": "Im/Exportar Tema",
     "delete_theme": "Eliminar Tema",
-    "save_theme": "Guardar Tema"
+    "save_theme": "Guardar Tema",
+    "open_browser": "Abrir navegador"
   },
   "tooltips": {
     "custom_exe": "Puedes seleccionar tu propio archivo ejecutable en lugar del predeterminado (por ejemplo, DELTARUNE.exe). Útil si está en una ubicación diferente o quieres ejecutar un archivo de inicio personalizado.",
@@ -451,7 +452,7 @@
     "hide_library_filters": "Ocultar opciones de filtrado en la pestaña de biblioteca para ahorrar espacio.",
     "change_mods_dir": "Puedes elegir dónde se ubicará la carpeta con archivos de mods.",
     "local_mod": "Mod local",
-    "search": "Buscar por nombre y descripción",
+    "search": "Buscar por nombre, descripción, autor, fecha, etiqueta o categoría",
     "clear_cache_button": "Eliminar el caché de metadatos de GameBanana para forzar la actualización de información",
     "merge_properties": "Combina configuraciones (como JSON) conservando los cambios de los mods para no perder ajustes funcionales.",
     "merge_code": "Combina inteligentemente el código del juego, permitiendo que varios mods funcionen juntos sin sobrescribir la lógica.",
@@ -467,6 +468,10 @@
     "filter_deltarune": "DELTARUNE"
   },
   "dialogs": {
+    "info": "Información",
+    "warning": "Advertencia",
+    "success": "Éxito",
+    "restart_required": "Reinicio Requerido",
     "gamebanana_picker_title": "Selecciona archivo para «{mod_name}»",
     "gamebanana_picker_hint": "Elige qué archivo compatible descargar desde GameBanana. Algunos archivos están pensados para versiones o plataformas distintas.",
     "gamebanana_picker_open_page": "Abrir página del mod",
@@ -960,7 +965,12 @@
     "patch_create_failed_details": "Error al crear parche, error:\\n{error}",
     "select_save_collection_body": "Seleccionar colección de guardados para usar:",
     "select_save_collection_title": "Seleccionar colección de guardados",
-    "xdelta_unavailable": "Ejecutable xdelta no encontrado. No se puede parchear."
+    "xdelta_unavailable": "Ejecutable xdelta no encontrado. No se puede parchear.",
+    "copy_font_failed": "No se pudo copiar la fuente.",
+    "gamebanana_install_failed": "Error al instalar el mod desde GameBanana: {error}",
+    "mod_uninstall_failed": "Error al desinstalar mod: {error}",
+    "cannot_delete_builtin_theme": "No se puede eliminar un tema integrado.",
+    "uninstall_failed": "Error al desinstalar mod"
   },
   "status": {
     "vanilla": "Vanilla",
@@ -1083,7 +1093,8 @@
     "local": "Local",
     "deltamod_archive_detected_url": "Archivo DELTAMOD detectado desde URL.",
     "deltamod_archive_detected": "Archivo DELTAMOD detectado.",
-    "unpacking_mod": "Descomprimiendo mod: {mod_name}..."
+    "unpacking_mod": "Descomprimiendo mod: {mod_name}...",
+    "game_stopped": "Juego detenido"
   },
   "startup": {
     "steam_deck_setup_error": "Error al configurar compatibilidad de Steam Deck: {error}",
@@ -1150,7 +1161,8 @@
     "copy_error": "Error al copiar archivo: {error}",
     "installation_error": "Error de instalación: {error}",
     "open_page_error": "Error al abrir página de complementos",
-    "no_plugins_installed": "No hay complementos instalados"
+    "no_plugins_installed": "No hay complementos instalados",
+    "installing_plugin": "Instalando complemento..."
   },
   "mods": {
     "import_mods": "Importar Mods",

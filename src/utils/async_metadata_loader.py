@@ -33,10 +33,17 @@ class AsyncMetadataLoader:
         self.max_concurrent = max_concurrent
         self.batch_size = batch_size
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._shutdown = False
+
+    def shutdown(self):
+        self._shutdown = True
+
+    def _is_shutdown_error(self, error: BaseException) -> bool:
+        return isinstance(error, RuntimeError) and 'cannot schedule new futures after shutdown' in str(error).lower()
 
     async def load_mods_metadata_async(self, mod_ids: List[str], metadata_cache: Optional[GameBananaMetadataCache] = None, app_state=None) -> List[Tuple[str, Any]]:
         """Load metadata for multiple mods asynchronously."""
-        if not mod_ids:
+        if not mod_ids or self._shutdown:
             return []
 
         start_time = time.time()
@@ -63,10 +70,14 @@ class AsyncMetadataLoader:
         logger.info(f'AsyncMetadataLoader: Loading {len(uncached_mods)} uncached mods (max_concurrent={self.max_concurrent})')
 
         for i in range(0, len(uncached_mods), self.batch_size):
+            if self._shutdown:
+                break
             batch = uncached_mods[i:i + self.batch_size]
             batch_results = await self._process_metadata_batch(batch, metadata_cache, app_state)
             results.extend(batch_results)
 
+            if self._shutdown:
+                break
             if i + self.batch_size < len(uncached_mods):
                 await asyncio.sleep(0.1)
 
@@ -79,13 +90,20 @@ class AsyncMetadataLoader:
 
     async def _process_metadata_batch(self, mod_ids: List[str], metadata_cache: Optional[GameBananaMetadataCache], app_state) -> List[Tuple[str, Any]]:
         """Process a batch of mod IDs concurrently."""
+        if self._shutdown:
+            return []
         tasks = [asyncio.create_task(self._load_with_semaphore(mod_id, app_state)) for mod_id in mod_ids]
 
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
         results = []
-        for mod_id, result in zip(mod_ids, results_list):
+        for mod_id, result in zip(mod_ids, results_list, strict=True):
+            if isinstance(result, asyncio.CancelledError):
+                continue
             if isinstance(result, Exception):
+                if self._shutdown or self._is_shutdown_error(result):
+                    self.shutdown()
+                    continue
                 logger.warning(f'AsyncMetadataLoader: Failed to load metadata for mod {mod_id}: {result}')
             elif result:
                 results.append((mod_id, result))
@@ -96,12 +114,24 @@ class AsyncMetadataLoader:
 
     async def _load_with_semaphore(self, mod_id: str, app_state) -> Optional[Dict[str, Any]]:
         """Load metadata with semaphore control."""
+        if self._shutdown:
+            return None
         async with self._semaphore:
+            if self._shutdown:
+                return None
             return await asyncio.wait_for(self._load_single_mod_metadata(mod_id, app_state), timeout=10)
 
     async def _load_single_mod_metadata(self, mod_id_str: str, app_state) -> Optional[Dict[str, Any]]:
         """Load metadata for a single mod."""
-        return await asyncio.to_thread(self._load_single_mod_metadata_sync, mod_id_str, app_state)
+        if self._shutdown:
+            return None
+        try:
+            return await asyncio.to_thread(self._load_single_mod_metadata_sync, mod_id_str, app_state)
+        except RuntimeError as e:
+            if self._is_shutdown_error(e):
+                self.shutdown()
+                return None
+            raise
 
     def _load_single_mod_metadata_sync(self, mod_id_str: str, app_state) -> Optional[Dict[str, Any]]:
         """Synchronous metadata loading with rate limiting."""

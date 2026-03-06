@@ -1,6 +1,7 @@
 import time
 from types import SimpleNamespace
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QLabel, QWidget
+import pytest
 
 
 class TestModWidgets:
@@ -12,6 +13,21 @@ class TestModWidgets:
             widget = BaseModWidget(None)
             assert widget is not None
             assert isinstance(widget, QWidget)
+        widget.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    @pytest.mark.parametrize(('downloads', 'expected'), [(0, '⤓ 0'), (None, '⤓ N/A')])
+    def test_mod_card_widget_downloads_text_distinguishes_zero_and_missing(self, qapp, downloads, expected):
+        from ui.widgets.mod.mod_card_widget import ModCardWidget
+        from models.mod_models import ModInfo
+        from unittest.mock import patch
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=downloads, game='deltarune', is_verified=False)
+        mod_data.is_gamebanana_mod = False
+        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
+            widget = ModCardWidget(mod_data, parent=None)
+            assert widget.downloads_label.text() == expected
         widget.deleteLater()
         for _ in range(3):
             qapp.processEvents()
@@ -106,6 +122,19 @@ class TestCommonWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    @pytest.mark.parametrize(('downloads', 'expected'), [(0, '0'), (None, 'N/A')])
+    def test_mod_details_overlay_downloads_distinguishes_zero_and_missing(self, qapp, downloads, expected):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0', description_url='', downloads=downloads, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
+        overlay = ModDetailsOverlay(None, mod_data)
+        meta_texts = [label.text() for label in overlay.findChildren(QLabel)]
+        assert any(f'>{expected}</span>' in text for text in meta_texts)
+        overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
     def test_mod_details_overlay_uses_custom_button_hover_color(self, qapp):
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         from models.mod_models import ModInfo
@@ -129,7 +158,7 @@ class TestCommonWidgets:
         overlay.update_screenshots(['https://example.com/1.png', 'https://example.com/2.png'])
         assert len(overlay._ss_urls) == 2
         assert overlay._ss_index == 0
-        assert overlay._prev_btn.isVisible() == (len(overlay._ss_urls) > 1)
+        assert overlay._prev_btn.isHidden() == (len(overlay._ss_urls) <= 1)
         overlay.update_screenshots([])
         assert len(overlay._ss_urls) == 0
         overlay.deleteLater()

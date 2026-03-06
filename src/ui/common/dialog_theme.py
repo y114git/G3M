@@ -1,66 +1,80 @@
 """Shared theme helper for dialogs."""
-from ui.common.styling import get_theme_color, get_border_radius
+from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius
 
 
-def apply_dialog_theme(dialog, app_state):
-    """Apply consistent theme to dialog."""
-    bg_color = get_theme_color(app_state.local_config, 'background', '#282828')
-    border_color = get_theme_color(app_state.local_config, 'border', '#039d5b')
-    button_color = get_theme_color(app_state.local_config, 'button', '#222222')
-    hover_color = get_theme_color(app_state.local_config, 'button_hover', '#616b78')
-    text_color = get_theme_color(app_state.local_config, 'text', '#e8e9eb')
+def get_dialog_theme_values(app_state):
+    colors = get_theme_colors(
+        app_state.local_config,
+        background='#282828',
+        border='#039d5b',
+        button='#222222',
+        button_hover='#616b78',
+        text='#e8e9eb',
+        secondary_text='#6de985',
+    )
     br = get_border_radius(app_state.local_config)
+    return {
+        **colors,
+        'border_radius': br,
+        'button_radius': clamp_border_radius(br, height=30),
+        'field_radius': clamp_border_radius(br, height=30),
+    }
 
-    dialog.setStyleSheet(f'''
+
+def build_dialog_theme_stylesheet(app_state):
+    theme = get_dialog_theme_values(app_state)
+    return f'''
         QDialog {{
-            background-color: {bg_color};
-            color: {text_color};
-            border-radius: {br}px;
+            background-color: {theme["background"]};
+            color: {theme["text"]};
+            border-radius: {theme["border_radius"]}px;
         }}
         QLineEdit {{
-            background-color: {bg_color};
-            border: 2px solid {border_color};
-            border-radius: {br}px;
-            color: {text_color};
+            background-color: {theme["background"]};
+            border: 2px solid {theme["border"]};
+            border-radius: {theme["field_radius"]}px;
+            color: {theme["text"]};
             padding: 8px;
             font-size: 13px;
         }}
         QLineEdit:focus {{
-            border: 2px solid {hover_color};
+            border: 2px solid {theme["button_hover"]};
         }}
         QListWidget {{
-            background-color: {bg_color};
-            border: 2px solid {border_color};
-            border-radius: {br}px;
-            color: {text_color};
+            background-color: {theme["background"]};
+            border: 2px solid {theme["border"]};
+            border-radius: {theme["border_radius"]}px;
+            color: {theme["text"]};
             padding: 5px;
         }}
         QListWidget::item {{
             padding: 8px;
-            border-bottom: 1px solid {border_color};
+            border-bottom: 1px solid {theme["border"]};
         }}
         QListWidget::item:selected {{
-            background-color: {hover_color};
+            background-color: {theme["button_hover"]};
         }}
         QPushButton {{
-            background-color: {button_color};
-            border: 2px solid {border_color};
-            border-radius: {br}px;
-            color: {text_color};
+            background-color: {theme["button"]};
+            border: 2px solid {theme["border"]};
+            border-radius: {theme["button_radius"]}px;
+            color: {theme["text"]};
             padding: 8px 15px;
             font-weight: bold;
         }}
-        QPushButton:hover {{
-            background-color: {hover_color};
-        }}
-        QPushButton:pressed {{
-            background-color: {hover_color};
+        QPushButton:hover, QPushButton:pressed {{
+            background-color: {theme["button_hover"]};
         }}
         QLabel {{
-            color: {text_color};
+            color: {theme["text"]};
         }}
         QCheckBox {{
-            color: {text_color};
+            color: {theme["text"]};
             font-size: 13px;
         }}
-    ''')
+    '''
+
+
+def apply_dialog_theme(dialog, app_state):
+    """Apply consistent theme to dialog."""
+    dialog.setStyleSheet(build_dialog_theme_stylesheet(app_state))

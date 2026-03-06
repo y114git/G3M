@@ -3,7 +3,18 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QCheckBox, QSizePolicy, QLabel
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import NoScrollComboBox
-from ui.common.styling import get_theme_color, build_tag_checkbox_style
+from ui.common.styling import get_theme_color, build_tag_checkbox_style, get_border_radius, install_widget_update_handler, get_widget_border_radius
+
+
+BASE_TAG_NAMES = ('textedit', 'customization', 'gameplay', 'other')
+SEARCH_GAME_OPTIONS = (
+    ('deltarune', 'deltarune'),
+    ('undertale', 'undertale'),
+    ('undertaleyellow', 'undertaleyellow'),
+    ('pizzatower', 'pizzatower'),
+    ('sugaryspire', 'sugaryspire'),
+)
+LIBRARY_GAME_OPTIONS = SEARCH_GAME_OPTIONS[:1] + (('deltarunedemo', 'deltarunedemo'),) + SEARCH_GAME_OPTIONS[1:]
 
 
 def create_sort_controls(app_state, items=None, config_key=None):
@@ -75,6 +86,22 @@ def create_search_button():
     search_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     search_btn.setToolTip(tr('ui.search_placeholder'))
     return search_btn
+
+
+def apply_filters_frame_style(frame: QFrame, app_state):
+    if not frame or not app_state:
+        return
+
+    def _apply_style():
+        filter_bg_color = app_state.local_config.get('custom_color_background') or 'rgba(40, 40, 40, 150)'
+        filter_border_color = app_state.local_config.get('custom_color_border') or '#039d5b'
+        zoom_factor = app_state.local_config.get('ui_scale', 1.0)
+        border_width = max(1, int(2 * zoom_factor))
+        radius = get_widget_border_radius(frame, get_border_radius(app_state.local_config))
+        padding = max(max(1, int(8 * zoom_factor)), (radius * 3 + 9) // 10)
+        frame.setStyleSheet(f'QFrame#filters {{ background-color: {filter_bg_color}; border: {border_width}px solid {filter_border_color}; padding: {padding}px; border-radius: {radius}px; }}')
+
+    install_widget_update_handler(frame, _apply_style, attr_name='_filters_frame_style_filter')
 
 
 def create_filters_frame():

@@ -39,29 +39,17 @@ class ThemeManagementDialog(QDialog):
     def _build_settings_text(self):
         config = self.theme_controller.app_state.local_config
         cs = self.theme_controller.customization_service
-
-        has_custom = False
-        parts = []
-
-        if config.get('custom_background_path'):
-            parts.append("• " + tr('themes.custom_background'))
-            has_custom = True
-
-        if cs.get_background_music_path():
-            parts.append("• " + tr('themes.background_music'))
-            has_custom = True
-
-        if cs.get_startup_sound_path():
-            parts.append("• " + tr('themes.startup_sound'))
-            has_custom = True
-
-        if cs.get_custom_logo_path():
-            parts.append("• " + tr('themes.custom_logo'))
-            has_custom = True
-
-        if cs.get_custom_font_path():
-            parts.append("• " + tr('themes.custom_font'))
-            has_custom = True
+        parts = [
+            '• ' + tr(label_key)
+            for enabled, label_key in (
+                (config.get('custom_background_path'), 'themes.custom_background'),
+                (cs.get_background_music_path(), 'themes.background_music'),
+                (cs.get_startup_sound_path(), 'themes.startup_sound'),
+                (cs.get_custom_logo_path(), 'themes.custom_logo'),
+                (cs.get_custom_font_path(), 'themes.custom_font'),
+            )
+            if enabled
+        ]
 
         color_map = {
             'custom_color_background': 'ui.background_color',
@@ -72,23 +60,20 @@ class ThemeManagementDialog(QDialog):
             'custom_color_secondary_text': 'ui.secondary_text_color'
         }
 
-        changed_colors = []
-        for conf_key, lang_key in color_map.items():
-            if config.get(conf_key):
-
-                color_name = tr(lang_key).rstrip(':')
-                changed_colors.append("  - " + color_name)
+        changed_colors = [
+            '  - ' + tr(lang_key).rstrip(':')
+            for conf_key, lang_key in color_map.items()
+            if config.get(conf_key)
+        ]
 
         if changed_colors:
             parts.append("• " + tr('themes.custom_colors') + ":\n" + "\n".join(changed_colors))
-            has_custom = True
 
         border_radius = get_border_radius(config)
         if border_radius:
             parts.append("• " + tr('ui.border_radius_label') + f": {border_radius}px")
-            has_custom = True
 
-        if not has_custom:
+        if not parts:
             return tr('themes.no_customizations')
 
         return "\n".join(parts)

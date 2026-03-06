@@ -73,7 +73,7 @@ class SearchDisplayController(QObject):
             return False
         if not getattr(mod, 'tagline', '').strip():
             return True
-        if not getattr(mod, 'downloads', None):
+        if getattr(mod, 'downloads', None) is None:
             return True
         return False
 

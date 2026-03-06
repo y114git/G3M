@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QScrollArea, QSizePolicy, QAbstractScrollArea
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_color, rgba_from_color, get_border_radius
+from ui.common.styling import get_theme_color, install_panel_style_handler, install_scroll_viewport_clip, set_layout_stretch_factors
 
 
 class PluginTabBuilder:
@@ -53,20 +53,12 @@ class PluginTabBuilder:
         plugins_layout.setContentsMargins(0, 0, 0, 0)
         plugins_scroll.setWidget(plugins_widget)
         plugins_container_layout.addWidget(plugins_scroll)
-        try:
-            plugins_container_layout.setStretch(0, 0)
-            plugins_container_layout.setStretch(1, 1)
-        except Exception:
-            pass
-        plugins_bg_rgba = rgba_from_color(get_theme_color(self.app_state.local_config, 'background', '#282828'))
-        br = get_border_radius(self.app_state.local_config)
-        plugins_container.setStyleSheet(f'QWidget#plugins_background {{ background-color: {plugins_bg_rgba}; border-radius: {br}px; margin: 5px; }}')
+        container_padding = 15
+        install_scroll_viewport_clip(plugins_scroll, plugins_container, self.app_state.local_config, inset=container_padding, attr_name='_plugins_viewport_clip_filter')
+        set_layout_stretch_factors(plugins_container_layout, 0, 1)
+        install_panel_style_handler(plugins_container, self.app_state.local_config, attr_name='_plugins_panel_style_filter')
         layout.addWidget(plugins_container)
-        try:
-            layout.setStretch(0, 0)
-            layout.setStretch(1, 1)
-        except Exception:
-            pass
+        set_layout_stretch_factors(layout, 0, 1)
         self.widgets = {'search_button': search_button, 'import_button': import_button, 'plugins_container': plugins_container, 'plugins_scroll': plugins_scroll, 'plugins_widget': plugins_widget, 'plugins_layout': plugins_layout, 'installed_plugins_label': installed_plugins_label}
         return widget
 

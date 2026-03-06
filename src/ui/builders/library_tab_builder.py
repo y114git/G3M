@@ -1,15 +1,17 @@
+import logging
 from typing import Dict, Any
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QEvent
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QComboBox, QScrollArea, QSizePolicy
+from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QScrollArea, QSizePolicy
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_color, rgba_from_color, get_border_radius
+from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_widget_update_handler, get_widget_border_radius, build_scrollbar_qss, build_button_style
 from ui.builders.shared_filters_builder import (
-    create_sort_controls, create_tag_checkboxes, create_search_button,
-    create_filters_frame
+    BASE_TAG_NAMES, LIBRARY_GAME_OPTIONS, create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button,
+    create_filters_frame, apply_filters_frame_style
 )
 
 _ARCHIVE_EXTENSIONS = ('.zip', '.7z', '.rar', '.tar.gz', '.lzma', '.gz')
+logger = logging.getLogger(__name__)
 
 
 class _DropAreaWidget(QWidget):
@@ -43,15 +45,14 @@ class LibraryTabBuilder(QObject):
         self.app_state, self.parent, self.widgets = app_state, parent, {}
 
     def _get_colors(self):
-        cfg = self.app_state.local_config
-        bg = get_theme_color(cfg, 'background', '#282828')
-        return {
-            'border': get_theme_color(cfg, 'border', '#039d5b'),
-            'button': get_theme_color(cfg, 'button', '#222222'),
-            'button_hover': get_theme_color(cfg, 'button_hover', '#616b78'),
-            'text': get_theme_color(cfg, 'text', '#e8e9eb'),
-            'background': bg
-        }
+        return get_theme_colors(
+            self.app_state.local_config,
+            border='#039d5b',
+            button='#222222',
+            button_hover='#616b78',
+            text='#e8e9eb',
+            background='#282828',
+        )
 
     def build(self) -> QWidget:
         widget = QWidget()
@@ -64,7 +65,7 @@ class LibraryTabBuilder(QObject):
         f_scroll.setMinimumWidth(200)
         filters = self._create_library_filters_widget()
         f_scroll.setWidget(filters)
-        filters.installEventFilter(self)
+        install_size_hint_height_sync(filters, f_scroll, attr_name='_library_filters_scroll_height_filter')
         f_scroll.setVisible(not self.app_state.local_config.get('hide_library_filters', False))
         layout.addWidget(f_scroll)
         self.widgets['filters_scroll'] = f_scroll
@@ -74,9 +75,7 @@ class LibraryTabBuilder(QObject):
         ctrl.addStretch()
         ctrl.addWidget(import_btn)
         ctrl.addSpacing(20)
-        game_combo = QComboBox()
-        for label_key, data in [('deltarune', 'deltarune'), ('deltarunedemo', 'deltarunedemo'), ('undertale', 'undertale'), ('undertaleyellow', 'undertaleyellow'), ('pizzatower', 'pizzatower'), ('sugaryspire', 'sugaryspire')]:
-            game_combo.addItem(tr(f'ui.{label_key}'), data)
+        game_combo = create_modgame_combo(self.app_state, LIBRARY_GAME_OPTIONS, 'selected_game_type')
         ctrl.addWidget(game_combo)
         ctrl.addSpacing(20)
         ch_cb = QCheckBox(tr('ui.chapter_mode'))
@@ -100,8 +99,7 @@ class LibraryTabBuilder(QObject):
             btn = QPushButton(name)
             btn.setCheckable(True)
             btn.setObjectName(f'chapter_tab_{i}')
-            br = get_border_radius(self.app_state.local_config)
-            btn.setStyleSheet(f'QPushButton#chapter_tab_{i} {{ background-color: {colors["button"]}; border: 2px solid {colors["border"]}; color: {colors["text"]}; font-weight: bold; font-size: {fs}px; border-radius: {br}px; padding: 5px; }} QPushButton#chapter_tab_{i}:checked {{ background-color: {colors["button_hover"]}; border: 3px solid {colors["border"]}; }} QPushButton#chapter_tab_{i}:hover {{ background-color: {colors["button_hover"]}; }}')
+            btn.setStyleSheet(build_button_style(btn.objectName(), colors['button'], colors['button_hover'], colors['text'], colors['border'], width=None, height=None, font_size=fs, border_radius=clamp_border_radius(get_border_radius(self.app_state.local_config), height=max(25, btn.sizeHint().height())), padding='5px', checked_bg_color=colors['button_hover'], checked_border_color=colors['border'], checked_border_width=3))
             t_layout.addWidget(btn)
             tab_btns.append(btn)
         t_layout.addStretch()
@@ -146,8 +144,23 @@ class LibraryTabBuilder(QObject):
         mw_layout.setContentsMargins(0, 0, 0, 0)
         scroll.setWidget(mods_w)
         m_layout.addWidget(scroll)
-        br = get_border_radius(self.app_state.local_config)
-        mods_cont.setStyleSheet(f'QWidget#mods_background {{ background-color: {rgba_from_color(colors["background"])}; border-radius: {br}px; margin: 5px; }}')
+        container_padding = 15
+
+        def _apply_inner_clip():
+            container_radius = get_widget_border_radius(mods_cont, get_border_radius(self.app_state.local_config))
+            content_padding = max(container_padding, (container_radius * 4 + 9) // 10)
+            viewport_inset = max(2, min(10, container_radius // 5))
+            scrollbar_corner_inset = max(6, min(18, container_radius // 2))
+            m_layout.setContentsMargins(content_padding, content_padding, content_padding, content_padding)
+            scroll.setStyleSheet(f'''QScrollArea {{ background-color: transparent; border: none; }}{build_scrollbar_qss(colors["text"], get_border_radius(self.app_state.local_config), vertical_margin=(scrollbar_corner_inset, 2, scrollbar_corner_inset, 0), horizontal_margin=(0, scrollbar_corner_inset, scrollbar_corner_inset, scrollbar_corner_inset))}''')
+            try:
+                scroll.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, 4), viewport_inset)
+            except (AttributeError, TypeError):
+                logger.exception('LibraryTabBuilder: setViewportMargins failed for viewport_inset=%s', viewport_inset)
+
+        mods_cont._inner_clip_callback = _apply_inner_clip
+        install_widget_update_handler(scroll, _apply_inner_clip, attr_name='_library_viewport_clip_filter')
+        install_panel_style_handler(mods_cont, self.app_state.local_config, attr_name='_library_panel_style_filter')
         layout.addWidget(mods_cont)
         self.widgets.update({
             'library_filters_widget': filters,
@@ -170,15 +183,9 @@ class LibraryTabBuilder(QObject):
         })
         return widget
 
-    def eventFilter(self, obj, event):
-        if 'filters_scroll' in self.widgets:
-            fs = self.widgets['filters_scroll']
-            if obj == fs.widget() and event.type() == QEvent.Type.Resize:
-                fs.setMaximumHeight(obj.sizeHint().height())
-        return False
-
     def _create_library_filters_widget(self) -> QFrame:
         w, layout = create_filters_frame()
+        apply_filters_frame_style(w, self.app_state)
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         _vc = Qt.AlignmentFlag.AlignVCenter
         sort_combo, sort_btn = create_sort_controls(self.app_state, [tr('ui.sort_by_name'), tr('ui.sort_by_date')])
@@ -187,7 +194,7 @@ class LibraryTabBuilder(QObject):
         layout.addSpacing(20)
         tags_lbl = QLabel(tr('ui.tags_label'))
         layout.addWidget(tags_lbl, 0, _vc)
-        tags = create_tag_checkboxes(self.app_state, ('textedit', 'customization', 'gameplay', 'other', 'gamebanana'))
+        tags = create_tag_checkboxes(self.app_state, (*BASE_TAG_NAMES, 'gamebanana'))
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
         layout.addStretch()
@@ -199,10 +206,9 @@ class LibraryTabBuilder(QObject):
 
     def _update_priority_button_style(self, btn, btn_clr, brd_clr, hvr_clr):
         n = btn.objectName()
-        t = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
+        t = self._get_colors()['text']
         fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
-        br = get_border_radius(self.app_state.local_config)
-        btn.setStyleSheet(f'QPushButton#{n} {{ background-color: {btn_clr}; border: 2px solid {brd_clr}; color: {t}; font-weight: bold; font-size: {fs}px; border-radius: {br}px; padding: 5px; }} QPushButton#{n}:hover {{ background-color: {hvr_clr}; }}')
+        btn.setStyleSheet(build_button_style(n, btn_clr, hvr_clr, t, brd_clr, width=None, height=None, font_size=fs, border_radius=clamp_border_radius(get_border_radius(self.app_state.local_config), height=max(30, btn.sizeHint().height())), padding='5px'))
 
     def update_priority_button_style(self):
         colors = self._get_colors()

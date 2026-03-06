@@ -1,5 +1,4 @@
 """Tests for asynchronous metadata loading functionality."""
-import pytest
 from unittest.mock import Mock, patch
 import time
 
@@ -58,7 +57,6 @@ class TestAsyncMetadataLoader:
         """Test async loading with cache hits."""
         import asyncio
         from utils.async_metadata_loader import AsyncMetadataLoader
-        from adapters.gamebanana_cache import GameBananaMetadataCache
 
         # Mock cache
         mock_cache = Mock()
@@ -127,6 +125,22 @@ class TestAsyncMetadataLoader:
         assert len(results) == 1
         assert results[0][0] == '12345'
         assert results[0][1]['downloads'] == 100
+
+    def test_load_single_mod_metadata_handles_executor_shutdown_gracefully(self):
+        import asyncio
+        from utils.async_metadata_loader import AsyncMetadataLoader
+
+        loader = AsyncMetadataLoader()
+
+        async def test_async():
+            with patch('asyncio.to_thread', side_effect=RuntimeError('cannot schedule new futures after shutdown')):
+                result = await loader._load_single_mod_metadata('12345', None)
+                return result
+
+        result = asyncio.run(test_async())
+
+        assert result is None
+        assert loader._shutdown is True
 
 
 class TestAsyncGameModsLoader:
