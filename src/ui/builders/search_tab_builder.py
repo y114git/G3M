@@ -1,8 +1,8 @@
 from typing import Dict, Any
 from PyQt6.QtCore import Qt, QObject
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QSizePolicy, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QSizePolicy, QLabel, QGridLayout, QCheckBox
 from services.localization_service import tr
-from ui.common.styling import install_size_hint_height_sync, install_scroll_viewport_clip, apply_panel_style
+from ui.common.styling import install_size_hint_height_sync, install_scroll_viewport_clip, apply_panel_style, build_tag_checkbox_style, get_theme_color, get_ui_scale_factor
 from ui.builders.shared_filters_builder import (
     BASE_TAG_NAMES, SEARCH_GAME_OPTIONS, create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame, create_modgame_combo, create_pagination_controls, apply_filters_frame_style
@@ -13,6 +13,26 @@ class ModsBrowserTabBuilder(QObject):
     def __init__(self, app_state, parent=None):
         super().__init__(parent)
         self.app_state, self.parent, self.widgets = app_state, parent, {}
+        self.mod_list_columns = 1
+        self._dynamic_style_signal_connected = False
+
+    def refresh_dynamic_styles(self) -> None:
+        show_nsfw_checkbox = self.widgets.get('show_nsfw_checkbox')
+        if not show_nsfw_checkbox:
+            return
+        config = getattr(self.app_state, 'local_config', None)
+        scale = get_ui_scale_factor(config)
+        text_color = get_theme_color(config, 'text', '#e8e9eb')
+        show_nsfw_checkbox.setStyleSheet(build_tag_checkbox_style(text_color, font_size=max(12, int(round(14 * scale))), indicator_size=max(16, int(round(18 * scale))), spacing=max(4, int(round(5 * scale)))))
+
+    def _connect_dynamic_style_refresh(self) -> None:
+        if self._dynamic_style_signal_connected:
+            return
+        settings_service = getattr(self.parent, 'settings_service', None)
+        if settings_service is None:
+            return
+        settings_service.theme_changed.connect(self.refresh_dynamic_styles)
+        self._dynamic_style_signal_connected = True
 
     def build(self) -> QWidget:
         widget = QWidget()
@@ -38,10 +58,14 @@ class ModsBrowserTabBuilder(QObject):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet('QScrollArea { background-color: transparent; }')
+        scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         mod_list = QWidget(scroll)
-        mod_list_layout = QVBoxLayout(mod_list)
-        mod_list_layout.setSpacing(15)
-        mod_list_layout.addStretch()
+        mod_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        mod_list_layout = QGridLayout(mod_list)
+        mod_list_layout.setContentsMargins(0, 0, 0, 0)
+        mod_list_layout.setHorizontalSpacing(18)
+        mod_list_layout.setVerticalSpacing(18)
+        mod_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         scroll.setWidget(mod_list)
         pag_widget, prev_btn, page_lbl, next_btn = create_pagination_controls()
         sc_layout.addWidget(scroll)
@@ -50,7 +74,8 @@ class ModsBrowserTabBuilder(QObject):
         install_scroll_viewport_clip(scroll, container, self.app_state.local_config, inset=container_padding, attr_name='_search_viewport_clip_filter')
         apply_panel_style(container, self.app_state.local_config)
         layout.addWidget(container)
-        self.widgets.update({'search_container': container, 'search_mods_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
+        self.widgets.update({'search_container': container, 'search_mods_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'mod_list_columns': self.mod_list_columns, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
+        self._connect_dynamic_style_refresh()
         return widget
 
     def _create_filters_widget(self) -> QFrame:
@@ -70,11 +95,16 @@ class ModsBrowserTabBuilder(QObject):
         tags = create_tag_checkboxes(self.app_state, BASE_TAG_NAMES)
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
+        layout.addSpacing(16)
+        show_nsfw_checkbox = QCheckBox(tr('ui.show_nsfw'))
+        show_nsfw_checkbox.setChecked(bool(self.app_state.local_config.get('show_nsfw', False)))
+        layout.addWidget(show_nsfw_checkbox, 0, _vc)
         layout.addStretch()
         search_btn = create_search_button()
         layout.addWidget(search_btn, 0, _vc)
-        self.widgets.update({'sort_combo': sort_combo, 'sort_order_btn': sort_btn, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'search_button': search_btn})
+        self.widgets.update({'sort_combo': sort_combo, 'sort_order_btn': sort_btn, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'show_nsfw_checkbox': show_nsfw_checkbox, 'search_button': search_btn})
         self.widgets.update({f'tag_{k}': v for k, v in tags.items()})
+        self.refresh_dynamic_styles()
         return w
 
     def get_widgets(self) -> Dict[str, Any]: return self.widgets

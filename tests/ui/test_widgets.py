@@ -18,6 +18,105 @@ class TestModWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_search_mod_card_widget_recalculates_metrics_when_ui_scale_changes(self, qapp):
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
+        from unittest.mock import patch
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={'ui_scale': 1.0})
+        mod_data = ModInfo(key='test_mod', name='Scaled Search Mod', version='1.0.0', author='Test Author', tagline='Search card scaling should remain stable across repeated UI scale changes.', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
+        mod_data.is_gamebanana_mod = False
+        with patch('ui.widgets.mod.search_mod_card_widget.load_mod_icon_universal'):
+            widget = SearchModCardWidget(mod_data, parent=host)
+            base_width = widget.maximumWidth()
+            host.app_state.local_config['ui_scale'] = 0.5
+            widget._update_style()
+            qapp.processEvents()
+            small_width = widget.maximumWidth()
+            assert small_width < base_width
+            assert 'font-size: 15px;' in widget.name_label.styleSheet()
+            host.app_state.local_config['ui_scale'] = 1.5
+            widget._update_style()
+            qapp.processEvents()
+            large_width = widget.maximumWidth()
+            assert large_width > base_width
+            assert widget.name_label.maximumWidth() < widget.maximumWidth()
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_installed_mod_widget_scales_with_ui_scale(self, qapp):
+        from ui.widgets.mod.installed_mod_widget import InstalledModWidget
+        from models.mod_models import ModInfo
+        from unittest.mock import patch
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={'ui_scale': 1.5})
+        mod_data = ModInfo(key='test_mod', name='Scaled Installed Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
+            widget = InstalledModWidget(mod_data, parent=host, parent_app=host)
+            assert widget.height() > 120
+            assert widget.icon_label.width() > 80
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_card_widget_scales_with_ui_scale(self, qapp):
+        from ui.widgets.mod.mod_card_widget import ModCardWidget
+        from models.mod_models import ModInfo
+        from unittest.mock import patch
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={'ui_scale': 1.5})
+        mod_data = ModInfo(key='test_mod', name='Scaled Mod', version='1.0.0', author='Test Author', tagline='Scaled tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data.is_gamebanana_mod = False
+        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
+            widget = ModCardWidget(mod_data, parent=host)
+            assert widget.height() > 120
+            assert widget.icon_label.width() > 80
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_search_mod_card_widget_expands_on_selection_and_hides_on_focus_loss(self, qapp):
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
+        from unittest.mock import patch
+        host = QWidget()
+        other = QWidget(host)
+        mod_data = ModInfo(key='test_mod', name='Very Long Mod Name That Should Wrap Across Two Lines And Then Get Ellipsized At The End', version='1.0.0', author='Test Author', tagline='Test tagline for the search card.', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
+        mod_data.is_gamebanana_mod = False
+        with patch('ui.widgets.mod.search_mod_card_widget.load_mod_icon_universal'):
+            widget = SearchModCardWidget(mod_data, parent=host)
+            host.show()
+            widget.show()
+            other.show()
+            qapp.processEvents()
+            assert not widget.expanded_widget.isVisible()
+            widget.set_selected(True)
+            widget.setFocus()
+            qapp.processEvents()
+            assert widget.expanded_widget.isVisible()
+            assert widget.downloads_label.text() == '⤓ 42'
+            assert widget.updated_label.text() == '↻ 2024-05-01'
+            assert widget.name_label.text()
+            assert len(widget.name_label.text().splitlines()) <= 2
+            assert not hasattr(widget, 'gb_status_label')
+            other.setFocus()
+            qapp.processEvents()
+            time.sleep(0.05)
+            qapp.processEvents()
+            assert not widget.expanded_widget.isVisible()
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
     @pytest.mark.parametrize(('downloads', 'expected'), [(0, '⤓ 0'), (None, '⤓ N/A')])
     def test_mod_card_widget_downloads_text_distinguishes_zero_and_missing(self, qapp, downloads, expected):
         from ui.widgets.mod.mod_card_widget import ModCardWidget
@@ -94,6 +193,20 @@ class TestPluginWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_plugin_widget_scales_with_ui_scale(self, qapp):
+        from ui.widgets.plugin.plugin_widget import PluginWidget
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={'ui_scale': 1.5})
+        plugin_info = {'name': 'Test Plugin', 'version': '1.0.0', 'author': 'Test Author', 'description': 'Test description'}
+        widget = PluginWidget(plugin_info, parent=host, parent_app=host)
+        assert widget.height() > 120
+        assert widget.icon_label.width() > 80
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
 
 class TestCommonWidgets:
 
@@ -118,6 +231,7 @@ class TestCommonWidgets:
         assert hasattr(overlay, '_prev_btn')
         assert hasattr(overlay, '_next_btn')
         assert hasattr(overlay, 'desc_text')
+        assert not hasattr(overlay, 'compat_status_label')
         overlay.deleteLater()
         for _ in range(3):
             qapp.processEvents()

@@ -56,3 +56,9 @@ class TestModFilterUtils:
         mod = {'key': 'gb_12345', 'name': 'Story Pack', 'tagline': 'Expanded scenes', 'author': 'Carol', 'gamebanana_category': 'Narrative'}
         result = filter_and_sort_mods([mod], {'search_text': 'carol narrative'})
         assert result == [mod]
+
+    def test_filter_hides_gamebanana_content_rated_mods_by_default(self):
+        safe_mod = {'key': 'gb_12345', 'name': 'Safe Mod', '_bHasContentRatings': False}
+        content_rated_mod = {'key': 'gb_657995', 'name': 'Roaring Knight: Berserk', '_bHasContentRatings': True}
+        result = filter_and_sort_mods([safe_mod, content_rated_mod], {})
+        assert result == [safe_mod]

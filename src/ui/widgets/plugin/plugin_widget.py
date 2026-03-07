@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt6.QtGui import QPixmap, QColor
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, build_button_style, round_pixmap, get_border_radius
+from ui.common.styling import get_theme_color, build_button_style, round_pixmap, get_border_radius, get_card_layout_scale, get_card_button_metrics
 from ui.utils.ui_utils import UIAnimator
 
 
@@ -21,11 +21,48 @@ class PluginWidget(QFrame):
         self.frame_selector = 'pluginWidget'
         self.setObjectName('pluginWidget')
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFixedHeight(120)
+        self.setFixedHeight(self._card_height())
         self.hide()
         self._init_ui()
         self._update_style()
         UIAnimator.fade_in(self, 200, getattr(self.parent_app, 'app_state', None) if getattr(self, 'parent_app', None) else None)
+
+    def _resolve_theme_config(self):
+        app_state = getattr(self.parent_app, 'app_state', None)
+        return app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
+
+    def _layout_scale(self) -> float:
+        return get_card_layout_scale(self._resolve_theme_config())
+
+    def _icon_size(self) -> int:
+        return max(64, int(round(80 * self._layout_scale())))
+
+    def _card_height(self) -> int:
+        return max(120, int(round(120 * self._layout_scale())))
+
+    def _title_font_size(self) -> int:
+        return max(14, int(round(16 * self._layout_scale())))
+
+    def _apply_metrics(self):
+        scale = self._layout_scale()
+        margin = max(8, int(round(10 * scale)))
+        spacing = max(10, int(round(15 * scale)))
+        if hasattr(self, 'main_layout') and self.main_layout:
+            self.main_layout.setContentsMargins(margin, margin, margin, margin)
+            self.main_layout.setSpacing(spacing)
+        if hasattr(self, 'title_layout') and self.title_layout:
+            self.title_layout.setSpacing(max(6, int(round(8 * scale))))
+        if hasattr(self, 'metadata_layout') and self.metadata_layout:
+            self.metadata_layout.setSpacing(max(8, int(round(10 * scale))))
+        if hasattr(self, 'icon_label') and self.icon_label:
+            icon_size = self._icon_size()
+            self.icon_label.setFixedSize(icon_size, icon_size)
+        if hasattr(self, 'status_indicator') and self.status_indicator:
+            indicator_size = max(14, int(round(16 * scale)))
+            self.status_indicator.setFixedSize(indicator_size, indicator_size)
+        if hasattr(self, 'version_container') and self.version_container and self.version_container.layout():
+            self.version_container.layout().setSpacing(max(4, int(round(5 * scale))))
+        self.setFixedHeight(self._card_height())
 
     def _resolve_plugin_name(self, plugin_info: dict | None = None) -> str:
         info = plugin_info or self.plugin_info
@@ -99,6 +136,7 @@ class PluginWidget(QFrame):
         info_layout.addLayout(title_layout)
         metadata_layout = QHBoxLayout()
         metadata_layout.setSpacing(10)
+        self.metadata_layout = metadata_layout
         author = self.plugin_info.get('author')
         self.author_container = None
         self.author_label_value = None
@@ -176,7 +214,8 @@ class PluginWidget(QFrame):
     def _update_status_indicator(self):
         status = self.plugin_info.get('status', 'enabled')
         color, tooltip_key = self._STATUS_STYLES.get(status, ('#F44336', 'plugins.status_broken'))
-        self.status_indicator.setStyleSheet(f'color: {color}; font-size: 14px; font-weight: bold;')
+        font_size = max(12, int(round(14 * self._layout_scale())))
+        self.status_indicator.setStyleSheet(f'color: {color}; font-size: {font_size}px; font-weight: bold;')
         self.status_indicator.setToolTip(tr(tooltip_key))
 
     def _update_toggle_button(self):
@@ -185,19 +224,36 @@ class PluginWidget(QFrame):
         config = app_state.local_config if app_state and hasattr(app_state, 'local_config') else None
         border = get_theme_color(config, 'border', '#039d5b')
         br = get_border_radius(config)
+        button_width, button_height, button_font_size = get_card_button_metrics(config)
         if status == 'enabled':
             self.toggle_button.setText(tr('plugins.disable'))
-            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, border_radius=br))
+            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
         else:
             self.toggle_button.setText(tr('plugins.enable'))
-            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, border_radius=br))
+            self.toggle_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
 
     def _update_style(self):
         from ui.common.styling import update_mod_widget_style
+        self._apply_metrics()
         update_mod_widget_style(self, self.frame_selector, self.parent_app)
         if hasattr(self, 'icon_label'):
             self.icon_label.setStyleSheet('border: none; background: transparent;')
             self._load_icon()
+        config = self._resolve_theme_config()
+        text_color = get_theme_color(config, 'text', '#e8e9eb')
+        secondary_text_color = get_theme_color(config, 'secondary_text', '#6de985')
+        title_font_size = self._title_font_size()
+        if hasattr(self, 'name_label') and self.name_label:
+            self.name_label.setStyleSheet(f'font-size: {title_font_size}px; font-weight: bold; color: {text_color};')
+        if hasattr(self, 'version_label') and self.version_label:
+            self.version_label.setStyleSheet(f'font-size: {title_font_size}px; color: {secondary_text_color};')
+        if hasattr(self, 'delete_button') and self.delete_button:
+            border = get_theme_color(config, 'border', '#039d5b')
+            br = get_border_radius(config)
+            button_width, button_height, button_font_size = get_card_button_metrics(config)
+            self.delete_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+        self._update_toggle_button()
+        self._update_status_indicator()
 
     def set_selected(self, selected: bool):
         self.is_selected = selected
@@ -309,6 +365,7 @@ class PluginWidget(QFrame):
         bg_color = get_theme_color(config, 'background', '#333')
         br = get_border_radius(config)
         bw = 2 if border_color else 0
+        target_size = max(1, self.icon_label.width() or self._icon_size())
         if icon_path and os.path.exists(icon_path):
             try:
                 pixmap = QPixmap()
@@ -317,9 +374,9 @@ class PluginWidget(QFrame):
                         icon_size = min(pixmap.width(), pixmap.height())
                         if icon_size > 0:
                             cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
-                            scaled_pixmap = cropped.scaled(80, 80, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                            scaled_pixmap = cropped.scaled(target_size, target_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                         else:
-                            scaled_pixmap = pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                            scaled_pixmap = pixmap.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                         self.icon_label.setPixmap(round_pixmap(scaled_pixmap, br, bw, border_color) if (br > 0 or bw > 0) else scaled_pixmap)
                         self.icon_label.setText('')
                         return
@@ -327,14 +384,14 @@ class PluginWidget(QFrame):
                 import logging
                 logging.debug(f'PluginWidget: Error loading icon from {icon_path}: {e}')
         try:
-            default_pixmap = QPixmap(80, 80)
+            default_pixmap = QPixmap(target_size, target_size)
             default_pixmap.fill(QColor(bg_color))
             self.icon_label.setPixmap(round_pixmap(default_pixmap, br, bw, border_color) if (br > 0 or bw > 0) else default_pixmap)
             self.icon_label.setText('🔌')
-            self.icon_label.setStyleSheet('font-size: 48px; border: none; background: transparent;')
+            self.icon_label.setStyleSheet(f'font-size: {max(36, int(round(48 * self._layout_scale())))}px; border: none; background: transparent;')
         except Exception:
             self.icon_label.setText('🔌')
-            self.icon_label.setStyleSheet('font-size: 48px; border: none; background: transparent;')
+            self.icon_label.setStyleSheet(f'font-size: {max(36, int(round(48 * self._layout_scale())))}px; border: none; background: transparent;')
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

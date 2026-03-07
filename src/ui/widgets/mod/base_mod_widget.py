@@ -1,6 +1,6 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
-from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color, get_border_radius
+from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color, get_border_radius, get_card_layout_scale, get_widget_dimensions
 from services.localization_service import tr
 from utils.mod_utils import get_mod_key
 
@@ -14,6 +14,35 @@ class BaseModWidget(QFrame):
         self.is_selected = False
         self.parent_app = parent
         self.frame_selector = ''
+
+    def _layout_scale(self) -> float:
+        return get_card_layout_scale(self._resolve_theme_config())
+
+    def _icon_size(self) -> int:
+        return max(64, int(round(80 * self._layout_scale())))
+
+    def _card_height(self) -> int:
+        return max(120, int(round(120 * self._layout_scale())))
+
+    def _title_font_size(self) -> int:
+        return max(14, int(round(16 * self._layout_scale())))
+
+    def _apply_metrics(self):
+        scale = self._layout_scale()
+        margin = max(8, int(round(10 * scale)))
+        spacing = max(10, int(round(15 * scale)))
+        if hasattr(self, 'main_layout') and self.main_layout:
+            self.main_layout.setContentsMargins(margin, margin, margin, margin)
+            self.main_layout.setSpacing(spacing)
+        if hasattr(self, 'title_layout') and self.title_layout:
+            self.title_layout.setSpacing(max(6, int(round(8 * scale))))
+        if hasattr(self, 'metadata_layout') and self.metadata_layout:
+            self.metadata_layout.setSpacing(max(8, int(round(10 * scale))))
+        if hasattr(self, 'icon_label') and self.icon_label:
+            icon_size = self._icon_size()
+            self.icon_label.setFixedSize(icon_size, icon_size)
+        if getattr(self, 'frame_selector', '') in ('modCard', 'installedMod'):
+            self.setFixedHeight(self._card_height())
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
@@ -42,6 +71,7 @@ class BaseModWidget(QFrame):
         title_layout.addWidget(version_label)
         title_layout.addStretch()
         self.title_layout = title_layout
+        self.version_label = version_label
         info_layout.addLayout(title_layout)
         metadata_layout = QHBoxLayout()
         metadata_layout.setSpacing(10)
@@ -120,7 +150,8 @@ class BaseModWidget(QFrame):
         bc = get_theme_color(config, 'border', '#039d5b') if config else None
         bw = 2 if bc else 0
         self.icon_label.setStyleSheet('border: none; background: transparent;')
-        load_mod_icon_universal(self.icon_label, self.mod_data, 80, local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
+        icon_width, icon_height = get_widget_dimensions(getattr(self, 'icon_label', None))
+        load_mod_icon_universal(self.icon_label, self.mod_data, (icon_width or self._icon_size(), icon_height or self._icon_size()), local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
 
     def _resolve_theme_config(self):
         if self.parent_app:
@@ -131,6 +162,7 @@ class BaseModWidget(QFrame):
         return None
 
     def _update_style(self):
+        self._apply_metrics()
         if self.frame_selector:
             update_mod_widget_style(self, self.frame_selector, self.parent_app)
         if hasattr(self, 'icon_label'):
@@ -138,9 +170,16 @@ class BaseModWidget(QFrame):
         config = self._resolve_theme_config()
         if config:
             text_color = get_theme_color(config, 'text', '#e8e9eb')
+            secondary_text_color = get_theme_color(config, 'secondary_text', '#6de985')
+            title_font_size = self._title_font_size()
             if hasattr(self, 'name_label') and self.name_label:
                 try:
-                    self.name_label.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {text_color};')
+                    self.name_label.setStyleSheet(f'font-size: {title_font_size}px; font-weight: bold; color: {text_color};')
+                except RuntimeError:
+                    pass
+            if hasattr(self, 'version_label') and self.version_label:
+                try:
+                    self.version_label.setStyleSheet(f'font-size: {title_font_size}px; color: {secondary_text_color};')
                 except RuntimeError:
                     pass
             if hasattr(self, 'author_label_title') and self.author_label_title:

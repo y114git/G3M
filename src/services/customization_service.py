@@ -192,7 +192,7 @@ class CustomizationManager(QObject):
     def _update_layout_widget_styles(self, container, widget_type) -> None:
         if not (container and (layout := container.layout())):
             return
-        for i in range(layout.count() - 1):
+        for i in range(layout.count()):
             if (item := layout.itemAt(i)) and (w := item.widget()) and isinstance(w, widget_type):
                 try:
                     w._update_style()

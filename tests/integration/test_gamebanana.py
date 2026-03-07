@@ -1,5 +1,4 @@
 import os
-import pytest
 from unittest.mock import Mock, patch, MagicMock
 
 
@@ -16,9 +15,17 @@ class TestGameBananaAPI:
         mock_session.get.return_value = mock_response
         mock_session_class.return_value = mock_session
         api = GameBananaAPI()
-        mods, needing_metadata = api.get_game_mods(game_id=6755, page=1, per_page=20)
+        mods, _needing_metadata = api.get_game_mods(game_id=6755, page=1, per_page=20)
+
         assert mods is not None
         assert isinstance(mods, list)
+
+    def test_map_mod_data_marks_content_rated_mod_as_nsfw(self):
+        from adapters.gamebanana_adapter import GameBananaAPI
+        api = GameBananaAPI()
+        mod = api._map_mod_data({'_idRow': 657995, '_sName': 'Roaring Knight: Berserk', '_nDownloadCount': 34, '_aTags': ['Boss: Roaring Knight'], '_bHasContentRatings': True}, 'deltarune')
+        assert mod is not None
+        assert mod.is_nsfw is True
 
     @patch('requests.Session')
     def test_get_mod_details(self, mock_session_class):

@@ -27,18 +27,18 @@ QLabel#versionLabel {{
 }}
 QLabel#secondaryText {{
     color: {secondary_text_color};
-    font-size: 14px;
+    font-size: {secondary_font_size}px;
 }}
 QLabel#primaryText {{
     color: {text_color};
-    font-size: 14px;
+    font-size: {primary_font_size}px;
 }}
 QPushButton#cardButton, QPushButton#cardButtonInstall, QPushButton#cardButtonUninstall {{
-    min-width: 110px;
-    max-width: 110px;
-    min-height: 35px;
-    max-height: 35px;
-    font-size: 15px;
+    min-width: {button_width}px;
+    max-width: {button_width}px;
+    min-height: {button_height}px;
+    max-height: {button_height}px;
+    font-size: {button_font_size}px;
     padding: 1px;
     border-radius: {button_border_radius};
 }}
@@ -208,15 +208,40 @@ def get_widget_dimensions(widget):
     return width, height
 
 
+def get_ui_scale_factor(config, default: float = 1.0, minimum: float = 0.5, maximum: float = 2.0) -> float:
+    try:
+        if config and hasattr(config, 'get'):
+            value = float(config.get('ui_scale', default) or default)
+        else:
+            value = float(default)
+    except (TypeError, ValueError):
+        value = float(default)
+    return max(minimum, min(maximum, value))
+
+
+def get_card_layout_scale(config, default: float = 1.0) -> float:
+    raw_scale = get_ui_scale_factor(config, default=default)
+    return max(0.85, min(1.55, 1.0 + (raw_scale - 1.0) * 0.7))
+
+
+def get_card_button_metrics(config) -> tuple[int, int, int]:
+    scale = get_card_layout_scale(config)
+    return (
+        max(96, round(110 * scale)),
+        max(32, round(35 * scale)),
+        max(13, round(15 * scale)),
+    )
+
+
 def get_widget_border_radius(widget, radius: int, border_width: int = 0, margin: int = 0) -> int:
     width, height = get_widget_dimensions(widget)
     return clamp_border_radius(radius, width=width, height=height, border_width=border_width, margin=margin)
 
 
-def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected=False, icon_selector='modIcon', frame_border_radius='0px', icon_border_radius='0px', button_border_radius='0px'):
-    border_width = '3px' if is_selected else '1px'
+def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected=False, icon_selector='modIcon', frame_border_radius='0px', icon_border_radius='0px', button_border_radius='0px', primary_font_size=14, secondary_font_size=14, button_width=110, button_height=35, button_font_size=15):
+    border_width = '2px'
     current_border_color = hover_border_color if is_selected else border_color
-    return _STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, secondary_text_color=secondary_text_color, text_color=text_color, frame_border_radius=frame_border_radius, icon_border_radius=icon_border_radius, button_border_radius=button_border_radius)
+    return _STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, secondary_text_color=secondary_text_color, text_color=text_color, frame_border_radius=frame_border_radius, icon_border_radius=icon_border_radius, button_border_radius=button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size)
 
 
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
@@ -239,16 +264,21 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         text_color = '#e8e9eb'
         secondary_text_color = '#6de985'
     border_radius_val = get_border_radius(config)
+    layout_scale = get_card_layout_scale(config)
+    primary_font_size = max(12, int(round(14 * layout_scale)))
+    secondary_font_size = max(12, int(round(14 * layout_scale)))
+    button_width, button_height, button_font_size = get_card_button_metrics(config)
     frame_border_radius_value = get_widget_border_radius(widget, border_radius_val)
     frame_border_radius = f'{frame_border_radius_value}px'
-    icon_border_radius = border_radius_px(border_radius_val, width=80, height=80)
-    button_border_radius = border_radius_px(border_radius_val, width=110, height=35, border_width=2)
+    icon_width, icon_height = get_widget_dimensions(getattr(widget, 'icon_label', None))
+    icon_border_radius = border_radius_px(border_radius_val, width=icon_width or 80, height=icon_height or 80)
+    button_border_radius = border_radius_px(border_radius_val, width=button_width, height=button_height, border_width=2)
     is_selected = getattr(widget, 'is_selected', False)
     icon_selector = 'pluginIcon' if frame_selector == 'pluginWidget' else 'modIcon'
-    widget.setStyleSheet(generate_widget_style(frame_selector, card_bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected, icon_selector, frame_border_radius, icon_border_radius, button_border_radius))
+    widget.setStyleSheet(generate_widget_style(frame_selector, card_bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected, icon_selector, frame_border_radius, icon_border_radius, button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size))
     main_layout = getattr(widget, 'main_layout', None)
     if main_layout:
-        content_margin = max(10, (frame_border_radius_value * 3 + 9) // 10)
+        content_margin = max(max(8, int(round(10 * layout_scale))), (frame_border_radius_value * 3 + 9) // 10)
         main_layout.setContentsMargins(content_margin, content_margin, content_margin, content_margin)
 
 
@@ -664,15 +694,34 @@ def round_pixmap(pixmap, radius, border_width=0, border_color=None):
     return QPixmap.fromImage(img)
 
 
-def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, border_radius=0, border_width=0, border_color=None):
+def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, border_radius=0, border_width=0, border_color=None, prefer_screenshot=False):
     from utils.path_utils import resource_path
 
     def _crop_and_scale_pixmap(pixmap, allow_empty=False):
-        icon_size = min(pixmap.width(), pixmap.height())
-        if icon_size <= 0 and allow_empty:
-            return pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        cropped = pixmap.copy((pixmap.width() - icon_size) // 2, (pixmap.height() - icon_size) // 2, icon_size, icon_size)
-        return cropped.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        source_width = pixmap.width()
+        source_height = pixmap.height()
+        if source_width <= 0 or source_height <= 0:
+            if allow_empty:
+                return pixmap.scaled(target_width, target_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            return pixmap
+        source_ratio = source_width / max(1, source_height)
+        target_ratio = target_width / max(1, target_height)
+        if source_ratio > target_ratio:
+            crop_height = source_height
+            crop_width = max(1, int(round(crop_height * target_ratio)))
+        else:
+            crop_width = source_width
+            crop_height = max(1, int(round(crop_width / target_ratio)))
+        cropped = pixmap.copy((source_width - crop_width) // 2, (source_height - crop_height) // 2, crop_width, crop_height)
+        return cropped.scaled(target_width, target_height, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+    if isinstance(size, (tuple, list)):
+        target_width = max(1, int(size[0]))
+        target_height = max(1, int(size[1]))
+    else:
+        target_width = max(1, int(size))
+        target_height = target_width
+
     assets_icon_path = resource_path('assets/icons/icon.ico')
     default_pixmap = None
     for default_icon_path in (assets_icon_path,):
@@ -686,12 +735,14 @@ def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, 
                 logging.debug(f'load_mod_icon_universal: Error loading default icon from {default_icon_path}: {e}')
                 default_pixmap = None
     if default_pixmap is None:
-        default_pixmap = QPixmap(size, size)
+        default_pixmap = QPixmap(target_width, target_height)
         default_pixmap.fill(QColor('#333'))
     icon_label.setPixmap(round_pixmap(default_pixmap, border_radius, border_width, border_color) if (border_radius > 0 or border_width > 0) else default_pixmap)
     try:
+        screenshots = getattr(mod_data, 'screenshots_url', None) or []
+        preferred_screenshot = next((url for url in screenshots if isinstance(url, str) and url.strip()), None) if prefer_screenshot else None
         icon_path = getattr(mod_data, 'icon_path', None)
-        icon_url = getattr(mod_data, 'icon_url', None)
+        icon_url = preferred_screenshot or getattr(mod_data, 'icon_url', None)
         local_icon_to_load = None
         if icon_url and (not icon_url.startswith(('http://', 'https://'))):
             if os.path.isabs(icon_url):
@@ -765,16 +816,23 @@ def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, 
                         logging.debug(f'load_mod_icon_universal: Error setting pixmap: {e}')
 
                 def _try_local_fallback():
-                    if local_fallback and os.path.exists(local_fallback):
+                    fallback_paths = []
+                    for candidate in (local_fallback, icon_path):
+                        if candidate and candidate not in fallback_paths:
+                            fallback_paths.append(candidate)
+                    for fallback_path in fallback_paths:
+                        if not os.path.exists(fallback_path):
+                            continue
                         try:
                             lbl = label_ref()
                             if lbl and not sip.isdeleted(lbl):
-                                pm = QPixmap(local_fallback)
+                                pm = QPixmap(fallback_path)
                                 if not pm.isNull():
                                     fb_pm = _crop_and_scale_pixmap(pm)
                                     lbl.setPixmap(round_pixmap(fb_pm, border_radius, border_width, border_color) if (border_radius > 0 or border_width > 0) else fb_pm)
+                                    return
                         except (RuntimeError, AttributeError):
-                            pass
+                            return
 
                 def _on_error(url, err):
                     logging.debug(f'load_mod_icon_universal: Failed to load image from URL {url}: {err}')

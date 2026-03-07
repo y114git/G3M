@@ -190,7 +190,7 @@ class ModOperationsController:
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
         files = getattr(mod, 'gamebanana_supported_files', []) or []
         if files:
-            self._notify_gamebanana_status_refresh()
+            self._notify_gamebanana_card_refresh()
             return files
         mod_id_str = get_gamebanana_mod_id(mod)
         if not mod_id_str:
@@ -205,7 +205,7 @@ class ModOperationsController:
                 mod.gamebanana_supported_files = files
                 mod.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
                 mod.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
-                self._notify_gamebanana_status_refresh()
+                self._notify_gamebanana_card_refresh()
             return files
         except Exception as e:
             logging.warning(f'ModOperationsController: Failed to refresh GameBanana files for {mod_id}: {e}')
@@ -261,12 +261,12 @@ class ModOperationsController:
             logging.debug(f'ModOperationsController: Failed to get identifier for mod: {e}')
         return None
 
-    def _notify_gamebanana_status_refresh(self):
+    def _notify_gamebanana_card_refresh(self):
         try:
             if hasattr(self.app, 'search_display'):
                 self.app.search_display.update_search_cards()
         except Exception as e:
-            logging.debug('_notify_gamebanana_status_refresh failed', exc_info=e)
+            logging.debug('_notify_gamebanana_card_refresh failed', exc_info=e)
 
     def _on_gamebanana_install_finished(self, success: bool, message: str, op_id: int):
         current_op_id = getattr(self.app, '_install_op_id', 0)

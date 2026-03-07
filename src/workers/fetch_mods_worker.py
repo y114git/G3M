@@ -184,7 +184,7 @@ class FetchModsThread(QThread):
                     all_mods_filtered.append(mod)
                 elif key and key in existing_mods_with_files:
                     existing_mod = existing_mods_with_files[key]
-                    for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified']:
+                    for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'is_nsfw']:
                         if hasattr(mod, attr):
                             setattr(existing_mod, attr, getattr(mod, attr))
                     all_mods_filtered.append(existing_mod)
@@ -193,7 +193,7 @@ class FetchModsThread(QThread):
                     mod_service = getattr(self.main_window, 'mod_service', None)
                     if mod_service:
                         mod_with_files = mod_service.create_mod_object_from_info(installed_mod_config, all_mods_filtered)
-                        for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified']:
+                        for attr in ['name', 'author', 'tagline', 'game_version', 'description_url', 'downloads', 'icon_url', 'is_verified', 'is_nsfw']:
                             if hasattr(mod, attr):
                                 setattr(mod_with_files, attr, getattr(mod, attr))
                         all_mods_filtered.append(mod_with_files)

@@ -1,10 +1,9 @@
 import threading
-from typing import Optional
 from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, get_border_radius
+from ui.common.styling import get_theme_color, get_border_radius, get_card_button_metrics, get_widget_dimensions
 from utils.mod_utils import get_mod_key
 import logging
 from ui.utils.ui_utils import UIAnimator
@@ -71,8 +70,7 @@ class ModCardWidget(BaseModWidget):
         self.frame_selector = 'modCard'
         self.setObjectName('modCard')
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFixedHeight(120)
-        self.gb_status_label = None
+        self.setFixedHeight(self._card_height())
         self._compatibility_thread = None
         self._init_ui()
         self._check_installation_status()
@@ -110,17 +108,7 @@ class ModCardWidget(BaseModWidget):
         self._compatibility_thread = None
 
     def _create_tags_layout_if_needed(self, info_layout):
-        tags_layout = QHBoxLayout()
-        tags_layout.setContentsMargins(0, 5, 0, 0)
-        tags_layout.setSpacing(10)
-        key = get_mod_key(self.mod_data)
-        if key and key.startswith('gb_'):
-            self.gb_status_label = QLabel(self)
-            self.gb_status_label.setObjectName('gbStatusLabel')
-            tags_layout.addWidget(self.gb_status_label)
-            self._update_gamebanana_status_label()
-        tags_layout.addStretch()
-        info_layout.addLayout(tags_layout)
+        return
 
     def _update_style(self):
         super()._update_style()
@@ -128,6 +116,11 @@ class ModCardWidget(BaseModWidget):
             label = getattr(self, attr, None)
             if label:
                 label.setStyleSheet(f'color: {self._get_theme_text_color()};')
+        if hasattr(self, 'install_button'):
+            if self.is_installed:
+                self._apply_uninstall_button_style()
+            else:
+                self._apply_gamebanana_install_styles()
 
     def _get_theme_text_color(self, fallback='#e8e9eb'):
         config = self._resolve_theme_config()
@@ -310,7 +303,6 @@ class ModCardWidget(BaseModWidget):
             for attr, (info_key, default) in self._COMPAT_ATTR_MAP.items():
                 setattr(self.mod_data, attr, compat_info.get(info_key, default))
             self._apply_gamebanana_install_styles()
-            self._update_gamebanana_status_label()
         except Exception as e:
             logging.warning(f'ModCardWidget: Error updating compatibility info: {e}', exc_info=True)
 
@@ -321,8 +313,9 @@ class ModCardWidget(BaseModWidget):
         border = self._get_theme_border_color('#039d5b')
         config = self._resolve_theme_config()
         br = get_border_radius(config)
+        button_width, button_height, button_font_size = get_card_button_metrics(config)
         from ui.common.styling import build_button_style
-        self.install_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border, border_radius=br))
+        self.install_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
 
     def _update_install_button(self):
         if self.is_installed:
@@ -357,56 +350,12 @@ class ModCardWidget(BaseModWidget):
             border = self._get_theme_border_color('#039d5b')
             config = self._resolve_theme_config()
             br = get_border_radius(config)
+            button_width, button_height, button_font_size = get_card_button_metrics(config)
             from ui.common.styling import build_button_style
-            self.install_button.setStyleSheet(build_button_style('cardButtonInstall', '#FFC107', '#FFB300', text_color, border, border_radius=br))
-            self.install_button.setToolTip(tr('ui.gamebanana_status_manual_tooltip'))
+            self.install_button.setStyleSheet(build_button_style('cardButtonInstall', '#FFC107', '#FFB300', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
         else:
             self.install_button.setStyleSheet('')
             self.install_button.setToolTip('')
-
-    def _format_gamebanana_format(self, fmt: Optional[str]) -> str:
-        if fmt == 'deltahub':
-            return tr('ui.gamebanana_format_deltahub')
-        if fmt == 'deltamod':
-            return tr('ui.gamebanana_format_deltamod')
-        return tr('defaults.not_specified')
-
-    def _update_gamebanana_status_label(self):
-        if not self.gb_status_label:
-            return
-        key = get_mod_key(self.mod_data)
-        is_gb = bool(key and key.startswith('gb_'))
-        if not is_gb:
-            self.gb_status_label.setVisible(False)
-            return
-        self.gb_status_label.setVisible(True)
-        if self.is_installed:
-            self._set_gamebanana_status(tr('ui.gamebanana_status_installed'), '#4CAF50', tr('ui.gamebanana_status_installed_tooltip'))
-            return
-        compatible = bool(getattr(self.mod_data, 'gamebanana_is_tool_compatible', False))
-        checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
-        files = getattr(self.mod_data, 'gamebanana_supported_files', []) or []
-        preferred = getattr(self.mod_data, 'gamebanana_preferred_format', None)
-        if compatible:
-            text = tr('ui.gamebanana_status_ready')
-            color = '#4CAF50'
-            tooltip = tr('ui.gamebanana_status_ready_tooltip', files=len(files) or 1, format=self._format_gamebanana_format(preferred))
-        elif checked:
-            text = tr('ui.gamebanana_status_manual')
-            color = '#FFC107'
-            tooltip = tr('ui.gamebanana_status_manual_tooltip')
-        else:
-            text = tr('ui.gamebanana_status_unknown')
-            color = '#9E9E9E'
-            tooltip = tr('ui.gamebanana_status_unknown_tooltip')
-        self._set_gamebanana_status(text, color, tooltip)
-
-    def _set_gamebanana_status(self, text: str, color: str, tooltip: str):
-        if not self.gb_status_label:
-            return
-        self.gb_status_label.setText(text)
-        self.gb_status_label.setStyleSheet(f'color: {color}; font-size: 13px; font-weight: bold; background: transparent;')
-        self.gb_status_label.setToolTip(tooltip)
 
     def _on_install_button_clicked(self):
         if self.is_installed:
@@ -424,7 +373,6 @@ class ModCardWidget(BaseModWidget):
                     for attr, val in [('gamebanana_compatibility_checked', False), ('gamebanana_is_tool_compatible', False), ('gamebanana_supported_files', [])]:
                         setattr(self.mod_data, attr, val)
                     self._start_compatibility_check()
-                self._update_gamebanana_status_label()
                 self._apply_gamebanana_install_styles()
 
     def update_mod_data(self):
@@ -438,7 +386,8 @@ class ModCardWidget(BaseModWidget):
                     br = get_border_radius(config)
                     bc = get_theme_color(config, 'border', '#039d5b') if config else None
                     bw = 2 if bc else 0
-                    load_mod_icon_universal(self.icon_label, self.mod_data, size=80, local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
+                    icon_width, icon_height = get_widget_dimensions(getattr(self, 'icon_label', None))
+                    load_mod_icon_universal(self.icon_label, self.mod_data, size=(icon_width or self._icon_size(), icon_height or self._icon_size()), local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
             if hasattr(self, 'downloads_label'):
                 self.downloads_label.setText(self._get_downloads_text())
             if hasattr(self, 'tagline_label'):
@@ -455,7 +404,6 @@ class ModCardWidget(BaseModWidget):
                     if not (self._compatibility_thread and self._compatibility_thread.isRunning()):
                         if not (hasattr(self, '_compatibility_check_timer') and self._compatibility_check_timer.isActive()):
                             self._start_compatibility_check()
-            self._update_gamebanana_status_label()
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
         except Exception as e:
@@ -485,4 +433,3 @@ class ModCardWidget(BaseModWidget):
             else:
                 self.install_button.setText(tr('buttons.install'))
                 self._apply_gamebanana_install_styles()
-        self._update_gamebanana_status_label()

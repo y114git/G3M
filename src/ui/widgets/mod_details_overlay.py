@@ -396,10 +396,6 @@ class ModDetailsOverlay(QWidget):
     def _build_action_buttons(self):
         buttons = self._layout(QHBoxLayout)
         buttons.addStretch()
-        self.compat_status_label = QLabel(self)
-        self.compat_status_label.setObjectName('gbStatusLabel')
-        self.compat_status_label.setVisible(False)
-        buttons.addWidget(self.compat_status_label)
         self.install_button = QPushButton()
         self._configure_install_button()
         buttons.addWidget(self.install_button)
@@ -459,7 +455,8 @@ class ModDetailsOverlay(QWidget):
         if style_args:
             self._set_install_button_style(border, *style_args)
             return
-        if src_btn.toolTip() == tr('ui.gamebanana_status_manual_tooltip'):
+        source_mod = getattr(getattr(self, 'source_card', None), 'mod_data', None)
+        if source_mod and bool(getattr(source_mod, 'gamebanana_compatibility_checked', False)) and (not bool(getattr(source_mod, 'gamebanana_is_tool_compatible', False))):
             self._set_install_button_style(border, 'cardButtonInstall', '#FFC107', '#FFB300')
             return
         self._set_install_button_style(border)
@@ -502,7 +499,6 @@ class ModDetailsOverlay(QWidget):
         self.install_button.setToolTip(src_btn.toolTip())
         self.install_button.setEnabled(src_btn.isEnabled())
         self._sync_install_button_style(src_btn, self._colors.get('border', '#039d5b'))
-        self._transfer_label_state(getattr(self.source_card, 'gb_status_label', None), self.compat_status_label)
 
     def update_screenshots(self, urls):
         urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://', 'https://'))][:self.SCREENSHOT_LIMIT]

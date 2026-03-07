@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from utils.path_utils import resource_path
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, build_button_style, get_border_radius
+from ui.common.styling import get_theme_color, build_button_style, get_border_radius, get_card_button_metrics
 from utils.mod_utils import get_mod_key
 from ui.utils.ui_utils import UIAnimator
 
@@ -28,7 +28,7 @@ class InstalledModWidget(BaseModWidget):
         self.frame_selector = 'installedMod'
         self.setObjectName('installedMod')
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFixedHeight(120)
+        self.setFixedHeight(self._card_height())
         self._init_ui()
         self._update_button_from_status()
 
@@ -99,12 +99,24 @@ class InstalledModWidget(BaseModWidget):
         text_color = get_theme_color(config, 'text', '#e8e9eb') if config else '#e8e9eb'
         border = get_theme_color(config, 'border', '#039d5b') if config else '#039d5b'
         br = get_border_radius(config)
-        self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, border_radius=br))
+        button_width, button_height, button_font_size = get_card_button_metrics(config)
+        self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
         self._update_style()
+
+    def _apply_metrics(self):
+        super()._apply_metrics()
+        scale = self._layout_scale()
+        indicator_size = max(14, round(16 * scale))
+        if hasattr(self, 'status_indicator') and self.status_indicator:
+            self.status_indicator.setFixedSize(indicator_size, indicator_size)
+        if hasattr(self, 'checkmark_label') and self.checkmark_label:
+            self.checkmark_label.setFixedWidth(max(32, int(round(40 * scale))))
+        if hasattr(self, 'actions_widget') and self.actions_widget and self.actions_widget.layout():
+            self.actions_widget.layout().setSpacing(max(4, int(round(5 * scale))))
 
     def _update_style(self):
         super()._update_style()
@@ -115,9 +127,20 @@ class InstalledModWidget(BaseModWidget):
                 label = getattr(self, attr, None)
                 if label:
                     label.setStyleSheet(f'color: {text_color};')
+            border = get_theme_color(config, 'border', '#039d5b')
+            br = get_border_radius(config)
+            button_width, button_height, button_font_size = get_card_button_metrics(config)
+            if hasattr(self, 'remove_button') and self.remove_button:
+                self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+            if hasattr(self, 'checkmark_label') and self.checkmark_label:
+                checkmark_font_size = max(16, int(round(18 * self._layout_scale())))
+                self.checkmark_label.setStyleSheet(f'font-size: {checkmark_font_size}px; font-weight: bold; color: #4CAF50;')
+        self._update_button_from_status()
 
     def _update_indicator(self):
-        style = 'font-size: 14px; font-weight: bold; margin-left: 5px;'
+        font_size = max(12, round(14 * self._layout_scale()))
+        margin_left = max(4, round(5 * self._layout_scale()))
+        style = f'font-size: {font_size}px; font-weight: bold; margin-left: {margin_left}px;'
 
         if self._is_mod_broken():
             self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
@@ -126,7 +149,8 @@ class InstalledModWidget(BaseModWidget):
         if self._is_gamebanana_linked():
             gb_icon_path = resource_path('assets/icons/gbicon.png')
             if os.path.exists(gb_icon_path):
-                pixmap = QPixmap(gb_icon_path).scaled(14, 14, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                icon_size = max(12, round(14 * self._layout_scale()))
+                pixmap = QPixmap(gb_icon_path).scaled(icon_size, icon_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.status_indicator.setPixmap(pixmap)
                 self.status_indicator.setText('')
             else:
@@ -189,12 +213,13 @@ class InstalledModWidget(BaseModWidget):
         config = self._resolve_theme_config()
         border = get_theme_color(config, 'border', '#039d5b') if config else '#039d5b'
         br = get_border_radius(config)
+        button_width, button_height, button_font_size = get_card_button_metrics(config)
         if self.status == 'active':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, border_radius=br))
+            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
         else:
             self.use_button.setText(tr('ui.use_button'))
-            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, border_radius=br))
+            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
 
     def _sync_status(self):
         self.status = 'active' if self.is_active else 'ready'

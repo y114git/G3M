@@ -448,8 +448,8 @@ class AppWindow(QWidget):
         self.search_mods_tab = search_builder.build()
         search_widgets = search_builder.get_widgets()
         self._bind_widgets(search_widgets, required=(
-            'search_container', 'search_mods_scroll', 'mod_list_widget', 'mod_list_layout',
-            'sort_combo', 'sort_order_btn', 'modgame_combo', 'tags_label', 'tag_textedit',
+            'search_container', 'search_mods_scroll', 'mod_list_widget', 'mod_list_layout', 'mod_list_columns',
+            'sort_combo', 'sort_order_btn', 'modgame_combo', 'tags_label', 'show_nsfw_checkbox', 'tag_textedit',
             'tag_customization', 'tag_gameplay', 'tag_other', 'search_button',
             'prev_page_btn', 'page_label', 'next_page_btn',
         ))
@@ -469,6 +469,13 @@ class AppWindow(QWidget):
         self.modgame_combo.currentIndexChanged.connect(on_modgame_changed)
         for tag_cb in (self.tag_textedit, self.tag_customization, self.tag_gameplay, self.tag_other):
             tag_cb.stateChanged.connect(lambda: (setattr(self.app_state, 'current_page', 1), self.search_display.update_filtered_mods()))
+
+        def on_show_nsfw_changed(state):
+            self.app_state.local_config['show_nsfw'] = bool(state)
+            self.settings_service.write_local_config()
+            self.app_state.current_page = 1
+            self.search_display.update_filtered_mods()
+        self.show_nsfw_checkbox.stateChanged.connect(on_show_nsfw_changed)
         self.search_button.clicked.connect(self.search_display.show_search_dialog)
         self.prev_page_btn.clicked.connect(self.search_display.prev_page)
         self.next_page_btn.clicked.connect(self.search_display.next_page)
@@ -595,7 +602,7 @@ class AppWindow(QWidget):
         self._section_headers = settings_widgets.get('_section_headers', [])
         self._section_lines = settings_widgets.get('_section_lines', [])
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
-        self._connect_theme_setting_spinbox(self.ui_scale_spinbox, timer_attr='_ui_scale_timer', config_key='ui_scale', value_transform=lambda value: value / 100.0)
+        self._connect_theme_setting_spinbox(self.ui_scale_spinbox, timer_attr='_ui_scale_timer', config_key='ui_scale', value_transform=lambda value: value / 100.0, after_change=self._refresh_scaled_card_displays)
         self._connect_theme_setting_spinbox(self.border_radius_spinbox, timer_attr='_border_radius_timer', config_key='custom_border_radius')
 
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
@@ -933,15 +940,27 @@ class AppWindow(QWidget):
             setattr(self, attr_name, timer)
         return timer
 
-    def _connect_theme_setting_spinbox(self, spinbox, *, timer_attr: str, config_key: str, value_transform=None):
+    def _connect_theme_setting_spinbox(self, spinbox, *, timer_attr: str, config_key: str, value_transform=None, after_change=None):
         timer = self._get_or_create_theme_timer(timer_attr)
 
         def _on_changed(value):
             self.app_state.local_config[config_key] = value_transform(value) if value_transform else value
             self.settings_service.write_local_config()
             timer.start()
+            if after_change:
+                after_change()
 
         spinbox.valueChanged.connect(_on_changed)
+
+    def _refresh_scaled_card_displays(self):
+        if hasattr(self, 'search_tab_builder') and hasattr(self.search_tab_builder, 'refresh_dynamic_styles'):
+            self.search_tab_builder.refresh_dynamic_styles()
+        if hasattr(self, 'search_display'):
+            self.search_display.update_display()
+        if hasattr(self, 'library_display'):
+            self.library_display.update_display()
+        if hasattr(self, 'plugin_display'):
+            self.plugin_display.update_display()
 
     @staticmethod
     def _localized_value(data, ru_key, en_key, fallback_key=None):
@@ -1318,6 +1337,8 @@ class AppWindow(QWidget):
             y = max(0, (panel_height - logo_height) // 2)
             self.launcher_icon_label.move((panel_width - logo_width) // 2, y)
         self.settings_service.schedule_geometry_save(self)
+        if hasattr(self, 'search_display') and hasattr(self, 'search_mods_scroll'):
+            self.search_display.update_display()
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -1485,7 +1506,7 @@ class AppWindow(QWidget):
                     self.main_tab_widget.insertTab(tab_index, new_widget, tr(plugin['name_key']))
                     self.main_tab_widget.setCurrentIndex(tab_index)
         except Exception as e:
-            logging.exception(f"Error initializing plugin '{plugin.get('name_key', 'unknown')}'")
+            logging.exception(f"Error initializing plugin '{plugin.get('name_key', 'unknown')}: {e}'")
 
     def _update_nobody_came_state(self, num_main_tabs, plugin_count):
         """Show or remove 'But nobody came.' based on tab/plugin counts."""
@@ -1614,3 +1635,4 @@ class AppWindow(QWidget):
             self.settings_service.write_local_config()
             if hasattr(self, '_ui_scale_timer'):
                 self._ui_scale_timer.start()
+            self._refresh_scaled_card_displays()

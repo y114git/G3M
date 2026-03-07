@@ -35,9 +35,33 @@ class TestTabBuilders:
         assert builder is not None
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from PyQt6.QtWidgets import QGridLayout
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
         builder = ModsBrowserTabBuilder(app_state, None)
         assert builder is not None
+        widget = builder.build()
+        widgets = builder.get_widgets()
+        assert widgets['mod_list_columns'] == 1
+        assert isinstance(widgets['mod_list_layout'], QGridLayout)
+        assert 'show_nsfw_checkbox' in widgets
+        assert widgets['show_nsfw_checkbox'].isChecked() is False
+        widget.deleteLater()
+
+    def test_mods_browser_show_nsfw_checkbox_scales_with_ui_scale(self, qapp, app_state, feedback_service):
+        from ui.builders.search_tab_builder import ModsBrowserTabBuilder
+        app_state.local_config['ui_scale'] = 1.5
+        builder = ModsBrowserTabBuilder(app_state, None)
+        widget = builder.build()
+        checkbox = builder.get_widgets()['show_nsfw_checkbox']
+        # Verify scaled values are larger than base
+        assert 'font-size:' in checkbox.styleSheet()
+        scaled_style = checkbox.styleSheet()
+        app_state.local_config['ui_scale'] = 1.0
+        builder.refresh_dynamic_styles()
+        base_style = checkbox.styleSheet()
+        # Verify styles changed after scale adjustment
+        assert scaled_style != base_style
+        widget.deleteLater()
 
     def test_plugin_tab_builder_creation(self, qapp, app_state, feedback_service):
         from ui.builders.plugin_tab_builder import PluginTabBuilder

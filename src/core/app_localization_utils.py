@@ -11,6 +11,7 @@ WIDGET_LOCALIZATIONS = [
     ('chat_button', 'setText', 'ui.chat_button'),
     ('shortcut_button', 'setText', 'buttons.shortcut'),
     ('tags_label', 'setText', 'ui.tags_label'),
+    ('show_nsfw_checkbox', 'setText', 'ui.show_nsfw'),
     ('tag_textedit', 'setText', 'tags.textedit'),
     ('tag_customization', 'setText', 'tags.customization'),
     ('tag_gameplay', 'setText', 'tags.gameplay'),
@@ -110,6 +111,8 @@ def relocalize_texts(w):
     w._apply_widget_localizations(WIDGET_LOCALIZATIONS)
     for combo_name, keys in COMBO_LOCALIZATIONS.items():
         w._apply_combo_localizations(combo_name, keys)
+    if hasattr(w, 'search_tab_builder') and hasattr(w.search_tab_builder, 'refresh_dynamic_styles'):
+        w.search_tab_builder.refresh_dynamic_styles()
     if hasattr(w, 'settings_reset_custom_exe_button') and w.settings_reset_custom_exe_button:
         w._update_custom_executable_ui()
     w.full_install_checkbox.setToolTip(w._full_install_tooltip())
