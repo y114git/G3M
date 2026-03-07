@@ -154,22 +154,33 @@ def apply_rounded_mask(widget, radius, inset=0):
         return
     inset_value = max(0, int(inset))
     if width <= (inset_value * 2) or height <= (inset_value * 2):
-        try:
-            widget.clearMask()
-        except (RuntimeError, AttributeError):
-            pass
+        if getattr(widget, '_rounded_mask_applied', False):
+            try:
+                widget.clearMask()
+            except (RuntimeError, AttributeError):
+                pass
+            widget._rounded_mask_applied = False
+            widget._rounded_mask_cache_key = None
         return
     radius_value = clamp_border_radius(radius, width=width - (inset_value * 2), height=height - (inset_value * 2))
     if radius_value <= 0:
-        try:
-            widget.clearMask()
-        except (RuntimeError, AttributeError):
-            pass
+        if getattr(widget, '_rounded_mask_applied', False):
+            try:
+                widget.clearMask()
+            except (RuntimeError, AttributeError):
+                pass
+            widget._rounded_mask_applied = False
+            widget._rounded_mask_cache_key = None
+        return
+    cache_key = (width, height, inset_value, radius_value)
+    if getattr(widget, '_rounded_mask_cache_key', None) == cache_key and getattr(widget, '_rounded_mask_applied', False):
         return
     path = QPainterPath()
     path.addRoundedRect(QRectF(inset_value, inset_value, width - (inset_value * 2), height - (inset_value * 2)), radius_value, radius_value)
     try:
         widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
+        widget._rounded_mask_applied = True
+        widget._rounded_mask_cache_key = cache_key
     except (RuntimeError, AttributeError):
         pass
 

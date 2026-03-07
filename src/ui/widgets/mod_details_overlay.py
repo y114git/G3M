@@ -174,6 +174,7 @@ class ModDetailsOverlay(QWidget):
         self._last_description_width = 0
         self._thread_pool = QThreadPool.globalInstance()
         self._original_resize_event = None
+        self._last_geometry = None
         self.hide()
         self._setup_ui()
         self.main_window = self._get_main_window()
@@ -217,6 +218,53 @@ class ModDetailsOverlay(QWidget):
     def _can_update(self) -> bool:
         return (not self.dialog_closed) and self._is_alive(self)
 
+    @staticmethod
+    def _clear_mask_if_needed(target):
+        if not getattr(target, '_rounded_mask_applied', False):
+            return
+        try:
+            target.clearMask()
+        except (RuntimeError, AttributeError):
+            pass
+        target._rounded_mask_applied = False
+        target._rounded_mask_cache_key = None
+
+    @staticmethod
+    def _set_stylesheet_if_changed(target, stylesheet: str, attr_name: str) -> bool:
+        if getattr(target, attr_name, None) == stylesheet:
+            return False
+        target.setStyleSheet(stylesheet)
+        setattr(target, attr_name, stylesheet)
+        return True
+
+    @staticmethod
+    def _set_contents_margins_if_changed(target, margins: tuple[int, int, int, int], attr_name: str) -> bool:
+        normalized = tuple(int(value) for value in margins)
+        if getattr(target, attr_name, None) == normalized:
+            return False
+        target.setContentsMargins(*normalized)
+        setattr(target, attr_name, normalized)
+        return True
+
+    @staticmethod
+    def _set_document_margin_if_changed(target, margin: int, attr_name: str) -> bool:
+        normalized = int(margin)
+        if getattr(target, attr_name, None) == normalized:
+            return False
+        target.setDocumentMargin(normalized)
+        setattr(target, attr_name, normalized)
+        return True
+
+    def _apply_overlay_geometry(self, force: bool = False) -> bool:
+        if not self.main_window:
+            return False
+        geometry = tuple(int(value) for value in self._calculate_content_geometry(self.main_window.rect()))
+        if (not force) and self._last_geometry == geometry:
+            return False
+        self._last_geometry = geometry
+        self.setGeometry(*geometry)
+        return True
+
     def _radius_for(self, widget, margin: int = 0) -> int:
         return get_widget_border_radius(widget, self._border_radius, margin=margin)
 
@@ -229,10 +277,7 @@ class ModDetailsOverlay(QWidget):
     def _install_scroll_clip_handlers(self, target, attr_prefix: str):
         def _apply():
             apply_scroll_area_chrome(target, max(0, self._radius_for(target) - 2), scrollbar_radius=self._border_radius)
-            try:
-                target.clearMask()
-            except (RuntimeError, AttributeError):
-                pass
+            self._clear_mask_if_needed(target)
 
         install_scroll_area_update_handlers(target, _apply, f'{attr_prefix}_clip')
 
@@ -254,21 +299,28 @@ class ModDetailsOverlay(QWidget):
                 '}',
                 scrollbar_qss,
             ]
-            target.setStyleSheet('\n'.join(rules))
-            scrollbar_extent = apply_scroll_area_chrome(target, qss=scrollbar_qss)
+            stylesheet = '\n'.join(rules)
+            self._set_stylesheet_if_changed(target, stylesheet, f'{attr_name}_stylesheet_cache')
+            scrollbar_qss_changed = getattr(target, f'{attr_name}_scrollbar_qss_cache', None) != scrollbar_qss
+            if scrollbar_qss_changed:
+                setattr(target, f'{attr_name}_scrollbar_qss_cache', scrollbar_qss)
+            scrollbar_extent = apply_scroll_area_chrome(target, qss=scrollbar_qss if scrollbar_qss_changed else None)
             try:
-                target.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, scrollbar_extent + 2), viewport_inset)
+                viewport_margins = (viewport_inset, viewport_inset, max(viewport_inset, scrollbar_extent + 2), viewport_inset)
+                if getattr(target, f'{attr_name}_viewport_margins_cache', None) != viewport_margins:
+                    target.setViewportMargins(*viewport_margins)
+                    setattr(target, f'{attr_name}_viewport_margins_cache', viewport_margins)
             except Exception:
                 pass
             try:
                 if content_target is not None:
-                    content_target.setContentsMargins(content_padding, content_padding, content_padding, content_padding)
+                    self._set_contents_margins_if_changed(content_target, (content_padding, content_padding, content_padding, content_padding), f'{attr_name}_content_margins_cache')
                 elif document_margin:
-                    target.document().setDocumentMargin(content_padding)
+                    self._set_document_margin_if_changed(target.document(), content_padding, f'{attr_name}_document_margin_cache')
             except Exception:
                 pass
             if viewport := target.viewport():
-                viewport.setStyleSheet(f'background-color: {self._colors["background"]}; border: none;')
+                self._set_stylesheet_if_changed(viewport, f'background-color: {self._colors["background"]}; border: none;', f'{attr_name}_viewport_stylesheet_cache')
 
         install_scroll_area_update_handlers(target, _apply, attr_name.removeprefix('_').removesuffix('_filter'))
         self._install_scroll_clip_handlers(target, clip_prefix)
@@ -294,8 +346,8 @@ class ModDetailsOverlay(QWidget):
     def _install_image_container_style(self, container):
         def _apply(target=container, image_label=self._img_label):
             radius = self._radius_for(target)
-            target.setStyleSheet(f'background-color:transparent; border:2px solid {self._colors["border"]}; border-radius: {radius}px;')
-            image_label.setStyleSheet(f'border: none; background-color: transparent; border-radius: {radius}px;')
+            self._set_stylesheet_if_changed(target, f'background-color:transparent; border:2px solid {self._colors["border"]}; border-radius: {radius}px;', '_overlay_image_container_stylesheet_cache')
+            self._set_stylesheet_if_changed(image_label, f'border: none; background-color: transparent; border-radius: {radius}px;', '_overlay_image_label_stylesheet_cache')
 
         install_widget_update_handler(container, _apply, attr_name='_overlay_image_style_filter')
 
@@ -382,7 +434,7 @@ class ModDetailsOverlay(QWidget):
             try:
                 self._sync_timer = QTimer()
                 self._sync_timer.timeout.connect(self._sync_button_from_card)
-                self._sync_timer.start(100)
+                self._sync_timer.start(250)
             except Exception as e:
                 logging.debug(f'QTimer setup failed for _sync_timer: {e}', exc_info=True)
             return
@@ -408,6 +460,8 @@ class ModDetailsOverlay(QWidget):
         self.desc_text = QTextBrowser()
         self.desc_text.setMinimumHeight(400)
         self.desc_text.setOpenExternalLinks(True)
+        self.desc_text.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
+        self.desc_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.desc_text.setFrameShape(QFrame.Shape.NoFrame)
         self._install_scroller_style(self.desc_text, selector='QTextBrowser', attr_name='_overlay_description_style_filter', clip_prefix='overlay_description', content_padding_min=14, content_padding_factor=4, text_color=self._colors['text'], font_size=16, document_margin=True)
         self._desc_default_color = self._colors['text']
@@ -616,20 +670,24 @@ class ModDetailsOverlay(QWidget):
             lbl.setVisible(show)
 
     def _rebuild_dots(self):
-        while self._dots_layout.count():
-            item = self._dots_layout.takeAt(0)
-            if item and item.widget():
-                item.widget().setParent(None)
-        self._dot_labels = []
+        while len(self._dot_labels) > len(self._ss_urls):
+            label = self._dot_labels.pop()
+            self._dots_layout.removeWidget(label)
+            label.deleteLater()
         tc = self.palette().color(self.foregroundRole()).name()
-        for i in range(len(self._ss_urls)):
-            lbl = QLabel('●' if i == self._ss_index else '○')
-            lbl.setStyleSheet(f'color:{tc};font-size:14px;background-color:transparent;border:none;padding:2px;')
+        dot_style = f'color:{tc};font-size:14px;background-color:transparent;border:none;padding:2px;'
+        while len(self._dot_labels) < len(self._ss_urls):
+            lbl = QLabel()
             self._dot_labels.append(lbl)
             self._dots_layout.addWidget(lbl)
+        for i, lbl in enumerate(self._dot_labels):
+            lbl.setText('●' if i == self._ss_index else '○')
+            if lbl.styleSheet() != dot_style:
+                lbl.setStyleSheet(dot_style)
 
     def show_overlay(self):
         """Show the overlay with fade-in animation."""
+        self._apply_overlay_geometry(force=True)
         self.show()
         self.raise_()
         self.activateWindow()
@@ -668,7 +726,7 @@ class ModDetailsOverlay(QWidget):
     def _on_main_window_resize(self, event):
         try:
             if self._is_alive(self) and self.isVisible():
-                self.setGeometry(*self._calculate_content_geometry(self.main_window.rect()))
+                self._apply_overlay_geometry()
         except (RuntimeError, AttributeError):
             pass
         if self._original_resize_event:
@@ -678,9 +736,8 @@ class ModDetailsOverlay(QWidget):
                 pass
 
     def resizeEvent(self, event):
-        if self.main_window:
-            self.setGeometry(*self._calculate_content_geometry(self.main_window.rect()))
         super().resizeEvent(event)
+        self._last_geometry = (self.x(), self.y(), self.width(), self.height())
         self._refresh_description_html()
 
     def _load_description(self):
@@ -810,7 +867,7 @@ def show_mod_details_overlay(parent, mod_data, source_card=None):
     """Show mod details overlay."""
     overlay = ModDetailsOverlay(parent, mod_data, source_card=source_card)
     main_window = overlay._get_main_window()
-    overlay.setGeometry(*overlay._calculate_content_geometry(main_window.rect()))
     overlay.setParent(main_window)
+    overlay._apply_overlay_geometry(force=True)
     overlay.show_overlay()
     return overlay

@@ -16,6 +16,19 @@ class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
 
+    def _should_run_entry_animation(self) -> bool:
+        parent_app = getattr(self, 'parent_app', None)
+        if not parent_app:
+            return True
+        main_tab_widget = getattr(parent_app, 'main_tab_widget', None)
+        library_tab = getattr(parent_app, 'library_tab', None)
+        if not main_tab_widget or library_tab is None:
+            return True
+        try:
+            return main_tab_widget.currentWidget() is library_tab
+        except Exception:
+            return True
+
     def __init__(self, mod_data, parent=None, installed_date=None, parent_app=None):
         super().__init__(mod_data, parent)
         if parent_app:
@@ -32,7 +45,8 @@ class InstalledModWidget(BaseModWidget):
         self._init_ui()
         self._update_button_from_status()
 
-        UIAnimator.fade_in(self, 200, getattr(self.parent_app, 'app_state', None) if self.parent_app else None)
+        if self._should_run_entry_animation():
+            UIAnimator.fade_in(self, 200, getattr(self.parent_app, 'app_state', None) if self.parent_app else None)
 
     def _init_ui(self):
         super()._init_ui()

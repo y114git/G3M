@@ -117,6 +117,18 @@ class TestModWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_search_display_controller_does_not_reselect_already_selected_card(self):
+        from controllers.search_display_controller import SearchDisplayController
+        from unittest.mock import Mock
+        mod = SimpleNamespace(name='Test Mod')
+        card = SimpleNamespace(mod_data=mod, is_selected=True, set_selected=Mock())
+        controller = SearchDisplayController.__new__(SearchDisplayController)
+        controller._iter_layout_cards = lambda: iter([card])
+        controller.clear_all_selections = Mock()
+        SearchDisplayController.on_mod_clicked(controller, mod)
+        controller.clear_all_selections.assert_not_called()
+        card.set_selected.assert_not_called()
+
     @pytest.mark.parametrize(('downloads', 'expected'), [(0, '⤓ 0'), (None, '⤓ N/A')])
     def test_mod_card_widget_downloads_text_distinguishes_zero_and_missing(self, qapp, downloads, expected):
         from ui.widgets.mod.mod_card_widget import ModCardWidget
@@ -302,6 +314,39 @@ class TestCommonWidgets:
         for _ in range(3):
             qapp.processEvents()
             time.sleep(0.05)
+
+    def test_mod_details_overlay_reuses_dot_labels_during_navigation(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(None, mod_data)
+        overlay.update_screenshots(['https://a.com/1.png', 'https://a.com/2.png', 'https://a.com/3.png'])
+        original_dot_labels = list(overlay._dot_labels)
+        overlay._ss_next()
+        assert overlay._dot_labels == original_dot_labels
+        assert overlay._dot_labels[1].text() == '●'
+        overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_rich_html_reserves_safe_width_for_inline_media(self):
+        from ui.common.rich_html import _build_img_tag, _placeholder_resource_width, _safe_inline_media_width
+        safe_width = _safe_inline_media_width(300)
+        assert safe_width == 290
+        assert _placeholder_resource_width(290) == 270
+        img_tag = _build_img_tag({'src': 'https://example.com/test.png', 'width': '300'}, 300)
+        assert 'width="290"' in img_tag
+
+    def test_rich_html_loading_placeholder_keeps_outer_edges_transparent(self):
+        from ui.common.rich_html import _create_loading_placeholder
+        placeholder = _create_loading_placeholder(300, 120, 'Loading image...')
+        center_y = placeholder.height() // 2
+        assert placeholder.pixelColor(0, center_y).alpha() == 0
+        assert placeholder.pixelColor(placeholder.width() - 1, center_y).alpha() == 0
+        assert placeholder.pixelColor(placeholder.width() - 8, center_y).alpha() == 0
+        assert placeholder.pixelColor(placeholder.width() - 16, center_y).alpha() == 0
+        assert placeholder.pixelColor(placeholder.width() // 2, center_y).alpha() > 0
 
     def test_dr_save_manager_slot_labels_size_for_multiline_text_on_first_refresh(self, qapp, app_state, temp_dir):
         from unittest.mock import Mock

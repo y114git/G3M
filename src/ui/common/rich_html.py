@@ -9,7 +9,7 @@ import re
 import logging
 from PyQt6.QtCore import QUrl, QRunnable, QThreadPool, QObject, pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QTextDocument, QColor, QPainter
-from PyQt6.QtWidgets import QTextBrowser
+from PyQt6.QtWidgets import QTextBrowser, QTextEdit
 from utils.network_utils import get_session
 
 _CSS_CLASS_MAP = {
@@ -53,16 +53,69 @@ def _style_dimension(style: str, name: str) -> str:
     return match.group(1) if match else ''
 
 
+def _safe_inline_media_width(widget_width: int) -> int:
+    try:
+        width = int(widget_width or 0)
+    except (TypeError, ValueError):
+        width = 0
+    return max(1, width - 10) if width > 10 else max(1, width)
+
+
+def _placeholder_resource_width(target_width: int) -> int:
+    try:
+        width = int(target_width or 0)
+    except (TypeError, ValueError):
+        width = 0
+    if width <= 0:
+        return 280
+    if width <= 140:
+        return max(120, width - 8)
+    return max(120, width - 20)
+
+
+def _browser_available_width(browser: QTextBrowser) -> int:
+    viewport = None
+    try:
+        viewport = browser.viewport()
+    except (AttributeError, RuntimeError, TypeError):
+        viewport = None
+    width_candidates = []
+    if viewport is not None:
+        try:
+            width_candidates.append(int(viewport.contentsRect().width()))
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            pass
+        try:
+            width_candidates.append(int(viewport.width()))
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            pass
+    try:
+        width_candidates.append(int(browser.contentsRect().width()))
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        pass
+    try:
+        width_candidates.append(int(browser.width()))
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        pass
+    available_width = next((width for width in width_candidates if width > 0), 600)
+    try:
+        document_margin = int(browser.document().documentMargin())
+    except (AttributeError, TypeError, ValueError):
+        document_margin = 0
+    return max(available_width - (document_margin * 2), 200)
+
+
 def _image_requests(html: str, widget_width: int) -> list[dict]:
     requests = []
+    safe_width = _safe_inline_media_width(widget_width)
     for match in _IMG_RE.finditer(html):
         attrs = _parse_attrs(match.group(1))
         src = attrs.get('src', '').strip()
         if not src.startswith(('http://', 'https://')):
             continue
-        width = _positive_int(attrs.get('width')) or widget_width
+        width = _positive_int(attrs.get('width')) or safe_width
         height = _positive_int(attrs.get('height'))
-        requests.append({'src': src, 'width': max(1, min(widget_width, width)), 'height': height})
+        requests.append({'src': src, 'width': max(1, min(safe_width, width)), 'height': height})
     return requests
 
 
@@ -73,11 +126,17 @@ def _create_loading_placeholder(width: int, height: int, text: str) -> QImage:
     image.fill(QColor(0, 0, 0, 0))
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    painter.fillRect(image.rect(), QColor(34, 34, 34, 235))
+    left_inset = 5
+    top_inset = 5
+    right_inset = 20
+    bottom_inset = 5
+    content_rect = image.rect().adjusted(left_inset, top_inset, -right_inset, -bottom_inset)
+    border_rect = content_rect.adjusted(0, 0, -1, -1)
+    painter.fillRect(content_rect, QColor(34, 34, 34, 235))
     painter.setPen(QColor(3, 157, 91, 220))
-    painter.drawRoundedRect(1, 1, placeholder_width - 2, placeholder_height - 2, 12, 12)
+    painter.drawRoundedRect(border_rect, 12, 12)
     painter.setPen(QColor(232, 233, 235))
-    painter.drawText(image.rect().adjusted(12, 12, -12, -12), Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap, text)
+    painter.drawText(content_rect.adjusted(12, 12, -12, -12), Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap, text)
     painter.end()
     return image
 
@@ -137,6 +196,7 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
     src = attrs.get('src', '')
     if not src:
         return ''
+    safe_width = _safe_inline_media_width(widget_width)
     style_attr = attrs.get('style', '')
     width_attr = attrs.get('width', '') or _style_dimension(style_attr, 'width')
     height_attr = attrs.get('height', '') or _style_dimension(style_attr, 'height')
@@ -145,7 +205,7 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
         if width_attr.endswith('%'):
             try:
                 pct = float(width_attr.rstrip('%'))
-                w = max(1, int(widget_width * pct / 100))
+                w = max(1, int(safe_width * pct / 100))
             except ValueError:
                 pass
         else:
@@ -161,13 +221,13 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
                 h = int(height_attr)
             except ValueError:
                 pass
-    if w and w > widget_width:
+    if w and w > safe_width:
         if h:
             try:
-                h = max(1, int(h * widget_width / w))
+                h = max(1, int(h * safe_width / w))
             except (TypeError, ValueError):
                 h = 0
-        w = widget_width
+        w = safe_width
     size_attrs = ''
     if w:
         size_attrs += f' width="{w}"'
@@ -270,7 +330,7 @@ def load_remote_images(browser: QTextBrowser, html: str, widget_width: int | Non
 
     for url, request in requests_by_url.items():
         placeholder_text = 'Loading GIF preview...' if url.lower().split('?', 1)[0].endswith('.gif') else 'Loading image...'
-        placeholder = _create_loading_placeholder(request.get('width', max_width), request.get('height', 0), placeholder_text)
+        placeholder = _create_loading_placeholder(_placeholder_resource_width(request.get('width', max_width)), request.get('height', 0), placeholder_text)
         doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), placeholder)
     _refresh_browser_document(browser, doc)
 
@@ -309,17 +369,18 @@ def set_rich_html(browser: QTextBrowser, html: str, default_color: str = '#e8e9e
         html: Raw HTML string (may contain remote images, CSS classes, font tags).
         default_color: Default text color for the wrapper div.
     """
-    viewport_width = browser.viewport().width() if browser.viewport() else browser.width()
     try:
-        document_margin = int(browser.document().documentMargin())
-    except (AttributeError, TypeError, ValueError):
-        document_margin = 0
-    try:
-        scrollbar_width = browser.verticalScrollBar().sizeHint().width()
+        browser.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
     except (AttributeError, RuntimeError, TypeError):
-        scrollbar_width = 16
-    widget_width = max((viewport_width or browser.width() or 600) - (document_margin * 2) - scrollbar_width - 24, 200)
+        pass
+    widget_width = _browser_available_width(browser)
     processed = preprocess_html(html, widget_width=widget_width)
     wrapped = f'<div style="color:{default_color};">{processed}</div>'
     browser.setHtml(wrapped)
+    refined_width = _browser_available_width(browser)
+    if abs(refined_width - widget_width) >= 4:
+        widget_width = refined_width
+        processed = preprocess_html(html, widget_width=widget_width)
+        wrapped = f'<div style="color:{default_color};">{processed}</div>'
+        browser.setHtml(wrapped)
     load_remote_images(browser, processed, widget_width=widget_width)

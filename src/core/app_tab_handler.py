@@ -1,5 +1,6 @@
 """Tab change handler extracted from AppWindow."""
 import logging
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 from services.localization_service import tr
 
@@ -14,7 +15,7 @@ def handle_tab_changed(w, index):
 
     if index == 2 and num_original_tabs == 3:
         if hasattr(w, 'plugin_display'):
-            w.plugin_display.update_display()
+            QTimer.singleShot(0, w.plugin_display.update_display)
         w.previous_tab_index = index
         return
     if index >= num_original_tabs:
@@ -72,5 +73,5 @@ def handle_tab_changed(w, index):
         if not getattr(w.app_state, 'library_initialized', False):
             w.app_state.library_initialized = True
             if hasattr(w.app_state, 'all_mods') and w.app_state.all_mods:
-                w.library_display.update_display()
+                QTimer.singleShot(0, w.library_display.update_display)
     w.previous_tab_index = index

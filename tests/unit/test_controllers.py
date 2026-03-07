@@ -1,4 +1,5 @@
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 
 class TestModOperationsController:
@@ -29,6 +30,52 @@ class TestLibraryDisplayController:
         controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=used_mods_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
+
+    def test_library_display_skips_refresh_for_unchanged_valid_cached_view(self, app_state, feedback_service):
+        from controllers.library_display_controller import LibraryDisplayController
+        app_window = Mock()
+        app_window.chapter_mode_checkbox.isChecked.return_value = False
+        app_window.library_sort_combo.currentIndex.return_value = 0
+        app_window.library_sort_ascending = False
+        app_window.library_tag_textedit.isChecked.return_value = False
+        app_window.library_tag_customization.isChecked.return_value = False
+        app_window.library_tag_gameplay.isChecked.return_value = False
+        app_window.library_tag_other.isChecked.return_value = False
+        app_window.library_tag_gamebanana.isChecked.return_value = False
+        app_window.game_type_combo.currentData.return_value = 'deltarune'
+        app_window.library_search_text = ''
+        app_window.installed_mods_layout.count.return_value = 2
+        app_window.game_launch = Mock()
+        mod_service = SimpleNamespace(_installed_mods_cache_valid=True)
+        controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=Mock(), app_window=app_window)
+        controller.refresh_async = Mock()
+        controller.update_mod_widgets_active_status = Mock()
+        controller._last_render_signature = (controller._current_view_signature(), (('mod_key',),))
+        controller.update_display()
+        controller.refresh_async.assert_not_called()
+        controller.update_mod_widgets_active_status.assert_called_once()
+
+    def test_library_display_refreshes_when_installed_cache_is_invalid(self, app_state, feedback_service):
+        from controllers.library_display_controller import LibraryDisplayController
+        app_window = Mock()
+        app_window.chapter_mode_checkbox.isChecked.return_value = False
+        app_window.library_sort_combo.currentIndex.return_value = 0
+        app_window.library_sort_ascending = False
+        app_window.library_tag_textedit.isChecked.return_value = False
+        app_window.library_tag_customization.isChecked.return_value = False
+        app_window.library_tag_gameplay.isChecked.return_value = False
+        app_window.library_tag_other.isChecked.return_value = False
+        app_window.library_tag_gamebanana.isChecked.return_value = False
+        app_window.game_type_combo.currentData.return_value = 'deltarune'
+        app_window.library_search_text = ''
+        app_window.installed_mods_layout.count.return_value = 2
+        app_window.game_launch = Mock()
+        mod_service = SimpleNamespace(_installed_mods_cache_valid=False)
+        controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=Mock(), app_window=app_window)
+        controller.refresh_async = Mock()
+        controller._last_render_signature = (controller._current_view_signature(), (('mod_key',),))
+        controller.update_display()
+        controller.refresh_async.assert_called_once()
 
 
 class TestSearchDisplayController:

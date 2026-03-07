@@ -24,6 +24,51 @@ class LibraryDisplayController:
         self.used_mods_service = used_mods_service
         self.app = app_window
         self._updating_display = False
+        self._last_render_signature = None
+        self._pending_view_signature = None
+
+    def _current_view_signature(self):
+        is_chapter_mode = hasattr(self.app, 'chapter_mode_checkbox') and self.app.chapter_mode_checkbox.isChecked()
+        sort_type = self.app.library_sort_combo.currentIndex() if hasattr(self.app, 'library_sort_combo') else 0
+        selected_tags = tuple(sorted(tag for tag in (
+            'textedit' if hasattr(self.app, 'library_tag_textedit') and self.app.library_tag_textedit.isChecked() else None,
+            'customization' if hasattr(self.app, 'library_tag_customization') and self.app.library_tag_customization.isChecked() else None,
+            'gameplay' if hasattr(self.app, 'library_tag_gameplay') and self.app.library_tag_gameplay.isChecked() else None,
+            'other' if hasattr(self.app, 'library_tag_other') and self.app.library_tag_other.isChecked() else None,
+        ) if tag))
+        return (
+            bool(is_chapter_mode),
+            getattr(self.app_state, 'selected_chapter_id', None) if is_chapter_mode else None,
+            getattr(self.app, 'game_type_combo', type('', (), {'currentData': lambda: 'deltarune'})).currentData() if hasattr(self.app, 'game_type_combo') else 'deltarune',
+            sort_type,
+            bool(getattr(self.app, 'library_sort_ascending', False)),
+            bool(hasattr(self.app, 'library_tag_gamebanana') and self.app.library_tag_gamebanana.isChecked()),
+            selected_tags,
+            getattr(self.app, 'library_search_text', '') or '',
+        )
+
+    @staticmethod
+    def _installed_mods_signature(installed_mods):
+        return tuple(
+            (
+                mod.get('key') or mod.get('mod_key') or '',
+                mod.get('added_date') or '',
+                mod.get('name') or '',
+                mod.get('version') or '',
+                mod.get('game') or mod.get('modgame') or '',
+                mod.get('folder_name') or '',
+            )
+            for mod in installed_mods
+        )
+
+    def _has_rendered_library_widgets(self) -> bool:
+        layout = getattr(self.app, 'installed_mods_layout', None)
+        if layout is None:
+            return False
+        return layout.count() > 1
+
+    def _installed_mods_cache_is_valid(self) -> bool:
+        return bool(getattr(self.mod_service, '_installed_mods_cache_valid', False))
 
     def _show_chapter_mode_instruction(self) -> None:
         if hasattr(self.app, 'installed_mods_container') and hasattr(self.app, 'installed_mods_layout'):
@@ -41,6 +86,15 @@ class LibraryDisplayController:
         if is_chapter_mode:
             self.update_for_chapter_mode(self.app_state.selected_chapter_id)
             return
+        view_signature = self._current_view_signature()
+        if self._installed_mods_cache_is_valid() and self._has_rendered_library_widgets() and self._last_render_signature and self._last_render_signature[0] == view_signature:
+            self.update_mod_widgets_active_status()
+            try:
+                self.app.game_launch.update_button_state()
+            except Exception:
+                pass
+            return
+        self._pending_view_signature = view_signature
         self.refresh_async()
 
     def _filter_and_sort_installed(self, installed_mods):
@@ -158,6 +212,15 @@ class LibraryDisplayController:
                 else:
                     self.update_for_chapter_mode(selected_id)
                 return
+            view_signature = self._pending_view_signature or self._current_view_signature()
+            render_signature = (view_signature, self._installed_mods_signature(installed_mods))
+            if self._installed_mods_cache_is_valid() and self._has_rendered_library_widgets() and self._last_render_signature == render_signature:
+                self.update_mod_widgets_active_status()
+                try:
+                    self.app.game_launch.update_button_state()
+                except Exception:
+                    pass
+                return
             container = getattr(self.app, 'installed_mods_container', None)
             if container:
                 container.setUpdatesEnabled(False)
@@ -199,6 +262,7 @@ class LibraryDisplayController:
                             show_empty_message_in_layout(self.app.installed_mods_layout, tr('ui.empty'), self.app_state.local_config, font_size=18)
                         self.update_mod_widgets_active_status()
                         self.app.game_launch.update_button_state()
+                        self._last_render_signature = render_signature
                         _finish_display()
                     else:
                         QTimer.singleShot(0, _build_next_batch)
@@ -216,6 +280,7 @@ class LibraryDisplayController:
         except Exception as e:
             logging.debug('update_display failed', exc_info=e)
         finally:
+            self._pending_view_signature = None
             self._updating_display = False
 
     def cleanup_missing_mods(self, installed_mods):

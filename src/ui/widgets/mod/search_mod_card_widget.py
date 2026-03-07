@@ -224,8 +224,11 @@ class SearchModCardWidget(ModCardWidget):
         except Exception:
             label_width = label.width() if hasattr(label, 'width') else 0
         available_width = max(80, label_width or self._card_width - margins.left() - margins.right() - 4)
+        cache_key = (cleaned_text, available_width, max_lines, reserve_lines or max_lines, metrics.lineSpacing(), metrics.averageCharWidth())
+        if getattr(label, '_elide_cache_key', None) == cache_key:
+            return False
         if not words:
-            label.setText('')
+            rendered_text = ''
             line_count = 1
         else:
             lines = []
@@ -248,14 +251,23 @@ class SearchModCardWidget(ModCardWidget):
                     remaining_text = ' '.join(words[word_index:])
                     current = metrics.elidedText(f'{current} {remaining_text}', Qt.TextElideMode.ElideRight, available_width)
                 lines.append(current)
-            label.setText('\n'.join(lines))
+            rendered_text = '\n'.join(lines)
             line_count = max(len(lines), 1)
         reserved = max(line_count, reserve_lines or max_lines)
         max_height = metrics.lineSpacing() * reserved + 6
-        label.setMinimumHeight(0)
-        label.setMaximumHeight(max_height)
+        changed = False
+        if label.text() != rendered_text:
+            label.setText(rendered_text)
+            changed = True
+        if label.minimumHeight() != 0:
+            label.setMinimumHeight(0)
+        if label.maximumHeight() != max_height:
+            label.setMaximumHeight(max_height)
+            changed = True
+        label._elide_cache_key = cache_key
+        return changed
 
-    def _refresh_card_geometry(self):
+    def _refresh_card_geometry(self, invalidate_parent: bool = False):
         if hasattr(self, 'main_layout') and self.main_layout:
             self.main_layout.activate()
         if hasattr(self, 'expanded_widget') and self.expanded_widget:
@@ -263,7 +275,7 @@ class SearchModCardWidget(ModCardWidget):
         self.adjustSize()
         self.updateGeometry()
         parent = self.parentWidget()
-        if parent and parent.layout():
+        if invalidate_parent and parent and parent.layout():
             parent.layout().invalidate()
             parent.updateGeometry()
 
@@ -271,12 +283,13 @@ class SearchModCardWidget(ModCardWidget):
         if not hasattr(self, 'name_label'):
             return
         text = self._full_name_text or getattr(self.mod_data, 'name', '') or ''
-        self._set_multiline_elided_text(self.name_label, text, 2, reserve_lines=2)
-        self.updateGeometry()
+        if self._set_multiline_elided_text(self.name_label, text, 2, reserve_lines=2):
+            self.updateGeometry()
 
     def _update_tagline_text(self):
         if hasattr(self, 'tagline_label'):
-            self._set_multiline_elided_text(self.tagline_label, self._get_tagline_text(), 4)
+            if self._set_multiline_elided_text(self.tagline_label, self._get_tagline_text(), 4):
+                self.updateGeometry()
 
     def _update_updated_label(self):
         if hasattr(self, 'updated_label'):
@@ -299,12 +312,12 @@ class SearchModCardWidget(ModCardWidget):
         self._apply_metrics()
         self._update_name_text()
         self._update_tagline_text()
-        self._refresh_card_geometry()
+        self._refresh_card_geometry(invalidate_parent=True)
 
     def _update_actions_visibility(self):
         if hasattr(self, 'expanded_widget'):
             self.expanded_widget.setVisible(self.is_selected)
-        self._refresh_card_geometry()
+        self._refresh_card_geometry(invalidate_parent=True)
 
     def update_mod_data(self):
         try:
@@ -328,7 +341,7 @@ class SearchModCardWidget(ModCardWidget):
                             self._start_compatibility_check()
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
-            self._refresh_card_geometry()
+            self._refresh_card_geometry(invalidate_parent=True)
         except Exception as e:
             logging.warning(f'SearchModCardWidget: Error updating mod data: {e}', exc_info=True)
 
