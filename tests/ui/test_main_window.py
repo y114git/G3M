@@ -1,23 +1,30 @@
-import pytest
 from unittest.mock import Mock, patch
 
 
 class TestAppWindow:
 
     @patch('core.app_window.SingleInstanceServer')
-    @patch('core.app_window.PresenceWorker')
-    def test_app_window_creation(self, mock_presence, mock_server, qapp, temp_dir):
+    def test_app_window_creation(self, mock_server, qapp, temp_dir):
         from core.app_window import AppWindow
         mock_server_instance = Mock()
         mock_server_instance.listen.return_value = True
         mock_server.return_value = mock_server_instance
-        with patch('utils.path_utils.get_user_data_root', return_value=temp_dir), patch('utils.path_utils.get_launcher_dir', return_value=temp_dir), patch('utils.path_utils.get_user_mods_dir', return_value=temp_dir), patch('utils.path_utils.get_user_plugins_dir', return_value=temp_dir):
+        mock_presence_response = Mock()
+        mock_presence_response.status_code = 200
+        mock_presence_response.json.return_value = {'online': 0}
+        mock_presence_session = Mock()
+        mock_presence_session.post.return_value = mock_presence_response
+        with patch('utils.path_utils.get_user_data_root', return_value=temp_dir), patch('utils.path_utils.get_launcher_dir', return_value=temp_dir), patch('utils.path_utils.get_user_mods_dir', return_value=temp_dir), patch('utils.path_utils.get_user_plugins_dir', return_value=temp_dir), patch('workers.presence_worker.get_session', return_value=mock_presence_session):
+            window = AppWindow()
             try:
-                window = AppWindow()
                 assert window is not None
                 assert hasattr(window, 'app_state')
-            except Exception as e:
-                pytest.skip(f'AppWindow creation failed: {e}')
+                assert hasattr(window, 'settings_service')
+                assert hasattr(window, 'mod_service')
+                assert hasattr(window, 'game_launch')
+                assert window.windowTitle() == 'DELTAHUB'
+            finally:
+                window.close()
 
 
 class TestTabBuilders:

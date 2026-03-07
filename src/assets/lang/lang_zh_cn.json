@@ -108,7 +108,7 @@
     "mod_not_verified": "您的模组未经验证，存在一些限制。",
     "mod_tags_label": "模组标签：",
     "mod_verified": "您的模组已通过验证。",
-    "mod_version_label": "模组版本：{version_text}",
+    "mod_version_label": "模组版本：",
     "modified_file_not_found": "未找到修改的文件：\\n{path}",
     "network_fallback_message": "网络错误。已加载本地列表。",
     "network_update_failed": "更新模组列表失败。",

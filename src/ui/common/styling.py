@@ -96,6 +96,47 @@ def install_widget_update_handler(widget, callback, attr_name='_widget_update_fi
     callback()
 
 
+class _ScrollAreaUpdateFilter(_WidgetUpdateFilter):
+    def eventFilter(self, obj, event):
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.LayoutRequest):
+            widget = self._widget_ref()
+            if not widget:
+                return False
+            try:
+                if sip.isdeleted(widget):
+                    return False
+            except (RuntimeError, AttributeError):
+                return False
+            self._callback()
+        return False
+
+
+def install_scroll_area_component_handler(widget, callback, attr_name: str):
+    if not widget:
+        return
+    existing = getattr(widget, attr_name, None)
+    if existing:
+        try:
+            widget.removeEventFilter(existing)
+        except (RuntimeError, TypeError):
+            pass
+    handler = _ScrollAreaUpdateFilter(widget, callback)
+    widget.installEventFilter(handler)
+    setattr(widget, attr_name, handler)
+    callback()
+
+
+def install_scroll_area_update_handlers(scroll_area, callback, attr_prefix: str):
+    install_scroll_area_component_handler(scroll_area, callback, attr_name=f'_{attr_prefix}_scroll_filter')
+    for suffix, widget in (
+        ('viewport', scroll_area.viewport() if scroll_area else None),
+        ('vertical_scrollbar', scroll_area.verticalScrollBar() if scroll_area else None),
+        ('horizontal_scrollbar', scroll_area.horizontalScrollBar() if scroll_area else None),
+    ):
+        if widget:
+            install_scroll_area_component_handler(widget, callback, attr_name=f'_{attr_prefix}_{suffix}_filter')
+
+
 def apply_rounded_mask(widget, radius, inset=0):
     if not widget:
         return
@@ -322,10 +363,10 @@ def border_radius_px(radius: int, width: int | None = None, height: int | None =
     return f'{clamp_border_radius(radius, width=width, height=height, border_width=border_width, margin=margin)}px'
 
 
-def _format_box_values(values) -> str:
+def _normalize_box_values(values) -> tuple[int, int, int, int]:
     if isinstance(values, str):
-        return values
-    if not isinstance(values, (list, tuple)):
+        values = tuple(part for part in values.replace('px', ' ').split() if part)
+    elif not isinstance(values, (list, tuple)):
         values = (values,)
     normalized = []
     for value in values:
@@ -341,6 +382,13 @@ def _format_box_values(values) -> str:
         normalized = [normalized[0], normalized[1], normalized[2], normalized[1]]
     else:
         normalized = normalized[:4]
+    return tuple(normalized)
+
+
+def _format_box_values(values) -> str:
+    if isinstance(values, str):
+        return values
+    normalized = _normalize_box_values(values)
     return ' '.join(f'{value}px' for value in normalized)
 
 
@@ -370,18 +418,56 @@ def install_panel_style_handler(widget, config, color_key: str = 'background', f
     install_widget_update_handler(widget, lambda target=widget: apply_panel_style(target, config, color_key=color_key, fallback=fallback, alpha=alpha, margin=margin), attr_name=attr_name)
 
 
+def apply_scroll_area_chrome(scroll_area, viewport_radius: int | None = None, scrollbar_radius: int | None = None, qss: str | None = None, minimum_extent: int = 16) -> int:
+    if not scroll_area:
+        return 0
+    vertical_scrollbar = scroll_area.verticalScrollBar()
+    scrollbars = tuple(scrollbar for scrollbar in (vertical_scrollbar, scroll_area.horizontalScrollBar()) if scrollbar)
+    if qss:
+        for scrollbar in scrollbars:
+            scrollbar.setStyleSheet(qss)
+    if viewport_radius is not None:
+        if viewport := scroll_area.viewport():
+            apply_rounded_mask(viewport, viewport_radius)
+        effective_scrollbar_radius = viewport_radius if scrollbar_radius is None else scrollbar_radius
+        for scrollbar in scrollbars:
+            apply_rounded_mask(scrollbar, effective_scrollbar_radius)
+    if not vertical_scrollbar:
+        return 0
+    try:
+        if not vertical_scrollbar.isVisible():
+            return 0
+    except (RuntimeError, AttributeError):
+        return 0
+    try:
+        active_extent = vertical_scrollbar.width() or vertical_scrollbar.sizeHint().width()
+    except (RuntimeError, AttributeError):
+        active_extent = 0
+    return max(minimum_extent, active_extent)
+
+
 def install_scroll_viewport_clip(scroll_area, container, config, inset: int, attr_name='_viewport_clip_filter'):
     def _apply():
-        viewport = scroll_area.viewport()
-        if viewport:
-            radius = get_widget_border_radius(container, get_border_radius(config))
-            apply_rounded_mask(viewport, max(0, radius - inset))
+        base_radius = get_border_radius(config)
+        radius = get_widget_border_radius(container, base_radius)
+        apply_scroll_area_chrome(scroll_area, max(0, radius - inset), scrollbar_radius=base_radius)
     container._inner_clip_callback = _apply
-    install_widget_update_handler(scroll_area, _apply, attr_name=attr_name)
+    install_scroll_area_update_handlers(scroll_area, _apply, attr_name.removeprefix('_').removesuffix('_filter'))
 
 
-def build_scrollbar_qss(handle_color: str, radius: int, thickness: int = 12, background: str = 'transparent', vertical_margin=(0, 0, 0, 0), horizontal_margin=(0, 0, 0, 0), min_handle: int = 25, include_corner: bool = False) -> str:
-    handle_radius = clamp_border_radius(radius, width=thickness, height=thickness, margin=1)
+def _scrollbar_radii(radius: int, thickness: int, start_margin: int, end_margin: int, handle_margin: int = 1) -> tuple[int, int]:
+    extent = max(0, thickness - start_margin - end_margin)
+    handle_extent = max(0, extent - (handle_margin * 2))
+    return clamp_border_radius(radius, width=extent, height=extent), clamp_border_radius(radius, width=handle_extent, height=handle_extent)
+
+
+def build_scrollbar_qss(handle_color: str, radius: int, thickness: int = 16, background: str = 'transparent', vertical_margin=(0, 0, 0, 0), horizontal_margin=(0, 0, 0, 0), min_handle: int = 25, include_corner: bool = False) -> str:
+    _vertical_top, vertical_right, _vertical_bottom, vertical_left = _normalize_box_values(vertical_margin)
+    horizontal_top, _horizontal_right, horizontal_bottom, _horizontal_left = _normalize_box_values(horizontal_margin)
+
+    handle_margin = 1
+    vertical_radius, vertical_handle_radius = _scrollbar_radii(radius, thickness, vertical_left, vertical_right, handle_margin=handle_margin)
+    horizontal_radius, horizontal_handle_radius = _scrollbar_radii(radius, thickness, horizontal_top, horizontal_bottom, handle_margin=handle_margin)
     corner_rule = '' if not include_corner else """
                 QAbstractScrollArea::corner {
                     background: transparent;
@@ -393,28 +479,28 @@ def build_scrollbar_qss(handle_color: str, radius: int, thickness: int = 12, bac
                     background: {background};
                     width: {thickness}px;
                     margin: {_format_box_values(vertical_margin)};
-                    border-radius: {handle_radius}px;
+                    border-radius: {vertical_radius}px;
                 }}
                 QScrollBar::handle:vertical {{
                     background-color: {handle_color};
                     min-height: {min_handle}px;
                     border: none;
-                    border-radius: {handle_radius}px;
-                    margin: 1px;
+                    border-radius: {vertical_handle_radius}px;
+                    margin: {handle_margin}px;
                 }}
                 QScrollBar:horizontal {{
                     border: none;
                     background: {background};
                     height: {thickness}px;
                     margin: {_format_box_values(horizontal_margin)};
-                    border-radius: {handle_radius}px;
+                    border-radius: {horizontal_radius}px;
                 }}
                 QScrollBar::handle:horizontal {{
                     background-color: {handle_color};
                     min-width: {min_handle}px;
                     border: none;
-                    border-radius: {handle_radius}px;
-                    margin: 1px;
+                    border-radius: {horizontal_handle_radius}px;
+                    margin: {handle_margin}px;
                 }}
                 QScrollBar::add-line:vertical,
                 QScrollBar::sub-line:vertical,

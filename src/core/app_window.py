@@ -76,6 +76,19 @@ class AppWindow(QWidget):
 
     def __init__(self, args: Optional[argparse.Namespace] = None, parent_for_dialogs: Optional[QWidget] = None, initial_url: str | None = None):
         super().__init__()
+        is_first_launch = self._init_core_state(parent_for_dialogs, initial_url)
+        self._init_runtime_state()
+        self._init_services_and_controllers()
+        self._connect_initialization_signals(is_first_launch)
+        self._finalize_window_setup()
+
+    def _init_core_state(self, parent_for_dialogs: Optional[QWidget], initial_url: str | None) -> bool:
+        self._tooltip_widget = None
+        self._tooltip_timer = QTimer(self)
+        self._tooltip_timer.setSingleShot(True)
+        self._tooltip_timer.timeout.connect(self._show_custom_tooltip)
+        self._last_tooltip_text = ""
+        self._last_tooltip_target = None
         self.app_state = AppState()
         GameBananaAPI.set_app_state(self.app_state)
         from utils.network_utils import _build_session
@@ -117,7 +130,9 @@ class AppWindow(QWidget):
         self._init_localization()
         self._splash_was_shown = False
         self.settings_service.migrate_config_if_needed()
-        is_first_launch = not self.app_state.local_config.get('first_launch_splash_shown', False)
+        return not self.app_state.local_config.get('first_launch_splash_shown', False)
+
+    def _init_runtime_state(self):
         self.resize(875, 750)
         self._initial_size = self.size()
         self.background_movie = None
@@ -135,6 +150,8 @@ class AppWindow(QWidget):
         self._install_op_id = 0
         self.pending_updates = []
         self._mods_display_ready_emitted = False
+
+    def _init_services_and_controllers(self):
         self.feedback_service.status_updated.connect(self.update_status_signal.emit)
         self.settings_service.language_changed.connect(lambda _: self._relocalize_ui())
         self.settings_service.restart_required.connect(lambda msg: self.feedback_service.show_message('info', 'dialogs.restart_required', msg))
@@ -178,12 +195,15 @@ class AppWindow(QWidget):
         from controllers.refresh_controller import RefreshController
         self.refresh_controller = RefreshController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self.game_launch, self.update_checker, self.settings_service, app_window=self)
         self._connect_cross_service_signals()
+
+    def _connect_initialization_signals(self, is_first_launch: bool):
         self.initialization_finished.connect(self.game_launch.update_button_state)
         self.initialization_finished.connect(self._try_start_background_music)
         if is_first_launch:
             self.initialization_finished.connect(self._handle_first_launch_settings)
-        self.init_ui()
 
+    def _finalize_window_setup(self):
+        self.init_ui()
         self._update_plugin_tabs()
         self.custom_font_family = localization_service.load_font()
         if (cfp := self.customization_service.get_custom_font_path()) and os.path.exists(cfp):
@@ -198,12 +218,6 @@ class AppWindow(QWidget):
         self.initialization_timer.start(INITIALIZATION_TIMEOUT)
         self.settings_service.load_window_geometry(self)
         QApplication.instance().installEventFilter(self)
-        self._tooltip_widget = None
-        self._tooltip_timer = QTimer()
-        self._tooltip_timer.setSingleShot(True)
-        self._tooltip_timer.timeout.connect(self._show_custom_tooltip)
-        self._last_tooltip_text = ""
-        self._last_tooltip_target = None
 
     def _handle_first_launch_settings(self):
         try:
@@ -849,7 +863,7 @@ class AppWindow(QWidget):
             self._update_change_path_button_text()
             self._update_settings_library_tab()
         except Exception:
-            pass
+            logging.debug('Error in _on_game_mode_updated_by_state', exc_info=True)
 
     def _update_change_path_button_text(self):
         if hasattr(self, 'settings_change_path_button') and self.settings_change_path_button:
@@ -942,6 +956,9 @@ class AppWindow(QWidget):
 
     def eventFilter(self, obj, ev):
         ev_type = ev.type()
+        tooltip_timer = getattr(self, '_tooltip_timer', None)
+        tooltip_widget = getattr(self, '_tooltip_widget', None)
+        last_tooltip_target = getattr(self, '_last_tooltip_target', None)
         if ev_type == QEvent.Type.MouseButtonDblClick:
             chapter_id = getattr(obj, '_chapter_id', None)
             if chapter_id is not None:
@@ -966,31 +983,36 @@ class AppWindow(QWidget):
         elif ev_type == QEvent.Type.ToolTip:
             text = obj.toolTip() if hasattr(obj, 'toolTip') else ''
             if text:
-                if self._last_tooltip_target == obj and self._tooltip_widget and self._tooltip_widget.isVisible():
+                if last_tooltip_target == obj and tooltip_widget and tooltip_widget.isVisible():
                     return True
                 self._last_tooltip_text = text
                 self._last_tooltip_target = obj
-                self._tooltip_timer.start(250)
+                if tooltip_timer:
+                    tooltip_timer.start(250)
                 return True
             self._hide_custom_tooltip()
             return super().eventFilter(obj, ev)
         elif ev_type in (QEvent.Type.Leave, QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress, QEvent.Type.Hide):
-            self._tooltip_timer.stop()
+            if tooltip_timer:
+                tooltip_timer.stop()
             self._hide_custom_tooltip()
 
         return super().eventFilter(obj, ev)
 
     def _show_custom_tooltip(self):
-        if not self._last_tooltip_target or not self._last_tooltip_text:
+        last_tooltip_target = getattr(self, '_last_tooltip_target', None)
+        last_tooltip_text = getattr(self, '_last_tooltip_text', '')
+        if not last_tooltip_target or not last_tooltip_text:
             return
 
         from PyQt6.QtGui import QCursor
 
-        if self._tooltip_widget:
-            self._tooltip_widget.close()
-            self._tooltip_widget.deleteLater()
+        tooltip_widget = getattr(self, '_tooltip_widget', None)
+        if tooltip_widget:
+            tooltip_widget.close()
+            tooltip_widget.deleteLater()
 
-        self._tooltip_widget = AnimatedToolTip(self._last_tooltip_text, None)
+        self._tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
         self._tooltip_widget.adjustSize()
 
         pos = QCursor.pos()
@@ -1006,14 +1028,15 @@ class AppWindow(QWidget):
         UIAnimator.fade_in(self._tooltip_widget, 150, self.app_state)
 
     def _hide_custom_tooltip(self):
-        if self._tooltip_widget and self._tooltip_widget.isVisible():
-            if not getattr(self._tooltip_widget, '_is_fading_out', False):
-                self._tooltip_widget._is_fading_out = True
-                anim = UIAnimator.fade_out(self._tooltip_widget, 150, self.app_state)
+        tooltip_widget = getattr(self, '_tooltip_widget', None)
+        if tooltip_widget and tooltip_widget.isVisible():
+            if not getattr(tooltip_widget, '_is_fading_out', False):
+                tooltip_widget._is_fading_out = True
+                anim = UIAnimator.fade_out(tooltip_widget, 150, self.app_state)
                 if anim:
                     anim.finished.connect(lambda: setattr(self, '_tooltip_widget', None))
                 else:
-                    self._tooltip_widget.hide()
+                    tooltip_widget.hide()
                     self._tooltip_widget = None
         self._last_tooltip_target = None
 
@@ -1124,16 +1147,16 @@ class AppWindow(QWidget):
     def _on_update_cleanup(self):
         try:
             self.progress_bar.setVisible(False)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'Update cleanup - progress bar: {e}')
         self.app_state.update_in_progress = False
         try:
             if not self.app_state.is_settings_view:
                 self.tab_widget.setEnabled(True)
             self._set_update_ui_enabled(True)
             self.game_launch.update_button_state()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'Update cleanup - UI restore: {e}')
 
     def _on_progress_update(self, value: int):
         self.progress_bar.setValue(value)
@@ -1223,7 +1246,7 @@ class AppWindow(QWidget):
                 btn = self.chapter_tab_buttons[i]
                 btn.clicked.connect(lambda checked, tid=tab.tab_id: self._on_chapter_tab_clicked(tid) if checked else None)
                 btn.installEventFilter(self)
-                setattr(btn, '_chapter_id', tab.tab_id)
+                btn._chapter_id = tab.tab_id
         self._update_chapter_tabs_style()
 
     def _on_chapter_tab_clicked(self, chapter_id):
@@ -1275,6 +1298,12 @@ class AppWindow(QWidget):
         relocalize_ui(self)
 
     def closeEvent(self, event):
+        app = QApplication.instance()
+        if app:
+            try:
+                app.removeEventFilter(self)
+            except Exception:
+                pass
         from core.app_cleanup import perform_close_cleanup
         perform_close_cleanup(self)
         super().closeEvent(event)
@@ -1449,14 +1478,14 @@ class AppWindow(QWidget):
                 if isinstance(new_widget, QWidget):
                     try:
                         new_widget.setProperty('plugin_name_key', plugin.get('name_key'))
-                        setattr(new_widget, '_plugin_info', plugin)
+                        new_widget._plugin_info = plugin
                     except Exception:
                         pass
                     self.main_tab_widget.removeTab(tab_index)
                     self.main_tab_widget.insertTab(tab_index, new_widget, tr(plugin['name_key']))
                     self.main_tab_widget.setCurrentIndex(tab_index)
         except Exception as e:
-            logging.error(f"Error initializing plugin '{plugin.get('name_key', 'unknown')}': {e}")
+            logging.exception(f"Error initializing plugin '{plugin.get('name_key', 'unknown')}'")
 
     def _update_nobody_came_state(self, num_main_tabs, plugin_count):
         """Show or remove 'But nobody came.' based on tab/plugin counts."""
@@ -1495,12 +1524,12 @@ class AppWindow(QWidget):
     def _run_with_plugin_api(self, plugin, handler):
         plugin_api = plugin.get('api')
         if plugin_api:
-            setattr(self, 'plugin_api', plugin_api)
+            self.plugin_api = plugin_api
         try:
             return handler(self)
         finally:
             if hasattr(self, 'plugin_api'):
-                delattr(self, 'plugin_api')
+                del self.plugin_api
 
     def _resolve_plugin_from_widget(self, current_widget, visible_plugins, plugin):
         try:

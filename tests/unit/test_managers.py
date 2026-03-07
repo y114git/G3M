@@ -119,6 +119,24 @@ class TestLocalizationManager:
         assert language is not None
         assert isinstance(language, str)
 
+    def test_plugin_localization_resolves_mod_editor_top_level_name_key(self):
+        from services.localization_service import LocalizationManager
+        from plugins_main.mod_editor.plugin_init import LANG_EN
+        loc = LocalizationManager()
+        loc.strings = {}
+        loc.current_language = 'en'
+        loc.merge_plugin_strings('mod_editor', LANG_EN)
+        assert loc.get_plugin_tr('mod_editor')('mod_editor_plugin') == 'Mod Editor'
+
+    def test_plugin_localization_resolves_xdelta_patcher_top_level_name_key(self):
+        from services.localization_service import LocalizationManager
+        from plugins_main.xdelta_patcher.plugin_init import LANG_EN
+        loc = LocalizationManager()
+        loc.strings = {}
+        loc.current_language = 'en'
+        loc.merge_plugin_strings('xdelta_patcher', LANG_EN)
+        assert loc.get_plugin_tr('xdelta_patcher')('xdelta_patcher_tab_title') == 'XDELTA Patcher'
+
 
 class TestLaunchManager:
 
@@ -165,7 +183,7 @@ class TestCustomizationManager:
     @patch('services.customization_service.tr')
     def test_customization_service_get_font_button_text(self, mock_tr, app_state, temp_dir):
         from services.customization_service import CustomizationManager
-        mock_tr.side_effect = lambda key, **kwargs: key
+        mock_tr.side_effect = lambda key, **_: key
         manager = CustomizationManager(app_state)
         app_state.config_dir = temp_dir
         # No font
@@ -266,12 +284,13 @@ class TestBackupManager:
             restored_content = f.read()
             assert restored_content == original_content
 
+
 class TestExpandedFormats:
     def test_customization_service_audio_formats(self, app_state, temp_dir):
         from services.customization_service import CustomizationManager
         manager = CustomizationManager(app_state)
         app_state.config_dir = temp_dir
-        
+
         for ext in ['.ogg', '.flac', '.m4a', '.aac']:
             path = os.path.join(temp_dir, f'custom_background_music{ext}')
             with open(path, 'w') as f:
@@ -283,7 +302,7 @@ class TestExpandedFormats:
         from services.customization_service import CustomizationManager
         manager = CustomizationManager(app_state)
         app_state.config_dir = temp_dir
-        
+
         path = os.path.join(temp_dir, 'custom_logo.webp')
         with open(path, 'w') as f:
             f.write('dummy')
@@ -293,7 +312,7 @@ class TestExpandedFormats:
         from services.settings_service import SettingsManager
         from services.localization_service import localization_service
         manager = SettingsManager(app_state, feedback_service, localization_service, parent=qapp)
-        
+
         paths = manager._get_audio_paths('background_music')
         assert any(p.endswith('.ogg') for p in paths)
         assert any(p.endswith('.flac') for p in paths)

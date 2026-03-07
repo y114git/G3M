@@ -4,7 +4,7 @@ from PyQt6.QtGui import QPixmap, QColor, QPainter
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextBrowser, QSizePolicy, QScrollArea, QFrame)
 from services.localization_service import tr
-from ui.common.styling import get_theme_colors, get_border_radius, install_widget_update_handler, apply_rounded_mask, get_widget_border_radius, build_scrollbar_qss, build_button_style, round_pixmap
+from ui.common.styling import get_theme_colors, get_border_radius, install_widget_update_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, apply_scroll_area_chrome, build_button_style, round_pixmap
 from ui.utils.ui_utils import UIAnimator
 from ui.utils.image_loader import ImageLoaderRunnable
 from utils.mod_utils import get_mod_key
@@ -228,19 +228,13 @@ class ModDetailsOverlay(QWidget):
 
     def _install_scroll_clip_handlers(self, target, attr_prefix: str):
         def _apply():
-            if viewport := target.viewport():
-                apply_rounded_mask(viewport, max(0, self._radius_for(target) - 2))
-            for scrollbar in (target.verticalScrollBar(), target.horizontalScrollBar()):
-                if scrollbar:
-                    apply_rounded_mask(scrollbar, self._radius_for(scrollbar, margin=1))
+            apply_scroll_area_chrome(target, max(0, self._radius_for(target) - 2), scrollbar_radius=self._border_radius)
             try:
                 target.clearMask()
             except (RuntimeError, AttributeError):
                 pass
 
-        install_widget_update_handler(target, _apply, attr_name=f'_{attr_prefix}_clip_filter')
-        if viewport := target.viewport():
-            install_widget_update_handler(viewport, _apply, attr_name=f'_{attr_prefix}_viewport_clip_filter')
+        install_scroll_area_update_handlers(target, _apply, f'{attr_prefix}_clip')
 
     def _install_scroller_style(self, target, *, selector: str, attr_name: str, clip_prefix: str, content_target=None, content_padding_min: int = 24, content_padding_factor: int = 6, text_color: str | None = None, font_size: int | None = None, document_margin: bool = False):
         def _apply():
@@ -248,6 +242,7 @@ class ModDetailsOverlay(QWidget):
             content_padding = max(content_padding_min, (radius * content_padding_factor + 9) // 10)
             viewport_inset = max(2, min(10, radius // 5))
             corner_inset = max(6, min(18, radius // 2))
+            scrollbar_qss = self._scrollbar_qss(corner_inset)
             rules = [
                 f'{selector} {{',
                 f'    background-color: {self._colors["background"]};',
@@ -257,11 +252,12 @@ class ModDetailsOverlay(QWidget):
                 *([f'    font-size: {font_size}px;'] if font_size is not None else []),
                 *(['    padding: 0px;'] if document_margin else []),
                 '}',
-                self._scrollbar_qss(corner_inset),
+                scrollbar_qss,
             ]
             target.setStyleSheet('\n'.join(rules))
+            scrollbar_extent = apply_scroll_area_chrome(target, qss=scrollbar_qss)
             try:
-                target.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, 6), viewport_inset)
+                target.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, scrollbar_extent + 2), viewport_inset)
             except Exception:
                 pass
             try:
@@ -274,7 +270,7 @@ class ModDetailsOverlay(QWidget):
             if viewport := target.viewport():
                 viewport.setStyleSheet(f'background-color: {self._colors["background"]}; border: none;')
 
-        install_widget_update_handler(target, _apply, attr_name=attr_name)
+        install_scroll_area_update_handlers(target, _apply, attr_name.removeprefix('_').removesuffix('_filter'))
         self._install_scroll_clip_handlers(target, clip_prefix)
 
     def _html_label(self, html: str, *, align=Qt.AlignmentFlag.AlignCenter, wrap: bool = True):

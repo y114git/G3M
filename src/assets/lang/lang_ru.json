@@ -108,7 +108,7 @@
     "mod_not_verified": "Ваш мод не верифицирован и на него действуют некоторые ограничения.",
     "mod_tags_label": "Теги мода:",
     "mod_verified": "Ваш мод верифицирован.",
-    "mod_version_label": "Версия мода: {version_text}",
+    "mod_version_label": "Версия мода:",
     "modified_file_not_found": "Модифицированный файл не найден:\n{path}",
     "network_fallback_message": "Ошибка сети. Загружен локальный список.",
     "network_update_failed": "Не удалось обновить список модов.",

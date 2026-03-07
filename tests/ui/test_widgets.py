@@ -71,8 +71,9 @@ class TestModWidgets:
                 except (TypeError, RuntimeError):
                     pass
                 thread.blockSignals(False)
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.debug(f'Thread cleanup error in test: {e}')
             safe_stop_thread(thread, timeout=1000)
         widget.deleteLater()
         for _ in range(3):
@@ -184,6 +185,59 @@ class TestCommonWidgets:
         overlay._ss_prev()
         assert overlay._ss_index == 2
         overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_dr_save_manager_slot_labels_size_for_multiline_text_on_first_refresh(self, qapp, app_state, temp_dir):
+        from unittest.mock import Mock
+        from plugins_main.dr_save_manager.save_manager_view_builder import SaveManagerViewBuilder
+        from plugins_main.dr_save_manager.save_ui_controller import SaveUiController
+        builder = SaveManagerViewBuilder(app_state, None)
+        save_manager_widget = builder.build()
+        widgets = builder.get_widgets()
+        app = SimpleNamespace(
+            save_tabs=widgets['save_tabs'],
+            _slot_labels=widgets['slot_labels'],
+            switch_collection_btn=widgets['switch_collection_btn'],
+            left_col_btn=widgets['left_col_btn'],
+            right_col_btn=widgets['right_col_btn'],
+            rename_collection_btn=widgets['rename_collection_btn'],
+            delete_collection_btn=widgets['delete_collection_btn'],
+            copy_from_main_btn=widgets['copy_from_main_btn'],
+            copy_to_main_btn=widgets['copy_to_main_btn'],
+            collection_name_lbl=widgets['collection_name_lbl'],
+            change_save_path_btn=widgets['change_save_path_btn'],
+            show_btn=widgets['show_btn'],
+            erase_btn=widgets['erase_btn'],
+            import_btn=widgets['import_btn'],
+            export_btn=widgets['export_btn'],
+        )
+        save_manager = Mock()
+        save_manager.save_path = temp_dir
+        save_manager.refresh_save_slots_data.return_value = {
+            0: (True, 'Susie - 4111 D$\nCompleted'),
+            1: (True, 'Ralsei - 2321 D$\nIncomplete'),
+            2: (False, '-------------- EMPTY --------------'),
+        }
+        save_manager.get_collection_ui_state.return_value = {
+            'in_collection': False,
+            'can_navigate_left': False,
+            'can_navigate_right': False,
+            'collection_name': '',
+        }
+        save_manager.current_collection_idx = -1
+        save_manager.selected_slot = None
+        controller = SaveUiController(app_state, Mock(), save_manager, Mock(), app)
+        save_manager_widget.show()
+        qapp.processEvents()
+        controller.refresh_slots()
+        qapp.processEvents()
+        for slot_index in (0, 1):
+            label = widgets['slot_labels'][(1, slot_index)]
+            assert label.minimumHeight() >= label.sizeHint().height()
+            assert '\n' in label.text()
+        save_manager_widget.deleteLater()
         for _ in range(3):
             qapp.processEvents()
             time.sleep(0.05)

@@ -108,7 +108,7 @@
     "mod_not_verified": "Your mod is not verified and has some restrictions.",
     "mod_tags_label": "Mod tags:",
     "mod_verified": "Your mod is verified.",
-    "mod_version_label": "Mod Version: {version_text}",
+    "mod_version_label": "Mod Version:",
     "modified_file_not_found": "Modified file not found:\\n{path}",
     "network_fallback_message": "Network error. Loaded local list.",
     "network_update_failed": "Failed to update mod list.",

@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QScrollArea, QSizePolicy
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_widget_update_handler, get_widget_border_radius, build_scrollbar_qss, build_button_style
+from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, build_button_style, apply_scroll_area_chrome
 from ui.builders.shared_filters_builder import (
     BASE_TAG_NAMES, LIBRARY_GAME_OPTIONS, create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame, apply_filters_frame_style
@@ -151,15 +151,17 @@ class LibraryTabBuilder(QObject):
             content_padding = max(container_padding, (container_radius * 4 + 9) // 10)
             viewport_inset = max(2, min(10, container_radius // 5))
             scrollbar_corner_inset = max(6, min(18, container_radius // 2))
+            scrollbar_qss = build_scrollbar_qss(colors["text"], get_border_radius(self.app_state.local_config), vertical_margin=(scrollbar_corner_inset, 2, scrollbar_corner_inset, 0), horizontal_margin=(0, scrollbar_corner_inset, scrollbar_corner_inset, scrollbar_corner_inset))
             m_layout.setContentsMargins(content_padding, content_padding, content_padding, content_padding)
-            scroll.setStyleSheet(f'''QScrollArea {{ background-color: transparent; border: none; }}{build_scrollbar_qss(colors["text"], get_border_radius(self.app_state.local_config), vertical_margin=(scrollbar_corner_inset, 2, scrollbar_corner_inset, 0), horizontal_margin=(0, scrollbar_corner_inset, scrollbar_corner_inset, scrollbar_corner_inset))}''')
+            scroll.setStyleSheet(f'''QScrollArea {{ background-color: transparent; border: none; }}{scrollbar_qss}''')
+            scrollbar_extent = apply_scroll_area_chrome(scroll, max(0, container_radius - viewport_inset), scrollbar_radius=get_border_radius(self.app_state.local_config), qss=scrollbar_qss)
             try:
-                scroll.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, 4), viewport_inset)
+                scroll.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, scrollbar_extent + 2), viewport_inset)
             except (AttributeError, TypeError):
                 logger.exception('LibraryTabBuilder: setViewportMargins failed for viewport_inset=%s', viewport_inset)
 
         mods_cont._inner_clip_callback = _apply_inner_clip
-        install_widget_update_handler(scroll, _apply_inner_clip, attr_name='_library_viewport_clip_filter')
+        install_scroll_area_update_handlers(scroll, _apply_inner_clip, 'library_viewport_clip')
         install_panel_style_handler(mods_cont, self.app_state.local_config, attr_name='_library_panel_style_filter')
         layout.addWidget(mods_cont)
         self.widgets.update({

@@ -297,6 +297,28 @@ class TestBorderRadius:
         assert 'width: 0px;' in sheet
         assert 'height: 0px;' in sheet
 
+    def test_apply_scroll_area_chrome_only_reserves_extent_for_visible_vertical_scrollbar(self, qapp):
+        from PyQt6.QtWidgets import QWidget, QScrollArea, QVBoxLayout
+        from ui.common.styling import apply_scroll_area_chrome
+        container = QWidget()
+        container.resize(240, 240)
+        layout = QVBoxLayout(container)
+        scroll = QScrollArea(container)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+        content = QWidget()
+        content.setMinimumHeight(20)
+        scroll.setWidget(content)
+        container.show()
+        qapp.processEvents()
+        assert not scroll.verticalScrollBar().isVisible()
+        assert apply_scroll_area_chrome(scroll) == 0
+        content.setMinimumHeight(1200)
+        qapp.processEvents()
+        assert scroll.verticalScrollBar().isVisible()
+        assert apply_scroll_area_chrome(scroll) >= 16
+        container.deleteLater()
+
     def test_border_radius_in_theme_export(self, app_state):
         app_state.local_config['custom_border_radius'] = 12
         settings = {'custom_border_radius': app_state.local_config.get('custom_border_radius', 0)}
