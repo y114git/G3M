@@ -208,6 +208,16 @@ def generate_widget_style(frame_selector, bg_color, border_color, hover_border_c
     return MOD_WIDGET_STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, secondary_text_color=secondary_text_color, text_color=text_color, frame_border_radius=frame_border_radius, icon_border_radius=icon_border_radius, button_border_radius=button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size)
 
 
+def apply_stylesheet_if_changed(widget, stylesheet: str, cache_attr: str = '_stylesheet_cache_key') -> bool:
+    if widget is None:
+        return False
+    if getattr(widget, cache_attr, None) == stylesheet:
+        return False
+    widget.setStyleSheet(stylesheet)
+    setattr(widget, cache_attr, stylesheet)
+    return True
+
+
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
     config = None
     if parent_app:
@@ -239,11 +249,15 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
     button_border_radius = border_radius_px(border_radius_val, width=button_width, height=button_height, border_width=2)
     is_selected = getattr(widget, 'is_selected', False)
     icon_selector = 'pluginIcon' if frame_selector == 'pluginWidget' else 'modIcon'
-    widget.setStyleSheet(generate_widget_style(frame_selector, card_bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected, icon_selector, frame_border_radius, icon_border_radius, button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size))
+    style_sheet = generate_widget_style(frame_selector, card_bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected, icon_selector, frame_border_radius, icon_border_radius, button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size)
+    apply_stylesheet_if_changed(widget, style_sheet, cache_attr='_mod_widget_stylesheet_cache')
     main_layout = getattr(widget, 'main_layout', None)
     if main_layout:
         content_margin = max(max(8, int(round(10 * layout_scale))), (frame_border_radius_value * 3 + 9) // 10)
-        main_layout.setContentsMargins(content_margin, content_margin, content_margin, content_margin)
+        margin_key = (content_margin, content_margin, content_margin, content_margin)
+        if getattr(widget, '_mod_widget_margin_cache', None) != margin_key:
+            main_layout.setContentsMargins(*margin_key)
+            widget._mod_widget_margin_cache = margin_key
 
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):

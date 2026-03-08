@@ -5,6 +5,21 @@ from utils.mod_utils import get_mod_key, get_mod_name, get_unique_mod_key
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
 
 
+class TestUiUtils:
+
+    def test_stop_existing_fade_clears_animation_reference_and_deletes_anim(self, qapp):
+        from PyQt6.QtWidgets import QWidget
+        from ui.utils.ui_utils import UIAnimator
+        widget = QWidget()
+        anim = Mock()
+        widget._fade_anim = anim
+        UIAnimator._stop_existing_fade(widget)
+        anim.stop.assert_called_once_with()
+        anim.deleteLater.assert_called_once_with()
+        assert widget._fade_anim is None
+        widget.deleteLater()
+
+
 class TestModUtils:
 
     def test_get_unique_mod_key(self):

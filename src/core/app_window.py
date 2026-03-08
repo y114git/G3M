@@ -92,6 +92,7 @@ class AppWindow(QWidget):
         self._tooltip_timer.timeout.connect(self._show_custom_tooltip)
         self._last_tooltip_text = ""
         self._last_tooltip_target = None
+        self._last_tooltip_size_key = None
         self.app_state = AppState()
         GameBananaAPI.set_app_state(self.app_state)
         from utils.network_utils import _build_session
@@ -166,6 +167,7 @@ class AppWindow(QWidget):
         self._window_layout_refresh_timer = QTimer(self)
         self._window_layout_refresh_timer.setSingleShot(True)
         self._window_layout_refresh_timer.timeout.connect(self._refresh_after_window_layout_change)
+        self._last_resize_cursor_shape = None
 
     def _init_services_and_controllers(self):
         self.feedback_service.status_updated.connect(self.update_status_signal.emit)
@@ -466,9 +468,14 @@ class AppWindow(QWidget):
     def _update_resize_cursor(self, pos):
         cursor_shape = self._cursor_for_resize_edges(self._window_resize_edges(pos))
         if cursor_shape is None:
-            self.unsetCursor()
+            if self._last_resize_cursor_shape is not None:
+                self.unsetCursor()
+                self._last_resize_cursor_shape = None
+            return
+        if self._last_resize_cursor_shape == cursor_shape:
             return
         self.setCursor(cursor_shape)
+        self._last_resize_cursor_shape = cursor_shape
 
     def _start_system_resize_if_needed(self, pos):
         edges = self._window_resize_edges(pos)
@@ -710,11 +717,15 @@ class AppWindow(QWidget):
             self.chapter_tabs_widget.setVisible(True)
         game_def = get_game(saved_game_type)
         self.app_state.game_mode = game_def if game_def else DeltaruneGame()
+        if not self.app_state.game_mode.is_multi_tab and self.app_state.current_mode == 'chapter':
+            self._set_checkbox_checked_silently(self.chapter_mode_checkbox, False)
+            self.app_state.current_mode = 'normal'
+            self.game_type_combo.setEnabled(True)
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
         self._update_change_path_button_text()
         self._setup_chapter_tabs()
-        if saved_chapter_mode and hasattr(self, '_show_chapter_mode_instruction'):
+        if self.app_state.current_mode == 'chapter' and hasattr(self, '_show_chapter_mode_instruction'):
             self._show_chapter_mode_instruction()
 
             def update_priority_button():
@@ -728,7 +739,7 @@ class AppWindow(QWidget):
                                 self.library_display._update_priority_button_visibility(chapter_id)
                                 break
             update_priority_button()
-        elif not saved_chapter_mode:
+        elif self.app_state.current_mode != 'chapter':
             self.library_display.update_display()
             self.library_display._update_priority_button_visibility()
             self.app_state.library_initialized = True
@@ -1031,12 +1042,14 @@ class AppWindow(QWidget):
     def _on_game_mode_updated_by_state(self, mode_obj):
         try:
             self._update_checkbox_visibility()
-            game_type = self.game_type_combo.currentData()
-            if game_type != 'deltarune':
+            game_def = mode_obj or self.app_state.game_mode
+            if not game_def.is_multi_tab:
                 self._set_checkbox_checked_silently(self.chapter_mode_checkbox, False)
                 if getattr(self.app_state, 'current_mode', 'normal') != 'normal':
                     self.app_state.current_mode = 'normal'
+                self.app_state.selected_chapter_id = None
                 self.game_type_combo.setEnabled(True)
+            self._setup_chapter_tabs()
             self.used_mods_service.load_used_mods_state()
             self.library_display.update_display()
             self._update_change_path_button_text()
@@ -1176,6 +1189,8 @@ class AppWindow(QWidget):
             if text:
                 if last_tooltip_target == obj and tooltip_widget and tooltip_widget.isVisible():
                     return True
+                if last_tooltip_target == obj and self._last_tooltip_text == text and tooltip_timer and tooltip_timer.isActive():
+                    return True
                 self._last_tooltip_text = text
                 self._last_tooltip_target = obj
                 if tooltip_timer:
@@ -1206,7 +1221,7 @@ class AppWindow(QWidget):
                 viewport.updateGeometry()
         if hasattr(self, 'mod_list_widget') and self.mod_list_widget:
             self.mod_list_widget.updateGeometry()
-        if hasattr(self, 'search_display') and self.search_display:
+        if hasattr(self, 'search_display'):
             current_tab = self.main_tab_widget.currentWidget() if hasattr(self, 'main_tab_widget') and self.main_tab_widget else None
             search_tab = getattr(self, 'search_mods_tab', None)
             if search_tab is None or current_tab is search_tab:
@@ -1229,13 +1244,16 @@ class AppWindow(QWidget):
         tooltip_widget = getattr(self, '_tooltip_widget', None)
         if tooltip_widget is None:
             tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
+            tooltip_widget._preserve_fade_effect = True
             self._tooltip_widget = tooltip_widget
-        else:
-            UIAnimator._stop_existing_fade(tooltip_widget)
-            tooltip_widget._is_fading_out = False
-            if tooltip_widget.text() != last_tooltip_text:
-                tooltip_widget.setText(last_tooltip_text)
-        tooltip_widget.adjustSize()
+            self._last_tooltip_size_key = None
+        UIAnimator._stop_existing_fade(tooltip_widget)
+        tooltip_widget._is_fading_out = False
+        if tooltip_widget.text() != last_tooltip_text:
+            tooltip_widget.setText(last_tooltip_text)
+        if self._last_tooltip_size_key != last_tooltip_text:
+            tooltip_widget.adjustSize()
+            self._last_tooltip_size_key = last_tooltip_text
 
         pos = QCursor.pos()
         pos += QPoint(10, 10)
@@ -1268,6 +1286,7 @@ class AppWindow(QWidget):
                     tooltip_widget.hide()
                     tooltip_widget._is_fading_out = False
         self._last_tooltip_target = None
+        self._last_tooltip_text = ''
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1469,14 +1488,32 @@ class AppWindow(QWidget):
             if selected_chapter_id is not None:
                 self.library_display.update_for_chapter_mode(selected_chapter_id)
 
+    def _sync_chapter_tab_buttons(self):
+        if not hasattr(self, 'chapter_tab_buttons'):
+            return []
+        tabs = list(getattr(self.app_state.game_mode, 'tabs', ()) or ())
+        for i, btn in enumerate(self.chapter_tab_buttons):
+            try:
+                btn.clicked.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            if i >= len(tabs):
+                btn.setChecked(False)
+                btn.setVisible(False)
+                btn._chapter_id = None
+                continue
+            tab = tabs[i]
+            btn.setVisible(True)
+            btn.setText(tr(tab.name_key))
+            btn.clicked.connect(lambda checked, tid=tab.tab_id: self._on_chapter_tab_clicked(tid) if checked else None)
+            btn.installEventFilter(self)
+            btn._chapter_id = tab.tab_id
+        if hasattr(self, 'chapter_tabs_widget'):
+            self.chapter_tabs_widget.setVisible(self.app_state.current_mode == 'chapter' and self.app_state.game_mode.is_multi_tab and bool(tabs))
+        return tabs
+
     def _setup_chapter_tabs(self):
-        tabs = self.app_state.game_mode.tabs
-        for i, tab in enumerate(tabs):
-            if i < len(self.chapter_tab_buttons):
-                btn = self.chapter_tab_buttons[i]
-                btn.clicked.connect(lambda checked, tid=tab.tab_id: self._on_chapter_tab_clicked(tid) if checked else None)
-                btn.installEventFilter(self)
-                btn._chapter_id = tab.tab_id
+        self._sync_chapter_tab_buttons()
         self._update_chapter_tabs_style()
 
     def _on_chapter_tab_clicked(self, chapter_id):
@@ -1499,7 +1536,7 @@ class AppWindow(QWidget):
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#616b78')
         text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
         fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
-        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons, strict=True)):
+        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons)):
             border_style = 'dashed' if direct_launch_chapter_id == tab.tab_id else 'solid'
             br = clamp_border_radius(get_border_radius(self.app_state.local_config), height=max(25, btn.sizeHint().height()))
             btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: {fs}px;\n                    border-radius: {br}px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
@@ -1556,7 +1593,9 @@ class AppWindow(QWidget):
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event):
-        self.unsetCursor()
+        if self._last_resize_cursor_shape is not None:
+            self.unsetCursor()
+            self._last_resize_cursor_shape = None
         super().leaveEvent(event)
 
     def resizeEvent(self, event):

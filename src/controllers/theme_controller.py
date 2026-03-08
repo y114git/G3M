@@ -88,6 +88,8 @@ class ThemeController:
             fs.setMaximumHeight(QWIDGETSIZE_MAX)
         app_inst = QApplication.instance()
         (app_inst if isinstance(app_inst, QApplication) else self.app).setStyleSheet(style_sheet)
+        if hasattr(self.app, '_last_tooltip_size_key'):
+            self.app._last_tooltip_size_key = None
 
         from ui.common.styling import get_theme_color
         text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')

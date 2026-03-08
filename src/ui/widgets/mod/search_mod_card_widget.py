@@ -2,7 +2,7 @@ import logging
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QWidget, QSizePolicy
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, get_border_radius, load_mod_icon_universal
+from ui.common.styling import get_theme_color, get_border_radius, load_mod_icon_universal, apply_stylesheet_if_changed
 from utils.mod_utils import get_mod_key
 from .mod_card_widget import ModCardWidget
 
@@ -44,6 +44,9 @@ class SearchModCardWidget(ModCardWidget):
     def __init__(self, mod_data, parent=None, parent_app=None):
         self._last_visual_source = None
         self._full_name_text = getattr(mod_data, 'name', '') or ''
+        self._layout_metrics_cache_key = None
+        self._last_search_icon_render_key = None
+        self._last_geometry_refresh_key = None
         config = self._resolve_layout_config(parent, parent_app)
         self._card_width = self.card_width_for_config(config)
         self._media_width, self._media_height = self.media_size_for_config(config)
@@ -84,6 +87,9 @@ class SearchModCardWidget(ModCardWidget):
         expanded_top_margin = max(4, int(round(6 * scale)))
         expanded_spacing = max(6, int(round(8 * scale)))
         content_width = max(80, self._card_width - side_padding * 2 - 4)
+        metrics_key = (self._card_width, self._media_width, self._media_height, side_padding, layout_spacing, metadata_spacing, expanded_top_margin, expanded_spacing, content_width)
+        if self._layout_metrics_cache_key == metrics_key:
+            return False
         if hasattr(self, 'icon_label'):
             self.icon_label.setFixedSize(self._media_width, self._media_height)
         if hasattr(self, 'main_layout'):
@@ -108,7 +114,9 @@ class SearchModCardWidget(ModCardWidget):
         self.setMaximumWidth(self._card_width)
         self.setMinimumHeight(0)
         self.setMaximumHeight(16777215)
-        self._refresh_card_geometry()
+        self._layout_metrics_cache_key = metrics_key
+        self._refresh_card_geometry(force=True)
+        return True
 
     def _init_ui(self):
         self.main_layout = QVBoxLayout(self)
@@ -201,17 +209,22 @@ class SearchModCardWidget(ModCardWidget):
         br = get_border_radius(config)
         bc = get_theme_color(config, 'border', '#039d5b') if config else None
         bw = 2 if bc else 0
-        self.icon_label.setStyleSheet('border: none; background: transparent;')
+        local_fallback = self._resolve_local_icon_fallback()
+        icon_key = (self._get_visual_source_key(), self._media_width, self._media_height, local_fallback, br, bw, bc)
+        if self._last_search_icon_render_key == icon_key:
+            return
+        apply_stylesheet_if_changed(self.icon_label, 'border: none; background: transparent;', cache_attr='_search_icon_label_stylesheet_cache')
         load_mod_icon_universal(
             self.icon_label,
             self.mod_data,
             size=(self._media_width, self._media_height),
-            local_fallback=self._resolve_local_icon_fallback(),
+            local_fallback=local_fallback,
             border_radius=br,
             border_width=bw,
             border_color=bc,
             prefer_screenshot=True,
         )
+        self._last_search_icon_render_key = icon_key
 
     def _set_multiline_elided_text(self, label, text: str, max_lines: int, reserve_lines: int | None = None):
         cleaned_text = (text or '').replace('\n', ' ')
@@ -267,7 +280,17 @@ class SearchModCardWidget(ModCardWidget):
         label._elide_cache_key = cache_key
         return changed
 
-    def _refresh_card_geometry(self, invalidate_parent: bool = False):
+    def _refresh_card_geometry(self, invalidate_parent: bool = False, force: bool = False):
+        geometry_key = (
+            self._card_width,
+            self._media_width,
+            self._media_height,
+            bool(getattr(self, 'expanded_widget', None) and self.expanded_widget.isVisible()),
+            getattr(self.name_label, 'maximumHeight', lambda: 0)() if hasattr(self, 'name_label') else 0,
+            getattr(self.tagline_label, 'maximumHeight', lambda: 0)() if hasattr(self, 'tagline_label') else 0,
+        )
+        if not force and not invalidate_parent and self._last_geometry_refresh_key == geometry_key:
+            return False
         if hasattr(self, 'main_layout') and self.main_layout:
             self.main_layout.activate()
         if hasattr(self, 'expanded_widget') and self.expanded_widget:
@@ -278,18 +301,24 @@ class SearchModCardWidget(ModCardWidget):
         if invalidate_parent and parent and parent.layout():
             parent.layout().invalidate()
             parent.updateGeometry()
+        self._last_geometry_refresh_key = geometry_key
+        return True
 
     def _update_name_text(self):
         if not hasattr(self, 'name_label'):
-            return
+            return False
         text = self._full_name_text or getattr(self.mod_data, 'name', '') or ''
         if self._set_multiline_elided_text(self.name_label, text, 2, reserve_lines=2):
             self.updateGeometry()
+            return True
+        return False
 
     def _update_tagline_text(self):
         if hasattr(self, 'tagline_label'):
             if self._set_multiline_elided_text(self.tagline_label, self._get_tagline_text(), 4):
                 self.updateGeometry()
+                return True
+        return False
 
     def _update_updated_label(self):
         if hasattr(self, 'updated_label'):
@@ -301,38 +330,41 @@ class SearchModCardWidget(ModCardWidget):
         scale = self.layout_scale_for_config(config)
         text_color = get_theme_color(config, 'text', '#e8e9eb') if config else '#e8e9eb'
         secondary = get_theme_color(config, 'secondary_text', '#6de985') if config else '#6de985'
+        metrics_changed = bool(self._apply_metrics())
         if hasattr(self, 'name_label'):
-            self.name_label.setStyleSheet(f'font-size: {max(15, int(round(18 * scale)))}px; font-weight: bold; color: {text_color};')
+            apply_stylesheet_if_changed(self.name_label, f'font-size: {max(15, int(round(18 * scale)))}px; font-weight: bold; color: {text_color};', cache_attr='_search_name_stylesheet_cache')
         for label in ('downloads_label', 'updated_label'):
             widget = getattr(self, label, None)
             if widget:
-                widget.setStyleSheet(f'color: {secondary}; font-size: {max(12, int(round(14 * scale)))}px;')
+                apply_stylesheet_if_changed(widget, f'color: {secondary}; font-size: {max(12, int(round(14 * scale)))}px;', cache_attr=f'_{label}_stylesheet_cache')
         if hasattr(self, 'tagline_label'):
-            self.tagline_label.setStyleSheet(f'color: {secondary}; font-size: {max(12, int(round(14 * scale)))}px;')
-        self._apply_metrics()
-        self._update_name_text()
-        self._update_tagline_text()
-        self._refresh_card_geometry(invalidate_parent=True)
+            apply_stylesheet_if_changed(self.tagline_label, f'color: {secondary}; font-size: {max(12, int(round(14 * scale)))}px;', cache_attr='_tagline_stylesheet_cache')
+        name_changed = self._update_name_text()
+        tagline_changed = self._update_tagline_text()
+        if metrics_changed or name_changed or tagline_changed:
+            self._refresh_card_geometry(invalidate_parent=True, force=True)
 
     def _update_actions_visibility(self):
         if hasattr(self, 'expanded_widget'):
-            self.expanded_widget.setVisible(self.is_selected)
-        self._refresh_card_geometry(invalidate_parent=True)
+            should_show = bool(self.is_selected)
+            if self.expanded_widget.isVisible() != should_show:
+                self.expanded_widget.setVisible(should_show)
+                self._refresh_card_geometry(invalidate_parent=True, force=True)
 
     def update_mod_data(self):
         try:
-            self._apply_metrics()
+            metrics_changed = bool(self._apply_metrics())
             visual_source = self._get_visual_source_key()
             if visual_source != self._last_visual_source:
                 self._last_visual_source = visual_source
                 self._load_icon()
             self._full_name_text = getattr(self.mod_data, 'name', '') or ''
-            self._update_name_text()
+            name_changed = self._update_name_text()
             if hasattr(self, 'downloads_label'):
                 self.downloads_label.setText(self._get_downloads_text())
             if hasattr(self, 'updated_label'):
                 self._update_updated_label()
-            self._update_tagline_text()
+            tagline_changed = self._update_tagline_text()
             key = get_mod_key(self.mod_data)
             if key and key.startswith('gb_'):
                 if not getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
@@ -341,7 +373,8 @@ class SearchModCardWidget(ModCardWidget):
                             self._start_compatibility_check()
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
-            self._refresh_card_geometry(invalidate_parent=True)
+            if metrics_changed or name_changed or tagline_changed:
+                self._refresh_card_geometry(invalidate_parent=True, force=True)
         except Exception as e:
             logging.warning(f'SearchModCardWidget: Error updating mod data: {e}', exc_info=True)
 

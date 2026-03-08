@@ -1,6 +1,6 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
-from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color, get_border_radius, get_card_layout_scale, get_widget_dimensions
+from ui.common.styling import load_mod_icon_universal, update_mod_widget_style, get_theme_color, get_border_radius, get_card_layout_scale, get_widget_dimensions, apply_stylesheet_if_changed
 from services.localization_service import tr
 from utils.mod_utils import get_mod_key
 
@@ -14,6 +14,13 @@ class BaseModWidget(QFrame):
         self.is_selected = False
         self.parent_app = parent
         self.frame_selector = ''
+        self._metrics_cache_key = None
+        self._last_icon_render_key = None
+        self._icon_label_stylesheet_cache = None
+        self._name_label_stylesheet_cache = None
+        self._version_label_stylesheet_cache = None
+        self._author_label_stylesheet_cache = None
+        self._category_label_stylesheet_cache = None
 
     def _layout_scale(self) -> float:
         return get_card_layout_scale(self._resolve_theme_config())
@@ -31,18 +38,26 @@ class BaseModWidget(QFrame):
         scale = self._layout_scale()
         margin = max(8, int(round(10 * scale)))
         spacing = max(10, int(round(15 * scale)))
+        title_spacing = max(6, int(round(8 * scale)))
+        metadata_spacing = max(8, int(round(10 * scale)))
+        icon_size = self._icon_size() if hasattr(self, 'icon_label') and self.icon_label else None
+        card_height = self._card_height() if getattr(self, 'frame_selector', '') in ('modCard', 'installedMod') else None
+        metrics_key = (margin, spacing, title_spacing, metadata_spacing, icon_size, card_height)
+        if getattr(self, '_metrics_cache_key', None) == metrics_key:
+            return False
         if hasattr(self, 'main_layout') and self.main_layout:
             self.main_layout.setContentsMargins(margin, margin, margin, margin)
             self.main_layout.setSpacing(spacing)
         if hasattr(self, 'title_layout') and self.title_layout:
-            self.title_layout.setSpacing(max(6, int(round(8 * scale))))
+            self.title_layout.setSpacing(title_spacing)
         if hasattr(self, 'metadata_layout') and self.metadata_layout:
-            self.metadata_layout.setSpacing(max(8, int(round(10 * scale))))
+            self.metadata_layout.setSpacing(metadata_spacing)
         if hasattr(self, 'icon_label') and self.icon_label:
-            icon_size = self._icon_size()
             self.icon_label.setFixedSize(icon_size, icon_size)
         if getattr(self, 'frame_selector', '') in ('modCard', 'installedMod'):
-            self.setFixedHeight(self._card_height())
+            self.setFixedHeight(card_height)
+        self._metrics_cache_key = metrics_key
+        return True
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
@@ -149,9 +164,14 @@ class BaseModWidget(QFrame):
         br = get_border_radius(config)
         bc = get_theme_color(config, 'border', '#039d5b') if config else None
         bw = 2 if bc else 0
-        self.icon_label.setStyleSheet('border: none; background: transparent;')
+        local_fallback = self._resolve_local_icon_fallback()
         icon_width, icon_height = get_widget_dimensions(getattr(self, 'icon_label', None))
-        load_mod_icon_universal(self.icon_label, self.mod_data, (icon_width or self._icon_size(), icon_height or self._icon_size()), local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
+        icon_key = (get_mod_key(self.mod_data), getattr(self.mod_data, 'icon_url', None), getattr(self.mod_data, 'icon_path', None), icon_width or self._icon_size(), icon_height or self._icon_size(), local_fallback, br, bw, bc)
+        if getattr(self, '_last_icon_render_key', None) == icon_key:
+            return
+        apply_stylesheet_if_changed(self.icon_label, 'border: none; background: transparent;', cache_attr='_icon_label_stylesheet_cache')
+        load_mod_icon_universal(self.icon_label, self.mod_data, (icon_width or self._icon_size(), icon_height or self._icon_size()), local_fallback=local_fallback, border_radius=br, border_width=bw, border_color=bc)
+        self._last_icon_render_key = icon_key
 
     def _resolve_theme_config(self):
         if self.parent_app:
@@ -174,22 +194,22 @@ class BaseModWidget(QFrame):
             title_font_size = self._title_font_size()
             if hasattr(self, 'name_label') and self.name_label:
                 try:
-                    self.name_label.setStyleSheet(f'font-size: {title_font_size}px; font-weight: bold; color: {text_color};')
+                    apply_stylesheet_if_changed(self.name_label, f'font-size: {title_font_size}px; font-weight: bold; color: {text_color};', cache_attr='_name_label_stylesheet_cache')
                 except RuntimeError:
                     pass
             if hasattr(self, 'version_label') and self.version_label:
                 try:
-                    self.version_label.setStyleSheet(f'font-size: {title_font_size}px; color: {secondary_text_color};')
+                    apply_stylesheet_if_changed(self.version_label, f'font-size: {title_font_size}px; color: {secondary_text_color};', cache_attr='_version_label_stylesheet_cache')
                 except RuntimeError:
                     pass
             if hasattr(self, 'author_label_title') and self.author_label_title:
                 try:
-                    self.author_label_title.setStyleSheet(f'color: {text_color};')
+                    apply_stylesheet_if_changed(self.author_label_title, f'color: {text_color};', cache_attr='_author_label_stylesheet_cache')
                 except RuntimeError:
                     pass
             if hasattr(self, 'category_label_title') and self.category_label_title:
                 try:
-                    self.category_label_title.setStyleSheet(f'color: {text_color};')
+                    apply_stylesheet_if_changed(self.category_label_title, f'color: {text_color};', cache_attr='_category_label_stylesheet_cache')
                 except RuntimeError:
                     pass
 
@@ -206,6 +226,8 @@ class BaseModWidget(QFrame):
                 pass
 
     def set_selected(self, selected):
+        if self.is_selected == selected:
+            return
         self.is_selected = selected
         if hasattr(self, '_update_actions_visibility'):
             self._update_actions_visibility()

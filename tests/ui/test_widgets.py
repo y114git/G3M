@@ -1,3 +1,4 @@
+import os
 import time
 from types import SimpleNamespace
 from PyQt6.QtWidgets import QLabel, QWidget
@@ -213,6 +214,35 @@ class TestPluginWidgets:
         widget = PluginWidget(plugin_info, parent=host, parent_app=host)
         assert widget.height() > 120
         assert widget.icon_label.width() > 80
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_plugin_widget_reloads_icon_when_file_changes_in_place(self, qapp, temp_dir):
+        from PyQt6.QtGui import QImage, QColor
+        from ui.widgets.plugin.plugin_widget import PluginWidget
+        plugin_dir = os.path.join(temp_dir, 'plugin_icon_refresh')
+        os.makedirs(plugin_dir, exist_ok=True)
+        icon_path = os.path.join(plugin_dir, 'icon.png')
+        image = QImage(8, 8, QImage.Format.Format_ARGB32)
+        image.fill(QColor('#ff0000'))
+        assert image.save(icon_path)
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={})
+        plugin_info = {'name': 'Test Plugin', 'version': '1.0.0', 'author': 'Test Author', 'description': 'Test description', 'path': plugin_dir}
+        widget = PluginWidget(plugin_info, parent=host, parent_app=host)
+        first_key = widget._last_icon_render_key
+        assert first_key is not None
+        updated_image = QImage(32, 32, QImage.Format.Format_ARGB32)
+        updated_image.fill(QColor('#0000ff'))
+        assert updated_image.save(icon_path)
+        widget.update_plugin_info(dict(plugin_info))
+        second_key = widget._last_icon_render_key
+        assert second_key is not None
+        assert second_key != first_key
+        assert second_key[1] != first_key[1]
         widget.deleteLater()
         host.deleteLater()
         for _ in range(3):

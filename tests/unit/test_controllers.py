@@ -188,6 +188,38 @@ class TestThemeController:
         invalidate_stylesheet_cache_mock.assert_not_called()
         invalidate_theme_color_cache_mock.assert_not_called()
 
+    def test_apply_theme_resets_tooltip_size_cache_key(self, app_state, feedback_service):
+        from controllers.theme_controller import ThemeController
+        from PyQt6.QtWidgets import QApplication as RealQApplication
+        settings_service = Mock()
+        settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
+        customization_service = Mock()
+        app_window = Mock()
+        app_window.custom_font_family = None
+        app_window.palette.return_value = Mock()
+        app_window.status_label = Mock()
+        app_window.color_widgets = {'button_hover': Mock(text=lambda: '')}
+        app_window.installed_mods_label = None
+        app_window.title_bar = None
+        app_window.top_panel_widget = Mock()
+        app_window.logo_placeholder = Mock()
+        app_window.launcher_icon_label = Mock()
+        app_window.findChildren.return_value = []
+        app_window.plugin_tab_builder = None
+        app_window.library_tag_widgets = []
+        app_window.search_display = None
+        app_window.plugin_display = None
+        app_window.library_tab_builder = Mock()
+        app_window.library_tab_builder.update_priority_button_style = Mock()
+        app_window._apply_window_corner_mask = Mock()
+        app_window.update = Mock()
+        app_window.size.return_value = Mock()
+        app_window._last_tooltip_size_key = 'tooltip-text'
+        with patch('controllers.theme_controller.THEMES', {'default': {'background': 'images/background.png', 'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'), patch('controllers.theme_controller.build_stylesheet', return_value=''), patch.object(RealQApplication, 'instance', return_value=None), patch('controllers.theme_controller.QApplication', RealQApplication):
+            controller = ThemeController(app_state=app_state, feedback_service=feedback_service, settings_service=settings_service, customization_service=customization_service, app_window=app_window)
+            controller.apply_theme(force=True)
+        assert app_window._last_tooltip_size_key is None
+
 
 class TestGameLaunchController:
 

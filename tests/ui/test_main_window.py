@@ -26,6 +26,30 @@ class TestAppWindow:
             finally:
                 window.close()
 
+    def test_sync_chapter_tab_buttons_hides_extra_buttons_for_single_tab_game(self, qapp):
+        from PyQt6.QtWidgets import QPushButton, QWidget
+        from core.app_window import AppWindow
+        from models.game_modes import UndertaleGame
+        window = QWidget()
+        window.app_state = Mock()
+        window.app_state.game_mode = UndertaleGame()
+        window.app_state.current_mode = 'chapter'
+        window.chapter_tabs_widget = QWidget()
+        window.chapter_tab_buttons = [QPushButton() for _ in range(5)]
+        window._on_chapter_tab_clicked = Mock()
+        tabs = AppWindow._sync_chapter_tab_buttons(window)
+        assert len(tabs) == 1
+        assert window.chapter_tab_buttons[0].isVisible()
+        assert getattr(window.chapter_tab_buttons[0], '_chapter_id', None) == 'undertale'
+        for btn in window.chapter_tab_buttons[1:]:
+            assert not btn.isVisible()
+            assert getattr(btn, '_chapter_id', None) is None
+        assert window.chapter_tabs_widget.isHidden()
+        window.chapter_tabs_widget.deleteLater()
+        for btn in window.chapter_tab_buttons:
+            btn.deleteLater()
+        window.deleteLater()
+
 
 class TestTabBuilders:
 

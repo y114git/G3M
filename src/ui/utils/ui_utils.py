@@ -115,6 +115,10 @@ class UIAnimator:
         return not app_state.local_config.get('disable_animations', False)
 
     @staticmethod
+    def _preserve_fade_effect(widget: QWidget) -> bool:
+        return bool(getattr(widget, '_preserve_fade_effect', False))
+
+    @staticmethod
     def _stop_existing_fade(widget: QWidget) -> None:
         anim = getattr(widget, '_fade_anim', None)
         if not anim:
@@ -123,11 +127,12 @@ class UIAnimator:
             anim.stop()
         except (RuntimeError, AttributeError):
             pass
+        if getattr(widget, '_fade_anim', None) is anim:
+            widget._fade_anim = None
         try:
             anim.deleteLater()
         except (RuntimeError, AttributeError):
             pass
-        widget._fade_anim = None
 
     @staticmethod
     def _get_opacity_effect(widget: QWidget) -> QGraphicsOpacityEffect:
@@ -151,6 +156,7 @@ class UIAnimator:
         """Fade in a widget by animating opacity."""
 
         should_show = widget.parent() is not None or type(widget).__name__ == "AnimatedToolTip"
+        preserve_effect = UIAnimator._preserve_fade_effect(widget)
 
         if not UIAnimator._animations_enabled(app_state):
             widget.setWindowOpacity(1.0)
@@ -175,9 +181,12 @@ class UIAnimator:
         anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
         def cleanup():
-            if hasattr(widget, 'setGraphicsEffect'):
-                widget.setGraphicsEffect(None)
-            widget._fade_effect = None
+            if preserve_effect:
+                effect.setOpacity(1.0)
+            else:
+                if hasattr(widget, 'setGraphicsEffect'):
+                    widget.setGraphicsEffect(None)
+                widget._fade_effect = None
             widget._fade_anim = None
 
         anim.finished.connect(cleanup)
@@ -190,6 +199,7 @@ class UIAnimator:
     @staticmethod
     def fade_out(widget: QWidget, duration: int = 200, app_state=None) -> QPropertyAnimation:
         """Fade out a widget by animating opacity."""
+        preserve_effect = UIAnimator._preserve_fade_effect(widget)
         if not UIAnimator._animations_enabled(app_state):
             widget.hide()
             return None
@@ -206,9 +216,12 @@ class UIAnimator:
 
         def cleanup():
             widget.hide()
-            if hasattr(widget, 'setGraphicsEffect'):
-                widget.setGraphicsEffect(None)
-            widget._fade_effect = None
+            if preserve_effect:
+                effect.setOpacity(0.0)
+            else:
+                if hasattr(widget, 'setGraphicsEffect'):
+                    widget.setGraphicsEffect(None)
+                widget._fade_effect = None
             widget._fade_anim = None
 
         anim.finished.connect(cleanup)
