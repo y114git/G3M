@@ -10,32 +10,12 @@ import logging
 from PyQt6.QtCore import QUrl, QRunnable, QThreadPool, QObject, pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QTextDocument, QColor, QPainter
 from PyQt6.QtWidgets import QTextBrowser, QTextEdit
+from config.constants import RICH_HTML_IMAGE_CACHE_MAX_SIZE, RICH_HTML_CSS_CLASS_MAP, RICH_HTML_IMG_RE, RICH_HTML_ATTR_RE, RICH_HTML_CLASS_RE, RICH_HTML_FONT_COLOR_RE
 from utils.network_utils import get_session
-
-_CSS_CLASS_MAP = {
-    'RedColor': 'color:#ff4444;',
-    'BlueColor': 'color:#5599ff;',
-    'GreenColor': 'color:#44ff44;',
-    'YellowColor': 'color:#ffdd44;',
-    'WhiteColor': 'color:#ffffff;',
-    'SelectedElement': '',
-}
-
-_IMG_RE = re.compile(
-    r'<img\b([^>]*)/?>', re.IGNORECASE | re.DOTALL
-)
-_ATTR_RE = re.compile(r'(\w[\w-]*)=["\']([^"\']*)["\']')
-_CLASS_RE = re.compile(
-    r'<(\w+)\b([^>]*?)\bclass=["\']([^"\']*)["\']([^>]*)>', re.IGNORECASE
-)
-_FONT_COLOR_RE = re.compile(
-    r'<font\b([^>]*?)\bcolor=["\']([^"\']*)["\']([^>]*)>(.*?)</font>',
-    re.IGNORECASE | re.DOTALL
-)
 
 
 def _parse_attrs(attr_str: str) -> dict:
-    return dict(_ATTR_RE.findall(attr_str))
+    return dict(RICH_HTML_ATTR_RE.findall(attr_str))
 
 
 def _positive_int(value) -> int:
@@ -108,7 +88,7 @@ def _browser_available_width(browser: QTextBrowser) -> int:
 def _image_requests(html: str, widget_width: int) -> list[dict]:
     requests = []
     safe_width = _safe_inline_media_width(widget_width)
-    for match in _IMG_RE.finditer(html):
+    for match in RICH_HTML_IMG_RE.finditer(html):
         attrs = _parse_attrs(match.group(1))
         src = attrs.get('src', '').strip()
         if not src.startswith(('http://', 'https://')):
@@ -162,7 +142,7 @@ def _resolve_classes(html: str) -> str:
         tag, pre, classes, post = m.group(1), m.group(2), m.group(3), m.group(4)
         styles = []
         for cls in classes.split():
-            css = _CSS_CLASS_MAP.get(cls)
+            css = RICH_HTML_CSS_CLASS_MAP.get(cls)
             if css:
                 styles.append(css)
         if not styles:
@@ -177,7 +157,7 @@ def _resolve_classes(html: str) -> str:
         clean_pre = re.sub(r'\s*class=["\'][^"\']*["\']', '', pre)
         clean_post = re.sub(r'\s*class=["\'][^"\']*["\']', '', post)
         return f'<{tag}{clean_pre} style="{style_val}"{clean_post}>'
-    return _CLASS_RE.sub(_repl, html)
+    return RICH_HTML_CLASS_RE.sub(_repl, html)
 
 
 def _resolve_font_tags(html: str) -> str:
@@ -188,7 +168,7 @@ def _resolve_font_tags(html: str) -> str:
         if other_attrs:
             return f'<span style="color:{color};" {other_attrs}>{inner}</span>'
         return f'<span style="color:{color};">{inner}</span>'
-    return _FONT_COLOR_RE.sub(_repl, html)
+    return RICH_HTML_FONT_COLOR_RE.sub(_repl, html)
 
 
 def _build_img_tag(attrs: dict, widget_width: int) -> str:
@@ -249,7 +229,7 @@ def preprocess_html(html: str, widget_width: int = 600) -> str:
         attrs = _parse_attrs(m.group(1))
         tag = _build_img_tag(attrs, widget_width)
         return tag if tag else m.group(0)
-    html = _IMG_RE.sub(_img_repl, html)
+    html = RICH_HTML_IMG_RE.sub(_img_repl, html)
     return html
 
 
@@ -278,14 +258,13 @@ class _ImageFetchRunnable(QRunnable):
             logging.debug(f'RichHTML: Failed to load image {self.url}: {e}')
 
 
-MAX_IMAGE_CACHE_SIZE = 128
 _IMAGE_CACHE = OrderedDict()
 
 
 def _cache_image(url: str, img: QImage):
     _IMAGE_CACHE.pop(url, None)
     _IMAGE_CACHE[url] = img
-    if len(_IMAGE_CACHE) > MAX_IMAGE_CACHE_SIZE:
+    if len(_IMAGE_CACHE) > RICH_HTML_IMAGE_CACHE_MAX_SIZE:
         _IMAGE_CACHE.popitem(last=False)
 
 

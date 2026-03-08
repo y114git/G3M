@@ -1,8 +1,7 @@
 """Mod filtering and sorting utilities."""
+from config.constants import MOD_FILTER_TRUE_VALUES, MOD_FILTER_NSFW_TEXT_MARKERS
 from services.mod_service import parse_mod_date
 from adapters.gamebanana_adapter import GameBananaAPI
-_TRUE_VALUES = (True, 'true', 'True', 1)
-_NSFW_TEXT_MARKERS = ('nsfw', 'adult', '18+', '18plus', 'explicit', 'mature')
 
 
 def _get_mod_attr(mod, attr, default=None): return mod.get(attr, default) if isinstance(mod, dict) else getattr(mod, attr, default)
@@ -42,13 +41,13 @@ def _build_searchable_text(mod, is_gamebanana: bool = False) -> str:
 
 def _get_mod_bool_attr(mod, attr, default=False):
     v = _get_mod_attr(mod, attr, default)
-    return v in _TRUE_VALUES if v else False
+    return v in MOD_FILTER_TRUE_VALUES if v else False
 
 
 def _contains_nsfw_text(value) -> bool:
     normalized = str(value or '').casefold().replace('_', ' ').replace('-', ' ').strip()
     collapsed = normalized.replace(' ', '')
-    return any(marker in normalized or marker in collapsed for marker in _NSFW_TEXT_MARKERS)
+    return any(marker in normalized or marker in collapsed for marker in MOD_FILTER_NSFW_TEXT_MARKERS)
 
 
 def _is_nsfw_mod(mod):

@@ -1,16 +1,14 @@
 """Post-show initialization logic extracted from AppWindow."""
 import os
 import logging
-from PyQt6.QtCore import QThread
 from config.constants import UI_COLORS, CLOUD_FUNCTIONS_BASE_URL
 from services.localization_service import tr
 from services.game_detection_service import is_game_running
 from utils.network_utils import get_session, check_internet_connection
-from workers.changelog_worker import FetchChangelogWorker
 
 
 def post_show_initialization(app):
-    """Run post-show init: internet check, global settings, changelog, config restore, mod scan."""
+    """Run post-show init: internet check, global settings, config restore, mod scan."""
     is_first_launch = not app.app_state.local_config.get('first_launch_splash_shown', False)
     if is_first_launch and getattr(app, '_splash_was_shown', False):
         app.app_state.local_config['first_launch_splash_shown'] = True
@@ -32,16 +30,6 @@ def post_show_initialization(app):
             app.app_state.has_internet = False
     if app.app_state.has_internet:
         app.app_state.pending_announce_check = True
-    changelog_url = app._localized_value(app.app_state.global_settings, 'changelog_ru_url', 'changelog_en_url', 'changelog_url')
-    if changelog_url and app.app_state.has_internet:
-        app.changelog_thread = QThread(app)
-        app.changelog_worker = FetchChangelogWorker(changelog_url.strip())
-        app.changelog_worker.moveToThread(app.changelog_thread)
-        app.changelog_worker.finished.connect(app.changelog_text_edit.setMarkdown)
-        app.changelog_thread.started.connect(app.changelog_worker.run)
-        app.changelog_thread.start()
-    else:
-        app.changelog_text_edit.setMarkdown(tr('status.changelog_load_failed'))
     if is_game_running():
         app.feedback_service.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
         return

@@ -2,15 +2,15 @@ import logging
 from typing import Dict, Any
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QScrollArea, QSizePolicy
+from config.constants import BASE_TAG_NAMES, LIBRARY_GAME_OPTIONS, LIBRARY_IMPORT_ARCHIVE_EXTENSIONS
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
 from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, build_button_style, apply_scroll_area_chrome
 from ui.builders.shared_filters_builder import (
-    BASE_TAG_NAMES, LIBRARY_GAME_OPTIONS, create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button,
+    create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame, apply_filters_frame_style
 )
 
-_ARCHIVE_EXTENSIONS = ('.zip', '.7z', '.rar', '.tar.gz', '.lzma', '.gz')
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +22,7 @@ class _DropAreaWidget(QWidget):
         self.setAcceptDrops(True)
 
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls() and any(u.toLocalFile().lower().endswith(_ARCHIVE_EXTENSIONS) for u in e.mimeData().urls()):
+        if e.mimeData().hasUrls() and any(u.toLocalFile().lower().endswith(LIBRARY_IMPORT_ARCHIVE_EXTENSIONS) for u in e.mimeData().urls()):
             e.acceptProposedAction()
 
     def dragMoveEvent(self, e):
@@ -33,7 +33,7 @@ class _DropAreaWidget(QWidget):
 
     def dropEvent(self, e):
         if e.mimeData().hasUrls():
-            paths = [u.toLocalFile() for u in e.mimeData().urls() if u.toLocalFile().lower().endswith(_ARCHIVE_EXTENSIONS)]
+            paths = [u.toLocalFile() for u in e.mimeData().urls() if u.toLocalFile().lower().endswith(LIBRARY_IMPORT_ARCHIVE_EXTENSIONS)]
             if paths:
                 e.acceptProposedAction()
                 self.files_dropped.emit(paths)

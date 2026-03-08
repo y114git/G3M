@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 
@@ -160,3 +160,31 @@ class TestGameLaunchController:
         controller = GameLaunchController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=used_mods_service, settings_service=settings_service, game_launcher=game_launcher, customization_service=customization_service, plugin_service=plugin_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
+
+
+class TestAppWindowRestore:
+
+    def test_on_window_restore_requested_uses_show_maximized_for_saved_maximized_state(self):
+        from core.app_window import AppWindow
+        from PyQt6.QtCore import Qt
+
+        window = Mock()
+        window.settings_service.was_window_maximized.return_value = True
+        window.settings_service.load_window_geometry.return_value = True
+        window.windowState.return_value = Qt.WindowState.WindowMaximized
+        window._restoring_window_geometry = False
+        window._finish_window_restore = Mock()
+
+        with patch('core.app_window.QTimer.singleShot', side_effect=lambda _ms, callback: callback()):
+            AppWindow._on_window_restore_requested(window)
+
+        window.settings_service.was_window_maximized.assert_called_once_with()
+        window.settings_service.load_window_geometry.assert_called_once_with(window, apply_maximized_state=False)
+        window.setWindowState.assert_called_once()
+        window.show.assert_called_once_with()
+        window.showMaximized.assert_called_once_with()
+        window.showNormal.assert_not_called()
+        window._finish_window_restore.assert_called_once_with()
+        window.activateWindow.assert_called_once_with()
+        window.raise_.assert_called_once_with()
+        assert window._restoring_window_geometry is True

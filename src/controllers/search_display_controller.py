@@ -12,13 +12,11 @@ from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
 from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
 from workers.gamebanana.search_worker import SearchGameBananaModsThread
 from adapters.gamebanana_cache import GameBananaMetadataCache
-from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
+from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, SEARCH_EXHAUSTED_PAGE_SENTINEL
 from ui.utils.ui_utils import DebounceTimer
 from controllers.search_metadata_handler import SearchMetadataHandler
 import logging
 logger = logging.getLogger(__name__)
-
-EXHAUSTED_PAGE_SENTINEL = 100
 
 
 class SearchDisplayController(QObject):
@@ -407,7 +405,7 @@ class SearchDisplayController(QObject):
                                     logger.warning(f'SearchDisplayController: Error triggering metadata loading: {e}', exc_info=True)
                             trigger_metadata_loading()
                     else:
-                        self.app_state.gamebanana_loaded_pages[gid] = EXHAUSTED_PAGE_SENTINEL
+                        self.app_state.gamebanana_loaded_pages[gid] = SEARCH_EXHAUSTED_PAGE_SENTINEL
                     results_received[0] += 1
                     if results_received[0] >= expected_results:
                         on_all_results_received()
@@ -530,7 +528,7 @@ class SearchDisplayController(QObject):
                         all_new_mods.extend(mods_list)
                         search_pages[game_id] = max(search_pages.get(game_id, 0), pg)
                     else:
-                        search_pages[game_id] = max(search_pages.get(game_id, 0), EXHAUSTED_PAGE_SENTINEL)
+                        search_pages[game_id] = max(search_pages.get(game_id, 0), SEARCH_EXHAUSTED_PAGE_SENTINEL)
                     results_received[0] += 1
                     if results_received[0] >= expected_results:
                         search_timeout_timer.stop()
@@ -976,7 +974,7 @@ class SearchDisplayController(QObject):
             gamebanana_game = self._get_selected_gamebanana_game()
             game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
             search_pages = getattr(self.app_state, 'gamebanana_search_loaded_pages', {}).get(search_text, {})
-            search_exhausted = search_pages.get(game_id, 0) >= EXHAUSTED_PAGE_SENTINEL
+            search_exhausted = search_pages.get(game_id, 0) >= SEARCH_EXHAUSTED_PAGE_SENTINEL
             can_load_more = can_load_more and (not search_exhausted)
         self.ui_button_enabled_update.emit('next_page_btn', has_more_mods or can_load_more)
 
@@ -1107,7 +1105,7 @@ class SearchDisplayController(QObject):
                         self._queue_mods_for_metadata(mods_needing)
                         self.update_filtered_mods()
                 else:
-                    self.app_state.gamebanana_loaded_pages[game_id] = EXHAUSTED_PAGE_SENTINEL
+                    self.app_state.gamebanana_loaded_pages[game_id] = SEARCH_EXHAUSTED_PAGE_SENTINEL
                     self.update_filtered_mods()
             except Exception as e:
                 logger.error(f'SearchDisplayController: Error in on_result for game load: {e}', exc_info=True)

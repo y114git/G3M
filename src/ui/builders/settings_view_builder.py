@@ -3,24 +3,17 @@ import platform
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton,
-    QCheckBox, QLineEdit, QTextBrowser, QSizePolicy, QTabWidget,
+    QCheckBox, QLineEdit, QSizePolicy, QTabWidget,
     QScrollArea, QSpinBox, QComboBox,
 )
 from services.localization_service import localization_service, tr
+from config.constants import SETTINGS_COLOR_CONFIG
 from ui.widgets.shared.custom_controls import NoScrollComboBox
 from ui.utils.ui_utils import UIAnimator
 from ui.common.styling import get_border_radius
 
 
 class SettingsViewBuilder:
-    COLOR_CONFIG = {
-        'background': 'ui.background_color',
-        'button': 'ui.elements_color',
-        'border': 'ui.border_color',
-        'button_hover': 'ui.hover_color',
-        'text': 'ui.main_text_color',
-        'secondary_text': 'ui.secondary_text_color',
-    }
 
     def __init__(self, app_state, parent=None):
         self.app_state = app_state
@@ -46,23 +39,10 @@ class SettingsViewBuilder:
         tab_widget.addTab(self._build_plugins_tab(tab_widget), tr('ui.settings_tab_plugins'))
         settings_layout.addWidget(tab_widget, stretch=1)
 
-        changelog_widget = self._build_changelog_widget()
-        changelog_widget.setVisible(False)
-        settings_layout.addWidget(changelog_widget, stretch=1)
-
-        button_bar_layout = QHBoxLayout()
-        button_bar_layout.setSpacing(10)
-        button_bar_layout.addStretch(1)
-        button_bar_layout.addWidget(self.widgets['changelog_button'])
-        button_bar_layout.addWidget(self.widgets['report_bug_button'])
-        button_bar_layout.addStretch(1)
-        settings_layout.addLayout(button_bar_layout)
-
         settings_widget.setVisible(False)
 
         self.widgets['settings_widget'] = settings_widget
         self.widgets['settings_tab_widget'] = tab_widget
-        self.widgets['changelog_widget'] = changelog_widget
         return settings_widget
 
     def _wrap_in_scroll(self, content_widget: QWidget, parent: QWidget = None) -> QScrollArea:
@@ -249,8 +229,6 @@ class SettingsViewBuilder:
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_advanced'), 'general_advanced', 'ui.settings_section_advanced', parent=page)
-        open_deltahub_folder_button = self._styled_button(tr('buttons.open_deltahub_folder'), 140)
-        cl.addWidget(open_deltahub_folder_button, alignment=Qt.AlignmentFlag.AlignCenter)
         reset_button = self._styled_button(tr('buttons.reset_settings'), 80)
         cl.addWidget(reset_button, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
@@ -263,7 +241,6 @@ class SettingsViewBuilder:
         self.widgets['fullscreen_checkbox'] = fullscreen_checkbox
         self.widgets['ui_scale_label'] = ui_scale_label
         self.widgets['ui_scale_spinbox'] = ui_scale_spinbox
-        self.widgets['open_deltahub_folder_button'] = open_deltahub_folder_button
         self.widgets['reset_button'] = reset_button
         return self._wrap_in_scroll(page, parent)
 
@@ -339,7 +316,7 @@ class SettingsViewBuilder:
         custom_style_layout.setContentsMargins(0, 4, 0, 0)
         custom_style_layout.setSpacing(8)
         color_widgets, color_labels = {}, {}
-        for key, lang_key in self.COLOR_CONFIG.items():
+        for key, lang_key in SETTINGS_COLOR_CONFIG.items():
             row_layout, line_edit, btn, reset_btn, label_widget = self._create_color_row(tr(lang_key))
             color_widgets[key], color_labels[key] = line_edit, label_widget
             self.widgets[f'color_btn_{key}'], self.widgets[f'color_reset_{key}'] = btn, reset_btn
@@ -370,7 +347,7 @@ class SettingsViewBuilder:
         self.widgets['custom_style_frame'] = custom_style_frame
         self.widgets['color_widgets'] = color_widgets
         self.widgets['color_labels'] = color_labels
-        self.widgets['color_config'] = {k: tr(v) for k, v in self.COLOR_CONFIG.items()}
+        self.widgets['color_config'] = {k: tr(v) for k, v in SETTINGS_COLOR_CONFIG.items()}
         self.widgets['theme_button'] = theme_button
         self.widgets['themes_list_widget'] = themes_list_widget
         self.widgets['theme_apply_btn'] = theme_apply_btn
@@ -592,30 +569,6 @@ class SettingsViewBuilder:
         self.widgets['settings_custom_executable_button'] = custom_executable_button
         self.widgets['settings_reset_custom_exe_button'] = reset_custom_exe_button
         return self._wrap_in_scroll(page, parent)
-
-    def _build_changelog_widget(self) -> QFrame:
-        changelog_widget = QFrame()
-        changelog_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        changelog_layout = QVBoxLayout(changelog_widget)
-        changelog_text_edit = QTextBrowser()
-        changelog_text_edit.setOpenExternalLinks(True)
-        changelog_text_edit.setMinimumHeight(0)
-        changelog_text_edit.setMaximumHeight(500)
-        if self.parent:
-            current_font = self.parent.font()
-            changelog_text_edit.setFont(current_font)
-            doc = changelog_text_edit.document()
-            if doc is not None:
-                doc.setDefaultFont(current_font)
-                doc.setDefaultStyleSheet('p { margin-bottom: 0.75em; } ul, ol { margin-left: 1em; } li { margin-bottom: 0.25em; }')
-        changelog_text_edit.setMarkdown(f"<i>{tr('status.loading')}</i>")
-        changelog_layout.addWidget(changelog_text_edit)
-        changelog_button = QPushButton(tr('buttons.changelog'))
-        report_bug_button = QPushButton(tr('buttons.report_bug'))
-        self.widgets['changelog_text_edit'] = changelog_text_edit
-        self.widgets['changelog_button'] = changelog_button
-        self.widgets['report_bug_button'] = report_bug_button
-        return changelog_widget
 
     def get_widgets(self) -> Dict[str, Any]:
         return self.widgets

@@ -2,9 +2,9 @@
 from PyQt6.QtWidgets import QApplication, QWIDGETSIZE_MAX
 from services.localization_service import tr
 from config.constants import THEMES, UI_COLORS
+from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
 from utils.path_utils import resource_path
 from workers.background_loader_worker import BgLoader
-from ui.styles import build_stylesheet
 from ui.common.styling import get_border_radius, rgba_from_color
 from ui.utils.ui_utils import DebounceTimer
 
@@ -23,7 +23,6 @@ class ThemeController:
 
     def apply_theme(self, force=False):
         from ui.common.styling import invalidate_theme_color_cache
-        from ui.styles import invalidate_stylesheet_cache
         invalidate_theme_color_cache()
         invalidate_stylesheet_cache()
         theme = THEMES['default']
@@ -100,6 +99,11 @@ class ThemeController:
         if self.app.installed_mods_label:
             self.app.installed_mods_label.setStyleSheet(bold_label_style)
 
+        if hasattr(self.app, 'title_bar') and self.app.title_bar:
+            self.app.title_bar.apply_metrics(zoom_factor)
+            self._refresh_title_bar_styles()
+        if hasattr(self.app, '_apply_window_corner_mask'):
+            self.app._apply_window_corner_mask()
         self.app.top_panel_widget.setMinimumHeight(scale(65))
         self.app.logo_placeholder.setFixedSize(scale(250), scale(60))
 
@@ -162,6 +166,31 @@ class ThemeController:
 
         QTimer.singleShot(0, _deferred_style_updates)
         self.app.update()
+
+    def _refresh_title_bar_styles(self):
+        title_bar = getattr(self.app, 'title_bar', None)
+        if not title_bar:
+            return
+        widgets = [title_bar]
+        title_bar_attrs = vars(title_bar) if hasattr(title_bar, '__dict__') else {}
+        for attr_name in ('left_widget', 'right_widget', 'help_button', 'minimize_button', 'maximize_button', 'close_button'):
+            widget = title_bar_attrs.get(attr_name)
+            if widget is not None:
+                widgets.append(widget)
+        seen = set()
+        for widget in widgets:
+            widget_id = id(widget)
+            if widget_id in seen:
+                continue
+            seen.add(widget_id)
+            try:
+                style = widget.style()
+                if style is not None:
+                    style.unpolish(widget)
+                    style.polish(widget)
+                widget.update()
+            except (AttributeError, RuntimeError):
+                continue
 
     def _iter_filter_scrolls(self):
         for attr in ('library_tab_builder', 'search_tab_builder'):

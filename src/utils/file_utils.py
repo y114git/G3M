@@ -1,6 +1,5 @@
 """File operation utilities."""
 import os
-import platform
 import re
 import shutil
 import stat
@@ -11,9 +10,8 @@ import threading
 import time
 from typing import Dict, Optional, Callable, TypeVar
 from utils.network_utils import download_file, get_filename_from_url, get_session
-from config.constants import MOD_CONFIG_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME
+from config.constants import MOD_CONFIG_FILENAME, META_JSON_FILENAME, ICON_PNG_FILENAME, LEGACY_MOD_CONFIG_FILENAME, LEGACY_META_JSON_FILENAME, IS_WINDOWS_PLATFORM
 T = TypeVar('T')
-_IS_WIN = platform.system() == 'Windows'
 
 
 def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: float = 0.1, op_name: str = 'operation', path: str = '') -> T:
@@ -33,7 +31,7 @@ def _retry_operation(operation: Callable[[], T], max_retries: int = 5, delay: fl
 
 
 def _fix_windows_permissions(path: str) -> None:
-    if _IS_WIN:
+    if IS_WINDOWS_PLATFORM:
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
         except OSError:
@@ -406,7 +404,7 @@ def safe_move(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
 
 
 def _rmtree_error_handler(func, path, _):
-    if _IS_WIN:
+    if IS_WINDOWS_PLATFORM:
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
             func(path)
@@ -425,7 +423,7 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
         _retry_operation(lambda: shutil.rmtree(path, **rmtree_kwargs), max_retries, delay, 'safe_rmtree', path)
         return True
     except Exception:
-        if not _IS_WIN:
+        if not IS_WINDOWS_PLATFORM:
             try:
                 renamed = os.path.join(tempfile.gettempdir(), f'deltahub_cleanup_{int(time.time())}')
                 if not os.path.exists(renamed):

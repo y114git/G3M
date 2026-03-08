@@ -7,13 +7,13 @@ import time
 from adapters.gamebanana_adapter import GameBananaAPI
 from models.mod_models import ModInfo
 from adapters.gamebanana_cache import GameBananaMetadataCache
+from config.constants import ASYNC_METADATA_MIN_REQUEST_INTERVAL
 
 logger = logging.getLogger(__name__)
 
 
 _rate_limit_lock = threading.Lock()
 _last_request_time = 0.0
-_MIN_REQUEST_INTERVAL = 0.2
 
 
 def _wait_for_global_rate_limit():
@@ -21,8 +21,8 @@ def _wait_for_global_rate_limit():
     global _last_request_time
     with _rate_limit_lock:
         elapsed = time.time() - _last_request_time
-        if elapsed < _MIN_REQUEST_INTERVAL:
-            time.sleep(_MIN_REQUEST_INTERVAL - elapsed)
+        if elapsed < ASYNC_METADATA_MIN_REQUEST_INTERVAL:
+            time.sleep(ASYNC_METADATA_MIN_REQUEST_INTERVAL - elapsed)
         _last_request_time = time.time()
 
 

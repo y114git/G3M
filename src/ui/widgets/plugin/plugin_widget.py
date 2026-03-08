@@ -2,6 +2,7 @@ import os
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt6.QtGui import QPixmap, QColor
+from config.constants import PLUGIN_STATUS_STYLES
 from services.localization_service import tr
 from ui.common.styling import get_theme_color, build_button_style, round_pixmap, get_border_radius, get_card_layout_scale, get_card_button_metrics
 from ui.utils.ui_utils import UIAnimator
@@ -209,11 +210,9 @@ class PluginWidget(QFrame):
         self.main_layout = main_layout
         self.title_layout = title_layout
 
-    _STATUS_STYLES = {'enabled': ('#4CAF50', 'plugins.status_enabled'), 'disabled': ('#FFA500', 'plugins.status_disabled')}
-
     def _update_status_indicator(self):
         status = self.plugin_info.get('status', 'enabled')
-        color, tooltip_key = self._STATUS_STYLES.get(status, ('#F44336', 'plugins.status_broken'))
+        color, tooltip_key = PLUGIN_STATUS_STYLES.get(status, ('#F44336', 'plugins.status_broken'))
         font_size = max(12, int(round(14 * self._layout_scale())))
         self.status_indicator.setStyleSheet(f'color: {color}; font-size: {font_size}px; font-weight: bold;')
         self.status_indicator.setToolTip(tr(tooltip_key))

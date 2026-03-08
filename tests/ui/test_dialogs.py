@@ -1,3 +1,4 @@
+from unittest.mock import Mock, patch
 from PyQt6.QtWidgets import QDialog
 
 
@@ -64,6 +65,52 @@ class TestReportBugDialog:
         assert hasattr(dialog, 'attach_logs_checkbox')
         assert hasattr(dialog, 'send_button')
         assert dialog.max_total_size == 10 * 1024 * 1024
+        dialog.close()
+
+
+class TestAboutDialog:
+
+    def test_about_dialog_creation(self, qapp, app_state, temp_dir):
+        from ui.dialogs.about_dialog import AboutDialog
+        callback = Mock()
+        dialog = AboutDialog(None, app_state, on_report_bug=callback)
+        assert dialog is not None
+        assert isinstance(dialog, QDialog)
+        assert dialog.title_label.text() == 'DELTAHUB'
+        assert dialog.data_path_edit.text() == temp_dir
+        assert dialog.report_bug_button.isEnabled()
+        assert dialog.os_value.text()
+        assert dialog.python_value.text()
+        dialog.close()
+
+    def test_about_dialog_actions(self, qapp, app_state):
+        from ui.dialogs.about_dialog import AboutDialog
+        callback = Mock()
+        dialog = AboutDialog(None, app_state, on_report_bug=callback)
+        with patch('ui.dialogs.about_dialog.QDesktopServices.openUrl') as open_url:
+            dialog.wiki_button.click()
+            dialog.open_folder_button.click()
+        assert open_url.call_count == 2
+        dialog.report_bug_button.click()
+        callback.assert_called_once()
+        assert dialog.result() == QDialog.DialogCode.Accepted
+
+    def test_about_dialog_disables_report_bug_without_callback(self, qapp, app_state):
+        from ui.dialogs.about_dialog import AboutDialog
+        dialog = AboutDialog(None, app_state)
+        assert not dialog.report_bug_button.isEnabled()
+        dialog.close()
+
+
+class TestChangelogDialog:
+
+    def test_changelog_dialog_creation_without_source(self, qapp):
+        from ui.dialogs.changelog_dialog import ChangelogDialog
+        dialog = ChangelogDialog(None, '')
+        assert dialog is not None
+        assert isinstance(dialog, QDialog)
+        assert hasattr(dialog, 'text_browser')
+        assert hasattr(dialog, 'close_button')
         dialog.close()
 
 

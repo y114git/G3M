@@ -120,8 +120,7 @@ def _classify_mod(mod_source_dir: str):
 
 def _apply_file_overrides(mod_source_dir: str, target_dir: str, backup_mgr, chapter_id: str, g3mtool):
     """Copy non-patch files from mod source into game target, with backup."""
-    from config.patching_config import SKIP_FILES, ARCHIVE_EXTENSIONS
-    from config.constants import DATA_FILE_EXTENSIONS
+    from config.constants import SKIP_FILES, ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS
     if not os.path.isdir(mod_source_dir):
         return
     for root, _dirs, files in os.walk(mod_source_dir):

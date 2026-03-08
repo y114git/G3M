@@ -229,7 +229,7 @@ class TestBorderRadius:
         assert app_state.local_config['custom_border_radius'] == 7
 
     def test_border_radius_in_stylesheet(self):
-        from ui.styles import build_stylesheet, invalidate_stylesheet_cache
+        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
         invalidate_stylesheet_cache()
         sheet = build_stylesheet(
             frame_bg_color='rgba(40,40,40,150)', button_color='#222',
@@ -242,7 +242,7 @@ class TestBorderRadius:
         assert 'border-radius: 7px' in sheet
 
     def test_button_radii_in_stylesheet_saturate_to_control_geometry(self):
-        from ui.styles import build_stylesheet, invalidate_stylesheet_cache
+        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
         invalidate_stylesheet_cache()
         sheet = build_stylesheet(
             frame_bg_color='rgba(40,40,40,150)', button_color='#222',
@@ -259,8 +259,28 @@ class TestBorderRadius:
         assert 'border-radius: 22px;' in top_refresh_section
         assert 'border-radius: 17px;' in field_section
 
+    def test_title_bar_window_button_radius_uses_safe_scaled_geometry(self):
+        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
+        invalidate_stylesheet_cache()
+        sheet = build_stylesheet(
+            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
+            border_color='#039d5b', button_hover_color='#616b78',
+            main_text_color='#e8e9eb', font_family_main='Arial',
+            font_size_main=16, font_size_small=12,
+            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
+            custom_border_radius='50px', zoom_factor=1.5,
+        )
+        title_bar_section = re.search(
+            r'\nQPushButton#titleBarMinimizeButton, QPushButton#titleBarMaximizeButton, QPushButton#titleBarCloseButton \{(?P<section>.*?)\n\}',
+            sheet,
+            re.DOTALL,
+        ).group('section')
+        assert 'min-width: 39px;' in title_bar_section
+        assert 'max-width: 39px;' in title_bar_section
+        assert 'border-radius: 22px;' in title_bar_section
+
     def test_checkbox_indicator_radius_saturates_at_safe_circle_value(self):
-        from ui.styles import build_stylesheet, invalidate_stylesheet_cache
+        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
         invalidate_stylesheet_cache()
         sheet = build_stylesheet(
             frame_bg_color='rgba(40,40,40,150)', button_color='#222',
@@ -276,7 +296,7 @@ class TestBorderRadius:
         assert 'height: 18px;' in checkbox_section
 
     def test_scrollbar_styles_use_custom_radius_and_hide_arrows(self):
-        from ui.styles import build_stylesheet, invalidate_stylesheet_cache
+        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
         invalidate_stylesheet_cache()
         sheet = build_stylesheet(
             frame_bg_color='rgba(40,40,40,150)', button_color='#222',
@@ -400,3 +420,54 @@ class TestThemeApplication:
                 kwargs = build_stylesheet_mock.call_args.kwargs
                 assert kwargs['frame_bg_color'] == 'rgba(0, 255, 0, 128)'
                 assert kwargs['tooltip_bg_color'] == 'rgba(0, 255, 0, 128)'
+
+    def test_theme_repolishes_title_bar_widgets_on_live_update(self, app_state):
+        from controllers.theme_controller import ThemeController
+        feedback_service = Mock()
+        settings_service = Mock()
+        settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
+        customization_service = Mock()
+        app_window = _build_theme_test_window()
+        app_state.local_config = {'custom_border_radius': 50}
+
+        def _styled_widget():
+            widget = Mock()
+            widget_style = Mock()
+            widget.style.return_value = widget_style
+            return widget, widget_style
+
+        title_bar, title_bar_style = _styled_widget()
+        left_widget, left_widget_style = _styled_widget()
+        right_widget, right_widget_style = _styled_widget()
+        help_button, help_button_style = _styled_widget()
+        minimize_button, minimize_button_style = _styled_widget()
+        maximize_button, maximize_button_style = _styled_widget()
+        close_button, close_button_style = _styled_widget()
+
+        title_bar.left_widget = left_widget
+        title_bar.right_widget = right_widget
+        title_bar.help_button = help_button
+        title_bar.minimize_button = minimize_button
+        title_bar.maximize_button = maximize_button
+        title_bar.close_button = close_button
+        app_window.title_bar = title_bar
+
+        with patch('controllers.theme_controller.THEMES', {'default': {'background': 'images/background.png', 'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'):
+            theme_controller = ThemeController(app_state, feedback_service, settings_service, customization_service, app_window)
+            from PyQt6.QtWidgets import QApplication as RealQApplication
+            with patch.object(RealQApplication, 'instance', return_value=None), patch('controllers.theme_controller.QApplication', RealQApplication):
+                app_window.setStyleSheet = Mock()
+                theme_controller.apply_theme()
+
+        title_bar.apply_metrics.assert_called_once()
+        for style_mock in (
+            title_bar_style,
+            left_widget_style,
+            right_widget_style,
+            help_button_style,
+            minimize_button_style,
+            maximize_button_style,
+            close_button_style,
+        ):
+            style_mock.unpolish.assert_called_once()
+            style_mock.polish.assert_called_once()

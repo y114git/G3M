@@ -1,10 +1,11 @@
 from typing import Dict, Any
 from PyQt6.QtCore import Qt, QObject
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QSizePolicy, QLabel, QGridLayout, QCheckBox
+from config.constants import BASE_TAG_NAMES, SEARCH_GAME_OPTIONS
 from services.localization_service import tr
 from ui.common.styling import install_size_hint_height_sync, install_scroll_viewport_clip, apply_panel_style, build_tag_checkbox_style, get_theme_color, get_ui_scale_factor
 from ui.builders.shared_filters_builder import (
-    BASE_TAG_NAMES, SEARCH_GAME_OPTIONS, create_sort_controls, create_tag_checkboxes, create_search_button,
+    create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame, create_modgame_combo, create_pagination_controls, apply_filters_frame_style
 )
 

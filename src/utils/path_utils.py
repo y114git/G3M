@@ -1,14 +1,11 @@
 """Path resolution and platform-specific utilities."""
 import logging
 import os
-import platform
 import re
 import stat
 import sys
 from pathlib import Path
-from config.constants import GAME_EXECUTABLES
-
-_SYS = platform.system()
+from config.constants import GAME_EXECUTABLES, CURRENT_PLATFORM
 
 
 def get_launcher_dir():
@@ -20,9 +17,9 @@ def get_launcher_dir():
 
 def get_user_data_root():
     home = os.path.expanduser('~')
-    if _SYS == 'Windows':
+    if CURRENT_PLATFORM == 'Windows':
         return os.path.join(os.getenv('LOCALAPPDATA') or os.getenv('APPDATA') or home, 'DELTAHUB')
-    if _SYS == 'Darwin':
+    if CURRENT_PLATFORM == 'Darwin':
         return os.path.join(home, 'Library', 'Application Support', 'DELTAHUB')
     return os.path.join(home, '.local', 'share', 'DELTAHUB')
 
@@ -48,7 +45,7 @@ def resolve_game_executable(base_dir, is_undertale=False, game_type=None):
         if not base_dir or not os.path.isdir(base_dir):
             return None
         game_types = [game_type] if game_type else (['undertaleyellow', 'undertale'] if is_undertale else ['deltarune'])
-        search_order = {'Windows': ['windows', 'linux', 'mac'], 'Linux': ['linux', 'windows', 'mac'], 'Darwin': ['mac', 'linux', 'windows']}.get(_SYS, ['windows', 'linux', 'mac'])
+        search_order = {'Windows': ['windows', 'linux', 'mac'], 'Linux': ['linux', 'windows', 'mac'], 'Darwin': ['mac', 'linux', 'windows']}.get(CURRENT_PLATFORM, ['windows', 'linux', 'mac'])
         for plat_key in search_order:
             for gt in game_types:
                 for name in list(GAME_EXECUTABLES.get(gt, {}).get(plat_key, ())):
@@ -75,7 +72,7 @@ def find_chapter_resource_dir(base_dir, chapter_id: str):
         if not base_dir:
             return None
         target_base = base_dir
-        if _SYS == 'Darwin':
+        if CURRENT_PLATFORM == 'Darwin':
             if not target_base.endswith('.app'):
                 for app_name in ('DELTARUNE.app', 'DELTARUNEdemo.app'):
                     candidate = os.path.join(target_base, app_name)
@@ -119,15 +116,15 @@ def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
         if part == 'steamapps' and i + 2 < len(path_parts) and path_parts[i + 1] == 'common':
             return True
     home = os.path.expanduser('~')
-    if _SYS == 'Windows':
+    if CURRENT_PLATFORM == 'Windows':
         for pf in filter(None, [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')]):
             if _match_steam_path(game_path_normalized, os.path.join(pf, 'Steam', 'steamapps', 'common', game_name)):
                 return True
-    elif _SYS == 'Linux':
+    elif CURRENT_PLATFORM == 'Linux':
         for sp in [os.path.join(home, '.steam', 'steam'), os.path.join(home, '.local', 'share', 'Steam'), os.path.join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam')]:
             if _match_steam_path(game_path_normalized, os.path.join(sp, 'steamapps', 'common', game_name)):
                 return True
-    elif _SYS == 'Darwin':
+    elif CURRENT_PLATFORM == 'Darwin':
         for sp in [os.path.join(home, 'Library', 'Application Support', 'Steam'), os.path.join(home, 'Steam')]:
             if _match_steam_path(game_path_normalized, os.path.join(sp, 'steamapps', 'common', game_name)):
                 return True
@@ -141,7 +138,7 @@ def _pizza_names(game_name):
 def autodetect_path(game_name: str) -> str | None:
     if game_name in ('UNDERTALE YELLOW', 'UndertaleYellow', 'undertaleyellow', 'SUGARY SPIRE', 'SugarySpire', 'sugaryspire'):
         return None
-    system, paths, names = _SYS, [], _pizza_names(game_name)
+    system, paths, names = CURRENT_PLATFORM, [], _pizza_names(game_name)
     home = os.path.expanduser('~')
     if system == 'Windows':
         pf_dirs = [p for p in [os.getenv('ProgramFiles(x86)'), os.getenv('ProgramFiles')] if p]
@@ -195,7 +192,7 @@ def autodetect_path(game_name: str) -> str | None:
 
 def fix_macos_python_symlink(app_dir: Path) -> None:
     try:
-        if _SYS != 'Darwin':
+        if CURRENT_PLATFORM != 'Darwin':
             return
         p = app_dir / 'Contents' / 'Frameworks' / 'Python'
         if not p.exists() or p.is_symlink():
@@ -218,7 +215,7 @@ def cleanup_old_updater_files():
     try:
         if not getattr(sys, 'frozen', False):
             return
-        system = _SYS
+        system = CURRENT_PLATFORM
         current_exe_path = os.path.realpath(sys.executable)
         if system == 'Darwin':
             replace_target = os.path.abspath(os.path.join(os.path.dirname(current_exe_path), '..', '..'))

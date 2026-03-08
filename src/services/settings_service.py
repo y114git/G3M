@@ -8,9 +8,9 @@ import shutil
 import tempfile
 import zipfile
 from typing import Optional
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QByteArray
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QPoint
 from PyQt6.QtWidgets import QFileDialog, QWidget
-from PyQt6.QtGui import QFontDatabase
+from PyQt6.QtGui import QFontDatabase, QGuiApplication
 from services.localization_service import tr, LocalizationManager
 from config.constants import LAUNCHER_VERSION, UI_COLORS
 
@@ -513,20 +513,75 @@ class SettingsManager(QObject):
         self.write_local_config()
         self.settings_changed.emit()
 
-    def load_window_geometry(self, widget: QWidget) -> bool:
-        saved = self.app_state.local_config.get('window_geometry')
+    def _get_saved_window_geometry_state(self) -> Optional[dict]:
+        saved = self.app_state.local_config.get('window_geometry_state')
+        return saved if isinstance(saved, dict) else None
+
+    def was_window_maximized(self) -> bool:
+        saved = self._get_saved_window_geometry_state()
+        return bool(saved.get('maximized', False)) if saved else False
+
+    def _get_screen_for_saved_geometry(self, x: int, y: int):
+        point = QPoint(x, y)
+        for screen in QGuiApplication.screens() or []:
+            try:
+                if screen.availableGeometry().contains(point):
+                    return screen
+            except AttributeError:
+                continue
+        screen_at_point = QGuiApplication.screenAt(point)
+        if screen_at_point is not None:
+            return screen_at_point
+        return None
+
+    def load_window_geometry(self, widget: QWidget, *, apply_maximized_state: bool = True) -> bool:
+        saved = self._get_saved_window_geometry_state()
         if not saved:
             return False
         try:
-            widget.restoreGeometry(QByteArray.fromHex(saved.encode()))
-            return True
-        except (ValueError, AttributeError) as e:
+            width = int(saved.get('width', 0))
+            height = int(saved.get('height', 0))
+            x = int(saved.get('x', widget.x()))
+            y = int(saved.get('y', widget.y()))
+            is_maximized = bool(saved.get('maximized', False))
+            screen = self._get_screen_for_saved_geometry(x, y) or widget.screen() or QGuiApplication.primaryScreen()
+            if screen is not None:
+                available = screen.availableGeometry()
+                min_width = max(widget.minimumWidth(), 640)
+                min_height = max(widget.minimumHeight(), 480)
+                width = max(min_width, min(width or widget.width(), available.width()))
+                height = max(min_height, min(height or widget.height(), available.height()))
+                max_x = max(available.left(), available.right() - width + 1)
+                max_y = max(available.top(), available.bottom() - height + 1)
+                x = min(max(x, available.left()), max_x)
+                y = min(max(y, available.top()), max_y)
+            if width > 0 and height > 0:
+                widget.resize(width, height)
+            widget.move(x, y)
+            if apply_maximized_state and is_maximized:
+                widget.setWindowState(widget.windowState() | Qt.WindowState.WindowMaximized)
+        except (TypeError, ValueError, AttributeError) as e:
             logging.debug(f'load_window_geometry: failed: {e}')
             return False
+        else:
+            return True
 
     def save_window_geometry(self, widget: QWidget):
-        geom_ba = widget.saveGeometry()
-        self.app_state.local_config['window_geometry'] = geom_ba.toHex().data().decode()
+        if widget.isMinimized() or widget.isFullScreen():
+            return
+        geometry = widget.normalGeometry() if widget.isMaximized() else widget.geometry()
+        if not geometry.isValid():
+            geometry = widget.geometry()
+        if not geometry.isValid():
+            return
+        self.app_state.local_config['window_geometry_state'] = {
+            'x': geometry.x(),
+            'y': geometry.y(),
+            'width': geometry.width(),
+            'height': geometry.height(),
+            'maximized': widget.isMaximized(),
+        }
+        self.app_state.local_config.pop('window_geometry', None)
         self.write_local_config()
 
     def schedule_geometry_save(self, widget: QWidget, timeout_ms: int = 500):

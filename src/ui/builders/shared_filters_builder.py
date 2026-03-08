@@ -6,17 +6,6 @@ from ui.widgets.shared.custom_controls import NoScrollComboBox
 from ui.common.styling import get_theme_color, build_tag_checkbox_style, get_border_radius, install_widget_update_handler, get_widget_border_radius
 
 
-BASE_TAG_NAMES = ('textedit', 'customization', 'gameplay', 'other')
-SEARCH_GAME_OPTIONS = (
-    ('deltarune', 'deltarune'),
-    ('undertale', 'undertale'),
-    ('undertaleyellow', 'undertaleyellow'),
-    ('pizzatower', 'pizzatower'),
-    ('sugaryspire', 'sugaryspire'),
-)
-LIBRARY_GAME_OPTIONS = SEARCH_GAME_OPTIONS[:1] + (('deltarunedemo', 'deltarunedemo'),) + SEARCH_GAME_OPTIONS[1:]
-
-
 def create_sort_controls(app_state, items=None, config_key=None):
     """Create sort combo and order button."""
     sort_combo = NoScrollComboBox()
@@ -109,8 +98,10 @@ def create_filters_frame():
     w = QFrame()
     w.setObjectName('filters')
     w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+    w.setMinimumWidth(0)
     layout = QHBoxLayout(w)
-    layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
-    layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetNoConstraint)
+    layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
     layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(10)
     return w, layout

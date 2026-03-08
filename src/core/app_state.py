@@ -49,7 +49,6 @@ class AppState(QObject):
         self.mods_loaded: bool = False
         self.library_initialized: bool = False
         self.is_settings_view: bool = False
-        self.is_changelog_view: bool = False
         self._current_mode: str = 'normal'
         self._selected_chapter_id: Optional[int] = None
         self._is_installing: bool = False

@@ -7,55 +7,8 @@ from PyQt6 import sip
 from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QColor, QPixmap, QPainter, QPainterPath, QPen, QRegion
 from PyQt6.QtWidgets import QLabel
+from config.constants import MOD_WIDGET_STYLE_TEMPLATE, EMPTY_LAYOUT_MESSAGE_STYLE
 from utils.mod_utils import get_mod_key
-
-
-_STYLE_TEMPLATE = '''QFrame#{frame_selector} {{
-    background-color: {bg_color};
-    border: {border_width} solid {border_color};
-    border-radius: {frame_border_radius};
-}}
-QFrame#{frame_selector}:hover {{
-    border-color: {hover_border_color};
-}}
-QLabel#{icon_selector} {{
-    border: 2px solid {border_color};
-    border-radius: {icon_border_radius};
-}}
-QLabel#versionLabel {{
-    color: {secondary_text_color};
-}}
-QLabel#secondaryText {{
-    color: {secondary_text_color};
-    font-size: {secondary_font_size}px;
-}}
-QLabel#primaryText {{
-    color: {text_color};
-    font-size: {primary_font_size}px;
-}}
-QPushButton#cardButton, QPushButton#cardButtonInstall, QPushButton#cardButtonUninstall {{
-    min-width: {button_width}px;
-    max-width: {button_width}px;
-    min-height: {button_height}px;
-    max-height: {button_height}px;
-    font-size: {button_font_size}px;
-    padding: 1px;
-    border-radius: {button_border_radius};
-}}
-QPushButton#cardButtonInstall {{
-    background-color: #4CAF50;
-    font-weight: bold;
-}}
-QPushButton#cardButtonInstall:hover {{
-    background-color: #5cb85c;
-}}
-QPushButton#cardButtonUninstall {{
-    background-color: #F44336;
-    font-weight: bold;
-}}
-QPushButton#cardButtonUninstall:hover {{
-    background-color: #d32f2f;
-}}'''
 
 
 class _WidgetUpdateFilter(QObject):
@@ -252,7 +205,7 @@ def get_widget_border_radius(widget, radius: int, border_width: int = 0, margin:
 def generate_widget_style(frame_selector, bg_color, border_color, hover_border_color, text_color, secondary_text_color, is_selected=False, icon_selector='modIcon', frame_border_radius='0px', icon_border_radius='0px', button_border_radius='0px', primary_font_size=14, secondary_font_size=14, button_width=110, button_height=35, button_font_size=15):
     border_width = '2px'
     current_border_color = hover_border_color if is_selected else border_color
-    return _STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, secondary_text_color=secondary_text_color, text_color=text_color, frame_border_radius=frame_border_radius, icon_border_radius=icon_border_radius, button_border_radius=button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size)
+    return MOD_WIDGET_STYLE_TEMPLATE.format(frame_selector=frame_selector, bg_color=bg_color, border_width=border_width, border_color=current_border_color, hover_border_color=hover_border_color, icon_selector=icon_selector, secondary_text_color=secondary_text_color, text_color=text_color, frame_border_radius=frame_border_radius, icon_border_radius=icon_border_radius, button_border_radius=button_border_radius, primary_font_size=primary_font_size, secondary_font_size=secondary_font_size, button_width=button_width, button_height=button_height, button_font_size=button_font_size)
 
 
 def update_mod_widget_style(widget, frame_selector, parent_app=None):
@@ -293,9 +246,6 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         main_layout.setContentsMargins(content_margin, content_margin, content_margin, content_margin)
 
 
-_EMPTY_MESSAGE_STYLE = 'QLabel {{\n    color: {color};\n    font-size: {font_size}px;\n    font-style: italic;\n    opacity: 0.75;\n    background-color: transparent;\n    padding: 40px;\n}}'
-
-
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
     empty_text_color = '#6de985'
     if local_config:
@@ -303,7 +253,7 @@ def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
     parent = layout.parentWidget() if hasattr(layout, 'parentWidget') else None
     empty_label = QLabel(text, parent)
     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    empty_label.setStyleSheet(_EMPTY_MESSAGE_STYLE.format(color=empty_text_color, font_size=font_size))
+    empty_label.setStyleSheet(EMPTY_LAYOUT_MESSAGE_STYLE.format(color=empty_text_color, font_size=font_size))
     layout.insertWidget(layout.count() - 1, empty_label)
 
 

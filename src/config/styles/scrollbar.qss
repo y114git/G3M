@@ -49,4 +49,3 @@ QScrollBar::sub-page:horizontal {
     background: transparent;
     border: none;
 }
-

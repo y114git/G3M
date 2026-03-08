@@ -16,19 +16,13 @@ class SettingsUiController:
             if hasattr(obj, attr):
                 getattr(obj, attr)()
 
-    def toggle_settings_view(self, show_changelog=False):
-        if show_changelog:
-            self.app_state.is_changelog_view = not self.app_state.is_changelog_view
-        else:
-            self.app_state.is_settings_view = not self.app_state.is_settings_view
-            if not self.app_state.is_settings_view and self.app_state.is_changelog_view:
-                self.app_state.is_changelog_view = False
+    def toggle_settings_view(self):
+        self.app_state.is_settings_view = not self.app_state.is_settings_view
         if self.app_state.is_settings_view:
             self.app.settings_button.setText(tr('ui.back_button'))
             self.app.tab_widget.setVisible(False)
             self.app.bottom_widget.setVisible(False)
             self.app.settings_widget.setVisible(True)
-            self.update_settings_page_visibility()
             self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
             self.app._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
@@ -41,13 +35,6 @@ class SettingsUiController:
     def show_report_bug_dialog(self):
         from ui.dialogs.report_bug_dialog import ReportBugDialog
         ReportBugDialog(self.app, self.app_state).exec()
-
-    def update_settings_page_visibility(self):
-        is_cl = self.app_state.is_changelog_view
-        if hasattr(self.app, 'settings_tab_widget'):
-            self.app.settings_tab_widget.setVisible(not is_cl)
-        self.app.changelog_widget.setVisible(is_cl)
-        self.app.changelog_button.setText(tr('buttons.close') if is_cl else tr('buttons.changelog'))
 
     def reset_settings(self):
         self.customization_service.stop_background_music()
@@ -69,7 +56,6 @@ class SettingsUiController:
         self.used_mods_service.used_mods.clear()
         self.used_mods_service.save_used_mods_state()
         self.used_mods_service.load_used_mods_state()
-        self.update_settings_page_visibility()
         self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
         self.app.game_launch.update_button_state()
         self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())

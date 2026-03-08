@@ -3,8 +3,8 @@ import os
 import shutil
 import tempfile
 from typing import Optional
+from config.constants import SKIP_FILES, ARCHIVE_EXTENSIONS
 from utils.patching import mod_content_utils as mod_content
-from config.patching_config import SKIP_FILES, ARCHIVE_EXTENSIONS
 
 
 def apply_xdelta_override(patcher, file_name: str, source_path: str, target_dir: str, chapter_id: Optional[int], fallback_target: Optional[str] = None, label: str = '') -> bool:

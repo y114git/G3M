@@ -93,6 +93,34 @@ class TestSettingsManager:
         app_state.local_config.update(loaded_data)
         assert app_state.local_config.get('test_setting') == 'test_value'
 
+    def test_settings_service_can_restore_normal_geometry_without_applying_maximized_state(self, app_state, feedback_service, qapp):
+        from services.settings_service import SettingsManager
+        from services.localization_service import localization_service
+        manager = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
+        app_state.local_config['window_geometry_state'] = {
+            'x': 120,
+            'y': 80,
+            'width': 900,
+            'height': 700,
+            'maximized': True,
+        }
+        widget = Mock()
+        widget.x.return_value = 0
+        widget.y.return_value = 0
+        widget.width.return_value = 800
+        widget.height.return_value = 600
+        widget.minimumWidth.return_value = 0
+        widget.minimumHeight.return_value = 0
+        widget.screen.return_value = None
+
+        restored = manager.load_window_geometry(widget, apply_maximized_state=False)
+
+        assert restored is True
+        widget.resize.assert_called_once_with(900, 700)
+        widget.move.assert_called_once_with(120, 80)
+        widget.setWindowState.assert_not_called()
+        assert manager.was_window_maximized() is True
+
 
 class TestPluginManager:
 

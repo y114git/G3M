@@ -6,15 +6,18 @@ import webbrowser
 import argparse
 from typing import Optional
 import logging
-from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QUrl, QPoint, QObject
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QDesktopServices
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QPoint, QObject, QRectF
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QLineEdit, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QSpinBox
 from services.localization_service import localization_service, tr
 from models.game_modes import DeltaruneGame, get_game
 from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, CLOUD_FUNCTIONS_BASE_URL
 from ui.utils.ui_utils import DebounceTimer, UIAnimator
 from ui.widgets.shared.custom_controls import AnimatedToolTip
-from ui.common.styling import get_theme_color, get_border_radius, display_hex_to_qt_hex, clamp_border_radius
+from ui.dialogs.about_dialog import AboutDialog
+from ui.dialogs.changelog_dialog import ChangelogDialog
+from ui.widgets.shared.custom_title_bar import CustomTitleBar
+from ui.common.styling import get_theme_color, get_border_radius, display_hex_to_qt_hex, clamp_border_radius, apply_rounded_mask
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
 from utils.network_utils import get_session
 from workers.presence_worker import PresenceWorker
@@ -124,6 +127,14 @@ class AppWindow(QWidget):
         from PyQt6.QtCore import QMetaObject, Qt
         QMetaObject.invokeMethod(self.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
         self.setWindowTitle('DELTAHUB')
+        self.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowSystemMenuHint |
+            Qt.WindowType.WindowMinimizeButtonHint |
+            Qt.WindowType.WindowMaximizeButtonHint |
+            Qt.WindowType.WindowCloseButtonHint
+        )
         self._supports_volume = platform.system() == 'Windows'
         self._initial_size = None
         self.app_state.local_config = self.settings_service.read_json(self.app_state.config_path) or {}
@@ -150,6 +161,11 @@ class AppWindow(QWidget):
         self._install_op_id = 0
         self.pending_updates = []
         self._mods_display_ready_emitted = False
+        self._resize_margin = 6
+        self._restoring_window_geometry = False
+        self._window_layout_refresh_timer = QTimer(self)
+        self._window_layout_refresh_timer.setSingleShot(True)
+        self._window_layout_refresh_timer.timeout.connect(self._refresh_after_window_layout_change)
 
     def _init_services_and_controllers(self):
         self.feedback_service.status_updated.connect(self.update_status_signal.emit)
@@ -275,13 +291,30 @@ class AppWindow(QWidget):
             self._pending_install_url = None
 
     def _on_window_restore_requested(self):
-        geometry_restored = self.settings_service.load_window_geometry(self)
-        if geometry_restored:
+        was_maximized = self.settings_service.was_window_maximized()
+        self._restoring_window_geometry = True
+        try:
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized & ~Qt.WindowState.WindowMaximized)
+        except Exception as e:
+            logging.debug(f'Failed to clear window state: {e}')
+        geometry_restored = self.settings_service.load_window_geometry(self, apply_maximized_state=False)
+        if was_maximized:
+            if geometry_restored:
+                self.show()
+            else:
+                self.showNormal()
+            QTimer.singleShot(0, self.showMaximized)
+        elif geometry_restored:
             self.show()
         else:
             self.showNormal()
+        QTimer.singleShot(250, self._finish_window_restore)
         self.activateWindow()
         self.raise_()
+
+    def _finish_window_restore(self):
+        self._restoring_window_geometry = False
+        self._schedule_window_layout_refresh(220)
 
     def _refresh_after_install(self) -> None:
         if self.plugin_service:
@@ -329,17 +362,179 @@ class AppWindow(QWidget):
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ''
 
+    def _show_about_dialog(self):
+        dialog = AboutDialog(self, self.app_state, on_report_bug=self.settings_ui.show_report_bug_dialog if hasattr(self, 'settings_ui') else None)
+        dialog.exec()
+
+    def _show_changelog_dialog(self):
+        changelog_url = self._localized_value(self.app_state.global_settings, 'changelog_ru_url', 'changelog_en_url', 'changelog_url')
+        dialog = ChangelogDialog(self, changelog_url.strip() if changelog_url else '')
+        dialog.exec()
+
+    def _toggle_maximized_from_title_bar(self):
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+        self._schedule_window_layout_refresh(220)
+
+    def _get_window_corner_radius(self) -> int:
+        if self.isMaximized() or self.isFullScreen():
+            return 0
+        try:
+            return max(0, int(get_border_radius(self.app_state.local_config, default=8)))
+        except (TypeError, ValueError):
+            return 8
+
+    def _get_window_outline_width(self) -> int:
+        return 0 if self.isMaximized() or self.isFullScreen() else 2
+
+    def _get_window_outline_color(self) -> QColor:
+        color = QColor(get_theme_color(self.app_state.local_config, 'border', '#039d5b'))
+        return color if color.isValid() else QColor('#039d5b')
+
+    def _apply_window_corner_mask(self):
+        apply_rounded_mask(self, self._get_window_corner_radius())
+
+    def _paint_window_outline(self, painter: QPainter):
+        outline_width = self._get_window_outline_width()
+        if outline_width <= 0:
+            return
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(self._get_window_outline_color(), outline_width))
+        inset = outline_width / 2
+        rect = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
+        radius = clamp_border_radius(self._get_window_corner_radius(), width=rect.width(), height=rect.height(), border_width=outline_width)
+        path = QPainterPath()
+        if radius > 0:
+            path.addRoundedRect(rect, radius, radius)
+        else:
+            path.addRect(rect)
+        painter.drawPath(path)
+
+    def _sync_title_bar_window_state(self):
+        if hasattr(self, 'title_bar') and self.title_bar:
+            self.title_bar.sync_window_state(self.isMaximized())
+        if hasattr(self, 'main_layout') and self.main_layout:
+            self.main_layout.setContentsMargins(*(0, 0, 0, 0) if self.isMaximized() else (10, 5, 10, 5))
+        self._apply_window_corner_mask()
+
+    def _schedule_window_layout_refresh(self, delay_ms: int = 160):
+        timer = getattr(self, '_window_layout_refresh_timer', None)
+        if timer is None:
+            return
+        timer.stop()
+        timer.start(max(0, int(delay_ms)))
+
+    def _refresh_after_window_layout_change(self):
+        if not self.isVisible() or self.isMinimized():
+            return
+        self.updateGeometry()
+        if hasattr(self, 'main_tab_widget') and self.main_tab_widget:
+            self.main_tab_widget.updateGeometry()
+        if hasattr(self, 'search_mods_scroll') and self.search_mods_scroll:
+            self.search_mods_scroll.updateGeometry()
+            try:
+                viewport = self.search_mods_scroll.viewport()
+            except Exception:
+                viewport = None
+            if viewport:
+                viewport.updateGeometry()
+        if hasattr(self, 'mod_list_widget') and self.mod_list_widget:
+            self.mod_list_widget.updateGeometry()
+        if hasattr(self, 'search_display') and self.search_display:
+            if hasattr(self.search_display, '_last_grid_metrics_key'):
+                self.search_display._last_grid_metrics_key = None
+            self.search_display.update_display()
+
+    def _window_resize_edges(self, pos):
+        if self.isMaximized():
+            return Qt.Edge(0)
+        rect = self.rect()
+        margin = max(4, int(self._resize_margin))
+        left = pos.x() <= margin
+        right = pos.x() >= rect.width() - margin
+        top = pos.y() <= margin
+        bottom = pos.y() >= rect.height() - margin
+        edges = Qt.Edge(0)
+        if left:
+            edges |= Qt.Edge.LeftEdge
+        if right:
+            edges |= Qt.Edge.RightEdge
+        if top:
+            edges |= Qt.Edge.TopEdge
+        if bottom:
+            edges |= Qt.Edge.BottomEdge
+        return edges
+
+    @staticmethod
+    def _cursor_for_resize_edges(edges):
+        diagonal_a = Qt.Edge.TopEdge | Qt.Edge.LeftEdge
+        diagonal_b = Qt.Edge.BottomEdge | Qt.Edge.RightEdge
+        diagonal_c = Qt.Edge.TopEdge | Qt.Edge.RightEdge
+        diagonal_d = Qt.Edge.BottomEdge | Qt.Edge.LeftEdge
+        if edges in (diagonal_a, diagonal_b):
+            return Qt.CursorShape.SizeFDiagCursor
+        if edges in (diagonal_c, diagonal_d):
+            return Qt.CursorShape.SizeBDiagCursor
+        if edges in (Qt.Edge.LeftEdge, Qt.Edge.RightEdge):
+            return Qt.CursorShape.SizeHorCursor
+        if edges in (Qt.Edge.TopEdge, Qt.Edge.BottomEdge):
+            return Qt.CursorShape.SizeVerCursor
+        return None
+
+    def _update_resize_cursor(self, pos):
+        cursor_shape = self._cursor_for_resize_edges(self._window_resize_edges(pos))
+        if cursor_shape is None:
+            self.unsetCursor()
+            return
+        self.setCursor(cursor_shape)
+
+    def _start_system_resize_if_needed(self, pos):
+        edges = self._window_resize_edges(pos)
+        if edges == Qt.Edge(0):
+            return False
+        handle = self.windowHandle()
+        if handle is None:
+            return False
+        try:
+            return bool(handle.startSystemResize(edges))
+        except Exception:
+            return False
+
     def init_ui(self):
         self.full_install_checkbox = QCheckBox(tr('ui.install_game_files_first'))
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
         self.full_install_checkbox.hide()
+        self.setMinimumSize(960, 600)
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(10, 5, 10, 5)
+        self.main_layout.setSpacing(6)
+        self.setMouseTracking(True)
+        self.title_bar = CustomTitleBar(self)
+        self.title_bar.changelog_requested.connect(self._show_changelog_dialog)
+        self.title_bar.about_requested.connect(self._show_about_dialog)
+        self.title_bar.minimize_requested.connect(self.showMinimized)
+        self.title_bar.maximize_restore_requested.connect(self._toggle_maximized_from_title_bar)
+        self.title_bar.close_requested.connect(self.close)
+        self.title_bar.set_localized_texts(
+            tr('ui.help_menu'),
+            tr('buttons.changelog'),
+            tr('ui.about_title'),
+            tr('ui.minimize_window'),
+            tr('ui.maximize_window'),
+            tr('ui.restore_window'),
+            tr('ui.close_window'),
+        )
+        self.main_layout.addWidget(self.title_bar)
         self.top_panel_widget = QFrame()
+        self.top_panel_widget.setObjectName('topPanelWidget')
         self.top_frame = QHBoxLayout(self.top_panel_widget)
-        self.top_frame.setContentsMargins(5, 0, 5, 0)
-        self.top_frame.setSpacing(5)
+        self.top_frame.setContentsMargins(4, 0, 4, 0)
+        self.top_frame.setSpacing(4)
         self.settings_button = QPushButton(tr('ui.settings_title'))
+        self.settings_button.setObjectName('topPanelCompactButton')
         self.settings_button.clicked.connect(self.settings_ui.toggle_settings_view)
         self.online_label = QLabel(tr('status.online_count', count='?'))
         self.online_label.setStyleSheet('padding-left:8px;')
@@ -357,16 +552,18 @@ class AppWindow(QWidget):
         self.top_frame.addWidget(self.logo_placeholder)
         self.top_frame.addStretch()
         self.telegram_button = QPushButton(tr('buttons.telegram'))
+        self.telegram_button.setObjectName('topPanelCompactButton')
         self.telegram_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('telegram_url', SOCIAL_LINKS['telegram'])))
         self.telegram_button.setStyleSheet(f"color: {UI_COLORS['link']};")
         self.top_frame.addWidget(self.telegram_button)
         self.discord_button = QPushButton(tr('buttons.discord'))
+        self.discord_button.setObjectName('topPanelCompactButton')
         self.discord_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('discord_url', SOCIAL_LINKS['discord'])))
         self.discord_button.setStyleSheet(f"color: {UI_COLORS['social_discord']};")
         self.top_frame.addWidget(self.discord_button)
         self.main_layout.addWidget(self.top_panel_widget)
         self.launcher_icon_label = QLabel(self.top_panel_widget)
-        self.launcher_icon_label.setFixedSize(250, 80)
+        self.launcher_icon_label.setFixedSize(250, 60)
         self.launcher_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.customization_service.load_launcher_icon(self.launcher_icon_label)
         self.bottom_widget = QFrame()
@@ -432,7 +629,7 @@ class AppWindow(QWidget):
 
         self.previous_tab_index = 0
         self.main_tab_widget.currentChanged.connect(self._on_tab_changed)
-        self.main_tab_widget.setStyleSheet('\n            QTabWidget::tab-bar {\n                alignment: center;\n            }\n            QTabBar::tab {\n                min-width: 120px;\n                padding: 8px 16px;\n            }\n        ')
+        self.main_tab_widget.setStyleSheet('\n            QTabWidget::tab-bar {\n                alignment: center;\n            }\n            QTabBar::tab {\n                min-width: 92px;\n                padding: 6px 10px;\n            }\n        ')
         self.main_layout.addWidget(self.main_tab_widget)
         self.main_layout.addWidget(self.bottom_widget)
         self._setup_settings_tab()
@@ -575,9 +772,9 @@ class AppWindow(QWidget):
         self.settings_widget = settings_builder.build()
         settings_widgets = settings_builder.get_widgets()
         self._bind_widgets(settings_widgets, required=(
-            'settings_tab_widget', 'changelog_widget',
+            'settings_tab_widget',
             'language_label', 'language_combo',
-            'beta_updates_checkbox', 'open_deltahub_folder_button', 'reset_button',
+            'beta_updates_checkbox', 'reset_button',
             'fullscreen_checkbox', 'disable_animations_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
             'change_background_button', 'change_logo_button', 'change_font_button', 'background_music_button',
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
@@ -590,7 +787,6 @@ class AppWindow(QWidget):
             'settings_change_path_button', 'settings_custom_executable_button',
             'settings_reset_custom_exe_button',
             'skip_patching_warnings_checkbox', 'launch_via_steam_checkbox', 'dont_hide_window_checkbox',
-            'changelog_text_edit', 'changelog_button', 'report_bug_button',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
             'merge_properties_checkbox', 'merge_code_checkbox', 'clear_cache_button',
             'ui_scale_label', 'ui_scale_spinbox',
@@ -606,7 +802,6 @@ class AppWindow(QWidget):
         self._connect_theme_setting_spinbox(self.border_radius_spinbox, timer_attr='_border_radius_timer', config_key='custom_border_radius')
 
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
-        self.open_deltahub_folder_button.clicked.connect(self._open_deltahub_folder)
         self.reset_button.clicked.connect(self.settings_ui.reset_settings)
         self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
         self.disable_animations_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_animations)
@@ -765,8 +960,6 @@ class AppWindow(QWidget):
             self.use_portproton_checkbox.stateChanged.connect(self._update_portproton_ui)
         if self.select_portproton_path_button:
             self.select_portproton_path_button.clicked.connect(self._select_portproton_path)
-        self.changelog_button.clicked.connect(lambda: self.settings_ui.toggle_settings_view(show_changelog=True))
-        self.report_bug_button.clicked.connect(self.settings_ui.show_report_bug_dialog)
 
         self.hide_mods_browser_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_mods_browser_tab)
         self.hide_library_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_tab)
@@ -1072,6 +1265,7 @@ class AppWindow(QWidget):
             except (ValueError, TypeError) as e:
                 logging.debug(f"Failed to parse color '{bg_color_str}': {e}")
                 painter.fillRect(self.rect(), QColor('rgba(0, 0, 0, 200)'))
+        self._paint_window_outline(painter)
         super().paintEvent(event)
 
     def _initialize_mutual_exclusions(self):
@@ -1146,7 +1340,7 @@ class AppWindow(QWidget):
         handle_update_info(self, update_info, retry_count)
 
     def _get_update_widgets(self):
-        return [self.action_button, self.chat_button, self.open_deltahub_folder_button, self.change_background_button]
+        return [self.action_button, self.chat_button, self.change_background_button]
 
     def _set_update_ui_enabled(self, enabled: bool):
         for w in self._get_update_widgets():
@@ -1327,8 +1521,30 @@ class AppWindow(QWidget):
         perform_close_cleanup(self)
         super().closeEvent(event)
 
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._sync_title_bar_window_state()
+            if not self.isMinimized():
+                self._schedule_window_layout_refresh(220)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._start_system_resize_if_needed(event.position().toPoint()):
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        self._update_resize_cursor(event.position().toPoint())
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.unsetCursor()
+        super().leaveEvent(event)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._apply_window_corner_mask()
         if hasattr(self, 'launcher_icon_label') and hasattr(self, 'top_panel_widget'):
             panel_width = self.top_panel_widget.width()
             logo_width = self.launcher_icon_label.width()
@@ -1336,13 +1552,14 @@ class AppWindow(QWidget):
             panel_height = self.top_panel_widget.height()
             y = max(0, (panel_height - logo_height) // 2)
             self.launcher_icon_label.move((panel_width - logo_width) // 2, y)
-        self.settings_service.schedule_geometry_save(self)
-        if hasattr(self, 'search_display') and hasattr(self, 'search_mods_scroll'):
-            self.search_display.update_display()
+        if not self._restoring_window_geometry:
+            self.settings_service.schedule_geometry_save(self)
+            self._schedule_window_layout_refresh()
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        self.settings_service.schedule_geometry_save(self)
+        if not self._restoring_window_geometry:
+            self.settings_service.schedule_geometry_save(self)
 
     def _load_local_data(self):
         protected_first_launch_splash_shown = self.app_state.local_config.get('first_launch_splash_shown')
@@ -1402,13 +1619,6 @@ class AppWindow(QWidget):
         if is_initial and (not result):
             self.customization_service.start_background_music()
         return result
-
-    def _open_deltahub_folder(self):
-        deltahub_path = get_user_data_root()
-        if os.path.exists(deltahub_path):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(deltahub_path))
-        else:
-            logging.warning(f'DELTAHUB folder not found: {deltahub_path}')
 
     def _show_chapter_mode_instruction(self):
         if not hasattr(self, 'installed_mods_layout'):

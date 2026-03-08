@@ -2,13 +2,11 @@ import logging
 import time
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QScrollArea, QWidget, QFrame, QSpinBox
 from PyQt6.QtCore import Qt, QTimer
+from config.constants import CHAT_MESSAGE_BACKGROUND_COLOR
 from services.localization_service import tr
 from services.chat_service import ChatManager
 from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values
 from ui.common.styling import clamp_border_radius
-
-
-_MESSAGE_BG_COLOR = 'rgba(255, 255, 255, 0.1)'
 
 
 class ChatWindow(QDialog):
@@ -275,7 +273,7 @@ class ChatWindow(QDialog):
     @staticmethod
     def _style_message_widget(msg_widget, border_radius: int, text_color: str):
         msg_radius = clamp_border_radius(border_radius, height=max(1, msg_widget.sizeHint().height()))
-        msg_widget.setStyleSheet(f'padding: 5px; background-color: {_MESSAGE_BG_COLOR}; border-radius: {msg_radius}px; color: {text_color};')
+        msg_widget.setStyleSheet(f'padding: 5px; background-color: {CHAT_MESSAGE_BACKGROUND_COLOR}; border-radius: {msg_radius}px; color: {text_color};')
 
     def _update_messages_display(self):
         self._clear_messages_display()
