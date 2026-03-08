@@ -22,9 +22,6 @@ class ThemeController:
         self._last_theme_params = {}
 
     def apply_theme(self, force=False):
-        from ui.common.styling import invalidate_theme_color_cache
-        invalidate_theme_color_cache()
-        invalidate_stylesheet_cache()
         theme = THEMES['default']
         background_disabled = self.app_state.local_config.get('background_disabled', False)
         new_background_path = None if background_disabled else (self.app_state.local_config.get('custom_background_path') or resource_path(f"assets/{theme.get('background', '')}"))
@@ -47,9 +44,12 @@ class ThemeController:
         border_radius_value = get_border_radius(self.app_state.local_config)
         custom_border_radius = f'{border_radius_value}px'
         params = {'bg': frame_bg_color, 'btn': button_color, 'border': border_color, 'hover': button_hover_color, 'text': main_text_color, 'sec_text': secondary_text_color, 'font': font_family_main, 'bg_path': new_background_path, 'bg_disabled': background_disabled, 'ui_scale': zoom_factor, 'border_radius': border_radius_value}
-        if not force and params == self._last_theme_params:
-            return
-        self._last_theme_params = params
+        should_invalidate_caches = force or params != self._last_theme_params
+        if should_invalidate_caches:
+            from ui.common.styling import invalidate_theme_color_cache
+            invalidate_theme_color_cache()
+            invalidate_stylesheet_cache()
+            self._last_theme_params = dict(params)
 
         current_bg_path = getattr(self.app, '_current_background_path', None)
         background_was_disabled = getattr(self.app, '_background_was_disabled', False)

@@ -93,7 +93,7 @@ class SearchDisplayController(QObject):
     def _sync_mod_grid_metrics(self):
         layout = getattr(self.app, 'mod_list_layout', None)
         if not layout:
-            return
+            return False
         config = getattr(self.app_state, 'local_config', None)
         spacing = SearchModCardWidget.grid_spacing_for_config(config)
         side_padding = SearchModCardWidget.side_padding_for_config(config)
@@ -106,7 +106,7 @@ class SearchDisplayController(QObject):
         grid_alignment = Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
         metrics_key = (int(spacing), int(side_padding), int(columns), int(grid_alignment))
         if getattr(self, '_last_grid_metrics_key', None) == metrics_key:
-            return
+            return False
         try:
             layout.setHorizontalSpacing(spacing)
             layout.setVerticalSpacing(spacing)
@@ -134,10 +134,13 @@ class SearchDisplayController(QObject):
                     layout.setColumnMinimumWidth(column, 0)
                 layout.invalidate()
                 self._last_grid_metrics_key = metrics_key
+                return True
             except Exception:
                 logger.debug('_sync_mod_grid_metrics: Failed to set layout spacing/margins')
         else:
             self._last_grid_metrics_key = metrics_key
+            return True
+        return False
 
     def _place_layout_widget(self, widget, position: int, column_span: int = 1, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter):
         if not hasattr(self.app, 'mod_list_layout'):
@@ -160,6 +163,29 @@ class SearchDisplayController(QObject):
             self.app.mod_list_layout.removeWidget(widget)
         except Exception:
             pass
+
+    def refresh_visible_layout(self):
+        layout = getattr(self.app, 'mod_list_layout', None)
+        if not layout:
+            return
+        metrics_changed = self._sync_mod_grid_metrics()
+        if not metrics_changed:
+            return
+        visible_cards = [widget for widget in self._iter_layout_cards() if widget.isVisible()]
+        if not visible_cards:
+            self.update_pagination()
+            return
+        self.ui_widget_updates_enabled.emit('mod_list_widget', False)
+        try:
+            for position, widget in enumerate(visible_cards):
+                self._place_layout_widget(widget, position)
+            layout.invalidate()
+            widget_container = getattr(self.app, 'mod_list_widget', None)
+            if widget_container:
+                widget_container.updateGeometry()
+        finally:
+            self.ui_widget_updates_enabled.emit('mod_list_widget', True)
+        self.update_pagination()
 
     @staticmethod
     def _mod_needs_metadata(mod) -> bool:

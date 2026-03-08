@@ -7,7 +7,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QColor, QPixmap, QPainter, QPainterPath, QPen, QRegion
 from PyQt6.QtWidgets import QLabel
-from config.constants import MOD_WIDGET_STYLE_TEMPLATE, EMPTY_LAYOUT_MESSAGE_STYLE
+from config.constants import MOD_WIDGET_STYLE_TEMPLATE, EMPTY_LAYOUT_MESSAGE_STYLE, UI_COLORS
 from utils.mod_utils import get_mod_key
 
 
@@ -272,6 +272,10 @@ def get_theme_color(config, color_key, default_color):
         _theme_color_cache[cache_key] = result
         return result
     return default_color
+
+
+def get_launch_status_color(config):
+    return get_theme_color(config, 'border', UI_COLORS['status_success'])
 
 
 def get_theme_colors(config, **defaults):

@@ -176,6 +176,38 @@ class TestLaunchManager:
         assert launcher is not None
         assert launcher.app_state == app_state
 
+    def test_close_game_uses_border_status_color(self, app_state, feedback_service):
+        from services.launch_service import GameLauncher
+        from services.localization_service import tr
+        app_state.local_config = {'custom_color_border': '#123456'}
+        launcher = GameLauncher(app_state=app_state, feedback_service=feedback_service, mod_service=Mock())
+        launcher.monitor_worker = Mock(process=Mock())
+        emitted = []
+        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+
+        launcher.close_game()
+
+        launcher.monitor_worker.process.terminate.assert_called_once_with()
+        assert len(emitted) == 1
+        assert emitted[0] == (tr('status.game_closed'), '#123456')
+
+    def test_launch_game_with_selections_uses_border_status_color_for_launch_messages(self, app_state, feedback_service):
+        from services.launch_service import GameLauncher
+        from services.localization_service import tr
+        app_state.local_config = {'custom_color_border': '#654321'}
+        launcher = GameLauncher(app_state=app_state, feedback_service=feedback_service, mod_service=Mock())
+        emitted = []
+        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+        launcher._has_selected_mods = Mock(return_value=False)
+        launcher._get_current_game_path = Mock(return_value='C:/game')
+        launcher._continue_after_patching = Mock()
+
+        with patch('services.launch_service.os.path.exists', return_value=True):
+            launcher._launch_game_with_selections({})
+
+        assert len(emitted) == 1
+        assert emitted[0] == (tr('status.launching_game'), '#654321')
+
 
 class TestUpdateCheckManager:
 

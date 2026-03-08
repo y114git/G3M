@@ -16,6 +16,7 @@ from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 from workers.game_monitor_worker import GameMonitorWorker
 from services.g3mtool_patching_service import G3MToolPatchingService
 from config.constants import UI_COLORS
+from ui.common.styling import get_launch_status_color
 
 
 class GameLauncher(QObject):
@@ -67,13 +68,16 @@ class GameLauncher(QObject):
         except Exception as e:
             logging.error(f'monitor thread cleanup failed: {e}', exc_info=True)
 
-    def stop_game(self):
+    def _launch_status_color(self) -> str:
+        return get_launch_status_color(getattr(self.app_state, 'local_config', None))
+
+    def close_game(self):
         worker = getattr(self, 'monitor_worker', None)
         process = getattr(worker, 'process', None)
         if process:
             try:
                 process.terminate()
-                self.status_changed.emit(tr('status.game_stopped', "Game stopped"), UI_COLORS['status_info'])
+                self.status_changed.emit(tr('status.game_closed'), self._launch_status_color())
             except Exception as e:
                 logging.error(f'Failed to terminate game process: {e}', exc_info=True)
 
@@ -101,7 +105,7 @@ class GameLauncher(QObject):
                     restore_window_callback()
                 return
             self._hook_result = hook_result
-        self.status_changed.emit(tr('status.launching_game'), UI_COLORS['status_success'])
+        self.status_changed.emit(tr('status.launching_game'), self._launch_status_color())
         has_selected_mods = self._has_selected_mods(selections)
         current_path = self._get_current_game_path()
         if not current_path or not os.path.exists(current_path):
@@ -167,7 +171,7 @@ class GameLauncher(QObject):
                     subprocess.Popen(['open', target_path])
                 else:
                     webbrowser.open(target_path)
-                self.status_changed.emit(tr('status.launching_via_steam'), UI_COLORS['status_steam'])
+                self.status_changed.emit(tr('status.launching_via_steam'), self._launch_status_color())
                 return
             if not working_directory or not os.path.isdir(working_directory):
                 msg = tr('errors.working_directory_not_found', path=working_directory)
@@ -182,7 +186,7 @@ class GameLauncher(QObject):
                 use_custom_exe = custom_path and os.path.isfile(custom_path) and (os.path.abspath(custom_path) == os.path.abspath(target_path))
                 if use_custom_exe:
                     subprocess.Popen(['open', target_path])
-                    self.status_changed.emit(tr('status.macos_file_opened'), UI_COLORS['status_steam'])
+                    self.status_changed.emit(tr('status.macos_file_opened'), self._launch_status_color())
                     if self.restore_window_callback:
                         self.restore_window_callback()
                     return
@@ -216,7 +220,7 @@ class GameLauncher(QObject):
                         self.status_changed.emit(tr('errors.game_launch_error', error=str(launch_error)), UI_COLORS['status_error'])
                     self._handle_launch_failure()
                     return
-            self.status_changed.emit(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
+            self.status_changed.emit(tr('status.game_launched_waiting_for_exit'), self._launch_status_color())
             self.monitor_thread = QThread(self)
             self.monitor_worker = GameMonitorWorker(process, vanilla_mode)
             self.monitor_worker.moveToThread(self.monitor_thread)

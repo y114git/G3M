@@ -6,6 +6,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
 from services.localization_service import tr
 from config.constants import UI_COLORS
+from ui.common.styling import get_launch_status_color
 from workers.install.full_install_worker import FullInstallThread
 from utils.mod_utils import get_mod_key
 
@@ -38,9 +39,12 @@ class GameLaunchController(QObject):
     def _is_full_install_enabled(self) -> bool:
         return self.app_state.game_mode.supports_full_install and self._full_install_checkbox_is_checked
 
+    def _launch_status_color(self) -> str:
+        return get_launch_status_color(getattr(self.app_state, 'local_config', None))
+
     def update_button_state(self):
         if getattr(self.app_state, 'game_is_running', False):
-            self.app_state.action_button_text = tr('ui.stop_game', 'Stop Game')
+            self.app_state.action_button_text = tr('ui.close_game')
             self.app_state.action_button_enabled = True
             return
         if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_patching:
@@ -121,8 +125,8 @@ class GameLaunchController(QObject):
 
     def on_action_button_click(self):
         if getattr(self.app_state, 'game_is_running', False):
-            if hasattr(self.game_launcher, 'stop_game'):
-                self.game_launcher.stop_game()
+            if hasattr(self.game_launcher, 'close_game'):
+                self.game_launcher.close_game()
             return
         if self.app_state.is_installing:
             self._cancel_operation('install')
@@ -160,7 +164,7 @@ class GameLaunchController(QObject):
         self.app_state.game_is_running = True
         if self._dont_hide:
             self.update_button_state()
-            self.feedback_service.update_status(tr('status.game_launched_waiting_for_exit'), UI_COLORS['status_steam'])
+            self.feedback_service.update_status(tr('status.game_launched_waiting_for_exit'), self._launch_status_color())
         else:
             self.window_hide_requested.emit()
 

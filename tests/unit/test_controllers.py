@@ -104,6 +104,20 @@ class TestSearchDisplayController:
         assert hasattr(controller, 'card_widget_cache')
         assert hasattr(controller, '_update_display_debounce')
 
+    def test_refresh_visible_layout_skips_relayout_when_grid_metrics_do_not_change(self, app_state, feedback_service):
+        from controllers.search_display_controller import SearchDisplayController
+        controller = SearchDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=Mock(), mod_ops=Mock(), app_window=Mock(mod_list_layout=Mock(), mod_list_widget=Mock()))
+        controller._sync_mod_grid_metrics = Mock(return_value=False)
+        controller._place_layout_widget = Mock()
+        controller.update_pagination = Mock()
+        controller.ui_widget_updates_enabled = Mock()
+
+        controller.refresh_visible_layout()
+
+        controller._place_layout_widget.assert_not_called()
+        controller.update_pagination.assert_not_called()
+        controller.ui_widget_updates_enabled.emit.assert_not_called()
+
 
 class TestSettingsUiController:
 
@@ -138,6 +152,42 @@ class TestThemeController:
         assert controller is not None
         assert controller.app_state == app_state
 
+    def test_apply_theme_skips_cache_invalidation_when_params_unchanged(self, app_state, feedback_service):
+        from controllers.theme_controller import ThemeController
+        from PyQt6.QtWidgets import QApplication as RealQApplication
+        app_state.local_config = {'custom_color_text': '#FF0000'}
+        settings_service = Mock()
+        settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
+        customization_service = Mock()
+        app_window = Mock()
+        app_window.custom_font_family = None
+        app_window.palette.return_value = Mock()
+        app_window.status_label = Mock()
+        app_window.color_widgets = {'button_hover': Mock(text=lambda: '')}
+        app_window.installed_mods_label = None
+        app_window.title_bar = None
+        app_window.top_panel_widget = Mock()
+        app_window.logo_placeholder = Mock()
+        app_window.launcher_icon_label = Mock()
+        app_window.findChildren.return_value = []
+        app_window.plugin_tab_builder = None
+        app_window.library_tag_widgets = []
+        app_window.search_display = None
+        app_window.plugin_display = None
+        app_window.library_tab_builder = Mock()
+        app_window.library_tab_builder.update_priority_button_style = Mock()
+        app_window._apply_window_corner_mask = Mock()
+        app_window.update = Mock()
+        app_window.size.return_value = Mock()
+        with patch('controllers.theme_controller.THEMES', {'default': {'background': 'images/background.png', 'colors': {'text': '#FFFFFF', 'background': '#000000', 'button': '#333333', 'border': '#444444', 'button_hover': '#555555'}, 'font_family': 'Arial', 'font_size_main': 12, 'font_size_small': 10}}), patch('controllers.theme_controller.BgLoader'), patch('controllers.theme_controller.invalidate_stylesheet_cache') as invalidate_stylesheet_cache_mock, patch('ui.common.styling.invalidate_theme_color_cache') as invalidate_theme_color_cache_mock, patch('controllers.theme_controller.build_stylesheet', return_value=''), patch.object(RealQApplication, 'instance', return_value=None), patch('controllers.theme_controller.QApplication', RealQApplication):
+            controller = ThemeController(app_state=app_state, feedback_service=feedback_service, settings_service=settings_service, customization_service=customization_service, app_window=app_window)
+            controller.apply_theme()
+            invalidate_stylesheet_cache_mock.reset_mock()
+            invalidate_theme_color_cache_mock.reset_mock()
+            controller.apply_theme()
+        invalidate_stylesheet_cache_mock.assert_not_called()
+        invalidate_theme_color_cache_mock.assert_not_called()
+
 
 class TestGameLaunchController:
 
@@ -160,6 +210,48 @@ class TestGameLaunchController:
         controller = GameLaunchController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=used_mods_service, settings_service=settings_service, game_launcher=game_launcher, customization_service=customization_service, plugin_service=plugin_service, app_window=app_window)
         assert controller is not None
         assert controller.app_state == app_state
+
+    def test_hide_window_with_dont_hide_updates_close_text_and_border_status_color(self):
+        from controllers.game_launch_controller import GameLaunchController
+        from services.localization_service import tr
+
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            is_installing=False,
+            operation_cancelled=False,
+            is_patching=False,
+            initialization_completed=True,
+            local_config={'dont_hide_window_on_launch': True, 'custom_color_border': '#123456'},
+            action_button_text=None,
+            action_button_enabled=False,
+            progress_bar_visible=False,
+            progress_bar_value=0,
+        )
+        feedback_service = Mock()
+        settings_service = Mock()
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        customization_service = Mock()
+        plugin_service = Mock()
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=settings_service,
+            game_launcher=Mock(),
+            customization_service=customization_service,
+            plugin_service=plugin_service,
+            app_window=Mock(),
+        )
+
+        controller.hide_window()
+
+        assert app_state.game_is_running is True
+        assert app_state.action_button_text == tr('ui.close_game')
+        feedback_service.update_status.assert_called_once_with(tr('status.game_launched_waiting_for_exit'), '#123456')
+        settings_service.save_window_geometry.assert_called_once()
 
 
 class TestAppWindowRestore:

@@ -330,7 +330,7 @@
     "dont_hide_window_on_launch": "No ocultar ventana al iniciar",
     "hide_wips_without_downloads": "Ocultar WIPs sin descargas",
     "apply_theme": "Aplicar Tema",
-    "stop_game": "Detener",
+    "close_game": "Cerrar",
     "patch_create_failed_details": "Error al crear parche, error:\\n{error}",
     "select_save_collection_title": "Seleccionar colección de guardados",
     "downloading_unrar": "Descargando utilidad UnRAR...",
@@ -1099,7 +1099,7 @@
     "deltamod_archive_detected_url": "Archivo DELTAMOD detectado desde URL.",
     "deltamod_archive_detected": "Archivo DELTAMOD detectado.",
     "unpacking_mod": "Descomprimiendo mod: {mod_name}...",
-    "game_stopped": "Juego detenido"
+    "game_closed": "Juego cerrado"
   },
   "startup": {
     "steam_deck_setup_error": "Error al configurar compatibilidad de Steam Deck: {error}",

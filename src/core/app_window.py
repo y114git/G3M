@@ -427,27 +427,6 @@ class AppWindow(QWidget):
         timer.stop()
         timer.start(max(0, int(delay_ms)))
 
-    def _refresh_after_window_layout_change(self):
-        if not self.isVisible() or self.isMinimized():
-            return
-        self.updateGeometry()
-        if hasattr(self, 'main_tab_widget') and self.main_tab_widget:
-            self.main_tab_widget.updateGeometry()
-        if hasattr(self, 'search_mods_scroll') and self.search_mods_scroll:
-            self.search_mods_scroll.updateGeometry()
-            try:
-                viewport = self.search_mods_scroll.viewport()
-            except Exception:
-                viewport = None
-            if viewport:
-                viewport.updateGeometry()
-        if hasattr(self, 'mod_list_widget') and self.mod_list_widget:
-            self.mod_list_widget.updateGeometry()
-        if hasattr(self, 'search_display') and self.search_display:
-            if hasattr(self.search_display, '_last_grid_metrics_key'):
-                self.search_display._last_grid_metrics_key = None
-            self.search_display.update_display()
-
     def _window_resize_edges(self, pos):
         if self.isMaximized():
             return Qt.Edge(0)
@@ -1211,6 +1190,34 @@ class AppWindow(QWidget):
 
         return super().eventFilter(obj, ev)
 
+    def _refresh_after_window_layout_change(self):
+        if not self.isVisible() or self.isMinimized():
+            return
+        self.updateGeometry()
+        if hasattr(self, 'main_tab_widget') and self.main_tab_widget:
+            self.main_tab_widget.updateGeometry()
+        if hasattr(self, 'search_mods_scroll') and self.search_mods_scroll:
+            self.search_mods_scroll.updateGeometry()
+            try:
+                viewport = self.search_mods_scroll.viewport()
+            except Exception:
+                viewport = None
+            if viewport:
+                viewport.updateGeometry()
+        if hasattr(self, 'mod_list_widget') and self.mod_list_widget:
+            self.mod_list_widget.updateGeometry()
+        if hasattr(self, 'search_display') and self.search_display:
+            current_tab = self.main_tab_widget.currentWidget() if hasattr(self, 'main_tab_widget') and self.main_tab_widget else None
+            search_tab = getattr(self, 'search_mods_tab', None)
+            if search_tab is None or current_tab is search_tab:
+                refresh_visible_layout = getattr(self.search_display, 'refresh_visible_layout', None)
+                if callable(refresh_visible_layout):
+                    refresh_visible_layout()
+                else:
+                    if hasattr(self.search_display, '_last_grid_metrics_key'):
+                        self.search_display._last_grid_metrics_key = None
+                    self.search_display.update_display()
+
     def _show_custom_tooltip(self):
         last_tooltip_target = getattr(self, '_last_tooltip_target', None)
         last_tooltip_text = getattr(self, '_last_tooltip_text', '')
@@ -1220,24 +1227,34 @@ class AppWindow(QWidget):
         from PyQt6.QtGui import QCursor
 
         tooltip_widget = getattr(self, '_tooltip_widget', None)
-        if tooltip_widget:
-            tooltip_widget.close()
-            tooltip_widget.deleteLater()
-
-        self._tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
-        self._tooltip_widget.adjustSize()
+        if tooltip_widget is None:
+            tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
+            self._tooltip_widget = tooltip_widget
+        else:
+            UIAnimator._stop_existing_fade(tooltip_widget)
+            tooltip_widget._is_fading_out = False
+            if tooltip_widget.text() != last_tooltip_text:
+                tooltip_widget.setText(last_tooltip_text)
+        tooltip_widget.adjustSize()
 
         pos = QCursor.pos()
         pos += QPoint(10, 10)
 
         screen = QApplication.primaryScreen().availableGeometry()
-        if pos.x() + self._tooltip_widget.width() > screen.right():
-            pos.setX(screen.right() - self._tooltip_widget.width() - 5)
-        if pos.y() + self._tooltip_widget.height() > screen.bottom():
-            pos.setY(pos.y() - self._tooltip_widget.height() - 20)
+        if pos.x() + tooltip_widget.width() > screen.right():
+            pos.setX(screen.right() - tooltip_widget.width() - 5)
+        if pos.y() + tooltip_widget.height() > screen.bottom():
+            pos.setY(pos.y() - tooltip_widget.height() - 20)
 
-        self._tooltip_widget.move(pos)
-        UIAnimator.fade_in(self._tooltip_widget, 150, self.app_state)
+        tooltip_widget.move(pos)
+        if tooltip_widget.isVisible():
+            tooltip_widget.show()
+            tooltip_widget.raise_()
+            effect = tooltip_widget.graphicsEffect() if hasattr(tooltip_widget, 'graphicsEffect') else None
+            if effect is not None and hasattr(effect, 'setOpacity'):
+                effect.setOpacity(1.0)
+        else:
+            UIAnimator.fade_in(tooltip_widget, 150, self.app_state)
 
     def _hide_custom_tooltip(self):
         tooltip_widget = getattr(self, '_tooltip_widget', None)
@@ -1246,10 +1263,10 @@ class AppWindow(QWidget):
                 tooltip_widget._is_fading_out = True
                 anim = UIAnimator.fade_out(tooltip_widget, 150, self.app_state)
                 if anim:
-                    anim.finished.connect(lambda: setattr(self, '_tooltip_widget', None))
+                    anim.finished.connect(lambda tw=tooltip_widget: setattr(tw, '_is_fading_out', False))
                 else:
                     tooltip_widget.hide()
-                    self._tooltip_widget = None
+                    tooltip_widget._is_fading_out = False
         self._last_tooltip_target = None
 
     def paintEvent(self, event):

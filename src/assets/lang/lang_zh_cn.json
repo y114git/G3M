@@ -181,7 +181,7 @@
     "tags_label": "标签：",
     "update_button": "更新",
     "update_mod_list": "更新模组列表中...",
-    "stop_game": "停止",
+    "close_game": "关闭",
     "updated_label": "更新时间：",
     "use_button": "使用",
     "value_label": "值",
@@ -1099,7 +1099,7 @@
     "local": "本地",
     "downloading_unrar": "正在下载 UnRAR 工具...",
     "unpacking_mod": "正在解压模组：{mod_name}...",
-    "game_stopped": "游戏已停止"
+    "game_closed": "游戏已关闭"
   },
   "startup": {
     "steam_deck_setup_error": "设置Steam Deck兼容性时出错：{error}",

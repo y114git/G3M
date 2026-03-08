@@ -181,7 +181,7 @@
     "tags_label": "Tags:",
     "update_button": "Update",
     "update_mod_list": "Updating mod list...",
-    "stop_game": "Stop",
+    "close_game": "Close",
     "updated_label": "Updated:",
     "use_button": "Use",
     "value_label": "Value",
@@ -1099,7 +1099,7 @@
     "local": "Local",
     "downloading_unrar": "Downloading UnRAR utility...",
     "unpacking_mod": "Unpacking mod: {mod_name}...",
-    "game_stopped": "Game stopped"
+    "game_closed": "Game closed"
   },
   "startup": {
     "steam_deck_setup_error": "Error setting up Steam Deck compatibility: {error}",

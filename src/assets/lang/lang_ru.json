@@ -181,7 +181,7 @@
     "tags_label": "Теги:",
     "update_button": "Обновить",
     "update_mod_list": "Обновляем список модов...",
-    "stop_game": "Остановить",
+    "close_game": "Закрыть",
     "updated_label": "Обновлено:",
     "use_button": "Использовать",
     "value_label": "Значение",
@@ -1099,7 +1099,7 @@
     "local": "Локальный",
     "downloading_unrar": "Загрузка утилиты UnRAR...",
     "unpacking_mod": "Распаковка мода: {mod_name}...",
-    "game_stopped": "Игра остановлена"
+    "game_closed": "Игра закрыта"
   },
   "startup": {
     "steam_deck_setup_error": "Ошибка при настройке совместимости со Steam Deck: {error}",

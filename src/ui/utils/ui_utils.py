@@ -13,15 +13,19 @@ class DebounceTimer:
         self._timer: Optional[QTimer] = None
         self._callback: Optional[Callable] = None
 
+    def _ensure_timer(self) -> QTimer:
+        if self._timer is None:
+            self._timer = QTimer()
+            self._timer.setSingleShot(True)
+            self._timer.timeout.connect(self._execute)
+        return self._timer
+
     def call(self, callback: Callable) -> None:
-        if self._timer is not None:
-            self._timer.stop()
-            self._timer.deleteLater()
-        self._timer = QTimer()
-        self._timer.setSingleShot(True)
+        timer = self._ensure_timer()
+        if timer.isActive():
+            timer.stop()
         self._callback = callback
-        self._timer.timeout.connect(self._execute)
-        self._timer.start(self.delay_ms)
+        timer.start(self.delay_ms)
 
     def _execute(self) -> None:
         if self._callback is not None:
@@ -30,14 +34,11 @@ class DebounceTimer:
             except Exception as e:
                 import logging
                 logging.error(f'DebounceTimer: Error executing callback: {e}', exc_info=True)
-        self._timer = None
         self._callback = None
 
     def cancel(self) -> None:
         if self._timer is not None:
             self._timer.stop()
-            self._timer.deleteLater()
-            self._timer = None
             self._callback = None
 
 

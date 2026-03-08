@@ -181,7 +181,7 @@
     "tags_label": "標籤：",
     "update_button": "更新",
     "update_mod_list": "更新模組列表中...",
-    "stop_game": "停止",
+    "close_game": "關閉",
     "updated_label": "更新時間：",
     "use_button": "使用",
     "value_label": "值",
@@ -1089,7 +1089,7 @@
     "downloading_theme": "正在下載主題...",
     "unknown_author_status": "未知",
     "smart_install_starting": "智能安裝：'{mod_name}' 將從DELTAHUB伺服器安裝。",
-    "moving_mods_folder": "正在移動模組資料夾...",
+    "game_closed": "遊戲已關閉",
     "no_version": "未指定",
     "applying_theme": "正在應用主題...",
     "mods_folder_change_error": "更改模組資料夾時出錯。",
@@ -1099,7 +1099,7 @@
     "local": "本地",
     "downloading_unrar": "正在下載 UnRAR 工具...",
     "unpacking_mod": "正在解壓模組：{mod_name}...",
-    "game_stopped": "遊戲已停止"
+    "moving_mods_folder": "正在移動模組資料夾..."
   },
   "startup": {
     "steam_deck_setup_error": "設置Steam Deck相容性時出錯：{error}",
