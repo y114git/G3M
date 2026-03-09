@@ -103,7 +103,7 @@ class LoadGameBananaMetadataThread(QThread):
                 downloads = None
             try:
                 desc = self.api.get_mod_description_only(mod_id, external_url=external_url)
-                tagline = desc[:200].strip() if desc and len(desc[:200].strip()) >= 10 else None
+                tagline = desc[:200].strip() if desc else None
             except Exception:
                 tagline = None
             try:

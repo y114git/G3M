@@ -9,8 +9,8 @@ def relocalize_texts(w):
     w.color_config = {key: tr(lang_key) for key, lang_key in SETTINGS_COLOR_CONFIG.items()}
     w.settings_button.setText(tr('ui.back_button') if w.app_state.is_settings_view else tr('ui.settings_title'))
     tab_labels = []
-    if hasattr(w, 'search_mods_tab'):
-        tab_labels.append((w.search_mods_tab, tr('ui.search_tab')))
+    if hasattr(w, 'mods_browser_tab'):
+        tab_labels.append((w.mods_browser_tab, tr('ui.search_tab')))
     if hasattr(w, 'library_tab'):
         tab_labels.append((w.library_tab, tr('ui.library_tab')))
     if hasattr(w, 'plugins_tab'):

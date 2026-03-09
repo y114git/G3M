@@ -208,8 +208,8 @@ class SettingsUiController:
                 tab_widget.removeTab(0)
 
             main_tabs_visible = 0
-            if not hide_mods_browser and hasattr(self.app, 'search_mods_tab'):
-                tab_widget.addTab(self.app.search_mods_tab, tr('ui.search_tab'))
+            if not hide_mods_browser and hasattr(self.app, 'mods_browser_tab'):
+                tab_widget.addTab(self.app.mods_browser_tab, tr('ui.search_tab'))
                 main_tabs_visible += 1
             if not hide_library and hasattr(self.app, 'library_tab'):
                 tab_widget.addTab(self.app.library_tab, tr('ui.library_tab'))

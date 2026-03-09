@@ -115,7 +115,7 @@ class SearchGameBananaModsThread(QThread):
                                     mod_info.gamebanana_category = cached_category
                         downloads_from_record = record.get('_nDownloadCount')
                         description_from_record = record.get('_sDescription', '')
-                        has_description_in_record = description_from_record and description_from_record.strip() and (len(description_from_record.strip()) >= 10)
+                        has_description_in_record = description_from_record and description_from_record.strip()
                         category_from_record = record.get('_aCategory') or record.get('Category')
                         has_category_in_record = bool(category_from_record)
                         needs_downloads = downloads_from_record is None and (not cache_valid if self.metadata_cache else True)

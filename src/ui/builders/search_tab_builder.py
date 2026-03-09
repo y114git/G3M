@@ -51,7 +51,7 @@ class ModsBrowserTabBuilder(QObject):
         self.widgets.update({'filters_scroll': f_scroll, 'filters_widget': f_widget})
         container = QWidget(widget)
         container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        container.setObjectName('search_mods_background')
+        container.setObjectName('mods_browser_background')
         sc_layout = QVBoxLayout(container)
         sc_layout.setContentsMargins(10, 10, 10, 10)
         sc_layout.setSpacing(10)
@@ -75,7 +75,7 @@ class ModsBrowserTabBuilder(QObject):
         install_scroll_viewport_clip(scroll, container, self.app_state.local_config, inset=container_padding, attr_name='_search_viewport_clip_filter')
         apply_panel_style(container, self.app_state.local_config)
         layout.addWidget(container)
-        self.widgets.update({'search_container': container, 'search_mods_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'mod_list_columns': self.mod_list_columns, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
+        self.widgets.update({'mods_browser_container': container, 'mods_browser_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'mod_list_columns': self.mod_list_columns, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
         self._connect_dynamic_style_refresh()
         return widget
 

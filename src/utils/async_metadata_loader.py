@@ -158,7 +158,7 @@ class AsyncMetadataLoader:
 
             try:
                 desc = api.get_mod_description_only(mod_id, external_url=external_url)
-                if desc and len(desc.strip()) >= 10:
+                if desc and desc.strip():
                     tagline = desc[:200].strip()
             except Exception as e:
                 logger.debug(f'Failed to load description for mod {mod_id}: {e}')

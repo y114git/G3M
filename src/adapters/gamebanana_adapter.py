@@ -156,7 +156,7 @@ class GameBananaAPI:
                             except (ValueError, TypeError):
                                 current_downloads = None
                             mod_info.downloads = current_downloads
-                            needs_meta = ((current_downloads is None) or (not mod_info.tagline or mod_info.tagline == 'No description' or len(mod_info.tagline) < 10) or (not mod_info.gamebanana_category)) and not cache_valid
+                            needs_meta = ((current_downloads is None) or (not mod_info.tagline or mod_info.tagline == 'No description') or (not mod_info.gamebanana_category)) and not cache_valid
                             if needs_meta:
                                 mods_needing_metadata.append(mod_id_str)
                             mod_info.has_full_metadata = not needs_meta
@@ -488,7 +488,7 @@ class GameBananaAPI:
             return None
         submitter = gb_data.get('_aSubmitter', {})
         desc = (gb_data.get('_sDescription', '') or '').strip()
-        tagline = desc[:200] if desc and len(desc) >= 10 else 'No description'
+        tagline = desc[:200] if desc else 'No description'
         raw_downloads = gb_data.get('_nDownloadCount')
         try:
             downloads = None if raw_downloads is None else max(int(raw_downloads), 0)

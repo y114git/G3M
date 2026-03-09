@@ -74,7 +74,7 @@ class SearchDisplayController(QObject):
             return 1
 
     def _get_mod_list_available_width(self) -> int:
-        scroll = getattr(self.app, 'search_mods_scroll', None)
+        scroll = getattr(self.app, 'mods_browser_scroll', None)
         if scroll and hasattr(scroll, 'viewport'):
             try:
                 viewport = scroll.viewport()
@@ -115,7 +115,7 @@ class SearchDisplayController(QObject):
         except Exception:
             pass
         self.app.mod_list_columns = max(1, int(columns))
-        scroll = getattr(self.app, 'search_mods_scroll', None)
+        scroll = getattr(self.app, 'mods_browser_scroll', None)
         if scroll:
             try:
                 scroll.setAlignment(grid_alignment)

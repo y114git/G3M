@@ -355,7 +355,7 @@ class TestBorderRadius:
         from unittest.mock import Mock
         cs = CustomizationManager(app_state)
         container = Mock()
-        container.objectName.return_value = 'search_mods_background'
+        container.objectName.return_value = 'mods_browser_background'
         app_state.local_config['custom_border_radius'] = 15
         cs.update_translucent_backgrounds(container)
         call_args = container.setStyleSheet.call_args[0][0]
@@ -377,7 +377,7 @@ class TestBorderRadius:
         from unittest.mock import Mock
         cs = CustomizationManager(app_state)
         container = Mock()
-        container.objectName.return_value = 'search_mods_background'
+        container.objectName.return_value = 'mods_browser_background'
         app_state.local_config['custom_color_background'] = '#8000FF00'
         cs.update_translucent_backgrounds(container)
         call_args = container.setStyleSheet.call_args[0][0]

@@ -604,7 +604,7 @@ class AppWindow(QWidget):
 
         self._num_main_tabs_visible = 0
         if not hide_mods_browser:
-            self.main_tab_widget.addTab(self.search_mods_tab, tr('ui.search_tab'))
+            self.main_tab_widget.addTab(self.mods_browser_tab, tr('ui.search_tab'))
             self._num_main_tabs_visible += 1
         if not hide_library:
             self.main_tab_widget.addTab(self.library_tab, tr('ui.library_tab'))
@@ -628,10 +628,10 @@ class AppWindow(QWidget):
     def _setup_search_tab(self):
         search_builder = ModsBrowserTabBuilder(self.app_state, self)
         self.search_tab_builder = search_builder
-        self.search_mods_tab = search_builder.build()
+        self.mods_browser_tab = search_builder.build()
         search_widgets = search_builder.get_widgets()
         self._bind_widgets(search_widgets, required=(
-            'search_container', 'search_mods_scroll', 'mod_list_widget', 'mod_list_layout', 'mod_list_columns',
+            'mods_browser_container', 'mods_browser_scroll', 'mod_list_widget', 'mod_list_layout', 'mod_list_columns',
             'sort_combo', 'sort_order_btn', 'modgame_combo', 'tags_label', 'show_nsfw_checkbox', 'tag_textedit',
             'tag_customization', 'tag_gameplay', 'tag_other', 'search_button',
             'prev_page_btn', 'page_label', 'next_page_btn',
@@ -1211,10 +1211,10 @@ class AppWindow(QWidget):
         self.updateGeometry()
         if hasattr(self, 'main_tab_widget') and self.main_tab_widget:
             self.main_tab_widget.updateGeometry()
-        if hasattr(self, 'search_mods_scroll') and self.search_mods_scroll:
-            self.search_mods_scroll.updateGeometry()
+        if hasattr(self, 'mods_browser_scroll') and self.mods_browser_scroll:
+            self.mods_browser_scroll.updateGeometry()
             try:
-                viewport = self.search_mods_scroll.viewport()
+                viewport = self.mods_browser_scroll.viewport()
             except Exception:
                 viewport = None
             if viewport:
@@ -1223,8 +1223,8 @@ class AppWindow(QWidget):
             self.mod_list_widget.updateGeometry()
         if hasattr(self, 'search_display'):
             current_tab = self.main_tab_widget.currentWidget() if hasattr(self, 'main_tab_widget') and self.main_tab_widget else None
-            search_tab = getattr(self, 'search_mods_tab', None)
-            if search_tab is None or current_tab is search_tab:
+            mods_browser_tab = getattr(self, 'mods_browser_tab', None)
+            if mods_browser_tab is None or current_tab is mods_browser_tab:
                 refresh_visible_layout = getattr(self.search_display, 'refresh_visible_layout', None)
                 if callable(refresh_visible_layout):
                     refresh_visible_layout()
