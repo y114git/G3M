@@ -3,16 +3,15 @@ import contextlib
 import logging
 import threading
 from collections import OrderedDict
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QImage
 from config.constants import IMAGE_CACHE_MAX_SIZE, NETWORK_SEMAPHORE_LIMIT
 
 try:
     _IMG_CACHE: OrderedDict[str, QImage] = OrderedDict()
-    _PIX_CACHE: dict[str, QPixmap] = {}
     _IMG_CACHE_LOCK, _NET_SEM = threading.RLock(), threading.Semaphore(NETWORK_SEMAPHORE_LIMIT)
-except Exception as e:
+except (ValueError, RuntimeError) as e:
     logging.warning(f'cache: failed to initialize cache/locks: {e}')
-    _IMG_CACHE, _PIX_CACHE, _IMG_CACHE_LOCK, _NET_SEM = OrderedDict(), {}, None, None
+    _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM = OrderedDict(), None, None
 
 
 @contextlib.contextmanager

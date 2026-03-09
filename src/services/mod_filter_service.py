@@ -1,7 +1,7 @@
 """Mod filtering and sorting utilities."""
-from config.constants import MOD_FILTER_TRUE_VALUES, MOD_FILTER_NSFW_TEXT_MARKERS
-from services.mod_service import parse_mod_date
 from adapters.gamebanana_adapter import GameBananaAPI
+from services.mod_service import parse_mod_date
+from config.constants import MOD_FILTER_TRUE_VALUES, MOD_FILTER_NSFW_TEXT_MARKERS
 
 
 def _get_mod_attr(mod, attr, default=None): return mod.get(attr, default) if isinstance(mod, dict) else getattr(mod, attr, default)
@@ -100,7 +100,6 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
     only_gamebanana, status_filter = filters.get('only_gamebanana', False), filters.get('status_filter', ['approved', 'pending'])
     exclude_installed = filters.get('exclude_installed', False)
     hide_local = filters.get('hide_local', False)
-    hide_wips_without_downloads = filters.get('hide_wips_without_downloads', False)
     show_nsfw = filters.get('show_nsfw', False)
     search_terms = [term for term in str(search_text).casefold().split() if term]
     installed_keys = set(installed_mod_keys or ())
@@ -115,9 +114,6 @@ def filter_and_sort_mods(mods_list, filters, sort_config=None, mod_accessor=None
         if hide_local and _is_prefixed_key(key, 'local_'):
             continue
         is_gb = _is_prefixed_key(key, 'gb_')
-        if hide_wips_without_downloads and is_gb and (_get_mod_bool_attr(mod, 'is_wip') or _get_mod_attr(mod, 'gamebanana_category') == 'Work In Progress'):
-            if not _int_value(_get_mod_attr(mod, 'downloads')):
-                continue
         if (not show_nsfw) and _is_nsfw_mod(mod):
             continue
         if only_gamebanana and not is_gb:

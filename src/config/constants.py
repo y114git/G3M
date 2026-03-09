@@ -197,14 +197,11 @@ WIDGET_LOCALIZATIONS = [
     ('tag_gameplay', 'setText', 'tags.gameplay'),
     ('tag_other', 'setText', 'tags.other'),
     ('search_button', 'setToolTip', 'ui.search_placeholder'),
-    ('prev_page_btn', 'setText', 'ui.prev_page'),
-    ('next_page_btn', 'setText', 'ui.next_page'),
     ('chapter_mode_checkbox', 'setText', 'ui.chapter_mode'),
     ('full_install_checkbox', 'setText', 'ui.full_install'),
     ('language_label', 'setText', 'ui.language_label'),
     ('beta_updates_checkbox', 'setText', 'ui.beta_updates'),
     ('skip_patching_warnings_checkbox', 'setText', 'ui.skip_patching_warnings'),
-    ('skip_patching_warnings_checkbox', 'setToolTip', 'tooltips.skip_patching_warnings'),
     ('fullscreen_checkbox', 'setText', 'ui.fullscreen'),
     ('fullscreen_checkbox', 'setToolTip', 'tooltips.fullscreen_tooltip'),
     ('ui_scale_label', 'setText', 'ui.scale_label'),
@@ -212,7 +209,7 @@ WIDGET_LOCALIZATIONS = [
     ('launch_via_steam_checkbox', 'setText', 'ui.steam_launch'),
     ('dont_hide_window_checkbox', 'setText', 'ui.dont_hide_window_on_launch'),
     ('dont_hide_window_checkbox', 'setToolTip', 'tooltips.dont_hide_window_on_launch'),
-    ('hide_wips_without_downloads_checkbox', 'setText', 'ui.hide_wips_without_downloads'),
+
     ('reset_button', 'setText', 'buttons.reset_settings'),
     ('settings_custom_executable_button', 'setText', 'buttons.custom_executable'),
     ('settings_custom_executable_button', 'setToolTip', 'tooltips.custom_executable_library'),
@@ -226,11 +223,6 @@ WIDGET_LOCALIZATIONS = [
     ('disable_animations_checkbox', 'setText', 'checkboxes.disable_animations'),
     ('disable_background_checkbox', 'setText', 'checkboxes.disable_background'),
     ('disable_splash_checkbox', 'setText', 'checkboxes.disable_splash'),
-    ('mods_per_page_label', 'setText', 'ui.mods_per_page_label'),
-    ('mods_per_page_spinbox', 'setToolTip', 'ui.mods_per_page_tooltip'),
-    ('gb_sort_label', 'setText', 'ui.gamebanana_sort_label'),
-    ('auto_sorting_checkbox', 'setText', 'ui.auto_sorting'),
-    ('auto_sorting_checkbox', 'setToolTip', 'ui.auto_sorting_tooltip'),
     ('blocklist_button', 'setText', 'ui.blocklist'),
     ('blocklist_button', 'setToolTip', 'ui.blocklist_tooltip'),
     ('priority_button', 'setText', 'ui.priority'),
@@ -253,15 +245,13 @@ WIDGET_LOCALIZATIONS = [
     ('merge_code_checkbox', 'setText', 'checkboxes.merge_code'),
     ('merge_properties_checkbox', 'setToolTip', 'tooltips.merge_properties'),
     ('merge_code_checkbox', 'setToolTip', 'tooltips.merge_code'),
-    ('clear_cache_button', 'setText', 'ui.clear_cache_button'),
-    ('clear_cache_button', 'setToolTip', 'tooltips.clear_cache_button'),
 ]
 PLUGIN_WIDGET_LOCALIZATIONS = [
     ('plugins_search_button', 'setText', 'plugins.search_plugins'),
     ('plugins_import_button', 'setText', 'plugins.import_plugins'),
 ]
 COMBO_LOCALIZATIONS = {
-    'sort_combo': ['ui.sort_by_downloads', 'ui.sort_by_update_date', 'ui.sort_by_creation_date'],
+    'sort_combo': ['ui.sort_by_relevance', 'ui.sort_by_creation_date', 'ui.sort_by_update_date'],
     'modgame_combo': ['ui.deltarune', 'ui.undertale', 'ui.undertaleyellow', 'ui.pizzatower', 'ui.sugaryspire'],
     'library_sort_combo': ['ui.sort_by_name', 'ui.sort_by_date'],
     'game_type_combo': ['ui.deltarune', 'ui.deltarunedemo', 'ui.undertale', 'ui.undertaleyellow', 'ui.pizzatower', 'ui.sugaryspire'],
@@ -287,6 +277,7 @@ MAX_DOWNLOAD_RETRIES = 5
 SEARCH_TIMEOUT_SECONDS = 10
 ASYNC_METADATA_MIN_REQUEST_INTERVAL = 0.2
 SEARCH_EXHAUSTED_PAGE_SENTINEL = 100
+PRESENCE_THREAD_WAIT_TIMEOUT = 2000
 
 """GameBanana integration constants."""
 GAMEBANANA_API_BASE = 'https://gamebanana.com/apiv11'
@@ -299,7 +290,7 @@ GAMEBANANA_GAME_IDS = {
 }
 GAMEBANANA_TOOL_ID_DELTAMOD = 20575
 GAMEBANANA_TOOL_ID_DELTAHUB = 20615
-GAMEBANANA_PER_PAGE = 20
+GAMEBANANA_PER_PAGE = 15
 
 """Mod file, archive, cache, and content metadata constants."""
 DATA_FILE_EXTENSIONS = ('.xdelta', '.vcdiff', '.win', '.unx', '.ios', '.droid')
@@ -309,10 +300,6 @@ META_JSON_FILENAME = 'meta.json'
 ICON_PNG_FILENAME = 'icon.png'
 LEGACY_MOD_CONFIG_FILENAME = 'config.json'
 LEGACY_META_JSON_FILENAME = '_deltamodInfo.json'
-CACHE_FRESH_TTL = 3600
-CACHE_STALE_TTL = 7 * 24 * 3600
-CACHE_MAX_ENTRIES = 10000
-CACHE_SAVE_DELAY = 5.0
 MAX_PATCHING_ARCHIVES = 10
 MOD_TYPE_G3MPATCH = 'g3mpatch'
 MOD_TYPE_XDELTA = 'xdelta'

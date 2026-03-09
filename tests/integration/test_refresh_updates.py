@@ -78,7 +78,7 @@ class TestRefreshLibraryDisplay:
 
 class TestRefreshMetadataLoading:
 
-    def test_refresh_loads_metadata(self, app_state):
+    def test_refresh_controller_has_expected_attributes(self, app_state):
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
@@ -87,4 +87,5 @@ class TestRefreshMetadataLoading:
         update_checker = Mock()
         app_window = Mock()
         refresh_controller = RefreshController(app_state, feedback_service, mod_service, used_mods_service, game_launch_controller, update_checker, app_window=app_window)
-        assert hasattr(refresh_controller, 'metadata_thread')
+        assert hasattr(refresh_controller, 'fetch_thread')
+        assert hasattr(refresh_controller, 'details_thread')

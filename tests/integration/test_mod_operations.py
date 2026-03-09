@@ -116,12 +116,18 @@ class TestManualInstall:
         assert hasattr(controller, '_start_manual_install_from_gamebanana')
         assert hasattr(controller, '_start_prepare_worker')
 
-    def test_chapter_display_name(self):
+    def test_chapter_display_name(self, tmp_path):
+        from unittest.mock import MagicMock, patch
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-        assert ManualModInstallDialog._chapter_display_name('deltarune_0') == '0'
-        assert ManualModInstallDialog._chapter_display_name('deltarune_2') == '2'
-        assert ManualModInstallDialog._chapter_display_name('undertale') == 'undertale'
-        assert ManualModInstallDialog._chapter_display_name('deltarunedemo') == 'deltarunedemo'
+        with patch.object(ManualModInstallDialog, '__init__', lambda self, *a, **kw: None):
+            dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)
+            dialog.data_tabs = MagicMock()
+            dialog.data_tabs.count.return_value = 0
+            from services.localization_service import tr
+            assert dialog._chapter_display_name('deltarune_0') == tr('tabs.menu_root')
+            assert dialog._chapter_display_name('deltarune_2') == tr('tabs.chapter_2')
+            assert dialog._chapter_display_name('undertale') == 'undertale'
+            assert dialog._chapter_display_name('deltarunedemo') == 'deltarunedemo'
 
     def test_chapter_folder_name(self):
         from utils.file_utils import get_chapter_folder_name

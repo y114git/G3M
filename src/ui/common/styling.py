@@ -138,13 +138,6 @@ def apply_rounded_mask(widget, radius, inset=0):
         pass
 
 
-def install_rounded_clip(widget, radius_provider, inset=0, attr_name='_rounded_clip_filter'):
-    def _apply():
-        radius = radius_provider() if callable(radius_provider) else radius_provider
-        apply_rounded_mask(widget, radius, inset=inset)
-    install_widget_update_handler(widget, _apply, attr_name=attr_name)
-
-
 def install_size_hint_height_sync(widget, scroll_area, attr_name='_size_hint_height_filter'):
     install_widget_update_handler(widget, lambda target=widget, target_scroll=scroll_area: target_scroll.setMaximumHeight(target.sizeHint().height()), attr_name=attr_name)
 
@@ -254,7 +247,7 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
     main_layout = getattr(widget, 'main_layout', None)
     if main_layout:
         content_margin = max(max(8, int(round(10 * layout_scale))), (frame_border_radius_value * 3 + 9) // 10)
-        margin_key = (content_margin, content_margin, content_margin, content_margin)
+        margin_key = (content_margin,) * 4
         if getattr(widget, '_mod_widget_margin_cache', None) != margin_key:
             main_layout.setContentsMargins(*margin_key)
             widget._mod_widget_margin_cache = margin_key

@@ -140,15 +140,15 @@ class SearchModCardWidget(ModCardWidget):
         metadata_layout.setSpacing(10)
         metadata_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.metadata_layout = metadata_layout
-        self.downloads_label = QLabel(self)
-        self.downloads_label.setObjectName('secondaryText')
-        self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
+        self.likes_label = QLabel(self)
+        self.likes_label.setObjectName('secondaryText')
+        self.likes_label.setToolTip(tr('ui.likes_tooltip'))
         self.updated_label = QLabel(self)
         self.updated_label.setObjectName('secondaryText')
         self.updated_label.setToolTip(tr('ui.updated_label'))
         separator = QLabel('|', metadata_widget)
         separator.setObjectName('secondaryText')
-        metadata_layout.addWidget(self.downloads_label)
+        metadata_layout.addWidget(self.likes_label)
         metadata_layout.addWidget(separator)
         metadata_layout.addWidget(self.updated_label)
         self.metadata_widget = metadata_widget
@@ -185,7 +185,7 @@ class SearchModCardWidget(ModCardWidget):
         expanded_layout.addWidget(self.actions_widget, 0, Qt.AlignmentFlag.AlignHCenter)
         self.main_layout.addWidget(self.expanded_widget)
         self.expanded_widget.setVisible(False)
-        self.downloads_label.setText(self._get_downloads_text())
+        self.likes_label.setText(self._get_likes_text())
         self._update_tagline_text()
         self._update_updated_label()
         self._update_name_text()
@@ -196,10 +196,10 @@ class SearchModCardWidget(ModCardWidget):
         return primary_screenshot or getattr(self.mod_data, 'icon_url', None) or getattr(self.mod_data, 'icon_path', None)
 
     def _get_tagline_text(self):
-        tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
         key = get_mod_key(self.mod_data)
-        if key and key.startswith('gb_') and not getattr(self.mod_data, 'has_full_metadata', True):
-            tagline = tr('ui.loading_placeholder')
+        if key and key.startswith('gb_'):
+            return ''
+        tagline = getattr(self.mod_data, 'tagline', '') or ''
         if len(tagline) > 180:
             tagline = tagline[:177] + '...'
         return tagline
@@ -315,7 +315,9 @@ class SearchModCardWidget(ModCardWidget):
 
     def _update_tagline_text(self):
         if hasattr(self, 'tagline_label'):
-            if self._set_multiline_elided_text(self.tagline_label, self._get_tagline_text(), 4):
+            text = self._get_tagline_text()
+            self.tagline_label.setVisible(bool(text))
+            if self._set_multiline_elided_text(self.tagline_label, text, 4):
                 self.updateGeometry()
                 return True
         return False
@@ -333,7 +335,7 @@ class SearchModCardWidget(ModCardWidget):
         metrics_changed = bool(self._apply_metrics())
         if hasattr(self, 'name_label'):
             apply_stylesheet_if_changed(self.name_label, f'font-size: {max(15, int(round(18 * scale)))}px; font-weight: bold; color: {text_color};', cache_attr='_search_name_stylesheet_cache')
-        for label in ('downloads_label', 'updated_label'):
+        for label in ('likes_label', 'updated_label'):
             widget = getattr(self, label, None)
             if widget:
                 apply_stylesheet_if_changed(widget, f'color: {secondary}; font-size: {max(12, int(round(14 * scale)))}px;', cache_attr=f'_{label}_stylesheet_cache')
@@ -360,17 +362,11 @@ class SearchModCardWidget(ModCardWidget):
                 self._load_icon()
             self._full_name_text = getattr(self.mod_data, 'name', '') or ''
             name_changed = self._update_name_text()
-            if hasattr(self, 'downloads_label'):
-                self.downloads_label.setText(self._get_downloads_text())
+            if hasattr(self, 'likes_label'):
+                self.likes_label.setText(self._get_likes_text())
             if hasattr(self, 'updated_label'):
                 self._update_updated_label()
             tagline_changed = self._update_tagline_text()
-            key = get_mod_key(self.mod_data)
-            if key and key.startswith('gb_'):
-                if not getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
-                    if not (self._compatibility_thread and self._compatibility_thread.isRunning()):
-                        if not (hasattr(self, '_compatibility_check_timer') and self._compatibility_check_timer.isActive()):
-                            self._start_compatibility_check()
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
             if metrics_changed or name_changed or tagline_changed:
@@ -387,8 +383,8 @@ class SearchModCardWidget(ModCardWidget):
             else:
                 self.install_button.setText(tr('buttons.install'))
                 self._apply_gamebanana_install_styles()
-        if hasattr(self, 'downloads_label'):
-            self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
+        if hasattr(self, 'likes_label'):
+            self.likes_label.setToolTip(tr('ui.likes_tooltip'))
         if hasattr(self, 'updated_label'):
             self.updated_label.setToolTip(tr('ui.updated_label'))
         self.update_mod_data()

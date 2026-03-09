@@ -16,7 +16,7 @@ from workers.mod_scan_worker import ModScanThread
 from adapters.deltamod_adapter import DeltamodConverter
 from utils.file_utils import load_json, save_json, get_chapter_folder_name, chapter_id_to_file_key
 from utils.file_utils import sanitize_filename, has_deltamod_info_file
-from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon
+from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon, sort_gamebanana_files_by_priority
 from utils.mod_config_parser import resolve_local_icon_url, parse_extra_files_raw, resolve_data_file_version, resolve_chapter_folder
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 import time
@@ -469,8 +469,9 @@ class ModManager(QObject):
     def resolve_gamebanana_file(mod_info, api, selected_file=None) -> Optional[Dict]:
         if selected_file:
             return selected_file
-        files = getattr(mod_info, 'gamebanana_supported_files', []) or []
+        files = sort_gamebanana_files_by_priority(getattr(mod_info, 'gamebanana_supported_files', []) or [])
         if files:
+            mod_info.gamebanana_supported_files = files
             return files[0]
         try:
             key = get_mod_key(mod_info)
@@ -479,11 +480,12 @@ class ModManager(QObject):
                 return None
             external_url = getattr(mod_info, 'external_url', None)
             compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
-            files = compat.get('supported_files') or []
+            files = sort_gamebanana_files_by_priority(compat.get('supported_files') or [])
             if files:
                 mod_info.gamebanana_supported_files = files
                 mod_info.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
                 mod_info.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
+                mod_info.gamebanana_preferred_format = 'deltahub' if any((f.get('compatibility') == 'deltahub') for f in files) else ('deltamod' if any((f.get('compatibility') == 'deltamod') for f in files) else None)
                 return files[0]
         except Exception as e:
             key = get_mod_key(mod_info) or 'unknown'

@@ -73,28 +73,5 @@ class FeedbackManager(QObject):
         reply = msg_box.exec()
         return reply == QMessageBox.StandardButton.Yes
 
-    def ask_custom_question(self, icon: QMessageBox.Icon, title_key: str, message_key: str, buttons: list[tuple[str, QMessageBox.ButtonRole, str]], default_button_key: str | None = None, **kwargs) -> str | None:
-        if not self._should_show_dialog():
-            return None
-        _t = self._tr
-        title = _t(title_key, **kwargs)
-        message = _t(message_key, **kwargs)
-        msg_box = QMessageBox(None)
-        msg_box.setIcon(icon)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
-        button_map = {}
-        default_button = None
-        for text_key, role, return_key in buttons:
-            button = msg_box.addButton(_t(text_key), role)
-            button_map[button] = return_key
-            if return_key == default_button_key:
-                default_button = button
-        if default_button:
-            msg_box.setDefaultButton(default_button)
-        msg_box.exec()
-        clicked_button = msg_box.clickedButton()
-        return button_map.get(clicked_button)
-
     def update_status(self, message: str, color: str = ''):
         self.status_updated.emit(message, color)

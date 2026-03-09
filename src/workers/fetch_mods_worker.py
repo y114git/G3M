@@ -1,7 +1,7 @@
 """Worker thread for fetching mod lists from remote sources."""
 import json
 import os
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import UI_COLORS, GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE
@@ -31,27 +31,18 @@ class FetchModsThread(QThread):
             all_mods = []
             try:
                 logger.info('FetchModsThread: Starting GameBanana fetch')
-                metadata_cache = None
-                sort_param = 'default'
+                sort_param = 'relevant'
                 app_state = getattr(self.main_window, 'app_state', None)
-                if app_state and hasattr(app_state, 'cache_dir'):
-                    sort_param = getattr(app_state, 'gamebanana_sort', 'default')
-                    try:
-                        from adapters.gamebanana_cache import GameBananaMetadataCache
-                        cache_dir = app_state.cache_dir
-                        metadata_cache = GameBananaMetadataCache(cache_dir)
-                        logger.info(f'FetchModsThread: Initialized metadata cache in {cache_dir}')
-                    except Exception as e:
-                        logger.warning(f'FetchModsThread: Failed to initialize metadata cache: {e}', exc_info=True)
+                if app_state:
+                    sort_index = app_state.local_config.get('search_sort_index', 0) if hasattr(app_state, 'local_config') else 0
+                    sort_param = ['relevant', 'new', 'updated'][sort_index] if sort_index in (0, 1, 2) else 'relevant'
 
                 class GameBananaFetcher:
 
-                    def __init__(self, sort_param='default', metadata_cache=None, app_state=None):
+                    def __init__(self, sort_param='relevant', app_state=None):
                         self.all_mods = []
-                        self.all_mods_needing_metadata = []
                         self.api = None
                         self.sort_param = sort_param
-                        self.metadata_cache = metadata_cache
                         self.app_state = app_state
                         self.status: Optional[Any] = None
 
@@ -69,66 +60,38 @@ class FetchModsThread(QThread):
                         logger.info(f'GameBananaFetcher.fetch_mods: Starting fetch for {selected_game} (GameBanana: {gamebanana_game}) with sort={self.sort_param}, initial_pages={initial_pages}')
                         if hasattr(self, 'status') and self.status:
                             self.status(tr('status.fetching_gamebanana_mods', game=gamebanana_game.upper()), UI_COLORS['status_info'])
-                        game_mods, game_mods_needing_metadata = self._fetch_game_mods(gamebanana_game, game_id, start_page=1, num_pages=initial_pages, sort=self.sort_param)
+                        game_mods = self._fetch_game_mods(game_id, start_page=1, num_pages=initial_pages, sort=self.sort_param)
                         if game_mods:
                             self.all_mods.extend(game_mods)
-                            self.all_mods_needing_metadata.extend(game_mods_needing_metadata)
-                            logger.info(f'GameBananaFetcher: Fetched {len(game_mods)} mods for {gamebanana_game} (pages 1-{initial_pages}), {len(game_mods_needing_metadata)} need metadata')
+                            logger.info(f'GameBananaFetcher: Fetched {len(game_mods)} mods for {gamebanana_game} (pages 1-{initial_pages})')
                         logger.info(f'GameBananaFetcher.fetch_mods: Total fetched {len(self.all_mods)} mods')
-                        return (self.all_mods, self.all_mods_needing_metadata)
+                        return self.all_mods
 
-                    def _fetch_game_mods(self, game_name: str, game_id: int, start_page: int = 1, num_pages: int = 3, sort: str = 'default') -> Tuple[List[ModInfo], List[str]]:
+                    def _fetch_game_mods(self, game_id: int, start_page: int = 1, num_pages: int = 3, sort: str = 'relevant') -> List[ModInfo]:
                         mods = []
-                        mods_needing_metadata = []
                         try:
                             if not self.api:
-                                return (mods, mods_needing_metadata)
-
-                            try:
-                                import asyncio
-                                from utils.async_metadata_loader import AsyncGameModsLoader
-                                pages_to_load = list(range(start_page, start_page + num_pages))
-                                async_loader = AsyncGameModsLoader(max_concurrent=3)
-                                mods, mods_needing_metadata = asyncio.run(async_loader.load_game_mods_async(
-                                    game_name, game_id, pages_to_load, GAMEBANANA_PER_PAGE, sort, self.metadata_cache, self.app_state
-                                ))
-                                logger.debug(f'AsyncGameModsLoader: Loaded {len(mods)} mods for {game_name}')
-                            except Exception as async_error:
-                                logger.warning(f'Async loading failed for {game_name}, falling back to sequential: {async_error}')
-
-                                for page in range(start_page, start_page + num_pages):
-                                    mods_data, page_mods_needing_metadata = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, metadata_cache=self.metadata_cache, app_state=self.app_state)
-                                    if not mods_data:
-                                        logger.debug(f'No mods data for {game_name} page {page}')
-                                        break
-                                    mods_needing_metadata.extend(page_mods_needing_metadata)
-                                    for mod_info in mods_data:
-                                        if mod_info:
-                                            mods.append(mod_info)
-                                    if len(mods_data) < GAMEBANANA_PER_PAGE:
-                                        break
-                                    logger.debug(f'Fetched page {page} for {game_name}: {len(mods_data)} mods, {len(page_mods_needing_metadata)} need metadata')
+                                return mods
+                            for page in range(start_page, start_page + num_pages):
+                                mods_data, _ = self.api.get_game_mods(game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=sort, app_state=self.app_state)
+                                if not mods_data:
+                                    break
+                                for mod_info in mods_data:
+                                    if mod_info:
+                                        mods.append(mod_info)
+                                if len(mods_data) < GAMEBANANA_PER_PAGE:
+                                    break
                         except Exception as e:
-                            logger.error(f'Error fetching mods for {game_name}: {e}', exc_info=True)
-                        return (mods, mods_needing_metadata)
-                fetcher = GameBananaFetcher(sort_param=sort_param, metadata_cache=metadata_cache, app_state=app_state)
+                            logger.error(f'Error fetching GameBanana mods: {e}', exc_info=True)
+                        return mods
+                fetcher = GameBananaFetcher(sort_param=sort_param, app_state=app_state)
 
                 fetcher.status = lambda msg, color: self.status.emit(msg, color)
                 initial_pages = 3
-                gamebanana_mods, mods_needing_metadata = fetcher.fetch_mods(initial_pages=initial_pages)
+                gamebanana_mods = fetcher.fetch_mods(initial_pages=initial_pages)
                 if gamebanana_mods:
                     all_mods.extend(gamebanana_mods)
-                    logger.info(f'FetchModsThread: Added {len(gamebanana_mods)} GameBanana mods to list, {len(mods_needing_metadata)} need metadata')
-                    unique_mods_needing_metadata = list(set(mods_needing_metadata))
-                    if unique_mods_needing_metadata and metadata_cache:
-                        app_state = getattr(self.main_window, 'app_state', None)
-                        if app_state:
-                            if not hasattr(app_state, 'gamebanana_mods_needing_metadata'):
-                                app_state.gamebanana_mods_needing_metadata = []
-                            existing = set(app_state.gamebanana_mods_needing_metadata)
-                            new_ids = set(unique_mods_needing_metadata)
-                            app_state.gamebanana_mods_needing_metadata = list(existing | new_ids)
-                            logger.info(f'FetchModsThread: Merged {len(new_ids)} new mod IDs needing metadata with {len(existing)} existing, total: {len(app_state.gamebanana_mods_needing_metadata)}')
+                    logger.info(f'FetchModsThread: Added {len(gamebanana_mods)} GameBanana mods to list')
                     app_state = getattr(self.main_window, 'app_state', None)
                     if app_state:
                         selected_game = app_state.local_config.get('selected_search_game', 'deltarune') if hasattr(app_state, 'local_config') else 'deltarune'

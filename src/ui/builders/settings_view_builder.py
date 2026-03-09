@@ -21,7 +21,7 @@ class SettingsViewBuilder:
         self.widgets = {}
 
     def build(self) -> QFrame:
-        settings_widget = QFrame()
+        settings_widget = QFrame(self.parent)
         settings_widget.setObjectName('settings_widget')
         settings_layout = QVBoxLayout(settings_widget)
 
@@ -33,9 +33,9 @@ class SettingsViewBuilder:
         """)
         tab_widget.addTab(self._build_general_tab(tab_widget), tr('ui.settings_tab_general'))
         tab_widget.addTab(self._build_appearance_tab(tab_widget), tr('ui.settings_tab_appearance'))
+        tab_widget.addTab(self._build_game_tab(tab_widget), tr('ui.settings_tab_game'))
         tab_widget.addTab(self._build_mods_browser_tab(tab_widget), tr('ui.settings_tab_mods_browser'))
         tab_widget.addTab(self._build_library_tab(tab_widget), tr('ui.settings_tab_library'))
-        tab_widget.addTab(self._build_launch_tab(tab_widget), tr('ui.settings_tab_launch'))
         tab_widget.addTab(self._build_plugins_tab(tab_widget), tr('ui.settings_tab_plugins'))
         settings_layout.addWidget(tab_widget, stretch=1)
 
@@ -366,69 +366,15 @@ class SettingsViewBuilder:
         cl.addWidget(hide_mods_browser_tab_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
-        sec, cl = self._collapsible_section(tr('ui.settings_section_display'), 'mods_display', 'ui.settings_section_display', parent=page)
-        mpp_container = QWidget(page)
-        mpp_layout = QHBoxLayout(mpp_container)
-        mpp_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        mpp_layout.setSpacing(10)
-        mods_per_page_label = self._styled_label(tr('ui.mods_per_page_label'))
-        mpp_layout.addWidget(mods_per_page_label)
-        mods_per_page_spinbox = QSpinBox()
-        mods_per_page_spinbox.setMinimum(5)
-        mods_per_page_spinbox.setMaximum(1000)
-        mods_per_page_spinbox.setValue(getattr(self.app_state, 'mods_per_page', 20))
-        mods_per_page_spinbox.setToolTip(tr('ui.mods_per_page_tooltip'))
-        mpp_layout.addWidget(mods_per_page_spinbox)
+        sec, cl = self._collapsible_section(tr('ui.settings_section_filters'), 'mods_filters', 'ui.settings_section_filters', parent=page)
         blocklist_button = self._styled_button(tr('ui.blocklist'), 100, tr('ui.blocklist_tooltip'))
-        mpp_layout.addWidget(blocklist_button)
-        cl.addWidget(mpp_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        hide_wips_without_downloads_checkbox = self._styled_checkbox(
-            tr('ui.hide_wips_without_downloads'),
-            "<html><body style='white-space: normal;'>" + tr('tooltips.hide_wips_without_downloads') + '</body></html>'
-        )
-        cl.addWidget(hide_wips_without_downloads_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        auto_sorting_checkbox = self._styled_checkbox(tr('ui.auto_sorting'), tr('ui.auto_sorting_tooltip'))
-        auto_sorting_checkbox.setChecked(self.app_state.local_config.get('auto_sorting', False))
-        cl.addWidget(auto_sorting_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sec)
-
-        sec, cl = self._collapsible_section('GameBanana', 'mods_gamebanana', parent=page)
-        gb_container = QWidget(page)
-        gb_layout = QHBoxLayout(gb_container)
-        gb_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        gb_layout.setSpacing(10)
-        gb_sort_label = self._styled_label(tr('ui.gamebanana_sort_label'))
-        gb_layout.addWidget(gb_sort_label)
-        gb_sort_combo = QComboBox()
-        for label, data in [('default', 'default'), ('new', 'new'), ('updated', 'updated')]:
-            gb_sort_combo.addItem(tr(f'ui.gamebanana_sort_{label}'), data)
-        gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
-        gb_sort_combo.setCurrentIndex(
-            {'default': 0, 'new': 1, 'updated': 2}.get(
-                getattr(self.app_state, 'gamebanana_sort', 'default'), 0
-            )
-        )
-        gb_layout.addWidget(gb_sort_combo)
-        cl.addWidget(gb_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sec)
-
-        sec, cl = self._collapsible_section(tr('ui.settings_section_advanced'), 'mods_advanced', 'ui.settings_section_advanced', parent=page)
-        clear_cache_button = self._styled_button(tr('ui.clear_cache_button'), 120, tr('tooltips.clear_cache_button'))
-        clear_cache_button.setObjectName('clear_cache_button')
-        cl.addWidget(clear_cache_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        cl.addWidget(blocklist_button, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         layout.addStretch()
 
         self.widgets['hide_mods_browser_tab_checkbox'] = hide_mods_browser_tab_checkbox
-        self.widgets['hide_wips_without_downloads_checkbox'] = hide_wips_without_downloads_checkbox
-        self.widgets['auto_sorting_checkbox'] = auto_sorting_checkbox
-        self.widgets['mods_per_page_label'] = mods_per_page_label
-        self.widgets['mods_per_page_spinbox'] = mods_per_page_spinbox
-        self.widgets['gb_sort_label'] = gb_sort_label
-        self.widgets['gb_sort_combo'] = gb_sort_combo
         self.widgets['blocklist_button'] = blocklist_button
-        self.widgets['clear_cache_button'] = clear_cache_button
         return self._wrap_in_scroll(page, parent)
 
     def _build_library_tab(self, parent: QWidget = None) -> QWidget:
@@ -465,7 +411,7 @@ class SettingsViewBuilder:
         self.widgets['hide_plugins_tab_checkbox'] = hide_plugins_tab_checkbox
         return self._wrap_in_scroll(page, parent)
 
-    def _build_launch_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_game_tab(self, parent: QWidget = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_paths'), 'launch_paths', 'ui.settings_section_paths', parent=page)

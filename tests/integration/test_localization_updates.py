@@ -1,5 +1,6 @@
 import re
 import pytest
+import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -20,6 +21,36 @@ class TestLocalizationSystem:
         from services.localization_service import LocalizationManager
         loc_service = LocalizationManager()
         assert hasattr(loc_service, 'rescan_languages')
+
+    def test_language_files_match_lang_en_key_set(self):
+        lang_dir = Path('src/assets/lang')
+        en_path = lang_dir / 'lang_en.json'
+        if not en_path.exists():
+            pytest.skip('lang_en.json not found')
+
+        def flatten_keys(data, prefix=''):
+            keys = set()
+            for key, value in data.items():
+                if key == 'metadata' or str(key).startswith('_'):
+                    continue
+                dotted = f'{prefix}.{key}' if prefix else key
+                if isinstance(value, dict):
+                    keys.update(flatten_keys(value, dotted))
+                else:
+                    keys.add(dotted)
+            return keys
+
+        expected_keys = flatten_keys(json.loads(en_path.read_text(encoding='utf-8')))
+        mismatches = []
+
+        for lang_path in sorted(lang_dir.glob('lang_*.json')):
+            actual_keys = flatten_keys(json.loads(lang_path.read_text(encoding='utf-8')))
+            missing = sorted(expected_keys - actual_keys)
+            extra = sorted(actual_keys - expected_keys)
+            if missing or extra:
+                mismatches.append((lang_path.name, missing[:10], extra[:10]))
+
+        assert not mismatches, f'Localization key mismatches found: {mismatches}'
 
 
 class TestUIElementsUseTrFunction:

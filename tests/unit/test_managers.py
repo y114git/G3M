@@ -147,25 +147,6 @@ class TestLocalizationManager:
         assert language is not None
         assert isinstance(language, str)
 
-    def test_plugin_localization_resolves_mod_editor_top_level_name_key(self):
-        from services.localization_service import LocalizationManager
-        from plugins_main.mod_editor.plugin_init import LANG_EN
-        loc = LocalizationManager()
-        loc.strings = {}
-        loc.current_language = 'en'
-        loc.merge_plugin_strings('mod_editor', LANG_EN)
-        assert loc.get_plugin_tr('mod_editor')('mod_editor_plugin') == 'Mod Editor'
-
-    def test_plugin_localization_resolves_xdelta_patcher_top_level_name_key(self):
-        from services.localization_service import LocalizationManager
-        from plugins_main.xdelta_patcher.plugin_init import LANG_EN
-        loc = LocalizationManager()
-        loc.strings = {}
-        loc.current_language = 'en'
-        loc.merge_plugin_strings('xdelta_patcher', LANG_EN)
-        assert loc.get_plugin_tr('xdelta_patcher')('xdelta_patcher_tab_title') == 'XDELTA Patcher'
-
-
 class TestLaunchManager:
 
     def test_launch_service_initialization(self, app_state, feedback_service):

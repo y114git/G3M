@@ -102,7 +102,9 @@ class LocalizationManager:
                     external_dict[key] = internal_value
                     needs_update = True
         sync_dicts(internal_data, external_data)
-        external_data['metadata'] = internal_data.get('metadata', {})
+        internal_metadata = internal_data.get('metadata', {})
+        needs_update = needs_update or external_data.get('metadata', {}) != internal_metadata
+        external_data['metadata'] = internal_metadata
         if needs_update:
             with open(external_path, 'w', encoding='utf-8') as f:
                 json.dump(external_data, f, ensure_ascii=False, indent=2)
@@ -162,9 +164,12 @@ class LocalizationManager:
             if not system_locale:
                 lang_env = os.environ.get('LANG') or os.environ.get('LC_ALL') or os.environ.get('LC_CTYPE')
                 if lang_env:
-                    system_locale = lang_env.split('.')[0].split('_')[0]
+                    system_locale = lang_env.split('.')[0]
             if system_locale:
-                lang_code = system_locale.split('_')[0].lower()
+                full_code = system_locale.lower().replace('-', '_')
+                if full_code in self.available_languages:
+                    return full_code
+                lang_code = full_code.split('_')[0]
                 if lang_code in self.available_languages:
                     return lang_code
         except Exception as e:
@@ -292,10 +297,6 @@ class LocalizationManager:
 
 
 localization_service = LocalizationManager()
-
-
-def _fallback_tr(key: str, **kwargs) -> str:
-    return localization_service._get_fallback_text(key, **kwargs)
 
 
 def tr(key: str, **kwargs) -> str:

@@ -41,20 +41,6 @@ class GameLauncher(QObject):
         self.restore_window_callback = None
         self.execute_plugin_hooks = None
 
-    def _on_warning_confirmation_needed(self, warning_type: str, title: str, message: str):
-        from PyQt6.QtWidgets import QMessageBox
-        msg_box = QMessageBox()
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
-        msg_box.setIcon(QMessageBox.Icon.Warning)
-        continue_btn = msg_box.addButton(tr('dialogs.patching_warning.continue_button'), QMessageBox.ButtonRole.AcceptRole)
-        cancel_btn = msg_box.addButton(tr('dialogs.patching_warning.cancel_button'), QMessageBox.ButtonRole.RejectRole)
-        msg_box.setDefaultButton(cancel_btn)
-        msg_box.exec()
-        result = msg_box.clickedButton() == continue_btn
-        if self._patching_thread:
-            self._patching_thread.set_warning_response(result)
-
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
             return
@@ -399,23 +385,6 @@ class GameLauncher(QObject):
         except Exception as e:
             logging.error(f'{context}: Failed to restore backups: {e}', exc_info=True)
             return False
-
-    def _cancel_launch_after_patching(self):
-        try:
-            self._try_restore_backups('cancel_launch_after_patching')
-        except Exception as e:
-            logging.error(f'Cancel launch cleanup failed: {e}', exc_info=True)
-        finally:
-            self.app_state.progress_bar_visible = False
-            self.app_state.progress_bar_value = 0
-            self.app_state.is_patching = False
-            self.app_state.action_button_text = None
-            self.app_state.action_button_enabled = True
-            if self.restore_window_callback:
-                try:
-                    self.restore_window_callback()
-                except Exception as e:
-                    logging.error(f'Failed to restore window: {e}', exc_info=True)
 
     def _continue_after_patching(self, selections: Dict[int, Any], patching_success: bool, needs_multi_mod: bool = False):
         if not patching_success:

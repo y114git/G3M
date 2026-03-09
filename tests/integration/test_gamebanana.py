@@ -28,7 +28,7 @@ class TestGameBananaAPI:
         assert mod.is_nsfw is True
 
     @patch('requests.Session')
-    def test_get_mod_details(self, mock_session_class):
+    def test_get_mod_profile_page(self, mock_session_class):
         from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
@@ -38,7 +38,7 @@ class TestGameBananaAPI:
         mock_session.get.return_value = mock_response
         mock_session_class.return_value = mock_session
         api = GameBananaAPI()
-        details = api.get_mod_details(mod_id=12345)
+        details = api.get_mod_profile_page(mod_id=12345)
         assert details is None or isinstance(details, dict)
 
     @patch('requests.Session')

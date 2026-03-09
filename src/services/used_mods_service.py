@@ -49,8 +49,8 @@ class UsedModsManager(QObject):
         if save_state:
             try:
                 self.save_used_mods_state()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f'set_used_mod: Failed to save used mods state: {e}', exc_info=True)
 
     def set_mods_list(self, chapter_id: str, mods_list: List[Any], save_state: bool = True) -> None:
         if not mods_list:
@@ -62,8 +62,8 @@ class UsedModsManager(QObject):
         if save_state:
             try:
                 self.save_used_mods_state()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f'set_mods_list: Failed to save used mods state: {e}', exc_info=True)
 
     def is_mod_used_for_chapter(self, mod_data, chapter_id: str) -> bool:
         if not mod_data or not (key := get_mod_key(mod_data)):
@@ -156,7 +156,8 @@ class UsedModsManager(QObject):
                             key = None
                     if key:
                         mod_keys.append(key)
-                except Exception:
+                except Exception as e:
+                    logging.error(f'save_used_mods_state: Failed to extract mod key from {repr(mod_data)}: {e}', exc_info=True)
                     continue
             if mod_keys:
                 if len(mod_keys) == 1:
@@ -167,7 +168,7 @@ class UsedModsManager(QObject):
         self.settings_service.write_local_config()
         logging.info(f'save_used_mods_state: Saved {len(used_mods_data)} chapter(s) with mods')
 
-    def load_used_mods_state(self, mode=None):
+    def load_used_mods_state(self):
         is_chapter_mode = self.app_state.current_mode == 'chapter'
 
         modes_to_load = [is_chapter_mode]
@@ -187,7 +188,7 @@ class UsedModsManager(QObject):
             valid_tab_ids = {tab.tab_id for tab in gm.tabs}
             expected_id = get_chapter_id_for_game_mode(gm)
             for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
-                chapter_id = self._migrate_legacy_id(chapter_id_str, gm)
+                chapter_id = self._migrate_legacy_id(chapter_id_str)
                 if not chapter_mode and expected_id != gm.game_id and chapter_id != expected_id:
                     continue
                 if chapter_mode and chapter_id not in valid_tab_ids:
@@ -236,30 +237,6 @@ class UsedModsManager(QObject):
             if mod_config := self.mod_service.get_mod_config(key):
                 return self.mod_service.create_mod_object_from_info(mod_config, getattr(self.app_state, 'all_mods', None))
         return None
-
-    def _retry_load_missing_mods(self):
-        if not getattr(self, '_pending_mod_keys', None):
-            return
-        needs_save = False
-        for chapter_id, missing_keys in list(self._pending_mod_keys.items()):
-            found_mods = [m for key in missing_keys if (m := self._find_mod_by_key(key))]
-            if found_mods:
-                existing_mods = self.used_mods.get(chapter_id, [])
-                existing_keys = {get_mod_key(m) for m in existing_mods}
-                for mod in found_mods:
-                    if get_mod_key(mod) not in existing_keys:
-                        existing_mods.append(mod)
-                self.used_mods[chapter_id] = existing_mods
-                needs_save = True
-            remaining = [k for k in missing_keys if not any(get_mod_key(m) == k for m in found_mods)]
-            if remaining:
-                self._pending_mod_keys[chapter_id] = remaining
-            else:
-                del self._pending_mod_keys[chapter_id]
-        if needs_save:
-            self.save_used_mods_state()
-            self.used_mods_updated.emit()
-            self.mod_widgets_update_needed.emit()
 
     def _is_local_mod(self, mod_data):
         key = get_mod_key(mod_data)
@@ -325,7 +302,7 @@ class UsedModsManager(QObject):
         self.parent_widget.launch_via_steam_checkbox.setEnabled(not should_block)
 
     @staticmethod
-    def _migrate_legacy_id(chapter_id_str: str, game_mode) -> str:
+    def _migrate_legacy_id(chapter_id_str: str) -> str:
         """Convert old numeric chapter IDs to new string-based IDs."""
         _LEGACY_MAP = {
             '-1': 'deltarune', '0': 'deltarune_0', '1': 'deltarune_1',

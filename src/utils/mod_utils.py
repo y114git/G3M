@@ -1,5 +1,6 @@
 """Mod data extraction utilities."""
 import os
+from typing import List, Dict
 
 
 def _get_mod_field(mod_data, field, default=None): return mod_data.get(field, default) if isinstance(mod_data, dict) else getattr(mod_data, field, default)
@@ -15,7 +16,7 @@ def get_gamebanana_key(mod_data):
 
 def get_gamebanana_mod_id(mod_data):
     """Get GameBanana mod ID (numeric part after gb_)."""
-    return (key := get_gamebanana_key(mod_data)) and key[3:] or None
+    return key[3:] if (key := get_gamebanana_key(mod_data)) else None
 
 
 def resolve_mod_icon(config_data: dict, mod_folder_path: str):
@@ -46,3 +47,18 @@ def get_unique_mod_key(base_key: str, existing_keys: set) -> str:
     while f"{base_key}_{counter}" in existing_keys:
         counter += 1
     return f"{base_key}_{counter}"
+
+
+def sort_gamebanana_files_by_priority(files: List[Dict]) -> List[Dict]:
+    """Sort GameBanana files by compatibility priority (deltahub > deltamod > others)."""
+    def _priority(file_info: Dict) -> tuple[int, str]:
+        compatibility = str(file_info.get('compatibility') or '').lower()
+        if compatibility == 'deltahub':
+            rank = 0
+        elif compatibility == 'deltamod':
+            rank = 1
+        else:
+            rank = 2
+        return (rank, str(file_info.get('name') or ''))
+
+    return sorted(files or [], key=_priority)

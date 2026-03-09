@@ -1,9 +1,10 @@
 """Mod type, asset, and resource detection utilities for the patching system."""
+import logging
 import os
 import platform
 import re
 import zipfile
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from config.constants import DATA_WIN_FILENAME
 
@@ -38,24 +39,9 @@ def find_g3m_patches(mod_source_dir: str) -> List[str]:
                     with zipfile.ZipFile(zip_path, 'r') as zf:
                         if 'g3mpatch.json' in zf.namelist():
                             results.append(zip_path)
-                except (zipfile.BadZipFile, Exception):
-                    pass
+                except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
+                    logging.warning(f'find_g3m_patches: Failed to read zip {zip_path}: {e}')
     return results
-
-
-def is_g3mpatch_zip(file_path: str) -> bool:
-    """Check if a file is a g3mpatch zip (contains g3mpatch.json)."""
-    if not os.path.isfile(file_path) or not file_path.lower().endswith('.zip'):
-        return False
-    try:
-        with zipfile.ZipFile(file_path, 'r') as zf:
-            return 'g3mpatch.json' in zf.namelist()
-    except (zipfile.BadZipFile, Exception):
-        return False
-
-
-def find_data_patches(mod_source_dir: str) -> List[str]:
-    return find_files_by_extension(mod_source_dir, ['.xdelta', '.vcdiff'])
 
 
 def find_ready_data_win_files(mod_source_dir: str, logger=None) -> List[str]:
@@ -77,46 +63,6 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> List[str]:
     if logger:
         logger.info(f'find_ready_data_win_files: found {len(ready_files)} ready data file(s) in {mod_source_dir}')
     return ready_files
-
-
-def dir_has_files(dir_path: str, ext_filter: tuple = None) -> bool:
-    try:
-        if not os.path.exists(dir_path):
-            return False
-        if ext_filter:
-            return any(f.endswith(ext_filter) for f in os.listdir(dir_path))
-        return bool(os.listdir(dir_path))
-    except Exception:
-        return False
-
-
-def detect_mod_type(mod_source_dir: str, logger=None) -> Dict[str, bool]:
-    mod_type = {'has_g3mpatch': False, 'has_xdelta_patch': False, 'has_ready_data_win': False, 'has_file_overrides': False}
-    if not os.path.isdir(mod_source_dir):
-        return mod_type
-    mod_type['has_g3mpatch'] = bool(find_g3m_patches(mod_source_dir))
-    mod_type['has_xdelta_patch'] = bool(find_data_patches(mod_source_dir))
-    mod_type['has_ready_data_win'] = bool(find_ready_data_win_files(mod_source_dir, logger=logger))
-    g3mpatch_zips = set(os.path.basename(p).lower() for p in find_g3m_patches(mod_source_dir))
-    has_other_files = False
-    for root, dirs, files in os.walk(mod_source_dir):
-        for file in files:
-            file_lower = file.lower()
-            if file_lower in ('config.json', '_icon.png', 'mod_config.json'):
-                continue
-            if file_lower.endswith(('.xdelta', '.vcdiff')):
-                continue
-            if file_lower.endswith(('data.win', 'game.ios')):
-                continue
-            if file_lower.endswith('.zip') and file_lower in g3mpatch_zips:
-                continue
-            has_other_files = True
-            break
-        if has_other_files:
-            break
-    if has_other_files:
-        mod_type['has_file_overrides'] = True
-    return mod_type
 
 
 def find_data_win(target_dir: str) -> Optional[str]:
@@ -168,33 +114,9 @@ def resolve_macos_path(base_path: str, app_name: str) -> str:
     return base_path
 
 
-def detect_mod_asset_types(mod_dir: str, logger=None) -> Dict[str, bool]:
-    asset_types = {'has_code': False, 'has_textures': False, 'has_shaders': False, 'has_tilesets': False, 'has_fonts': False, 'has_sounds': False, 'has_rooms': False}
-    objects_dir = os.path.join(mod_dir, 'Objects')
-    if os.path.exists(objects_dir):
-        asset_types['has_code'] = dir_has_files(os.path.join(objects_dir, 'CodeEntries'))
-        asset_types['has_textures'] = any(os.path.exists(os.path.join(objects_dir, d)) for d in ('Sprites', 'Backgrounds', 'Fonts'))
-        asset_types['has_shaders'] = dir_has_files(os.path.join(objects_dir, 'Shaders'))
-        asset_types['has_tilesets'] = dir_has_files(os.path.join(objects_dir, 'Backgrounds'), ('.png',))
-        asset_types['has_fonts'] = dir_has_files(os.path.join(objects_dir, 'Fonts'))
-        asset_types['has_sounds'] = dir_has_files(os.path.join(objects_dir, 'Sounds'), ('.wav', '.ogg'))
-        asset_types['has_rooms'] = dir_has_files(os.path.join(objects_dir, 'Rooms'), ('.json',))
-    elif os.path.exists(os.path.join(mod_dir, 'data.win')):
-        for k in ('has_code', 'has_textures', 'has_shaders', 'has_tilesets', 'has_fonts', 'has_sounds'):
-            asset_types[k] = True
-        if logger:
-            logger.debug(f'Objects directory not found for {mod_dir}, assuming mod has all asset types (will be verified by export scripts)')
-    return asset_types
-
-
 def has_content(objects_dir: str, subdir: str) -> bool:
     p = os.path.join(objects_dir, subdir)
     return bool(os.path.exists(p) and os.listdir(p))
-
-
-def get_dir_resources(obj_dir: str, subdir: str) -> list:
-    p = os.path.join(obj_dir, subdir)
-    return [d for d in os.listdir(p) if os.path.isdir(os.path.join(p, d))] if os.path.exists(p) else []
 
 
 def get_file_resources(obj_dir: str, subdir: str, exts, exclude=None) -> list:
@@ -202,31 +124,6 @@ def get_file_resources(obj_dir: str, subdir: str, exts, exclude=None) -> list:
     if not os.path.exists(p):
         return []
     return [os.path.splitext(f)[0] for f in os.listdir(p) if f.endswith(exts) and (not exclude or not f.endswith(exclude))]
-
-
-def get_font_resources(obj_dir: str) -> list:
-    fonts_path = os.path.join(obj_dir, 'Fonts')
-    if not os.path.exists(fonts_path):
-        return []
-    font_names = set()
-    for f in os.listdir(fonts_path):
-        if f.endswith(('.png', '.json')):
-            font_names.add(os.path.splitext(f)[0])
-        elif f.startswith('glyphs_') and f.endswith('.csv'):
-            font_names.add(f[7:-4])
-    return list(font_names)
-
-
-def get_tileset_config_resource(obj_dir: str) -> list:
-    tilesets_path = os.path.join(obj_dir, 'Tilesets')
-    return ['tilesets_config'] if os.path.exists(tilesets_path) and os.path.exists(os.path.join(tilesets_path, 'config.json')) else []
-
-
-def get_gml_resources(obj_dir: str, logger=None) -> list:
-    code_files = get_file_resources(obj_dir, 'CodeEntries', '.gml')
-    if code_files and logger:
-        logger.debug(f'[IMPORT] Code files to import: {code_files[:10]}...' if len(code_files) > 10 else f'[IMPORT] Code files to import: {code_files}')
-    return code_files
 
 
 def no_res(obj_dir: str) -> list:

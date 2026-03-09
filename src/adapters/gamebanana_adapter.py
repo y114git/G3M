@@ -4,9 +4,9 @@ import logging
 import json
 import re
 import time
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from datetime import datetime
-from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM, NETWORK_TIMEOUT_SHORT
+from config.constants import GAMEBANANA_API_BASE, GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD, NETWORK_TIMEOUT_MEDIUM
 from utils.network_utils import get_session
 from models.mod_models import ModInfo
 logger = logging.getLogger(__name__)
@@ -27,6 +27,20 @@ class GameBananaAPI:
         self._last_request_time = 0.0
         self._min_request_interval = 0.2
         self._rate_limit_wait_time = 0.0
+
+    @staticmethod
+    def _get_item_type_from_url(external_url: Optional[str]) -> str:
+        if not external_url:
+            return 'Mod'
+        normalized_url = str(external_url).strip().lower()
+        if '/wips/' in normalized_url:
+            return 'Wip'
+        if '/mods/' in normalized_url:
+            return 'Mod'
+        match = re.search(r'/(mods|wips)(?:/|$)', normalized_url)
+        if match:
+            return 'Wip' if match.group(1) == 'wips' else 'Mod'
+        return 'Wip' if '/wip' in normalized_url else 'Mod'
 
     def _reset_rate_limit_state(self):
         if self._app_state and self._app_state.local_config.get('gb_rate_limit_start', 0):
@@ -79,7 +93,10 @@ class GameBananaAPI:
                 self._reset_rate_limit_state()
 
                 if not response.text or not response.text.strip():
-                    logger.warning(f'{operation} for mod {mod_id}: Empty response')
+                    if operation in ('get_game_mods', 'search_mods'):
+                        logger.debug(f'{operation}: Empty response, returning empty result set')
+                        return {}
+                    logger.debug(f'{operation} for mod {mod_id}: Empty response')
                     return None
                 return response.json()
             except json.JSONDecodeError as e:
@@ -96,209 +113,86 @@ class GameBananaAPI:
                 return None
         return None
 
-    def get_game_mods(self, game_id, page=1, per_page=20, sort='default', metadata_cache=None, max_retries=2, app_state=None):
-        valid_sorts = ['default', 'new', 'updated']
-        effective_sort = sort if sort in valid_sorts else 'default'
-        url = f'{self.base_url}/Game/{game_id}/Subfeed'
-        params = {'_nPage': page, '_nPerpage': per_page, '_sSort': effective_sort, '_csvModelInclusions': 'Mod,Wip'}
-        mods_needing_metadata = []
-        for attempt in range(max_retries + 1):
-            try:
-                self._wait_for_rate_limit()
-                response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-                response.raise_for_status()
-                self._reset_rate_limit_state()
-                data = response.json()
-                records = data.get('_aRecords', [])
-                game_name = next((n for n, v in GAMEBANANA_GAME_IDS.items() if v == game_id), 'deltarune')
-                mapped_mods: List[ModInfo] = []
-                for record in records:
-                    model_name = record.get('_sModelName')
-                    if model_name not in ('Mod', 'Wip', 'WIP'):
-                        continue
-                    mod_id = record.get('_idRow')
-                    if mod_id:
-                        mod_id_str = str(mod_id)
-                        is_wip = model_name in ('Wip', 'WIP')
-                        hide_wips = getattr(app_state, 'local_config', {}).get('hide_wips_without_downloads', False) if app_state else False
-                        if hide_wips and is_wip:
-                            try:
-                                if not int(record.get('_nDownloadCount') or 0):
-                                    continue
-                            except (ValueError, TypeError):
-                                continue
-                        mod_info = self._map_mod_data(record, game_name, is_wip=is_wip)
-                        if mod_info:
-                            raw_downloads = record.get('_nDownloadCount')
-                            try:
-                                mod_info.downloads = None if raw_downloads is None else max(int(raw_downloads), 0)
-                            except (ValueError, TypeError):
-                                mod_info.downloads = None
-                            downloads_value = mod_info.downloads
-                            cache_valid = False
-                            cached_category = None
-                            if metadata_cache:
-                                cache_valid = metadata_cache.is_valid(mod_id_str)
-                                if cache_valid:
-                                    cached_downloads = metadata_cache.get_field(mod_id_str, 'downloads')
-                                    cached_tagline = metadata_cache.get_field(mod_id_str, 'tagline')
-                                    cached_category = metadata_cache.get_field(mod_id_str, 'category')
-                                    if cached_downloads is not None:
-                                        mod_info.downloads = cached_downloads
-                                    elif downloads_value is not None:
-                                        mod_info.downloads = downloads_value
-                                    if cached_tagline:
-                                        mod_info.tagline = cached_tagline
-                                    if cached_category:
-                                        mod_info.gamebanana_category = cached_category
-                            try:
-                                current_downloads = None if mod_info.downloads is None else max(int(mod_info.downloads), 0)
-                            except (ValueError, TypeError):
-                                current_downloads = None
-                            mod_info.downloads = current_downloads
-                            needs_meta = ((current_downloads is None) or (not mod_info.tagline or mod_info.tagline == 'No description') or (not mod_info.gamebanana_category)) and not cache_valid
-                            if needs_meta:
-                                mods_needing_metadata.append(mod_id_str)
-                            mod_info.has_full_metadata = not needs_meta
-                            mapped_mods.append(mod_info)
-                return (mapped_mods, mods_needing_metadata)
-            except requests.RequestException as e:
-                status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                if self._handle_rate_limit_retry(status_code, attempt, max_retries, f'get_game_mods: Rate limit (429) for game {game_id}, waiting {{wait_time}} seconds before retry'):
-                    continue
-                self._handle_request_exception(e, None, f'Error fetching mods for game {game_id}')
-                return (None, [])
-            except Exception as e:
-                logger.error(f'Unexpected error fetching mods for game {game_id}: {e}')
-                return (None, [])
-        return (None, [])
+    @staticmethod
+    def _normalize_sort(sort: Optional[str]) -> str:
+        if sort == 'relevant':
+            return 'default'
+        return sort if sort in ('default', 'new', 'updated') else 'default'
 
-    def _get_item_type_from_url(self, external_url=None):
-        return 'Wip' if external_url and '/wips/' in external_url else 'Mod'
+    def get_game_mods(self, game_id, page=1, per_page=20, sort='relevant', metadata_cache=None, max_retries=2, app_state=None, search_string: Optional[str] = None):
+        effective_sort = self._normalize_sort(sort)
+        params = {'_nPage': page, '_nPerpage': per_page, '_sSort': effective_sort, '_csvModelInclusions': 'Mod,Wip'}
+        if search_string and search_string.strip():
+            params['_sName'] = search_string.strip()
+        data = self._api_request(f'{self.base_url}/Game/{game_id}/Subfeed', params=params, max_retries=max_retries, operation='get_game_mods')
+        if not isinstance(data, dict):
+            return (None, [])
+        records = data.get('_aRecords', [])
+        game_name = next((n for n, v in GAMEBANANA_GAME_IDS.items() if v == game_id), 'deltarune')
+        mapped_mods: List[ModInfo] = []
+        for record in records:
+            model_name = record.get('_sModelName')
+            if model_name not in ('Mod', 'Wip', 'WIP'):
+                continue
+            mod_info = self._map_mod_data(record, game_name, is_wip=model_name in ('Wip', 'WIP'))
+            if mod_info:
+                mapped_mods.append(mod_info)
+        return (mapped_mods, [])
 
     def _get_item_field(self, mod_id, field_name, extractor_func=None, itemtype=None, external_url=None, max_retries=2):
-        itemtype = itemtype or self._get_item_type_from_url(external_url)
-        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': field_name}
-        for attempt in range(max_retries + 1):
-            try:
-                self._wait_for_rate_limit()
-                response = self.session.get(f'{self.core_api_base}/Core/Item/Data', params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-                response.raise_for_status()
-                self._reset_rate_limit_state()
-                if not response.text or not response.text.strip():
-                    return None
-                data = response.json()
-                if isinstance(data, list) and data:
-                    fv = data[0]
-                elif isinstance(data, dict):
-                    fv = data.get(field_name) or data.get('name') or data.get('Category().name') or data.get('Category') or data.get('_sName')
-                else:
-                    fv = data
-                if isinstance(fv, list):
-                    fv = (fv[0][0] if isinstance(fv[0], list) and fv[0] else fv[0]) if fv else None
-                if extractor_func and fv is not None:
-                    try:
-                        return extractor_func(fv)
-                    except Exception:
-                        return None
-                return fv
-            except json.JSONDecodeError:
-                return None
-            except requests.RequestException as e:
-                sc = getattr(getattr(e, 'response', None), 'status_code', None)
-                if self._handle_rate_limit_retry(sc, attempt, max_retries):
-                    continue
-                self._handle_request_exception(e, mod_id, f'_get_item_field({field_name})')
-                return None
-            except Exception as e:
-                logger.error(f'_get_item_field({field_name}) for mod {mod_id}: {e}', exc_info=True)
-                return None
-        return None
-
-    @staticmethod
-    def _extract_int(value):
-        try:
-            return int(value) if isinstance(value, (int, float)) else int(float(value)) if isinstance(value, str) and value.strip() else None
-        except (ValueError, TypeError):
+        profile = self.get_mod_profile_page(mod_id, external_url=external_url, max_retries=max_retries)
+        if not isinstance(profile, dict):
             return None
+        field_map = {
+            'downloads': profile.get('_nDownloadCount'),
+            'description': profile.get('_sDescription'),
+            'text': profile.get('_sText'),
+            'Category().name': (profile.get('_aCategory') or {}).get('_sName') if isinstance(profile.get('_aCategory'), dict) else None,
+        }
+        value = field_map.get(field_name)
+        if extractor_func and value is not None:
+            try:
+                return extractor_func(value)
+            except Exception:
+                return None
+        return value
 
-    @staticmethod
-    def _extract_str(value):
-        s = (value if isinstance(value, str) else str(value) if value is not None else '').strip()
-        return s or None
-
-    @staticmethod
-    def _extract_category(value):
-        s = (value if isinstance(value, str) else str(value) if value is not None else '').strip()
-        return s if s and s.lower() not in ('none', 'null', '') else None
-
-    def get_mod_downloads_only(self, mod_id, external_url=None):
-        return self._get_item_field(mod_id, 'downloads', self._extract_int, external_url=external_url)
-
-    def get_mod_description_only(self, mod_id, external_url=None):
-        return self._get_item_field(mod_id, 'description', self._extract_str, external_url=external_url)
-
-    def get_mod_category_only(self, mod_id, external_url=None):
-        return self._get_item_field(mod_id, 'Category().name', self._extract_category, external_url=external_url)
+    def get_mod_downloads_only(self, mod_id, external_url=None, max_retries=2):
+        value = self._get_item_field(mod_id, 'downloads', external_url=external_url, max_retries=max_retries)
+        return self._safe_int(value)
 
     def _fetch_fields(self, mod_id, fields, external_url=None, max_retries=2, timeout=None):
-        """Shared helper for fetching multiple fields from Core/Item/Data."""
-        itemtype = self._get_item_type_from_url(external_url)
-        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': ','.join(fields)}
-        for attempt in range(max_retries + 1):
-            try:
-                self._wait_for_rate_limit()
-                response = self.session.get(f'{self.core_api_base}/Core/Item/Data', params=params, timeout=timeout or NETWORK_TIMEOUT_MEDIUM)
-                response.raise_for_status()
-                self._reset_rate_limit_state()
-                if not response.text or not response.text.strip():
-                    return None
-                data = response.json()
-                if not data:
-                    return None
-                if isinstance(data, list):
-                    return self._map_fields_from_list(data, fields) if len(data) >= len(fields) else (data[0] if isinstance(data[0], dict) else self._map_fields_from_list(data, fields))
-                if isinstance(data, dict):
-                    return self._map_fields_from_dict(data, fields) or {f: data.get(f) for f in fields}
-                return None
-            except (json.JSONDecodeError, requests.RequestException, Exception) as e:
-                if isinstance(e, requests.RequestException):
-                    sc = getattr(getattr(e, 'response', None), 'status_code', None)
-                    if self._handle_rate_limit_retry(sc, attempt, max_retries):
-                        continue
-                    self._handle_request_exception(e, mod_id, f'_fetch_fields({",".join(fields)})')
-                elif isinstance(e, Exception):
-                    logger.error(f'_fetch_fields for mod {mod_id}: {e}', exc_info=True)
-                return None
-        return None
-
-    def get_mod_text_and_screenshots(self, mod_id, external_url=None, max_retries=2):
-        return self._fetch_fields(mod_id, ('text', 'screenshots'), external_url, max_retries, NETWORK_TIMEOUT_SHORT)
+        profile = self.get_mod_profile_page(mod_id, external_url=external_url, max_retries=max_retries, timeout=timeout)
+        if not isinstance(profile, dict):
+            return None
+        result = {}
+        for field in fields:
+            if field == 'text':
+                result[field] = profile.get('_sText') or profile.get('_sDescription')
+            elif field == 'description':
+                result[field] = profile.get('_sDescription')
+            elif field == 'screenshots':
+                result[field] = self._extract_preview_urls(profile.get('_aPreviewMedia'), external_url=external_url)
+            else:
+                result[field] = profile.get(field)
+        return result
 
     def get_mod_full_details_for_display(self, mod_id, external_url=None, max_retries=2):
-        return self._fetch_fields(mod_id, ('text', 'description', 'screenshots'), external_url, max_retries)
+        return self._fetch_fields(mod_id, ('text', 'description', 'screenshots', '_nDownloadCount'), external_url, max_retries)
 
-    def get_mod_details(self, mod_id, external_url=None, max_retries=2):
+    def get_mod_profile_page(self, mod_id, external_url=None, max_retries=2, timeout=None):
         itemtype = self._get_item_type_from_url(external_url)
-        data = self._api_request(f'{self.base_url}/{itemtype}/{mod_id}', max_retries=max_retries, operation='get_mod_details', mod_id=mod_id)
-        return data if isinstance(data, dict) else None
-
-    def get_mod_preview_media(self, mod_id, external_url=None, max_retries=2):
-        itemtype = self._get_item_type_from_url(external_url)
-        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'Preview().aPreviewMedia()'}
-        data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_mod_preview_media', mod_id=mod_id)
-        return data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else (data if isinstance(data, dict) else None)
-
-    def get_mod_profile_page(self, mod_id, external_url=None, max_retries=2):
-        itemtype = self._get_item_type_from_url(external_url)
-        data = self._api_request(f'{self.base_url}/{itemtype}/{mod_id}/ProfilePage', max_retries=max_retries, operation='get_mod_profile_page', mod_id=mod_id)
+        data = self._api_request(f'{self.base_url}/{itemtype}/{mod_id}/ProfilePage', max_retries=max_retries, timeout=timeout, operation='get_mod_profile_page', mod_id=mod_id)
         return data if isinstance(data, dict) else None
 
     def get_mod_files(self, mod_id, external_url=None, max_retries=2):
-        itemtype = self._get_item_type_from_url(external_url)
-        params = {'itemtype': itemtype, 'itemid': mod_id, 'fields': 'Files().aFiles()'}
-        data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_mod_files', mod_id=mod_id)
-        return [v for v in data[0].values() if isinstance(v, dict)] or None if isinstance(data, list) and data and isinstance(data[0], dict) else None
+        profile = self.get_mod_profile_page(mod_id, external_url=external_url, max_retries=max_retries)
+        if not isinstance(profile, dict):
+            return None
+        profile_files = profile.get('_aFiles', [])
+        if isinstance(profile_files, dict):
+            return [value for value in profile_files.values() if isinstance(value, dict)]
+        return [value for value in profile_files if isinstance(value, dict)] if isinstance(profile_files, list) else None
 
     def _get_mod_file_compatibility(self, mod_id, external_url=None):
         cached = self._compatibility_cache.get(mod_id)
@@ -345,14 +239,6 @@ class GameBananaAPI:
             return None
 
     @staticmethod
-    def _map_fields_from_list(data: List[Any], fields: Tuple[str, ...]) -> Dict[str, Any]:
-        return {field: data[idx] if len(data) > idx else None for idx, field in enumerate(fields)}
-
-    @staticmethod
-    def _map_fields_from_dict(data: Dict[str, Any], fields: Tuple[str, ...]) -> Dict[str, Any]:
-        return {field: data.get(field) for field in fields if field in data}
-
-    @staticmethod
     def _first_value(entries: List[Optional[Dict[str, Any]]], key: str, default: Any = None) -> Any:
         for entry in entries:
             if not entry:
@@ -369,52 +255,9 @@ class GameBananaAPI:
         download_count = self._safe_int(self._first_value(sources, '_nDownloadCount'))
         return {'id': file_id, 'name': self._first_value(sources, '_sFile', f'file_{file_id}'), 'version': self._first_value(sources, '_sVersion', '1.0.0'), 'description': self._first_value(sources, '_sDescription', ''), 'download_url': self._first_value(sources, '_sDownloadUrl'), 'size_bytes': size_val or 0, 'timestamp': timestamp_val, 'download_count': download_count or 0, 'md5': self._first_value(sources, '_sMd5Checksum'), 'analysis_state': self._first_value(sources, '_sAnalysisState'), 'analysis_result': self._first_value(sources, '_sAnalysisResult'), 'analysis_result_verbose': self._first_value(sources, '_sAnalysisResultVerbose'), 'av_state': self._first_value(sources, '_sAvState'), 'av_result': self._first_value(sources, '_sAvResult'), 'is_archived': bool(self._first_value(sources, '_bIsArchived', False)), 'has_contents': bool(self._first_value(sources, '_bHasContents', False)), 'tool_ids': tool_ids, 'tool_names': tool_names, 'compatibility': compatibility_label}
 
-    def get_file_contents(self, file_id, max_retries=2):
-        params = {'itemtype': 'File', 'itemid': file_id, 'fields': 'aFileTree()'}
-        data = self._api_request(f'{self.core_api_base}/Core/Item/Data', params, max_retries=max_retries, operation='get_file_contents', mod_id=file_id)
-        if data is None:
-            return None
-        ft = data[0] if isinstance(data, list) and data else data
-        if isinstance(ft, dict):
-            return [v for k, v in ft.items() if isinstance(v, str) and k not in ('screenshots', 'folders')] or None
-        if isinstance(ft, list):
-            return ft if (not ft or isinstance(ft[0], str)) else (ft[0] if isinstance(ft[0], list) else None)
-        return None
-
-    def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'best_match', max_retries: int = 2) -> Optional[Dict]:
-        url = f'{self.base_url}/Util/Search/Results'
-        search_str = search_string.strip() if search_string and len(search_string.strip()) >= 2 else '  '
-        per_page_limit = min(per_page, 50)
-        all_records = []
-        all_data = {}
-        for model_type in ['Mod', 'Wip']:
-            params = {'_idGameRow': game_id, '_sModelName': model_type, '_nPage': page, '_nPerpage': per_page_limit, '_sOrder': sort, '_sSearchString': search_str}
-            for attempt in range(max_retries + 1):
-                try:
-                    self._wait_for_rate_limit()
-                    response = self.session.get(url, params=params, timeout=NETWORK_TIMEOUT_MEDIUM)
-                    response.raise_for_status()
-                    self._reset_rate_limit_state()
-                    data = response.json()
-                    all_records.extend(data.get('_aRecords', []))
-                    if not all_data:
-                        all_data = data.copy()
-                    break
-                except requests.RequestException as e:
-                    status_code = getattr(e.response, 'status_code', None) if hasattr(e, 'response') and e.response else None
-                    if self._handle_rate_limit_retry(status_code, attempt, max_retries):
-                        continue
-                    self._handle_request_exception(e, None, f'search_mods({model_type})')
-                    break
-                except Exception as e:
-                    logger.error(f'search_mods({model_type}) for game {game_id}: {e}', exc_info=True)
-                    break
-        if all_data:
-            all_data['_aRecords'] = all_records
-            if '_nRecordCount' in all_data:
-                all_data['_nRecordCount'] = len(all_records)
-            return all_data
-        return None
+    def search_mods(self, game_id: int, search_string: Optional[str] = None, page: int = 1, per_page: int = 20, sort: str = 'relevant', max_retries: int = 2) -> Optional[Dict]:
+        data = self._api_request(f'{self.base_url}/Game/{game_id}/Subfeed', params={'_nPage': page, '_nPerpage': per_page, '_sSort': self._normalize_sort(sort), '_csvModelInclusions': 'Mod,Wip', '_sName': (search_string or '').strip()}, max_retries=max_retries, operation='search_mods')
+        return data if isinstance(data, dict) else None
 
     @staticmethod
     def timestamp_to_date(timestamp: Optional[int]) -> Optional[str]:
@@ -457,6 +300,20 @@ class GameBananaAPI:
         return None
 
     @staticmethod
+    def _extract_preview_urls(preview_media, external_url: Optional[str] = None) -> List[str]:
+        if not isinstance(preview_media, dict):
+            return []
+        urls = []
+        for image in preview_media.get('_aImages', []) or []:
+            if not isinstance(image, dict):
+                continue
+            base_url = image.get('_sBaseUrl')
+            file_name = image.get('_sFile800') or image.get('_sFile530') or image.get('_sFile220') or image.get('_sFile') or image.get('_sFile100')
+            if base_url and file_name:
+                urls.append(f'{base_url}/{file_name}')
+        return GameBananaAPI.fix_screenshot_urls(urls, external_url=external_url)
+
+    @staticmethod
     def extract_tags(tags):
         if not tags:
             return []
@@ -494,6 +351,11 @@ class GameBananaAPI:
             downloads = None if raw_downloads is None else max(int(raw_downloads), 0)
         except (ValueError, TypeError):
             downloads = None
+        raw_likes = gb_data.get('_nLikeCount')
+        try:
+            like_count = None if raw_likes is None else max(int(raw_likes), 0)
+        except (ValueError, TypeError):
+            like_count = None
         gbc = gb_data.get('_aCategory') or gb_data.get('Category')
         category = None
         if gbc:
@@ -512,4 +374,7 @@ class GameBananaAPI:
         if not is_nsfw:
             is_nsfw = any(('nsfw' in str(tag).casefold()) or ('adult' in str(tag).casefold()) or ('18+' in str(tag).casefold()) for tag in tags)
         external_url = gb_data.get('_sProfileUrl') or f"https://gamebanana.com/{'wips' if is_wip else 'mods'}/{mod_id}"
-        return ModInfo(key=f'gb_{mod_id}', name=gb_data.get('_sName', 'Unknown Mod'), version=gb_data.get('_sVersion', '') or '1.0.0', author=submitter.get('_sName', 'Unknown') if isinstance(submitter, dict) else 'Unknown', tagline=tagline, game_version='Not specified', downloads=downloads, created_date=self.timestamp_to_date(gb_data.get('_tsDateAdded')) or 'N/A', last_updated=self.timestamp_to_date(gb_data.get('_tsDateModified')) or 'N/A', game=game_name, is_verified=gb_data.get('_bIsVerified', False), icon_url=self.extract_icon_url(gb_data.get('_aPreviewMedia', {})), tags=tags, external_url=external_url, screenshots_url=[], description_url=gb_data.get('_sTextUrl', ''), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False, is_nsfw=is_nsfw)
+        preview_media = gb_data.get('_aPreviewMedia', {})
+        raw_has_files = gb_data.get('_bHasFiles', True)
+        has_files = raw_has_files not in (False, 0, '0', 'false', 'False', None)
+        return ModInfo(key=f'gb_{mod_id}', name=gb_data.get('_sName', 'Unknown Mod'), version=gb_data.get('_sVersion', '') or '1.0.0', author=submitter.get('_sName', 'Unknown') if isinstance(submitter, dict) else 'Unknown', tagline=tagline, game_version='Not specified', description_url=gb_data.get('_sTextUrl', ''), downloads=downloads, game=game_name, is_verified=gb_data.get('_bIsVerified', False), like_count=like_count, icon_url=self.extract_icon_url(preview_media), tags=tags, hide_mod=False, ban_status=False, is_nsfw=is_nsfw, has_files=has_files, is_wip=is_wip, files={}, demo_url=None, demo_version=None, created_date=self.timestamp_to_date(gb_data.get('_tsDateAdded')) or 'N/A', last_updated=self.timestamp_to_date(gb_data.get('_tsDateModified') or gb_data.get('_tsDateUpdated')) or 'N/A', external_url=external_url, screenshots_url=self._extract_preview_urls(preview_media, external_url=external_url), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False, has_full_metadata=True)

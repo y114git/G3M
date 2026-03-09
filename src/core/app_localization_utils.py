@@ -33,14 +33,13 @@ def relocalize_texts(w):
         w.use_portproton_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>')
     if w.select_portproton_path_button:
         w.select_portproton_path_button.setText(tr('buttons.select_portproton_path'))
-    w.hide_wips_without_downloads_checkbox.setToolTip("<html><body style='white-space: normal;'>" + tr('tooltips.hide_wips_without_downloads') + '</body></html>')
     w._update_change_path_button_text()
     if hasattr(w, 'settings_tab_widget'):
         w.settings_tab_widget.setTabText(0, tr('ui.settings_tab_general'))
         w.settings_tab_widget.setTabText(1, tr('ui.settings_tab_appearance'))
-        w.settings_tab_widget.setTabText(2, tr('ui.settings_tab_mods_browser'))
-        w.settings_tab_widget.setTabText(3, tr('ui.settings_tab_library'))
-        w.settings_tab_widget.setTabText(4, tr('ui.settings_tab_launch'))
+        w.settings_tab_widget.setTabText(2, tr('ui.settings_tab_game'))
+        w.settings_tab_widget.setTabText(3, tr('ui.settings_tab_mods_browser'))
+        w.settings_tab_widget.setTabText(4, tr('ui.settings_tab_library'))
         w.settings_tab_widget.setTabText(5, tr('ui.settings_tab_plugins'))
     if hasattr(w, '_update_settings_library_tab'):
         w._update_settings_library_tab()
@@ -50,9 +49,6 @@ def relocalize_texts(w):
                 lbl.setText(tr(key))
             except (RuntimeError, AttributeError):
                 pass
-    w._apply_combo_localizations('gb_sort_combo', ['ui.gamebanana_sort_default', 'ui.gamebanana_sort_new', 'ui.gamebanana_sort_updated'])
-    if hasattr(w, 'gb_sort_combo'):
-        w.gb_sort_combo.setToolTip(tr('ui.gamebanana_sort_tooltip'))
     w.theme.update_background_button_state()
     w.theme.update_logo_button_state()
     w.change_font_button.setText(w.customization_service.get_font_button_text())

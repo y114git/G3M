@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QDialog, QMessageBox
 from services.localization_service import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
+from utils.mod_utils import sort_gamebanana_files_by_priority
 from workers.install.batch_install_worker import InstallModsThread
 from workers.install.gamebanana_install_worker import InstallGameBananaModThread
 from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
@@ -49,6 +50,7 @@ class ModOperationsController:
                     pass
 
     def _pick_gamebanana_file(self, available_files, mod_name, external_url):
+        available_files = sort_gamebanana_files_by_priority(available_files)
         if len(available_files) <= 1:
             return available_files[0] if available_files else None
         dialog = GameBananaFilePickerDialog(self.app, available_files, mod_name, external_url)
@@ -190,6 +192,8 @@ class ModOperationsController:
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
         files = getattr(mod, 'gamebanana_supported_files', []) or []
         if files:
+            files = sort_gamebanana_files_by_priority(files)
+            mod.gamebanana_supported_files = files
             self._notify_gamebanana_card_refresh()
             return files
         mod_id_str = get_gamebanana_mod_id(mod)
@@ -200,11 +204,12 @@ class ModOperationsController:
             api = GameBananaAPI()
             external_url = getattr(mod, 'external_url', None)
             compat = api.get_supported_files_for_mod(mod_id, external_url=external_url)
-            files = compat.get('supported_files') or []
+            files = sort_gamebanana_files_by_priority(compat.get('supported_files') or [])
             if files:
                 mod.gamebanana_supported_files = files
                 mod.gamebanana_is_tool_compatible = compat.get('has_supported_files', False)
                 mod.gamebanana_compatibility_checked = compat.get('compatibility_checked', False)
+                mod.gamebanana_preferred_format = 'deltahub' if any((f.get('compatibility') == 'deltahub') for f in files) else ('deltamod' if any((f.get('compatibility') == 'deltamod') for f in files) else None)
                 self._notify_gamebanana_card_refresh()
             return files
         except Exception as e:
@@ -291,18 +296,13 @@ class ModOperationsController:
                 return
             if hasattr(mod, 'is_gamebanana_mod') and callable(mod.is_gamebanana_mod) and mod.is_gamebanana_mod():
                 available_files = self._get_available_gamebanana_files(mod)
-                is_checked = bool(getattr(mod, 'gamebanana_compatibility_checked', False))
-                is_compatible = bool(getattr(mod, 'gamebanana_is_tool_compatible', False))
-                if is_checked and (not is_compatible):
-                    self._show_incompatible_gamebanana_dialog(mod=mod)
+                if available_files:
+                    selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
+                    if selected_file is None:
+                        return
+                    self._install_gamebanana_mod(mod, force, is_update, selected_file=selected_file)
                     return
-                if not available_files:
-                    self._show_incompatible_gamebanana_dialog(mod=mod)
-                    return
-                selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
-                if selected_file is None:
-                    return
-                self._install_gamebanana_mod(mod, force, is_update, selected_file=selected_file)
+                self._show_incompatible_gamebanana_dialog(mod=mod)
                 return
             available_chapters = []
             if mod.game == 'undertale':
@@ -418,9 +418,6 @@ class ModOperationsController:
                     return
                 for idx, mod in enumerate(self.app_state.filtered_mods):
                     if get_mod_key(mod) == key:
-                        page = idx // self.app_state.mods_per_page + 1
-                        if page != self.app_state.current_page:
-                            self.app_state.current_page = page
                         self._safe_execute(lambda: self.app.search_display.update_display(), 'Failed to update display')
                         return
                 logging.debug(f'ModOperationsController: Installed mod {key} not found in filtered_mods')

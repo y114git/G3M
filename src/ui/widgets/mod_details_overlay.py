@@ -11,6 +11,7 @@ from utils.mod_utils import get_mod_key
 from adapters.gamebanana_adapter import GameBananaAPI
 from workers import WorkerSignals
 from PyQt6 import sip as _sip
+import html
 import json
 import logging
 import webbrowser
@@ -55,40 +56,18 @@ class LoadModDetailsThread(QThread):
         except ValueError:
             return None
 
-    def _load_metadata_cache(self):
-        if not self.cache_dir or self.isInterruptionRequested():
-            return None
-        try:
-            from adapters.gamebanana_cache import GameBananaMetadataCache
-            return GameBananaMetadataCache(self.cache_dir)
-        except Exception as e:
-            logging.warning(f'LoadModDetailsThread: Error accessing cache: {e}', exc_info=True)
-            return None
-
-    def _cached_details(self, metadata_cache, mod_id_str):
-        if not metadata_cache or not metadata_cache.is_valid(mod_id_str):
-            return None
-        external_url = getattr(self.mod_data, 'external_url', None)
-        result = {
-            'text': metadata_cache.get_field(mod_id_str, 'full_description'),
-            'screenshots': metadata_cache.get_field(mod_id_str, 'screenshots'),
-        }
-        if result['screenshots']:
-            result['screenshots'] = GameBananaAPI.fix_screenshot_urls(result['screenshots'], external_url=external_url)
-        result = {key: value for key, value in result.items() if value}
-        if result:
-            logging.debug(f'LoadModDetailsThread: Using cached data for mod {mod_id_str}')
-        return result or None
-
-    @staticmethod
-    def _coerce_text(text_field):
+    def _coerce_text(self, text_field):
         if isinstance(text_field, list):
             text_field = text_field[0] if text_field else None
         return text_field if isinstance(text_field, str) else (str(text_field) if text_field else None)
 
     def _extract_screenshots(self, api, screenshots_field):
         external_url = getattr(self.mod_data, 'external_url', None)
-        screenshots_data = screenshots_field[0] if isinstance(screenshots_field, list) and screenshots_field else screenshots_field
+        screenshots_data = screenshots_field
+        if isinstance(screenshots_data, list) and len(screenshots_data) == 1 and isinstance(screenshots_data[0], list):
+            screenshots_data = screenshots_data[0]
+        if isinstance(screenshots_data, list) and all(isinstance(item, str) for item in screenshots_data):
+            return [item for item in screenshots_data if item.startswith(('http://', 'https://'))]
         if isinstance(screenshots_data, str):
             return api.extract_screenshots_from_api(screenshots_data, external_url=external_url)
         if isinstance(screenshots_data, dict):
@@ -105,7 +84,7 @@ class LoadModDetailsThread(QThread):
             if self.isInterruptionRequested():
                 break
             if isinstance(screenshot_obj, dict):
-                file_name = screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220')
+                file_name = screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220') or screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile100')
                 if file_name:
                     screenshots.append(f'{base_url}/{file_name}')
         return screenshots
@@ -117,30 +96,22 @@ class LoadModDetailsThread(QThread):
             mod_id = self._get_mod_id()
             if mod_id is None:
                 return
-            mod_id_str = str(mod_id)
-            metadata_cache = self._load_metadata_cache()
-            if cached := self._cached_details(metadata_cache, mod_id_str):
-                if not self.isInterruptionRequested():
-                    self.details_loaded.emit(cached)
-                return
             if self.isInterruptionRequested():
                 return
             api = GameBananaAPI()
             external_url = getattr(self.mod_data, 'external_url', None)
-            details = api.get_mod_text_and_screenshots(mod_id, external_url=external_url)
+            details = api.get_mod_full_details_for_display(mod_id, external_url=external_url)
             if details and (not self.isInterruptionRequested()):
                 full_description = self._coerce_text(details.get('text'))
+                tagline = self._coerce_text(details.get('description'))
+                downloads_value = api._safe_int(details.get('_nDownloadCount') if isinstance(details, dict) else None)
                 screenshots = self._extract_screenshots(api, details.get('screenshots'))
-                result = {'screenshots': screenshots}
+                result = {'screenshots': screenshots, 'downloads': downloads_value if downloads_value is not None else 0}
                 if full_description:
                     result['text'] = full_description
+                if tagline:
+                    result['tagline'] = tagline.strip()
                 result['screenshots'] = screenshots
-                if metadata_cache and (full_description or screenshots):
-                    try:
-                        if not self.isInterruptionRequested():
-                            metadata_cache.set(mod_id_str, full_description=full_description, screenshots=screenshots or None)
-                    except Exception as e:
-                        logging.warning(f'LoadModDetailsThread: Cache save error: {e}')
                 if not self.isInterruptionRequested():
                     self.details_loaded.emit(result)
         except Exception as e:
@@ -354,11 +325,6 @@ class ModDetailsOverlay(QWidget):
     def _meta_row_html(self, key: str, value: str) -> str:
         return f'<span style="color:{self._colors["text"]};font-weight:bold;font-size:13px;">{tr(key)}</span> <span style="color:{self._colors["secondary_text"]};font-size:13px;">{value}</span>'
 
-    def _add_meta_row(self, layout, key: str, value: str, *, wrap: bool = False):
-        label = QLabel(self._meta_row_html(key, value))
-        label.setWordWrap(wrap)
-        layout.addWidget(label)
-
     def _translated_tags(self) -> str:
         tags = getattr(self.mod_data, 'tags', None)
         if not tags:
@@ -394,29 +360,38 @@ class ModDetailsOverlay(QWidget):
 
     def _build_metadata_layout(self):
         meta = self._layout(QVBoxLayout, spacing=4)
+        self._meta_labels = {}
         version = self.mod_data.version
         downloads_value = getattr(self.mod_data, 'downloads', None)
         for key, value in (
-            ('ui.author_label', self.mod_data.author),
             ('ui.mod_version_label', (version.split('|')[0] if version and '|' in version else version) or 'N/A'),
-            ('ui.game_version_label', self.mod_data.game_version or 'N/A'),
+            ('ui.author_label', self.mod_data.author),
+            ('ui.updated_label', getattr(self.mod_data, 'last_updated', None) or 'N/A'),
             ('ui.created_label', self.mod_data.created_date or 'N/A'),
-            ('ui.downloads_label', 'N/A' if downloads_value is None else str(downloads_value)),
+            ('ui.downloads_label', '0' if downloads_value is None else str(downloads_value)),
             ('ui.category_label', getattr(self.mod_data, 'gamebanana_category', None) or getattr(self.mod_data, 'category', None)),
         ):
             if value:
-                self._add_meta_row(meta, key, value)
+                label = QLabel(self._meta_row_html(key, value))
+                label.setWordWrap(key == 'ui.tags_label')
+                self._meta_labels[key] = label
+                meta.addWidget(label)
         if tags := self._translated_tags():
-            self._add_meta_row(meta, 'ui.tags_label', tags, wrap=True)
+            label = QLabel(self._meta_row_html('ui.tags_label', tags))
+            label.setWordWrap(True)
+            self._meta_labels['ui.tags_label'] = label
+            meta.addWidget(label)
         return meta
 
     def _build_left_column(self):
         left = self._layout(QVBoxLayout, margins=(0, 0, 0, 0), spacing=15)
         if external_url := getattr(self.mod_data, 'external_url', None):
             left.addWidget(self._create_button(tr('ui.view_on_external_site'), obj_name='cardButtonExternal', style=self._button_style('cardButtonExternal', text_color='#FFD700', width=self.EXTERNAL_BUTTON_WIDTH, font_size=15), clicked=lambda: webbrowser.open(external_url), fixed_width=self.EXTERNAL_BUTTON_WIDTH), 0, Qt.AlignmentFlag.AlignCenter)
-        left.addWidget(self._html_label(f'<h2 style="color:{self._colors["text"]};margin:8px 0;font-size:18px;">{self.mod_data.name}</h2>'))
-        if self.mod_data.tagline:
-            left.addWidget(self._html_label(f'<p style="color:{self._colors["secondary_text"]};margin:0 0 15px 0;font-size:14px;font-style:italic;">{self.mod_data.tagline}</p>'))
+        self.title_label = self._html_label(f'<h2 style="color:{self._colors["text"]};margin:8px 0;font-size:18px;">{html.escape(self.mod_data.name or "")}</h2>')
+        left.addWidget(self.title_label)
+        self.tagline_label = self._html_label('', wrap=True)
+        left.addWidget(self.tagline_label)
+        self._update_tagline_label(getattr(self.mod_data, 'tagline', None))
         left.addLayout(self._build_carousel_layout())
         left.addLayout(self._build_metadata_layout())
         left.addStretch()
@@ -494,14 +469,6 @@ class ModDetailsOverlay(QWidget):
                 logging.debug(f'cleanup_thread: failed to stop/delete {attr_name}: {e}', exc_info=True)
             setattr(self, attr_name, None)
 
-    def _transfer_label_state(self, source_label, target_label):
-        visible = bool(source_label and source_label.isVisible())
-        if visible:
-            target_label.setText(source_label.text())
-            target_label.setStyleSheet(source_label.styleSheet())
-            target_label.setToolTip(source_label.toolTip())
-        target_label.setVisible(visible)
-
     def _sync_install_button_style(self, src_btn, border: str):
         style_args = {
             'cardButtonUninstall': ('cardButtonUninstall', '#F44336', '#d32f2f'),
@@ -509,11 +476,29 @@ class ModDetailsOverlay(QWidget):
         if style_args:
             self._set_install_button_style(border, *style_args)
             return
-        source_mod = getattr(getattr(self, 'source_card', None), 'mod_data', None)
-        if source_mod and bool(getattr(source_mod, 'gamebanana_compatibility_checked', False)) and (not bool(getattr(source_mod, 'gamebanana_is_tool_compatible', False))):
-            self._set_install_button_style(border, 'cardButtonInstall', '#FFC107', '#FFB300')
-            return
         self._set_install_button_style(border)
+
+    def _update_tagline_label(self, tagline):
+        if not hasattr(self, 'tagline_label'):
+            return
+        clean_tagline = (tagline or '').strip()
+        if clean_tagline:
+            self.tagline_label.setText(f'<p style="color:{self._colors["secondary_text"]};margin:0 0 15px 0;font-size:14px;font-style:italic;">{html.escape(clean_tagline)}</p>')
+            if self.tagline_label.parent() is not None:
+                self.tagline_label.setVisible(True)
+        else:
+            self.tagline_label.clear()
+            self.tagline_label.setVisible(False)
+
+    def _update_meta_row(self, key: str, value: str, *, wrap: bool = False):
+        if not value:
+            return
+        label = getattr(self, '_meta_labels', {}).get(key)
+        if label is None:
+            return
+        label.setText(self._meta_row_html(key, value))
+        label.setWordWrap(wrap)
+        label.setVisible(True)
 
     def _setup_ui(self):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
@@ -613,6 +598,8 @@ class ModDetailsOverlay(QWidget):
 
     def _ss_fade_to(self, qimg):
         self._ss_set_pixmap(qimg)
+        effect = UIAnimator.get_opacity_effect(self._img_label)
+        effect.setOpacity(0.0)
         UIAnimator.fade_in(self._img_label, duration=250, app_state=self._app_state)
 
     def _ss_set_pixmap(self, qimg):
@@ -654,6 +641,8 @@ class ModDetailsOverlay(QWidget):
 
     def _ss_on_preloaded(self, idx, qimg):
         self._ss_store_image(idx, qimg)
+        if idx == self._ss_index:
+            self._ss_fade_to(qimg)
 
     def _ss_unload_distant(self):
         n = len(self._ss_urls)
@@ -688,6 +677,8 @@ class ModDetailsOverlay(QWidget):
     def show_overlay(self):
         """Show the overlay with fade-in animation."""
         self._apply_overlay_geometry(force=True)
+        effect = UIAnimator.get_opacity_effect(self)
+        effect.setOpacity(0.0)
         self.show()
         self.raise_()
         self.activateWindow()
@@ -738,15 +729,18 @@ class ModDetailsOverlay(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._last_geometry = (self.x(), self.y(), self.width(), self.height())
-        self._refresh_description_html()
+        self._update_ss_nav()
 
     def _load_description(self):
+        existing_screenshots = getattr(self.mod_data, 'screenshots_url', None) or []
+        if existing_screenshots and not self._ss_urls:
+            self.update_screenshots(existing_screenshots)
         if hasattr(self.mod_data, 'full_description') and self.mod_data.full_description:
             self._set_description_html(self.mod_data.full_description)
-        elif hasattr(self.mod_data, 'description_url') and self.mod_data.description_url:
-            self._load_description_from_url()
         elif self.mod_data.is_gamebanana_mod() and self.mod_data.get_gamebanana_mod_id():
             self._load_gamebanana_description()
+        elif hasattr(self.mod_data, 'description_url') and self.mod_data.description_url:
+            self._load_description_from_url()
         else:
             self._set_description_message(tr('ui.no_description'))
 
@@ -812,10 +806,24 @@ class ModDetailsOverlay(QWidget):
             if not self._can_update():
                 return
             if details.get('text'):
+                self.mod_data.full_description = details['text']
                 self._set_description_html(details['text'])
+            elif getattr(self.mod_data, 'description_url', None):
+                self._load_description_from_url()
+            else:
+                self.mod_data.full_description = ''
+                self._set_description_html('')
+            if 'tagline' in details:
+                self.mod_data.tagline = details['tagline']
+                self._update_tagline_label(details['tagline'])
+            if 'downloads' in details:
+                self.mod_data.downloads = details['downloads']
+                self._update_meta_row('ui.downloads_label', str(details['downloads']))
             ss = details.get('screenshots', [])
             if ss and isinstance(ss, list) and any(isinstance(u, str) and u.strip() for u in ss):
-                self.update_screenshots(ss)
+                self.mod_data.screenshots_url = ss
+                if not self._ss_urls:
+                    self.update_screenshots(ss)
         except Exception as e:
             logging.error(f'Error in _on_details_loaded: {e}', exc_info=True)
 
@@ -865,9 +873,10 @@ class ModDetailsOverlay(QWidget):
 
 def show_mod_details_overlay(parent, mod_data, source_card=None):
     """Show mod details overlay."""
-    overlay = ModDetailsOverlay(parent, mod_data, source_card=source_card)
-    main_window = overlay._get_main_window()
-    overlay.setParent(main_window)
+    main_window = parent
+    while main_window and main_window.parent():
+        main_window = main_window.parent()
+    overlay = ModDetailsOverlay(main_window, mod_data, source_card=source_card)
     overlay._apply_overlay_geometry(force=True)
     overlay.show_overlay()
     return overlay

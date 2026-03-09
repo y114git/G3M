@@ -78,9 +78,6 @@ class ModCardWidget(BaseModWidget):
         self._update_style()
         if self.is_installed and hasattr(self, 'install_button'):
             self._apply_uninstall_button_style()
-        key = get_mod_key(self.mod_data)
-        if key and key.startswith('gb_'):
-            self._start_compatibility_check()
         try:
             self.destroyed.connect(self._cleanup_compatibility_thread)
         except Exception:
@@ -107,9 +104,6 @@ class ModCardWidget(BaseModWidget):
             pass
         self._compatibility_thread = None
 
-    def _create_tags_layout_if_needed(self, info_layout):
-        return
-
     def _update_style(self):
         super()._update_style()
         for attr in ('created_label_title', 'updated_label_title'):
@@ -135,38 +129,26 @@ class ModCardWidget(BaseModWidget):
             return self.parent_app.app_state
         return None
 
-    def _get_mod_identifier(self):
+    def _get_likes_text(self):
         try:
             key = get_mod_key(self.mod_data)
-            if not key:
-                return None
-            if key.startswith('gb_') and key[3:]:
-                return f'gb::{key[3:]}'
-            return f'key::{key}'
-        except Exception:
-            return None
-
-    def _get_downloads_text(self):
-        try:
-            key = get_mod_key(self.mod_data)
-            downloads_value = getattr(self.mod_data, 'downloads', None)
+            likes_value = getattr(self.mod_data, 'like_count', None)
             if key and key.startswith('gb_'):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
                     return tr('ui.loading_placeholder')
-            return f'⤓ {downloads_value if downloads_value is not None else "N/A"}'
+            return f'❤ {likes_value if likes_value is not None else 0}'
         except Exception:
-            downloads_value = getattr(self.mod_data, 'downloads', None)
-            return f'⤓ {downloads_value if downloads_value is not None else "N/A"}'
+            return '❤ N/A'
 
     def _init_ui(self):
         super()._init_ui()
-        downloads_text = self._get_downloads_text()
-        self.downloads_label = QLabel(downloads_text, self)
-        self.downloads_label.setObjectName('secondaryText')
-        self.downloads_label.setToolTip(tr('ui.downloads_tooltip'))
-        self.downloads_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.title_layout.addWidget(self.downloads_label)
+        likes_text = self._get_likes_text()
+        self.likes_label = QLabel(likes_text, self)
+        self.likes_label.setObjectName('secondaryText')
+        self.likes_label.setToolTip(tr('ui.likes_tooltip'))
+        self.likes_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.title_layout.addWidget(self.likes_label)
         created_date_text = self.mod_data.created_date or 'N/A'
         created_container = QWidget(self)
         created_container_layout = QHBoxLayout(created_container)
@@ -338,24 +320,8 @@ class ModCardWidget(BaseModWidget):
             self.install_button.setEnabled(not is_installing)
 
     def _apply_gamebanana_install_styles(self):
-        key = get_mod_key(self.mod_data)
-        if not key or not key.startswith('gb_'):
-            self.install_button.setStyleSheet('')
-            self.install_button.setToolTip('')
-            return
-        compatible = bool(getattr(self.mod_data, 'gamebanana_is_tool_compatible', False))
-        checked = bool(getattr(self.mod_data, 'gamebanana_compatibility_checked', False))
-        if checked and (not compatible):
-            text_color = self._get_theme_text_color('#e8e9eb')
-            border = self._get_theme_border_color('#039d5b')
-            config = self._resolve_theme_config()
-            br = get_border_radius(config)
-            button_width, button_height, button_font_size = get_card_button_metrics(config)
-            from ui.common.styling import build_button_style
-            self.install_button.setStyleSheet(build_button_style('cardButtonInstall', '#FFC107', '#FFB300', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
-        else:
-            self.install_button.setStyleSheet('')
-            self.install_button.setToolTip('')
+        self.install_button.setStyleSheet('')
+        self.install_button.setToolTip('')
 
     def _on_install_button_clicked(self):
         if self.is_installed:
@@ -372,7 +338,6 @@ class ModCardWidget(BaseModWidget):
                 if not self.is_installed:
                     for attr, val in [('gamebanana_compatibility_checked', False), ('gamebanana_is_tool_compatible', False), ('gamebanana_supported_files', [])]:
                         setattr(self.mod_data, attr, val)
-                    self._start_compatibility_check()
                 self._apply_gamebanana_install_styles()
 
     def update_mod_data(self):
@@ -388,8 +353,8 @@ class ModCardWidget(BaseModWidget):
                     bw = 2 if bc else 0
                     icon_width, icon_height = get_widget_dimensions(getattr(self, 'icon_label', None))
                     load_mod_icon_universal(self.icon_label, self.mod_data, size=(icon_width or self._icon_size(), icon_height or self._icon_size()), local_fallback=self._resolve_local_icon_fallback(), border_radius=br, border_width=bw, border_color=bc)
-            if hasattr(self, 'downloads_label'):
-                self.downloads_label.setText(self._get_downloads_text())
+            if hasattr(self, 'likes_label'):
+                self.likes_label.setText(self._get_likes_text())
             if hasattr(self, 'tagline_label'):
                 tagline = getattr(self.mod_data, 'tagline', '') or tr('ui.no_description')
                 key = get_mod_key(self.mod_data)
@@ -398,12 +363,6 @@ class ModCardWidget(BaseModWidget):
                 if len(tagline) > 200:
                     tagline = tagline[:197] + '...'
                 self.tagline_label.setText(tagline)
-            key = get_mod_key(self.mod_data)
-            if key and key.startswith('gb_'):
-                if not getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
-                    if not (self._compatibility_thread and self._compatibility_thread.isRunning()):
-                        if not (hasattr(self, '_compatibility_check_timer') and self._compatibility_check_timer.isActive()):
-                            self._start_compatibility_check()
             if not self.is_installed:
                 self._apply_gamebanana_install_styles()
         except Exception as e:
@@ -425,6 +384,8 @@ class ModCardWidget(BaseModWidget):
             self.created_label_title.setText(tr('ui.created_label'))
         if hasattr(self, 'updated_label_title'):
             self.updated_label_title.setText(tr('ui.updated_label'))
+        if hasattr(self, 'likes_label'):
+            self.likes_label.setToolTip(tr('ui.likes_tooltip'))
         if hasattr(self, 'details_button'):
             self.details_button.setText(tr('ui.details_button'))
         if hasattr(self, 'install_button'):

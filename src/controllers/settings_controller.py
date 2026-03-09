@@ -23,7 +23,7 @@ class SettingsUiController:
             self.app.tab_widget.setVisible(False)
             self.app.bottom_widget.setVisible(False)
             self.app.settings_widget.setVisible(True)
-            self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
+            self.customization_service.load_custom_style_settings(self.app.color_widgets)
             self.app._update_status(tr('status.launcher_settings'), UI_COLORS['status_info'])
         else:
             self.app.settings_button.setText(tr('ui.settings_title'))
@@ -42,8 +42,8 @@ class SettingsUiController:
         checkboxes = (
             'chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox',
             'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_animations_checkbox', 'disable_background_checkbox',
-            'disable_splash_checkbox', 'skip_patching_warnings_checkbox', 'hide_wips_without_downloads_checkbox',
-            'auto_sorting_checkbox', 'merge_properties_checkbox', 'merge_code_checkbox',
+            'disable_splash_checkbox', 'skip_patching_warnings_checkbox',
+            'merge_properties_checkbox', 'merge_code_checkbox',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
             'launch_via_steam_checkbox', 'dont_hide_window_checkbox', 'use_portproton_checkbox'
         )
@@ -128,11 +128,6 @@ class SettingsUiController:
         self.settings_service.on_toggle_portproton(use)
         self._call_if_exists(self.app, '_update_portproton_ui')
 
-    def on_toggle_hide_wips_without_downloads(self):
-        self.settings_service.on_toggle_hide_wips_without_downloads(self.app.hide_wips_without_downloads_checkbox.isChecked())
-        if hasattr(self.app, 'search_display'):
-            self.app.search_display.update_filtered_mods()
-
     def on_toggle_dont_hide_window_on_launch(self, state):
         self.settings_service.on_toggle_dont_hide_window_on_launch(bool(state))
 
@@ -161,24 +156,6 @@ class SettingsUiController:
 
     def on_toggle_merge_code(self, state):
         self.settings_service.on_toggle_merge_code(bool(state))
-
-    def on_clear_cache_clicked(self):
-        if not self.feedback_service.ask_question(tr('dialogs.clear_cache_confirm_title'), tr('dialogs.clear_cache_confirm_text')):
-            return
-        try:
-            if hasattr(self.app, 'refresh_controller'):
-                self.app.refresh_controller._stop_fetch_thread()
-            self.app_state.gamebanana_mods_needing_metadata = []
-
-            from adapters.gamebanana_cache import GameBananaMetadataCache
-            import os
-            cache = GameBananaMetadataCache(os.path.join(self.app_state.cache_dir, 'gamebanana_cache.json'))
-            cache.clear()
-            self.feedback_service.show_message('info', 'dialogs.success', tr('dialogs.clear_cache_success'))
-        except Exception as e:
-            import logging
-            logging.error(f'Error clearing cache: {e}')
-            self.feedback_service.show_message('error', 'errors.error', str(e))
 
     def on_toggle_hide_library_tab(self, state):
         self.settings_service.on_toggle_hide_library_tab(bool(state))

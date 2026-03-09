@@ -20,7 +20,6 @@ class AppState(QObject):
     current_page_changed = pyqtSignal(int)
     search_text_changed = pyqtSignal(str)
     library_search_text_changed = pyqtSignal(str)
-    mods_per_page_changed = pyqtSignal(int)
     current_task_changed = pyqtSignal(object)
     action_button_text_changed = pyqtSignal(str)
     action_button_enabled_changed = pyqtSignal(bool)
@@ -29,7 +28,7 @@ class AppState(QObject):
     progress_bar_value_changed = pyqtSignal(int)
     all_mods_updated = pyqtSignal(list)
     gb_rate_limit_error = pyqtSignal()
-    _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_patching': 'is_patching_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_mods_per_page': 'mods_per_page_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
+    _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_patching': 'is_patching_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
 
     def __init__(self):
         super().__init__()
@@ -67,7 +66,6 @@ class AppState(QObject):
         self._current_page: int = 1
         self._search_text: str = ''
         self._library_search_text: str = ''
-        self._mods_per_page: int = 20
         self._current_task: Optional[QThread] = None
         self._action_button_text: str = ''
         self._action_button_enabled: bool = True
@@ -76,9 +74,6 @@ class AppState(QObject):
         self.gamebanana_loaded_pages: Dict[int, int] = {}
         self.gamebanana_search_loaded_pages: Dict[str, Dict[int, int]] = {}
         self.gamebanana_loading: bool = False
-        self.gamebanana_sort: str = 'default'
-        self.gamebanana_mods_needing_metadata: List[str] = []
-        self.auto_sorting: bool = False
         self.has_internet: bool = True
         self.pending_announce_check: bool = False
         self.current_install_mod_identifier: Optional[str] = None
@@ -208,14 +203,6 @@ class AppState(QObject):
     @library_search_text.setter
     def library_search_text(self, value: str) -> None:
         self._library_search_text = value
-
-    @property
-    def mods_per_page(self) -> int:
-        return self._mods_per_page
-
-    @mods_per_page.setter
-    def mods_per_page(self, value: int) -> None:
-        self._mods_per_page = value
 
     @property
     def current_task(self) -> Optional[QThread]:

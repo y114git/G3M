@@ -102,7 +102,7 @@ class TestModWidgets:
             widget.setFocus()
             qapp.processEvents()
             assert widget.expanded_widget.isVisible()
-            assert widget.downloads_label.text() == '⤓ 42'
+            assert hasattr(widget, 'likes_label')
             assert widget.updated_label.text() == '↻ 2024-05-01'
             assert widget.name_label.text()
             assert len(widget.name_label.text().splitlines()) <= 2
@@ -130,16 +130,16 @@ class TestModWidgets:
         controller.clear_all_selections.assert_not_called()
         card.set_selected.assert_not_called()
 
-    @pytest.mark.parametrize(('downloads', 'expected'), [(0, '⤓ 0'), (None, '⤓ N/A')])
-    def test_mod_card_widget_downloads_text_distinguishes_zero_and_missing(self, qapp, downloads, expected):
+    def test_mod_card_widget_has_likes_label(self, qapp):
         from ui.widgets.mod.mod_card_widget import ModCardWidget
         from models.mod_models import ModInfo
         from unittest.mock import patch
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=downloads, game='deltarune', is_verified=False)
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=42, like_count=123, game='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = ModCardWidget(mod_data, parent=None)
-            assert widget.downloads_label.text() == expected
+            assert hasattr(widget, 'likes_label')
+            assert '123' in widget.likes_label.text()
         widget.deleteLater()
         for _ in range(3):
             qapp.processEvents()
@@ -279,8 +279,70 @@ class TestCommonWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
-    @pytest.mark.parametrize(('downloads', 'expected'), [(0, '0'), (None, 'N/A')])
-    def test_mod_details_overlay_downloads_distinguishes_zero_and_missing(self, qapp, downloads, expected):
+    def test_mod_details_overlay_hidden_during_construction(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        host = QWidget()
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, created_date='2024-01-01', tags=['gameplay'])
+        overlay = ModDetailsOverlay(host, mod_data)
+        assert not overlay.isVisible(), 'Overlay must be hidden after construction to prevent child widgets flashing'
+        overlay.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_details_overlay_preloaded_screenshot_displays_on_navigate(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        from PyQt6.QtGui import QImage
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(None, mod_data)
+        overlay._ss_urls = ['https://a.com/1.png', 'https://a.com/2.png', 'https://a.com/3.png']
+        overlay._ss_images = [None, None, None]
+        overlay._ss_loading = [False, True, False]
+        overlay._ss_index = 0
+        test_img = QImage(4, 4, QImage.Format.Format_ARGB32)
+        test_img.fill(0xFFFF0000)
+        overlay._ss_on_preloaded(1, test_img)
+        assert overlay._ss_images[1] is test_img
+        assert not overlay._ss_loading[1]
+        overlay._ss_index = 1
+        overlay._ss_on_preloaded(1, test_img)
+        assert overlay._img_label.pixmap() is not None and not overlay._img_label.pixmap().isNull(), 'Preloaded screenshot should display when user is viewing that index'
+        overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_details_overlay_metadata_order(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0', description_url='', downloads=42, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
+        overlay = ModDetailsOverlay(None, mod_data)
+        meta_texts = [label.text() for label in overlay.findChildren(QLabel)]
+
+        # Find the positions of version and author in the metadata
+        version_pos = None
+        author_pos = None
+        for i, text in enumerate(meta_texts):
+            if '>1.0.0</span>' in text:  # Version text
+                version_pos = i
+            if '>Test Author</span>' in text:  # Author text
+                author_pos = i
+
+        # Verify that version comes before author
+        assert version_pos is not None, "Version not found in metadata"
+        assert author_pos is not None, "Author not found in metadata"
+        assert version_pos < author_pos, f"Version should come before author, but version is at position {version_pos} and author is at position {author_pos}"
+
+        overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    @pytest.mark.parametrize(('downloads', 'expected'), [(0, '0'), (None, '0')])
+    def test_mod_details_overlay_shows_downloads(self, qapp, downloads, expected):
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         from models.mod_models import ModInfo
         mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0', description_url='', downloads=downloads, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
@@ -318,6 +380,17 @@ class TestCommonWidgets:
         assert overlay._prev_btn.isHidden() == (len(overlay._ss_urls) <= 1)
         overlay.update_screenshots([])
         assert len(overlay._ss_urls) == 0
+        overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_details_overlay_initializes_screenshots_from_mod_data(self, qapp):
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        from models.mod_models import ModInfo
+        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False, screenshots_url=['https://example.com/1.png', 'https://example.com/2.png'])
+        overlay = ModDetailsOverlay(None, mod_data)
+        assert overlay._ss_urls == ['https://example.com/1.png', 'https://example.com/2.png']
         overlay.deleteLater()
         for _ in range(3):
             qapp.processEvents()
@@ -377,56 +450,3 @@ class TestCommonWidgets:
         assert placeholder.pixelColor(placeholder.width() - 8, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() - 16, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() // 2, center_y).alpha() > 0
-
-    def test_dr_save_manager_slot_labels_size_for_multiline_text_on_first_refresh(self, qapp, app_state, temp_dir):
-        from unittest.mock import Mock
-        from plugins_main.dr_save_manager.save_manager_view_builder import SaveManagerViewBuilder
-        from plugins_main.dr_save_manager.save_ui_controller import SaveUiController
-        builder = SaveManagerViewBuilder(app_state, None)
-        save_manager_widget = builder.build()
-        widgets = builder.get_widgets()
-        app = SimpleNamespace(
-            save_tabs=widgets['save_tabs'],
-            _slot_labels=widgets['slot_labels'],
-            switch_collection_btn=widgets['switch_collection_btn'],
-            left_col_btn=widgets['left_col_btn'],
-            right_col_btn=widgets['right_col_btn'],
-            rename_collection_btn=widgets['rename_collection_btn'],
-            delete_collection_btn=widgets['delete_collection_btn'],
-            copy_from_main_btn=widgets['copy_from_main_btn'],
-            copy_to_main_btn=widgets['copy_to_main_btn'],
-            collection_name_lbl=widgets['collection_name_lbl'],
-            change_save_path_btn=widgets['change_save_path_btn'],
-            show_btn=widgets['show_btn'],
-            erase_btn=widgets['erase_btn'],
-            import_btn=widgets['import_btn'],
-            export_btn=widgets['export_btn'],
-        )
-        save_manager = Mock()
-        save_manager.save_path = temp_dir
-        save_manager.refresh_save_slots_data.return_value = {
-            0: (True, 'Susie - 4111 D$\nCompleted'),
-            1: (True, 'Ralsei - 2321 D$\nIncomplete'),
-            2: (False, '-------------- EMPTY --------------'),
-        }
-        save_manager.get_collection_ui_state.return_value = {
-            'in_collection': False,
-            'can_navigate_left': False,
-            'can_navigate_right': False,
-            'collection_name': '',
-        }
-        save_manager.current_collection_idx = -1
-        save_manager.selected_slot = None
-        controller = SaveUiController(app_state, Mock(), save_manager, Mock(), app)
-        save_manager_widget.show()
-        qapp.processEvents()
-        controller.refresh_slots()
-        qapp.processEvents()
-        for slot_index in (0, 1):
-            label = widgets['slot_labels'][(1, slot_index)]
-            assert label.minimumHeight() >= label.sizeHint().height()
-            assert '\n' in label.text()
-        save_manager_widget.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)

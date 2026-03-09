@@ -10,7 +10,7 @@ import tarfile
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QWidget, QTabWidget
 from services.localization_service import localization_service, tr
 from models.plugin_api import PluginAPI
@@ -18,8 +18,6 @@ from models.plugin_api import PluginAPI
 
 class PluginManager(QObject):
     """Manages plugin loading, installation, and lifecycle."""
-    plugins_loaded = pyqtSignal()
-    plugin_error = pyqtSignal(str, str)
 
     def __init__(self, app_state, settings_service=None, parent=None):
         super().__init__(parent)
@@ -101,6 +99,10 @@ class PluginManager(QObject):
         except Exception as e:
             logging.debug(f'_extract_plugin_info_from_file: Error extracting info from {plugin_init_py_path}: {e}')
 
+    def get_plugin_api(self, plugin_id: str) -> Optional[PluginAPI]:
+        """Get the PluginAPI instance for a plugin by its ID."""
+        return self._plugin_apis.get(plugin_id)
+
     def get_plugin_status(self, plugin_name: str, plugin_path: str) -> str:
         if not os.path.isdir(plugin_path):
             return 'broken'
@@ -144,7 +146,7 @@ class PluginManager(QObject):
             single_dir = os.path.join(temp_dir, contents[0])
             if os.path.isdir(single_dir) and os.path.isfile(os.path.join(single_dir, 'plugin_init.py')):
                 return single_dir
-        for root, dirs, files in os.walk(temp_dir):
+        for root, files in os.walk(temp_dir):
             if 'plugin_init.py' in files:
                 rel_path = os.path.relpath(root, temp_dir)
                 if rel_path != '.' and os.path.dirname(rel_path) == '':
@@ -281,8 +283,6 @@ class PluginManager(QObject):
                         localized_name = tr(prefixed_name_key)
                 except Exception:
                     pass
-                self.plugin_error.emit(localized_name, error_msg)
-        self.plugins_loaded.emit()
 
     def update_plugin_tabs(self, main_tab_widget: QTabWidget, num_original_tabs: int = 4, preserve_widgets: bool = False) -> Dict[int, Dict[str, Any]]:
         plugin_tab_map = {}
@@ -312,7 +312,7 @@ class PluginManager(QObject):
                 if plugin_tab is None:
                     plugin_tab = QWidget()
                     try:
-                        setattr(plugin_tab, '_plugin_info', plugin)
+                        plugin_tab._plugin_info = plugin
                         plugin_tab.setProperty('plugin_name_key', plugin_name_key)
                     except Exception:
                         pass
@@ -371,9 +371,6 @@ class PluginManager(QObject):
             all_plugins.append(plugin_info)
         return all_plugins
 
-    def get_plugin_api(self, plugin_id: str) -> Optional[PluginAPI]:
-        return self._plugin_apis.get(plugin_id)
-
     def reload_plugin(self, plugin_name: str):
         plugin_to_reload = next((p for p in self.app_state.plugins if p.get('name') == plugin_name), None)
         plugin_id = plugin_to_reload.get('plugin_id') if plugin_to_reload else None
@@ -410,5 +407,4 @@ class PluginManager(QObject):
                     logging.error(f"Error executing {hook_name} hook for plugin '{localized_name}': {error_msg}", exc_info=True)
                     plugin_name = plugin.get('name', 'Unknown')
                     self._plugin_errors[plugin_name] = error_msg
-                    self.plugin_error.emit(localized_name, error_msg)
         return result

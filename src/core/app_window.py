@@ -252,7 +252,6 @@ class AppWindow(QWidget):
     def _connect_cross_service_signals(self):
         """Connect signals between services, controllers, and display components."""
         self.mod_service.mod_list_updated.connect(self.library_display.update_display)
-        self.mod_service.mod_list_updated.connect(self.used_mods_service._retry_load_missing_mods)
         self.mod_service.mod_list_updated.connect(lambda: self._load_used_mods_debounce.call(self.used_mods_service.load_used_mods_state))
         self.used_mods_service.used_mod_changed.connect(lambda chapter_id: self.game_launch.update_button_state())
         self.used_mods_service.used_mod_changed.connect(lambda chapter_id: self.library_display._update_priority_button_visibility(chapter_id) if hasattr(self.library_display, '_update_priority_button_visibility') else None)
@@ -266,6 +265,7 @@ class AppWindow(QWidget):
         self.game_launch.show_pending_dialogs_requested.connect(self._show_pending_dialogs)
         self.game_launch.pending_updates_changed.connect(lambda updates: setattr(self, 'pending_updates', updates))
         self.settings_service.theme_changed.connect(self.theme.on_theme_changed_by_service)
+        self.settings_service.settings_changed.connect(self.search_display.update_filtered_mods)
 
     def _connect_own_signals(self):
         """Connect AppWindow's own pyqtSignals to their handlers."""
@@ -585,9 +585,6 @@ class AppWindow(QWidget):
         self.main_tab_widget = QTabWidget()
         self.main_tab_widget.setTabPosition(QTabWidget.TabPosition.North)
         self.app_state.current_page = 1
-        default_mods_per_page = self.app_state.local_config.get('mods_per_page', 20)
-        self.app_state.mods_per_page = default_mods_per_page
-        self.app_state.gamebanana_sort = 'default'
         self.app_state.filtered_mods = []
         self.sort_ascending = False
         self.app_state.search_text = ''
@@ -620,7 +617,6 @@ class AppWindow(QWidget):
         self.main_layout.addWidget(self.bottom_widget)
         self._setup_settings_tab()
         self.search_display.update_filtered_mods()
-        self.main_layout.addWidget(self.settings_widget)
         self.tab_widget = self.main_tab_widget
         self.tabs = {}
         self.setWindowIcon(QIcon(resource_path('assets/icons/icon.ico')))
@@ -632,12 +628,10 @@ class AppWindow(QWidget):
         search_widgets = search_builder.get_widgets()
         self._bind_widgets(search_widgets, required=(
             'mods_browser_container', 'mods_browser_scroll', 'mod_list_widget', 'mod_list_layout', 'mod_list_columns',
-            'sort_combo', 'sort_order_btn', 'modgame_combo', 'tags_label', 'show_nsfw_checkbox', 'tag_textedit',
+            'sort_combo', 'modgame_combo', 'tags_label', 'show_nsfw_checkbox', 'tag_textedit',
             'tag_customization', 'tag_gameplay', 'tag_other', 'search_button',
-            'prev_page_btn', 'page_label', 'next_page_btn',
         ))
         self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
-        self.sort_order_btn.clicked.connect(self._toggle_sort_order)
         if 'selected_search_game' not in self.app_state.local_config:
             default_game = self.modgame_combo.currentData() or 'deltarune'
             self.app_state.local_config['selected_search_game'] = default_game
@@ -660,8 +654,10 @@ class AppWindow(QWidget):
             self.search_display.update_filtered_mods()
         self.show_nsfw_checkbox.stateChanged.connect(on_show_nsfw_changed)
         self.search_button.clicked.connect(self.search_display.show_search_dialog)
-        self.prev_page_btn.clicked.connect(self.search_display.prev_page)
-        self.next_page_btn.clicked.connect(self.search_display.next_page)
+        try:
+            self.mods_browser_scroll.verticalScrollBar().valueChanged.connect(self.search_display.on_scroll_value_changed)
+        except Exception:
+            pass
 
     def _setup_library_tab(self):
         from ui.builders.library_tab_builder import LibraryTabBuilder
@@ -760,6 +756,12 @@ class AppWindow(QWidget):
     def _setup_settings_tab(self):
         settings_builder = SettingsViewBuilder(self.app_state, self)
         self.settings_widget = settings_builder.build()
+        if hasattr(self, 'main_layout') and self.main_layout:
+            insert_index = self.main_layout.indexOf(self.main_tab_widget) if hasattr(self, 'main_tab_widget') else -1
+            if insert_index >= 0:
+                self.main_layout.insertWidget(insert_index, self.settings_widget)
+            else:
+                self.main_layout.addWidget(self.settings_widget)
         settings_widgets = settings_builder.get_widgets()
         self._bind_widgets(settings_widgets, required=(
             'settings_tab_widget',
@@ -770,15 +772,13 @@ class AppWindow(QWidget):
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
             'color_config', 'theme_button', 'themes_list_widget', 'theme_apply_btn',
             'theme_save_btn', 'theme_delete_btn', 'do_not_save_theme_checkbox',
-            'hide_wips_without_downloads_checkbox', 'auto_sorting_checkbox',
-            'mods_per_page_label', 'mods_per_page_spinbox',
-            'gb_sort_label', 'gb_sort_combo', 'blocklist_button',
+            'blocklist_button',
             'hide_library_filters_checkbox', 'settings_game_combo',
             'settings_change_path_button', 'settings_custom_executable_button',
             'settings_reset_custom_exe_button',
             'skip_patching_warnings_checkbox', 'launch_via_steam_checkbox', 'dont_hide_window_checkbox',
             'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
-            'merge_properties_checkbox', 'merge_code_checkbox', 'clear_cache_button',
+            'merge_properties_checkbox', 'merge_code_checkbox',
             'ui_scale_label', 'ui_scale_spinbox',
             'border_radius_label', 'border_radius_spinbox',
         ), optional=(
@@ -927,14 +927,6 @@ class AppWindow(QWidget):
             line_edit.editingFinished.connect(self.theme.on_custom_style_edited)
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
             reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self.theme.on_custom_style_edited()))
-        self.hide_wips_without_downloads_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_wips_without_downloads)
-        self.auto_sorting_checkbox.stateChanged.connect(self._on_auto_sorting_changed)
-        self.mods_per_page_spinbox.setValue(self.app_state.mods_per_page)
-        self.mods_per_page_spinbox.valueChanged.connect(self._on_mods_per_page_changed)
-        self.app_state.auto_sorting = self.app_state.local_config.get('auto_sorting', False)
-        self.auto_sorting_checkbox.setChecked(self.app_state.auto_sorting)
-        self.gb_sort_combo.setCurrentIndex(0)
-        self.gb_sort_combo.currentIndexChanged.connect(self._on_gamebanana_sort_changed)
         self.blocklist_button.clicked.connect(self.search_display.show_blocklist_dialog)
         self.hide_library_filters_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_library_filters)
         self.settings_game_combo.currentIndexChanged.connect(self._on_settings_game_combo_changed)
@@ -956,7 +948,6 @@ class AppWindow(QWidget):
         self.hide_plugins_tab_checkbox.stateChanged.connect(self.settings_ui.on_toggle_hide_plugins_tab)
         self.merge_properties_checkbox.stateChanged.connect(self.settings_ui.on_toggle_merge_properties)
         self.merge_code_checkbox.stateChanged.connect(self.settings_ui.on_toggle_merge_code)
-        self.clear_cache_button.clicked.connect(self.settings_ui.on_clear_cache_clicked)
 
         self.hide_mods_browser_tab_checkbox.setChecked(self.app_state.local_config.get('hide_mods_browser_tab', False))
         self.hide_library_tab_checkbox.setChecked(self.app_state.local_config.get('hide_library_tab', False))
@@ -990,48 +981,12 @@ class AppWindow(QWidget):
             sort_index = self.sort_combo.currentIndex()
             self.app_state.local_config['search_sort_index'] = sort_index
             self.settings_service.write_local_config()
-        self.search_display.update_filtered_mods()
-
-    def _apply_sort_order(self, ascending: bool, btn):
-        btn.setText('▲' if ascending else '▼')
-        btn.setToolTip(tr('ui.ascending') if ascending else tr('ui.descending'))
+        self.search_display.load_mods_for_selected_game()
 
     def _toggle_library_sort_order(self):
         self.library_sort_ascending = not self.library_sort_ascending
         self._apply_sort_order(self.library_sort_ascending, self.library_sort_order_btn)
         self.library_display.update_display()
-
-    def _toggle_sort_order(self):
-        self.sort_ascending = not self.sort_ascending
-        self._apply_sort_order(self.sort_ascending, self.sort_order_btn)
-        self.search_display.update_filtered_mods()
-
-    def _on_mods_per_page_changed(self, value: int):
-        try:
-            self.app_state.mods_per_page = value
-            self.app_state.local_config['mods_per_page'] = value
-            self.settings_service.write_local_config()
-            self.app_state.current_page = 1
-            self.search_display.update_filtered_mods()
-            logging.info(f'Mods per page changed to {value}')
-        except Exception as e:
-            logging.error(f'Error in _on_mods_per_page_changed: {e}', exc_info=True)
-
-    def _on_auto_sorting_changed(self, state: int):
-        try:
-            is_checked = state == Qt.CheckState.Checked.value
-            self.app_state.auto_sorting = is_checked
-            self.app_state.local_config['auto_sorting'] = is_checked
-            self.settings_service.write_local_config()
-            if is_checked:
-                self.search_display.update_filtered_mods(preserve_page=True)
-            logging.info(f'Auto-sorting changed to {is_checked}')
-        except Exception as e:
-            logging.error(f'Error in _on_auto_sorting_changed: {e}', exc_info=True)
-
-    def _on_gamebanana_sort_changed(self, index: int):
-        from core.app_sort_handler import handle_gamebanana_sort_changed
-        handle_gamebanana_sort_changed(self, index)
 
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()

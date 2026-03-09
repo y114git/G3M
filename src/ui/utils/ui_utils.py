@@ -135,6 +135,10 @@ class UIAnimator:
             pass
 
     @staticmethod
+    def get_opacity_effect(widget: QWidget) -> QGraphicsOpacityEffect:
+        return UIAnimator._get_opacity_effect(widget)
+
+    @staticmethod
     def _get_opacity_effect(widget: QWidget) -> QGraphicsOpacityEffect:
         effect = getattr(widget, '_fade_effect', None)
         if isinstance(effect, QGraphicsOpacityEffect):

@@ -6,7 +6,7 @@ from services.localization_service import tr
 from ui.common.styling import install_size_hint_height_sync, install_scroll_viewport_clip, apply_panel_style, build_tag_checkbox_style, get_theme_color, get_ui_scale_factor
 from ui.builders.shared_filters_builder import (
     create_sort_controls, create_tag_checkboxes, create_search_button,
-    create_filters_frame, create_modgame_combo, create_pagination_controls, apply_filters_frame_style
+    create_filters_frame, create_modgame_combo, apply_filters_frame_style
 )
 
 
@@ -68,14 +68,12 @@ class ModsBrowserTabBuilder(QObject):
         mod_list_layout.setVerticalSpacing(18)
         mod_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         scroll.setWidget(mod_list)
-        pag_widget, prev_btn, page_lbl, next_btn = create_pagination_controls()
         sc_layout.addWidget(scroll)
-        sc_layout.addWidget(pag_widget)
         container_padding = 10
         install_scroll_viewport_clip(scroll, container, self.app_state.local_config, inset=container_padding, attr_name='_search_viewport_clip_filter')
         apply_panel_style(container, self.app_state.local_config)
         layout.addWidget(container)
-        self.widgets.update({'mods_browser_container': container, 'mods_browser_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'mod_list_columns': self.mod_list_columns, 'prev_page_btn': prev_btn, 'page_label': page_lbl, 'next_page_btn': next_btn})
+        self.widgets.update({'mods_browser_container': container, 'mods_browser_scroll': scroll, 'mod_list_widget': mod_list, 'mod_list_layout': mod_list_layout, 'mod_list_columns': self.mod_list_columns})
         self._connect_dynamic_style_refresh()
         return widget
 
@@ -84,9 +82,8 @@ class ModsBrowserTabBuilder(QObject):
         apply_filters_frame_style(w, self.app_state)
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         _vc = Qt.AlignmentFlag.AlignVCenter
-        sort_combo, sort_btn = create_sort_controls(self.app_state, [tr('ui.sort_by_downloads'), tr('ui.sort_by_update_date'), tr('ui.sort_by_creation_date')], 'search_sort_index')
+        sort_combo, _ = create_sort_controls(self.app_state, [(tr('ui.sort_by_relevance'), 'relevant'), (tr('ui.sort_by_creation_date'), 'new'), (tr('ui.sort_by_update_date'), 'updated')], 'search_sort_index', include_order_button=False)
         layout.addWidget(sort_combo, 0, _vc)
-        layout.addWidget(sort_btn, 0, _vc)
         layout.addSpacing(20)
         modgame_combo = create_modgame_combo(self.app_state, SEARCH_GAME_OPTIONS, 'selected_search_game')
         layout.addWidget(modgame_combo, 0, _vc)
@@ -103,7 +100,7 @@ class ModsBrowserTabBuilder(QObject):
         layout.addStretch()
         search_btn = create_search_button()
         layout.addWidget(search_btn, 0, _vc)
-        self.widgets.update({'sort_combo': sort_combo, 'sort_order_btn': sort_btn, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'show_nsfw_checkbox': show_nsfw_checkbox, 'search_button': search_btn})
+        self.widgets.update({'sort_combo': sort_combo, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'show_nsfw_checkbox': show_nsfw_checkbox, 'search_button': search_btn})
         self.widgets.update({f'tag_{k}': v for k, v in tags.items()})
         self.refresh_dynamic_styles()
         return w

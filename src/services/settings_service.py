@@ -122,7 +122,7 @@ class SettingsManager(QObject):
     def on_toggle_hide_library_filters(self, enabled: bool): self._toggle_setting('hide_library_filters', enabled)
     def on_toggle_steam_launch(self, enabled: bool): self._toggle_setting('launch_via_steam', enabled)
     def on_toggle_portproton(self, enabled: bool): self._toggle_setting('use_portproton', enabled)
-    def on_toggle_hide_wips_without_downloads(self, enabled: bool): self._toggle_setting('hide_wips_without_downloads', enabled)
+
     def on_toggle_dont_hide_window_on_launch(self, enabled: bool): self._toggle_setting('dont_hide_window_on_launch', enabled)
     def on_toggle_disable_animations(self, enabled: bool): self._toggle_setting('disable_animations', enabled, None)
     def on_toggle_disable_background(self, enabled: bool): self._toggle_setting('background_disabled', enabled, 'theme_changed')

@@ -67,6 +67,7 @@ class TestTabBuilders:
         widgets = builder.get_widgets()
         assert widgets['mod_list_columns'] == 1
         assert isinstance(widgets['mod_list_layout'], QGridLayout)
+        assert widgets['sort_combo'].currentData() == 'relevant'
         assert 'show_nsfw_checkbox' in widgets
         assert widgets['show_nsfw_checkbox'].isChecked() is False
         widget.deleteLater()
