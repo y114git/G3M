@@ -6,7 +6,7 @@ import webbrowser
 import argparse
 from typing import Optional
 import logging
-from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QPoint, QObject, QRectF
+from PyQt6.QtCore import QTranslator, Qt, QEvent, QThread, QTimer, pyqtSignal, QPoint, QObject, QRectF, QSize
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QLineEdit, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QSpinBox
 from services.localization_service import localization_service, tr
@@ -18,7 +18,7 @@ from ui.dialogs.about_dialog import AboutDialog
 from ui.dialogs.changelog_dialog import ChangelogDialog
 from ui.widgets.shared.custom_title_bar import CustomTitleBar
 from ui.common.styling import get_theme_color, get_border_radius, display_hex_to_qt_hex, clamp_border_radius, apply_rounded_mask
-from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir
+from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir, get_colored_search_icon, get_colored_refresh_icon, get_colored_refresh_icon_svg, colored_icon
 from utils.network_utils import get_session
 from workers.presence_worker import PresenceWorker
 from controllers.mod_operations_controller import ModOperationsController
@@ -99,14 +99,13 @@ class AppWindow(QWidget):
         self.app_state.network_session = _build_session()
         self.server: SingleInstanceServer | None = None
         self.app_state.config_dir = os.path.join(get_user_data_root(), 'settings')
-        self.app_state.cache_dir = os.path.join(get_user_data_root(), 'cache')
         self.launcher_dir = get_launcher_dir()
         from utils.path_utils import get_user_mods_dir
         self.app_state.mods_dir = get_user_mods_dir()
         self.app_state.plugins_dir = get_user_plugins_dir()
         self.app_state.mods_metadata_path = os.path.join(self.app_state.mods_dir, 'metadata.json')
         self.app_state.plugins_metadata_path = os.path.join(self.app_state.plugins_dir, 'metadata.json')
-        for d in (self.app_state.config_dir, self.app_state.cache_dir, self.app_state.mods_dir, self.app_state.plugins_dir):
+        for d in (self.app_state.config_dir, self.app_state.mods_dir, self.app_state.plugins_dir):
             os.makedirs(d, exist_ok=True)
         self.lang_service = localization_service
         self.app_state.config_path = os.path.join(self.app_state.config_dir, 'settings.json')
@@ -203,6 +202,7 @@ class AppWindow(QWidget):
         for signal_name, method_name in (
             ('ui_button_text_update', 'setText'),
             ('ui_button_tooltip_update', 'setToolTip'),
+            ('ui_button_icon_update', 'setIcon'),
             ('ui_button_enabled_update', 'setEnabled'),
             ('ui_widget_updates_enabled', 'setUpdatesEnabled'),
         ):
@@ -498,7 +498,7 @@ class AppWindow(QWidget):
         self.main_layout.setContentsMargins(10, 5, 10, 5)
         self.main_layout.setSpacing(6)
         self.setMouseTracking(True)
-        self.title_bar = CustomTitleBar(self)
+        self.title_bar = CustomTitleBar(self, app_state=self.app_state)
         self.title_bar.changelog_requested.connect(self._show_changelog_dialog)
         self.title_bar.about_requested.connect(self._show_about_dialog)
         self.title_bar.minimize_requested.connect(self.showMinimized)
@@ -526,10 +526,14 @@ class AppWindow(QWidget):
         self.online_label.setStyleSheet('padding-left:8px;')
         self.online_label.setToolTip(tr('tooltips.online_counter'))
         self.top_frame.addWidget(self.settings_button)
-        self.top_refresh_button = QPushButton('🔄️')
+        self.top_refresh_button = QPushButton()
         self.top_refresh_button.setObjectName('topRefreshBtn')
         self.top_refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
+        main_text_color = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
+        self.top_refresh_button.setIcon(get_colored_refresh_icon_svg(main_text_color))
+        self.top_refresh_button.setIconSize(QSize(20, 20))
+        self.top_refresh_button.setFixedSize(30, 30)
         self.top_frame.addWidget(self.top_refresh_button)
         self.top_frame.addWidget(self.online_label)
         self.top_frame.addStretch()
@@ -537,16 +541,21 @@ class AppWindow(QWidget):
         self.logo_placeholder.setFixedWidth(225)
         self.top_frame.addWidget(self.logo_placeholder)
         self.top_frame.addStretch()
-        self.telegram_button = QPushButton(tr('buttons.telegram'))
-        self.telegram_button.setObjectName('topPanelCompactButton')
-        self.telegram_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('telegram_url', SOCIAL_LINKS['telegram'])))
-        self.telegram_button.setStyleSheet(f"color: {UI_COLORS['link']};")
-        self.top_frame.addWidget(self.telegram_button)
-        self.discord_button = QPushButton(tr('buttons.discord'))
-        self.discord_button.setObjectName('topPanelCompactButton')
-        self.discord_button.clicked.connect(lambda: webbrowser.open(self.app_state.global_settings.get('discord_url', SOCIAL_LINKS['discord'])))
-        self.discord_button.setStyleSheet(f"color: {UI_COLORS['social_discord']};")
-        self.top_frame.addWidget(self.discord_button)
+        _social_style = "padding: 4px; min-width: 40px; min-height: 40px; max-width: 40px; max-height: 40px;"
+        for attr, icon_svg, url_key, lang_key in (
+            ('telegram_button', 'telegram_logo.svg', 'telegram', 'buttons.telegram'),
+            ('discord_button', 'discord_logo.svg', 'discord', 'buttons.discord'),
+        ):
+            btn = QPushButton()
+            btn.setObjectName('topPanelCompactButton')
+            btn.clicked.connect(lambda _=False, k=url_key: webbrowser.open(self.app_state.global_settings.get(f'{k}_url', SOCIAL_LINKS[k])))
+            btn.setIcon(QIcon(resource_path(f'assets/icons/{icon_svg}')))
+            btn.setIconSize(QSize(32, 32))
+            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            btn.setStyleSheet(_social_style)
+            btn.setToolTip(tr(lang_key))
+            setattr(self, attr, btn)
+            self.top_frame.addWidget(btn)
         self.main_layout.addWidget(self.top_panel_widget)
         self.launcher_icon_label = QLabel(self.top_panel_widget)
         self.launcher_icon_label.setFixedSize(250, 60)
@@ -589,7 +598,7 @@ class AppWindow(QWidget):
         self.sort_ascending = False
         self.app_state.search_text = ''
         self._setup_search_tab()
-        self.library_sort_ascending = False
+        self.library_sort_ascending = self.app_state.local_config.get('library_sort_ascending', True)
         self.app_state.library_search_text = ''
         self._previous_mode = 'normal'
         self._setup_library_tab()
@@ -690,8 +699,14 @@ class AppWindow(QWidget):
         self.game_type_combo.currentIndexChanged.connect(self.settings_ui.on_game_type_changed)
         self.chapter_mode_checkbox.stateChanged.connect(self.settings_ui.on_chapter_mode_changed)
         self.full_install_checkbox.stateChanged.connect(self._on_toggle_full_install)
-        self.library_sort_combo.currentIndexChanged.connect(self.library_display.update_display)
+        saved_lib_sort_index = self.app_state.local_config.get('library_sort_index', 0)
+        if 0 <= saved_lib_sort_index < self.library_sort_combo.count():
+            self.library_sort_combo.blockSignals(True)
+            self.library_sort_combo.setCurrentIndex(saved_lib_sort_index)
+            self.library_sort_combo.blockSignals(False)
+        self.library_sort_combo.currentIndexChanged.connect(self._on_library_sort_changed)
         self.library_sort_order_btn.clicked.connect(self._toggle_library_sort_order)
+        self._apply_sort_order(self.library_sort_ascending, self.library_sort_order_btn)
         for tag in self.library_tag_widgets:
             tag.stateChanged.connect(self.library_display.update_display)
         self.library_search_button.clicked.connect(self._show_library_search_dialog)
@@ -983,10 +998,25 @@ class AppWindow(QWidget):
             self.settings_service.write_local_config()
         self.search_display.load_mods_for_selected_game()
 
+    def _on_library_sort_changed(self):
+        self.app_state.local_config['library_sort_index'] = self.library_sort_combo.currentIndex()
+        self.settings_service.write_local_config()
+        self.library_display.update_display()
+
     def _toggle_library_sort_order(self):
         self.library_sort_ascending = not self.library_sort_ascending
+        self.app_state.local_config['library_sort_ascending'] = self.library_sort_ascending
+        self.settings_service.write_local_config()
         self._apply_sort_order(self.library_sort_ascending, self.library_sort_order_btn)
         self.library_display.update_display()
+
+    def _apply_sort_order(self, is_ascending: bool, sort_button):
+        """Apply sort order to button with icon and tooltip update."""
+        if sort_button:
+            sort_button.setToolTip(tr('ui.ascending') if is_ascending else tr('ui.descending'))
+            tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
+            sort_button.setIcon(colored_icon('arrow_up' if is_ascending else 'arrow_down', tc))
+            sort_button.setIconSize(QSize(12, 12))
 
     def _update_checkbox_visibility(self):
         game_type = self.game_type_combo.currentData()
@@ -1606,12 +1636,34 @@ class AppWindow(QWidget):
         except Exception:
             self.app_state.has_internet = False
 
+    def _set_lib_search_icon(self, is_searching: bool):
+        tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
+        self.library_search_button.setIcon(get_colored_refresh_icon(tc) if is_searching else get_colored_search_icon(tc))
+        self.library_search_button.setIconSize(QSize(16, 16))
+
+    def _refresh_themed_icons(self):
+        """Re-read theme color and regenerate all SVG-based button icons."""
+        tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
+        if hasattr(self, 'top_refresh_button'):
+            self.top_refresh_button.setIcon(get_colored_refresh_icon_svg(tc))
+            self.top_refresh_button.setIconSize(QSize(20, 20))
+        if hasattr(self, 'library_search_button'):
+            is_searching = bool(getattr(self, 'library_search_text', ''))
+            self.library_search_button.setIcon(get_colored_refresh_icon(tc) if is_searching else get_colored_search_icon(tc))
+            self.library_search_button.setIconSize(QSize(16, 16))
+        if hasattr(self, 'library_sort_order_btn') and self.library_sort_order_btn:
+            is_asc = getattr(self, 'library_sort_ascending', False)
+            self.library_sort_order_btn.setIcon(colored_icon('arrow_up' if is_asc else 'arrow_down', tc))
+            self.library_sort_order_btn.setIconSize(QSize(12, 12))
+        if hasattr(self, 'title_bar') and self.title_bar:
+            self.title_bar._update_window_icons()
+
     def _show_library_search_dialog(self):
         from PyQt6.QtWidgets import QInputDialog
         if getattr(self, 'library_search_text', ''):
             self.library_search_text = ''
             self.app_state.library_search_text = ''
-            self.library_search_button.setText('🔍')
+            self._set_lib_search_icon(False)
             self.library_search_button.setToolTip(tr('ui.search_placeholder'))
             self.library_display.update_display()
         else:
@@ -1619,7 +1671,7 @@ class AppWindow(QWidget):
             if ok and text.strip():
                 self.library_search_text = text.strip()
                 self.app_state.library_search_text = text.strip()
-                self.library_search_button.setText('↻')
+                self._set_lib_search_icon(True)
                 self.library_search_button.setToolTip(tr('ui.clear_search_tooltip', text=text.strip()))
                 self.library_display.update_display()
 
@@ -1834,6 +1886,8 @@ class AppWindow(QWidget):
         widget = getattr(self, widget_name, None)
         if widget and hasattr(widget, method):
             getattr(widget, method)(value)
+            if method == 'setIcon' and hasattr(widget, 'setText'):
+                widget.setText('')
 
     def _show_pending_dialogs(self):
         if not self.app_state.pending_dialogs:

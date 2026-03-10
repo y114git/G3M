@@ -1,10 +1,10 @@
 import os
 import tempfile
 import logging
-from PyQt6.QtCore import pyqtSignal, Qt, QUrl, QMimeData
+from PyQt6.QtCore import pyqtSignal, Qt, QUrl, QMimeData, QSize
 from PyQt6.QtGui import QDesktopServices, QPixmap, QDrag
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
-from utils.path_utils import resource_path
+from utils.path_utils import resource_path, colored_icon
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
 from ui.common.styling import get_theme_color, build_button_style, get_border_radius, get_card_button_metrics
@@ -92,12 +92,16 @@ class InstalledModWidget(BaseModWidget):
                 separator.setObjectName('secondaryText')
                 self.metadata_layout.addWidget(separator)
         self.metadata_layout.addStretch()
-        self.checkmark_label = QLabel('✓', self)
-        self.checkmark_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-        self.checkmark_label.setStyleSheet('font-size: 18px; font-weight: bold; color: #4CAF50;')
-        self.checkmark_label.setFixedWidth(40)
-        self.checkmark_label.setVisible(False)
-        self.main_layout.addWidget(self.checkmark_label)
+        self.checkmark_button = QPushButton(self)
+        self.checkmark_button.setObjectName('checkmarkButton')
+        self.checkmark_button.setFixedSize(40, 40)
+        self.checkmark_button.setStyleSheet('QPushButton { background: transparent; border: none; }')
+        self.checkmark_button.setVisible(False)
+        _chk_color = get_theme_color(self._resolve_theme_config(), 'secondary_text', '#4CAF50')
+        self.checkmark_button.setIcon(colored_icon('checkmark', _chk_color))
+        self.checkmark_button.setIconSize(QSize(24, 24))
+        self.checkmark_button.setEnabled(False)  # Make it non-interactive
+        self.main_layout.addWidget(self.checkmark_button)
         self.actions_widget = QWidget(self)
         actions_layout = QVBoxLayout(self.actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -127,8 +131,8 @@ class InstalledModWidget(BaseModWidget):
         indicator_size = max(14, round(16 * scale))
         if hasattr(self, 'status_indicator') and self.status_indicator:
             self.status_indicator.setFixedSize(indicator_size, indicator_size)
-        if hasattr(self, 'checkmark_label') and self.checkmark_label:
-            self.checkmark_label.setFixedWidth(max(32, int(round(40 * scale))))
+        if hasattr(self, 'checkmark_button') and self.checkmark_button:
+            self.checkmark_button.setFixedWidth(max(32, round(40 * scale)))
         if hasattr(self, 'actions_widget') and self.actions_widget and self.actions_widget.layout():
             self.actions_widget.layout().setSpacing(max(4, int(round(5 * scale))))
 
@@ -146,9 +150,11 @@ class InstalledModWidget(BaseModWidget):
             button_width, button_height, button_font_size = get_card_button_metrics(config)
             if hasattr(self, 'remove_button') and self.remove_button:
                 self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
-            if hasattr(self, 'checkmark_label') and self.checkmark_label:
-                checkmark_font_size = max(16, int(round(18 * self._layout_scale())))
-                self.checkmark_label.setStyleSheet(f'font-size: {checkmark_font_size}px; font-weight: bold; color: #4CAF50;')
+            if hasattr(self, 'checkmark_button') and self.checkmark_button:
+                icon_size = max(18, round(24 * self._layout_scale()))
+                _chk_color = get_theme_color(config, 'secondary_text', '#4CAF50')
+                self.checkmark_button.setIcon(colored_icon('checkmark', _chk_color))
+                self.checkmark_button.setIconSize(QSize(icon_size, icon_size))
         self._update_button_from_status()
 
     def _update_indicator(self):
@@ -246,17 +252,17 @@ class InstalledModWidget(BaseModWidget):
         self._sync_status()
 
     def _update_actions_visibility(self):
-        if not hasattr(self, 'actions_widget') or not hasattr(self, 'checkmark_label'):
+        if not hasattr(self, 'actions_widget') or not hasattr(self, 'checkmark_button'):
             return
         if self.is_selected:
             self.actions_widget.setVisible(True)
-            self.checkmark_label.setVisible(False)
+            self.checkmark_button.setVisible(False)
         elif self.is_active:
             self.actions_widget.setVisible(False)
-            self.checkmark_label.setVisible(True)
+            self.checkmark_button.setVisible(True)
         else:
             self.actions_widget.setVisible(False)
-            self.checkmark_label.setVisible(False)
+            self.checkmark_button.setVisible(False)
 
     def set_selected(self, selected):
         super().set_selected(selected)

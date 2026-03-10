@@ -5,6 +5,8 @@ import re
 import stat
 import sys
 from pathlib import Path
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import QByteArray, Qt
 from config.constants import GAME_EXECUTABLES, CURRENT_PLATFORM
 
 
@@ -243,3 +245,75 @@ def version_sort_key(v: str):
         return (*nums, 1 if suff else 0, suff)
     except Exception:
         return (0, 0, 0, 0, '')
+
+
+_ICON_DEFS = {
+    'search': ('search_icon.svg', [('fill="#444"', 'fill="{c}"')]),
+    'reset': ('reset_icon.svg', [('stroke="#0C0310"', 'stroke="{c}"')]),
+    'refresh': ('refresh_icon.svg', [('stroke="#000000"', 'stroke="{c}"')]),
+    'checkmark': ('checkmark_icon.svg', [('fill="#010002"', 'fill="{c}"'), ('style="fill:#010002;"', 'style="fill:{c};"')], True),
+    'save': ('save_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
+    'delete': ('delete_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
+    'minimize': ('minimize_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'maximize': ('maximize_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'restore': ('restore_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'cross': ('cross_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'arrow_down': ('arrow_down.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
+    'arrow_up': ('arrow_up.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
+}
+
+
+def colored_icon(name: str, color: str) -> QIcon:
+    """Create a themed QIcon by replacing color tokens in an SVG asset."""
+    defn = _ICON_DEFS.get(name)
+    if not defn:
+        return QIcon()
+    svg_file, replacements = defn[0], defn[1]
+    use_renderer = len(defn) > 2 and defn[2]
+    svg_path = resource_path(f'assets/icons/{svg_file}')
+    try:
+        with open(svg_path, 'r', encoding='utf-8', errors='replace') as f:
+            svg = f.read()
+        if use_renderer:
+            svg = re.sub(r'<\?xml[^?]*\?>', '', svg, count=1)
+        for old, new_tpl in replacements:
+            svg = svg.replace(old, new_tpl.format(c=color))
+        svg_bytes = QByteArray(svg.encode('utf-8'))
+        if use_renderer:
+            from PyQt6.QtSvg import QSvgRenderer
+            from PyQt6.QtGui import QPainter
+            renderer = QSvgRenderer(svg_bytes)
+            if not renderer.isValid():
+                return QIcon(svg_path)
+            pixmap = QPixmap(64, 64)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            renderer.render(painter)
+            painter.end()
+            icon = QIcon()
+            icon.addPixmap(pixmap, QIcon.Mode.Normal)
+            icon.addPixmap(pixmap, QIcon.Mode.Disabled)
+            return icon
+        pixmap = QPixmap()
+        pixmap.loadFromData(svg_bytes, 'svg')
+        icon = QIcon()
+        icon.addPixmap(pixmap)
+        return icon
+    except Exception as e:
+        logging.debug(f'colored_icon: failed to render {name}: {e}')
+        return QIcon(svg_path)
+
+
+def get_colored_search_icon(color: str) -> QIcon: return colored_icon('search', color)
+def get_colored_reset_icon(color: str) -> QIcon: return colored_icon('reset', color)
+def get_colored_refresh_icon(color: str) -> QIcon: return colored_icon('reset', color)
+def get_colored_refresh_icon_svg(color: str) -> QIcon: return colored_icon('refresh', color)
+def get_colored_checkmark_icon(color: str) -> QIcon: return colored_icon('checkmark', color)
+def get_colored_save_icon(color: str) -> QIcon: return colored_icon('save', color)
+def get_colored_delete_icon(color: str) -> QIcon: return colored_icon('delete', color)
+def get_colored_minimize_icon(color: str) -> QIcon: return colored_icon('minimize', color)
+def get_colored_maximize_icon(color: str) -> QIcon: return colored_icon('maximize', color)
+def get_colored_restore_icon(color: str) -> QIcon: return colored_icon('restore', color)
+def get_colored_cross_icon(color: str) -> QIcon: return colored_icon('cross', color)
+def get_colored_arrow_down_icon(color: str) -> QIcon: return colored_icon('arrow_down', color)
+def get_colored_arrow_up_icon(color: str) -> QIcon: return colored_icon('arrow_up', color)

@@ -243,3 +243,22 @@ class TestModMetadata:
                         assert isinstance(metadata, dict)
         finally:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
+
+    def test_metadata_preserved_after_load_local_mods_cleanup(self, app_state, feedback_service):
+        """Verify that load_local_mods does not destroy existing metadata when processing cleanup keys."""
+        from services.mod_service import ModManager
+        mod_service = ModManager(app_state, feedback_service)
+        original_date = '2024-06-15 12:30:00'
+        seed_metadata = {
+            'test_mod_abc': {'added_date': original_date, 'is_gamebanana': True},
+            'mod_files_to_cleanup': [],
+            'mod_dirs_to_cleanup': [],
+        }
+        mod_service._write_metadata(seed_metadata)
+        mod_service.load_local_mods()
+        after = mod_service._read_metadata()
+        assert 'test_mod_abc' not in after or after['test_mod_abc']['added_date'] == original_date, \
+            'Existing metadata added_date must not be overwritten by load_local_mods'
+        assert 'mod_files_to_cleanup' not in after, 'Cleanup keys should be removed'
+        assert 'mod_dirs_to_cleanup' not in after, 'Cleanup keys should be removed'
+        mod_service._write_metadata({})

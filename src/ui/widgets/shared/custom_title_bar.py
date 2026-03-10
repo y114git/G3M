@@ -1,7 +1,9 @@
-from PyQt6.QtCore import QEvent, QPoint, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QSizePolicy, QToolButton, QWidget
 import logging
+from ui.common.styling import get_theme_color
+from utils.path_utils import colored_icon
 logger = logging.getLogger(__name__)
 
 
@@ -12,10 +14,11 @@ class CustomTitleBar(QWidget):
     maximize_restore_requested = pyqtSignal()
     close_requested = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, app_state=None):
         super().__init__(parent)
         self.setObjectName('customTitleBar')
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.app_state = app_state
 
         self._maximize_tooltip = ''
         self._restore_tooltip = ''
@@ -48,17 +51,19 @@ class CustomTitleBar(QWidget):
         right_layout.setSpacing(6)
         self._right_layout = right_layout
 
-        self.minimize_button = QPushButton('—', self.right_widget)
+        self.minimize_button = QPushButton(self.right_widget)
         self.minimize_button.setObjectName('titleBarMinimizeButton')
         self.minimize_button.clicked.connect(self.minimize_requested.emit)
 
-        self.maximize_button = QPushButton('□', self.right_widget)
+        self.maximize_button = QPushButton(self.right_widget)
         self.maximize_button.setObjectName('titleBarMaximizeButton')
         self.maximize_button.clicked.connect(self.maximize_restore_requested.emit)
 
-        self.close_button = QPushButton('✕', self.right_widget)
+        self.close_button = QPushButton(self.right_widget)
         self.close_button.setObjectName('titleBarCloseButton')
         self.close_button.clicked.connect(self.close_requested.emit)
+
+        self._update_window_icons()
 
         right_layout.addStretch(1)
         right_layout.addWidget(self.minimize_button)
@@ -126,8 +131,22 @@ class CustomTitleBar(QWidget):
         self.close_button.setToolTip(close_tooltip)
         self.sync_window_state(self.window().isMaximized())
 
+    def _tc(self):
+        return get_theme_color(self.app_state.local_config, 'text', '#ffffff') if self.app_state else '#ffffff'
+
+    def _update_window_icons(self):
+        """Update window control buttons with colored icons."""
+        tc = self._tc()
+        for btn, name in ((self.minimize_button, 'minimize'), (self.close_button, 'cross')):
+            btn.setIcon(colored_icon(name, tc))
+            btn.setIconSize(QSize(12, 12))
+        self.sync_window_state(self.window().isMaximized() if self.window() else False)
+
     def sync_window_state(self, is_maximized: bool):
-        self.maximize_button.setText('❐' if is_maximized else '□')
+        """Sync window state and update maximize/restore icon."""
+        tc = self._tc()
+        self.maximize_button.setIcon(colored_icon('restore' if is_maximized else 'maximize', tc))
+        self.maximize_button.setIconSize(QSize(12, 12))
         self.maximize_button.setToolTip(self._restore_tooltip if is_maximized else self._maximize_tooltip)
 
     def apply_metrics(self, scale: float = 1.0):
@@ -145,6 +164,9 @@ class CustomTitleBar(QWidget):
             button.setMinimumHeight(scaled(20))
         for button in (self.minimize_button, self.maximize_button, self.close_button):
             button.setFixedSize(button_size, button_size)
+            if self.app_state:
+                icon_size = scaled(12)
+                button.setIconSize(QSize(icon_size, icon_size))
 
     def _can_start_window_action(self, pos) -> bool:
         child = self.childAt(pos)

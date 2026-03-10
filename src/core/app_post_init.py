@@ -40,9 +40,9 @@ def post_show_initialization(app):
     _restore_ui_state_from_config(app)
     try:
         from workers.mod_scan_worker import ModScanThread
-        from utils.path_utils import get_user_data_root
-        cache_dir = os.path.join(get_user_data_root(), 'cache')
-        app._mod_scan_thread = ModScanThread(app.app_state.mods_dir, app, cache_dir=cache_dir)
+        for d in (app.app_state.config_dir, app.app_state.mods_dir, app.app_state.plugins_dir):
+            os.makedirs(d, exist_ok=True)
+        app._mod_scan_thread = ModScanThread(app.app_state.mods_dir, app)
         app._mod_scan_thread.scan_completed.connect(app._on_mod_scan_finished)
         app._mod_scan_thread.start()
         app.status_label.setText(tr('status.scanning_mods'))

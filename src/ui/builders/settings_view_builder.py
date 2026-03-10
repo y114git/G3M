@@ -1,16 +1,18 @@
 from typing import Dict, Any
 import platform
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton,
     QCheckBox, QLineEdit, QSizePolicy, QTabWidget,
     QScrollArea, QSpinBox, QComboBox,
 )
+from PyQt6.QtGui import QIcon  # noqa: F401
 from services.localization_service import localization_service, tr
 from config.constants import SETTINGS_COLOR_CONFIG
 from ui.widgets.shared.custom_controls import NoScrollComboBox
 from ui.utils.ui_utils import UIAnimator
-from ui.common.styling import get_border_radius
+from ui.common.styling import get_border_radius, get_theme_color
+from utils.path_utils import colored_icon
 
 
 class SettingsViewBuilder:
@@ -157,10 +159,19 @@ class SettingsViewBuilder:
             btn.setToolTip(tooltip)
         return btn
 
-    def _create_icon_btn(self, icon: str, obj_name: str = 'actionIconBtn') -> QPushButton:
-        btn = QPushButton(icon)
+    _EMOJI_TO_ICON = {'⭯': 'reset', '✔': 'checkmark', '🖫': 'save', '🗑': 'delete'}
+
+    def _create_icon_btn(self, icon_text: str, obj_name: str = 'actionIconBtn', app_state=None) -> QPushButton:
+        btn = QPushButton()
         btn.setObjectName(obj_name)
         btn.setFixedSize(35, 35)
+        icon_name = self._EMOJI_TO_ICON.get(icon_text)
+        if icon_name and app_state:
+            tc = get_theme_color(app_state.local_config, 'text', '#ffffff')
+            btn.setIcon(colored_icon(icon_name, tc))
+            btn.setIconSize(QSize(20, 20))
+        else:
+            btn.setText(icon_text)
         return btn
 
     def _create_color_row(self, label_text: str, parent: QWidget = None):
@@ -177,7 +188,7 @@ class SettingsViewBuilder:
         btn = QPushButton(tr('ui.select_color'), parent)
         btn.setMinimumWidth(80)
         btn.setMinimumHeight(30)
-        reset = self._create_icon_btn('⭯')
+        reset = self._create_icon_btn('⭯', app_state=self.app_state)
         row.addWidget(label)
         row.addStretch()
         row.addWidget(disp)
@@ -256,7 +267,9 @@ class SettingsViewBuilder:
         themes_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
         themes_list_widget = QComboBox()
         themes_list_widget.setMinimumWidth(150)
-        theme_apply_btn, theme_save_btn, theme_delete_btn = self._create_icon_btn("✔"), self._create_icon_btn("🖫"), self._create_icon_btn("🗑")
+        theme_apply_btn = self._create_icon_btn("✔", app_state=self.app_state)
+        theme_save_btn = self._create_icon_btn("🖫", app_state=self.app_state)
+        theme_delete_btn = self._create_icon_btn("🗑", app_state=self.app_state)
         themes_row.addWidget(themes_list_widget)
         themes_row.addWidget(theme_apply_btn), themes_row.addWidget(theme_save_btn), themes_row.addWidget(theme_delete_btn)
         cl.addLayout(themes_row)
@@ -443,8 +456,7 @@ class SettingsViewBuilder:
         )
         custom_executable_button.setObjectName('settings_custom_executable_button')
         path_exe_layout.addWidget(custom_executable_button)
-        reset_custom_exe_button = QPushButton('⭯')
-        reset_custom_exe_button.setObjectName('actionIconBtn')
+        reset_custom_exe_button = self._create_icon_btn('⭯', app_state=self.app_state)
         reset_custom_exe_button.setVisible(False)
         path_exe_layout.addWidget(reset_custom_exe_button)
         cl.addWidget(path_exe_row, alignment=Qt.AlignmentFlag.AlignCenter)

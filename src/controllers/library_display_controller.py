@@ -102,7 +102,8 @@ class LibraryDisplayController:
         filtered_mods = filter_and_sort_mods(installed_mods, filters)
         if hasattr(self.app, 'library_sort_combo'):
             sort_type = self.app.library_sort_combo.currentIndex()
-            reverse = not self.app.library_sort_ascending
+            is_asc = self.app.library_sort_ascending
+            reverse = not is_asc if sort_type == 0 else is_asc
             filtered_mods.sort(key=lambda mod: mod.get('name', '').lower() if sort_type == 0 else mod.get('added_date') or '', reverse=reverse)
         return filtered_mods
 
@@ -126,7 +127,7 @@ class LibraryDisplayController:
         filters = {'tags': selected_tags, 'game': current_game_type, 'search_text': search_text, 'hide_banned': False, 'only_gamebanana': only_gamebanana, 'status_filter': ['approved', 'pending', 'unknown']}
         sort_config = None
         if hasattr(self.app, 'library_sort_combo') and self.app.library_sort_combo.currentIndex() == 1:
-            sort_config = {'sort_type': 1, 'reverse': not self.app.library_sort_ascending}
+            sort_config = {'sort_type': 1, 'reverse': self.app.library_sort_ascending}
         return (filters, sort_config)
 
     def update_for_chapter_mode(self, selected_chapter_id):

@@ -200,7 +200,7 @@ class LibraryTabBuilder(QObject):
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
         layout.addStretch()
-        search_btn = create_search_button()
+        search_btn = create_search_button(self.app_state)
         layout.addWidget(search_btn, 0, _vc)
         self.widgets.update({'library_sort_combo': sort_combo, 'library_sort_order_btn': sort_btn, 'library_tags_label': tags_lbl, 'library_search_button': search_btn, 'library_tag_widgets': list(tags.values())})
         self.widgets.update({f'library_tag_{k}': v for k, v in tags.items()})

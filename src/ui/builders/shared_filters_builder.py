@@ -1,9 +1,11 @@
 """Shared filter widget components for UI builders."""
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QCheckBox, QSizePolicy
+
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import NoScrollComboBox
 from ui.common.styling import get_theme_color, build_tag_checkbox_style, get_border_radius, install_widget_update_handler, get_widget_border_radius
+from utils.path_utils import colored_icon
 
 
 def create_sort_controls(app_state, items=None, config_key=None, include_order_button=True):
@@ -21,10 +23,13 @@ def create_sort_controls(app_state, items=None, config_key=None, include_order_b
         sort_combo.setCurrentIndex(idx if 0 <= idx < sort_combo.count() else 0)
     sort_btn = None
     if include_order_button:
-        sort_btn = QPushButton('▼')
+        sort_btn = QPushButton()
         sort_btn.setObjectName('sortOrderBtn')
         sort_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         sort_btn.setToolTip(tr('ui.sort_direction_tooltip'))
+        sort_btn.setAccessibleName(tr('ui.sort_direction_tooltip'))
+        sort_btn.setIcon(colored_icon('arrow_down', get_theme_color(app_state.local_config, 'text', '#ffffff')))
+        sort_btn.setIconSize(QSize(12, 12))
     return sort_combo, sort_btn
 
 
@@ -49,12 +54,16 @@ def create_modgame_combo(app_state, games_list, config_key=None):
     return modgame_combo
 
 
-def create_search_button():
+def create_search_button(app_state=None):
     """Create search button."""
-    search_btn = QPushButton('🔍')
+    search_btn = QPushButton()
     search_btn.setObjectName('searchBtn')
     search_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     search_btn.setToolTip(tr('ui.search_placeholder'))
+    search_btn.setAccessibleName(tr('ui.search_placeholder'))
+    tc = get_theme_color(app_state.local_config, 'text', '#ffffff') if app_state else '#ffffff'
+    search_btn.setIcon(colored_icon('search', tc))
+    search_btn.setIconSize(QSize(16, 16))
     return search_btn
 
 

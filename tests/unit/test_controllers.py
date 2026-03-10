@@ -36,7 +36,7 @@ class TestLibraryDisplayController:
         app_window = Mock()
         app_window.chapter_mode_checkbox.isChecked.return_value = False
         app_window.library_sort_combo.currentIndex.return_value = 0
-        app_window.library_sort_ascending = False
+        app_window.library_sort_ascending = True
         app_window.library_tag_textedit.isChecked.return_value = False
         app_window.library_tag_customization.isChecked.return_value = False
         app_window.library_tag_gameplay.isChecked.return_value = False
@@ -60,7 +60,7 @@ class TestLibraryDisplayController:
         app_window = Mock()
         app_window.chapter_mode_checkbox.isChecked.return_value = False
         app_window.library_sort_combo.currentIndex.return_value = 0
-        app_window.library_sort_ascending = False
+        app_window.library_sort_ascending = True
         app_window.library_tag_textedit.isChecked.return_value = False
         app_window.library_tag_customization.isChecked.return_value = False
         app_window.library_tag_gameplay.isChecked.return_value = False
@@ -76,6 +76,36 @@ class TestLibraryDisplayController:
         controller._last_render_signature = (controller._current_view_signature(), (('mod_key',),))
         controller.update_display()
         controller.refresh_async.assert_called_once()
+
+    def test_library_sort_order_name_ascending_and_date_descending(self, app_state, feedback_service):
+        """Default ascending=True should sort names A→Z and dates newest→oldest."""
+        from controllers.library_display_controller import LibraryDisplayController
+        app_window = Mock()
+        app_window.chapter_mode_checkbox.isChecked.return_value = False
+        app_window.library_sort_combo.currentIndex.return_value = 0
+        app_window.library_sort_ascending = True
+        app_window.library_tag_textedit.isChecked.return_value = False
+        app_window.library_tag_customization.isChecked.return_value = False
+        app_window.library_tag_gameplay.isChecked.return_value = False
+        app_window.library_tag_other.isChecked.return_value = False
+        app_window.library_tag_gamebanana.isChecked.return_value = False
+        app_window.game_type_combo.currentData.return_value = 'deltarune'
+        app_window.library_search_text = ''
+        app_window.game_launch = Mock()
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = [
+            {'key': 'b', 'name': 'Beta', 'game': 'deltarune', 'added_date': '2024-01-01 00:00:00'},
+            {'key': 'a', 'name': 'Alpha', 'game': 'deltarune', 'added_date': '2025-06-01 00:00:00'},
+            {'key': 'c', 'name': 'Charlie', 'game': 'deltarune', 'added_date': '2024-06-01 00:00:00'},
+        ]
+        controller = LibraryDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, used_mods_service=Mock(), app_window=app_window)
+        result = controller._filter_and_sort_installed(mod_service.get_installed_mods_list())
+        names = [m['name'] for m in result]
+        assert names == ['Alpha', 'Beta', 'Charlie'], f'Name sort ascending should be A→Z, got {names}'
+        app_window.library_sort_combo.currentIndex.return_value = 1
+        result = controller._filter_and_sort_installed(mod_service.get_installed_mods_list())
+        dates = [m['added_date'] for m in result]
+        assert dates == ['2025-06-01 00:00:00', '2024-06-01 00:00:00', '2024-01-01 00:00:00'], f'Date sort ascending should be newest first, got {dates}'
 
 
 class TestSearchDisplayController:

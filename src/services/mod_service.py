@@ -155,11 +155,10 @@ class ModManager(QObject):
                 return self._mods_cache.copy()
             if use_async and not self._scan_in_progress and not (self._scan_thread and self._scan_thread.isRunning()):
                 self._scan_in_progress = True
-                from utils.path_utils import get_user_data_root
-                cache_dir = os.path.join(get_user_data_root(), 'cache')
-                self._scan_thread = ModScanThread(self.app_state.mods_dir, self.parent(), cache_dir=cache_dir)
+                self._scan_thread = ModScanThread(self.app_state.mods_dir, self.parent())
                 self._scan_thread.scan_completed.connect(self._on_scan_completed)
                 self._scan_thread.start()
+                return self._mods_cache.copy()
             cache, mods_by_name = scan_mods_directory(self.app_state.mods_dir, self._mods_cache)
             self._mods_cache = cache
             self._key_manager.fix_duplicate_mod_keys(self._mods_cache)
@@ -390,7 +389,10 @@ class ModManager(QObject):
                             remover(p)
                     except Exception as e:
                         logging.warning(f'load_local_mods: failed to remove cleanup {kind} {p}: {e}', exc_info=True)
-            self._write_metadata({'mod_files_to_cleanup': [], 'mod_dirs_to_cleanup': []})
+            if 'mod_files_to_cleanup' in metadata or 'mod_dirs_to_cleanup' in metadata:
+                metadata.pop('mod_files_to_cleanup', None)
+                metadata.pop('mod_dirs_to_cleanup', None)
+                self._write_metadata(metadata)
             self.cleanup_stale_used_mods()
             return True
         except Exception as e:

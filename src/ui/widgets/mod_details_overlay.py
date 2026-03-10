@@ -42,10 +42,9 @@ class LoadDescriptionFromUrlThread(QThread):
 class LoadModDetailsThread(QThread):
     details_loaded = pyqtSignal(dict)
 
-    def __init__(self, mod_data, cache_dir=None, parent=None):
+    def __init__(self, mod_data, parent=None):
         super().__init__(parent)
         self.mod_data = mod_data
-        self.cache_dir = cache_dir
 
     def _get_mod_id(self):
         mod_key = get_mod_key(self.mod_data) or ''
@@ -798,8 +797,7 @@ class ModDetailsOverlay(QWidget):
     def _load_gamebanana_description(self):
         """Load GameBanana mod description."""
         self._show_loading_description()
-        cache_dir = self._app_state.cache_dir if self._app_state and hasattr(self._app_state, 'cache_dir') else None
-        self._start_thread('load_thread', LoadModDetailsThread(self.mod_data, cache_dir=cache_dir, parent=None), (('details_loaded', self._on_details_loaded),))
+        self._start_thread('load_thread', LoadModDetailsThread(self.mod_data, parent=None), (('details_loaded', self._on_details_loaded),))
 
     def _on_details_loaded(self, details):
         try:

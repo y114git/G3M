@@ -72,8 +72,6 @@ UI_COLORS = {
     'status_info': 'gray',
     'status_ready': 'lightgreen',
     'status_steam': 'blue',
-    'link': '#00BFFF',
-    'social_discord': '#8A2BE2',
     'saves_button': 'yellow',
 }
 THEMES = {
@@ -185,9 +183,9 @@ RICH_HTML_FONT_COLOR_RE = re.compile(r'<font\b([^>]*?)\bcolor=["\']([^"\']*)["\'
 """Localization mapping constants."""
 WIDGET_LOCALIZATIONS = [
     ('online_label', 'setToolTip', 'tooltips.online_counter'),
-    ('telegram_button', 'setText', 'buttons.telegram'),
+    ('telegram_button', 'setToolTip', 'buttons.telegram'),
     ('beta_updates_checkbox', 'setToolTip', 'tooltips.beta_updates'),
-    ('discord_button', 'setText', 'buttons.discord'),
+    ('discord_button', 'setToolTip', 'buttons.discord'),
     ('chat_button', 'setText', 'ui.chat_button'),
     ('shortcut_button', 'setText', 'buttons.shortcut'),
     ('tags_label', 'setText', 'ui.tags_label'),

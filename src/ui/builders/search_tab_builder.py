@@ -98,7 +98,7 @@ class ModsBrowserTabBuilder(QObject):
         show_nsfw_checkbox.setChecked(bool(self.app_state.local_config.get('show_nsfw', False)))
         layout.addWidget(show_nsfw_checkbox, 0, _vc)
         layout.addStretch()
-        search_btn = create_search_button()
+        search_btn = create_search_button(self.app_state)
         layout.addWidget(search_btn, 0, _vc)
         self.widgets.update({'sort_combo': sort_combo, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'show_nsfw_checkbox': show_nsfw_checkbox, 'search_button': search_btn})
         self.widgets.update({f'tag_{k}': v for k, v in tags.items()})

@@ -1,7 +1,8 @@
 """Controller for theme management and UI customization."""
 from PyQt6.QtWidgets import QApplication, QWIDGETSIZE_MAX
+from PyQt6.QtCore import QSize
 from services.localization_service import tr
-from config.constants import THEMES, UI_COLORS
+from config.constants import THEMES
 from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
 from utils.path_utils import resource_path
 from workers.background_loader_worker import BgLoader
@@ -78,9 +79,6 @@ class ThemeController:
         for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
             palette.setColor(role, txt_col)
         (QApplication.instance() or self.app).setPalette(palette)
-        for widget, color in [(getattr(self.app, 'telegram_button', None), UI_COLORS['link']), (getattr(self.app, 'discord_button', None), UI_COLORS['social_discord'])]:
-            if widget:
-                widget.setStyleSheet(f'color: {color};')
         scroll_handle_color = self.app_state.local_config.get('custom_color_button') or '#e8e9eb'
         checkbox_checked_color = '#ffffff' if not self.app.color_widgets['button_hover'].text() else button_hover_color
         style_sheet = build_stylesheet(frame_bg_color=frame_bg_color, button_color=button_color, border_color=border_color, button_hover_color=button_hover_color, main_text_color=main_text_color, font_family_main=font_family_main, font_size_main=font_size_main, font_size_small=font_size_small, checkbox_checked_color=checkbox_checked_color, scroll_handle_color=scroll_handle_color, tooltip_bg_color=tooltip_bg_color, zoom_factor=zoom_factor, custom_border_radius=custom_border_radius)
@@ -108,6 +106,15 @@ class ThemeController:
             self.app._apply_window_corner_mask()
         self.app.top_panel_widget.setMinimumHeight(scale(65))
         self.app.logo_placeholder.setFixedSize(scale(250), scale(60))
+        btn_size = scale(40)
+        icon_size_social = scale(32)
+        social_style = f"padding: {scale(4)}px; min-width: {btn_size}px; min-height: {btn_size}px; max-width: {btn_size}px; max-height: {btn_size}px;"
+        for btn_attr in ('telegram_button', 'discord_button'):
+            btn = getattr(self.app, btn_attr, None)
+            if btn:
+                btn.setFixedSize(btn_size, btn_size)
+                btn.setIconSize(QSize(icon_size_social, icon_size_social))
+                btn.setStyleSheet(social_style)
 
         from PyQt6.QtCore import QTimer
         if hasattr(self.app, 'launcher_icon_label'):
@@ -399,6 +406,8 @@ class ThemeController:
                     line_frame.setStyleSheet(line_style)
                 except RuntimeError:
                     pass
+        if hasattr(self.app, '_refresh_themed_icons'):
+            self.app._refresh_themed_icons()
 
     def on_background_button_click(self):
         self.settings_service.on_background_button_click()

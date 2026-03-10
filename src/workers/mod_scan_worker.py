@@ -10,7 +10,7 @@ class ModScanThread(QThread):
     """Background thread for scanning mod directory."""
     scan_completed = pyqtSignal(dict)
 
-    def __init__(self, mods_dir: str, parent=None, cache_dir: str = None):
+    def __init__(self, mods_dir: str, parent=None):
         super().__init__(parent)
         self.mods_dir = mods_dir
         self._cancel_flag = False

@@ -13,6 +13,8 @@ from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
 from workers.gamebanana.search_worker import SearchGameBananaModsThread
 from config.constants import GAMEBANANA_GAME_IDS, SEARCH_EXHAUSTED_PAGE_SENTINEL
 from ui.utils.ui_utils import DebounceTimer
+from ui.common.styling import get_theme_color
+from utils.path_utils import get_colored_search_icon, get_colored_refresh_icon
 import logging
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ class SearchDisplayController(QObject):
     """Manages search display, filtering, and mod interaction in search results."""
     ui_button_text_update = pyqtSignal(str, str)
     ui_button_tooltip_update = pyqtSignal(str, str)
+    ui_button_icon_update = pyqtSignal(str, object)
     ui_button_enabled_update = pyqtSignal(str, bool)
     ui_combo_data_requested = pyqtSignal(str)
     combo_data_received = pyqtSignal(str, object)
@@ -188,6 +191,13 @@ class SearchDisplayController(QObject):
             logger.warning(f'SearchDisplayController: Error getting installed mod keys: {e}', exc_info=True)
         return set()
 
+    def _set_search_btn_icon(self, is_searching: bool):
+        tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
+        icon = get_colored_refresh_icon(tc) if is_searching else get_colored_search_icon(tc)
+        self.ui_button_icon_update.emit('search_button', icon)
+        tooltip = tr('ui.clear_search_tooltip', text=self.app_state.search_text) if is_searching else tr('ui.search_placeholder')
+        self.ui_button_tooltip_update.emit('search_button', tooltip)
+
     def _clear_search_timers(self):
         """Stop and delete all active search timers."""
         for timer in self._active_search_timers[:]:
@@ -334,8 +344,7 @@ class SearchDisplayController(QObject):
         if self.app_state.search_text == search_text:
             self.app_state.search_text = ''
             self._current_search_text = ''
-            self.ui_button_text_update.emit('search_button', '🔍')
-            self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
+            self._set_search_btn_icon(False)
             self.load_mods_for_selected_game()
 
     def show_blocklist_dialog(self):
@@ -365,15 +374,13 @@ class SearchDisplayController(QObject):
             self.app_state.gamebanana_loading = False
             self._current_search_text = ''
             self.app_state.search_text = ''
-            self.ui_button_text_update.emit('search_button', '🔍')
-            self.ui_button_tooltip_update.emit('search_button', tr('ui.search_placeholder'))
+            self._set_search_btn_icon(False)
             self.load_mods_for_selected_game()
         else:
             text, ok = QInputDialog.getText(self.app, tr('ui.search_tab'), tr('ui.search_in_name_description'))
             if ok and len(text.strip()) >= 2:
                 self.app_state.search_text = text.strip()
-                self.ui_button_text_update.emit('search_button', '↻')
-                self.ui_button_tooltip_update.emit('search_button', tr('ui.clear_search_tooltip', text=self.app_state.search_text))
+                self._set_search_btn_icon(True)
                 self.load_mods_for_selected_game()
 
     def _build_filters_and_sort(self):
