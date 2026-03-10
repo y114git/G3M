@@ -338,6 +338,8 @@ class ModDetailsOverlay(QWidget):
         self._img_label = QLabel(img_container)
         self._img_label.setFixedSize(self.IMG_W, self.IMG_H)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._img_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._img_label.mousePressEvent = self._on_screenshot_click
         self._install_image_container_style(img_container)
         carousel.addWidget(img_container, 0, Qt.AlignmentFlag.AlignHCenter)
         nav = self._layout(QHBoxLayout, margins=(0, 0, 0, 0), spacing=4)
@@ -373,11 +375,13 @@ class ModDetailsOverlay(QWidget):
             if value:
                 label = QLabel(self._meta_row_html(key, value))
                 label.setWordWrap(key == 'ui.tags_label')
+                label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
                 self._meta_labels[key] = label
                 meta.addWidget(label)
         if tags := self._translated_tags():
             label = QLabel(self._meta_row_html('ui.tags_label', tags))
             label.setWordWrap(True)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
             self._meta_labels['ui.tags_label'] = label
             meta.addWidget(label)
         return meta
@@ -386,9 +390,15 @@ class ModDetailsOverlay(QWidget):
         left = self._layout(QVBoxLayout, margins=(0, 0, 0, 0), spacing=15)
         if external_url := getattr(self.mod_data, 'external_url', None):
             left.addWidget(self._create_button(tr('ui.view_on_external_site'), obj_name='cardButtonExternal', style=self._button_style('cardButtonExternal', text_color='#FFD700', width=self.EXTERNAL_BUTTON_WIDTH, font_size=15), clicked=lambda: webbrowser.open(external_url), fixed_width=self.EXTERNAL_BUTTON_WIDTH), 0, Qt.AlignmentFlag.AlignCenter)
-        self.title_label = self._html_label(f'<h2 style="color:{self._colors["text"]};margin:8px 0;font-size:18px;">{html.escape(self.mod_data.name or "")}</h2>')
+        self.title_label = QLabel(f'<h2 style="color:{self._colors["text"]};margin:8px 0;font-size:18px;">{html.escape(self.mod_data.name or "")}</h2>')
+        self.title_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.title_label.setWordWrap(True)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left.addWidget(self.title_label)
-        self.tagline_label = self._html_label('', wrap=True)
+        self.tagline_label = QLabel('')
+        self.tagline_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.tagline_label.setWordWrap(True)
+        self.tagline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left.addWidget(self.tagline_label)
         self._update_tagline_label(getattr(self.mod_data, 'tagline', None))
         left.addLayout(self._build_carousel_layout())
@@ -824,6 +834,11 @@ class ModDetailsOverlay(QWidget):
                     self.update_screenshots(ss)
         except Exception as e:
             logging.error(f'Error in _on_details_loaded: {e}', exc_info=True)
+
+    def _on_screenshot_click(self, event):
+        """Handle screenshot click to open in browser."""
+        if event.button() == Qt.MouseButton.LeftButton and self._ss_urls and 0 <= self._ss_index < len(self._ss_urls):
+            webbrowser.open(self._ss_urls[self._ss_index])
 
     def _restore_main_window_resize(self):
         """Restores the original resizeEvent of the main window."""
