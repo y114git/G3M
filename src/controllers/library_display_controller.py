@@ -229,10 +229,10 @@ class LibraryDisplayController:
             def _finish_display():
                 if container:
                     container.setUpdatesEnabled(True)
+                self.app._library_batch_render_in_progress = False
 
             try:
                 clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-                self.cleanup_missing_mods(installed_mods)
                 existing_mods = [mod_info for mod_info in installed_mods if self.mod_service.check_mod_exists(mod_info)]
                 filtered_mods = self._filter_and_sort_installed(existing_mods)
                 mods = list(filtered_mods)
@@ -244,6 +244,7 @@ class LibraryDisplayController:
             def _build_next_batch(batch_size=25):
                 nonlocal batch_index
                 try:
+                    self.app._library_batch_render_in_progress = True
                     start = batch_index
                     end = min(start + batch_size, len(mods))
                     for idx in range(start, end):
@@ -283,18 +284,6 @@ class LibraryDisplayController:
         finally:
             self._pending_view_signature = None
             self._updating_display = False
-
-    def cleanup_missing_mods(self, installed_mods):
-        installed_mod_keys = {mod.get('key') or mod.get('mod_key') for mod in installed_mods if mod.get('key') or mod.get('mod_key')}
-        mods_metadata = self.mod_service._read_metadata()
-        orphaned_keys = set(mods_metadata.keys()) - installed_mod_keys
-        if orphaned_keys:
-            for key in orphaned_keys:
-                del mods_metadata[key]
-                dummy_mod_data = self.mod_service.create_mod_object_from_info({'key': key, 'name': 'Orphaned Mod'}, getattr(self.app_state, 'all_mods', None))
-                if dummy_mod_data:
-                    self.used_mods_service.remove_mod_from_all_chapters(dummy_mod_data)
-            self.mod_service._write_metadata(mods_metadata)
 
     def update_mod_widgets_active_status(self):
         if not hasattr(self.app, 'installed_mods_layout') or self.app.installed_mods_layout is None:

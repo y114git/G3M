@@ -75,24 +75,17 @@ jobs:
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
               id: run_tests
-              continue-on-error: true
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
                   DISPLAY: :99
                   QT_QPA_PLATFORM: offscreen
               run: |
+                  set -o pipefail
                   pytest tests/ -vv --collect-only --tb=short 2>&1 | tee test-collection.log || true
                   pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
-                  TEST_EXIT_CODE=$?
+                  TEST_EXIT_CODE=${PIPESTATUS[0]}
                   echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
                   exit $TEST_EXIT_CODE
-            - name: Check test results
-              if: always()
-              run: |
-                  if [ "${{ steps.run_tests.outcome }}" != "success" ]; then
-                      echo "Tests failed or were cancelled"
-                      exit 1
-                  fi
             - name: Publish test results summary
               if: always()
               run: |
@@ -181,22 +174,15 @@ jobs:
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
               id: run_tests
-              continue-on-error: true
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
+                  set -o pipefail
                   pytest tests/ -vv --collect-only --tb=short 2>&1 | tee test-collection.log || true
                   pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
-                  TEST_EXIT_CODE=$?
+                  TEST_EXIT_CODE=${PIPESTATUS[0]}
                   echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
                   exit $TEST_EXIT_CODE
-            - name: Check test results
-              if: always()
-              run: |
-                  if [ "${{ steps.run_tests.outcome }}" != "success" ]; then
-                      echo "Tests failed or were cancelled"
-                      exit 1
-                  fi
             - name: Publish test results summary
               if: always()
               run: |
@@ -285,22 +271,15 @@ jobs:
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]" || true
             - name: Run all tests
               id: run_tests
-              continue-on-error: true
               env:
                   PYTHONPATH: ${{ github.workspace }}/src
               run: |
+                  set -o pipefail
                   pytest tests/ -vv --collect-only --tb=short 2>&1 | tee test-collection.log || true
                   pytest tests/ -v --tb=short --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
-                  TEST_EXIT_CODE=$?
+                  TEST_EXIT_CODE=${PIPESTATUS[0]}
                   echo "exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
                   exit $TEST_EXIT_CODE
-            - name: Check test results
-              if: always()
-              run: |
-                  if [ "${{ steps.run_tests.outcome }}" != "success" ]; then
-                      echo "Tests failed or were cancelled"
-                      exit 1
-                  fi
             - name: Publish test results summary
               if: always()
               run: |
@@ -393,7 +372,6 @@ jobs:
                   python -c "import os; test_files = []; [test_files.extend([os.path.join(root, f) for f in files if f.startswith('test_') and f.endswith('.py')]) for root, dirs, files in os.walk('tests')]; print(f'Found {len(test_files)} test files:'); [print(f) for f in test_files[:10]]"
             - name: Run all tests
               id: run_tests
-              continue-on-error: true
               shell: powershell
               env:
                   PYTHONPATH: ${{ github.workspace }}\src
@@ -404,14 +382,6 @@ jobs:
                   $exitCode = if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 }
                   echo "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
                   exit $exitCode
-            - name: Check test results
-              if: always()
-              shell: powershell
-              run: |
-                  if ("${{ steps.run_tests.outcome }}" -ne "success") {
-                      Write-Host "Tests failed or were cancelled"
-                      exit 1
-                  }
             - name: Publish test results summary
               if: always()
               shell: powershell

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, Q
 from config.constants import BASE_TAG_NAMES, LIBRARY_GAME_OPTIONS, LIBRARY_IMPORT_ARCHIVE_EXTENSIONS
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
-from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, build_button_style, apply_scroll_area_chrome
+from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, build_button_style, apply_scroll_area_chrome, apply_stylesheet_if_changed
 from ui.builders.shared_filters_builder import (
     create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button,
     create_filters_frame, apply_filters_frame_style
@@ -152,13 +152,36 @@ class LibraryTabBuilder(QObject):
             viewport_inset = max(2, min(10, container_radius // 5))
             scrollbar_corner_inset = max(6, min(18, container_radius // 2))
             scrollbar_qss = build_scrollbar_qss(colors["text"], get_border_radius(self.app_state.local_config), vertical_margin=(scrollbar_corner_inset, 2, scrollbar_corner_inset, 0), horizontal_margin=(0, scrollbar_corner_inset, scrollbar_corner_inset, scrollbar_corner_inset))
-            m_layout.setContentsMargins(content_padding, content_padding, content_padding, content_padding)
-            scroll.setStyleSheet(f'''QScrollArea {{ background-color: transparent; border: none; }}{scrollbar_qss}''')
+            viewport = scroll.viewport() if hasattr(scroll, 'viewport') else None
+            v_scrollbar = scroll.verticalScrollBar() if hasattr(scroll, 'verticalScrollBar') else None
+            clip_key = (
+                container_radius,
+                content_padding,
+                viewport_inset,
+                scrollbar_corner_inset,
+                int(scroll.width() or 0),
+                int(scroll.height() or 0),
+                int(viewport.width() or 0) if viewport else 0,
+                int(viewport.height() or 0) if viewport else 0,
+                bool(v_scrollbar.isVisible()) if v_scrollbar else False,
+                int((v_scrollbar.width() or v_scrollbar.sizeHint().width()) if v_scrollbar else 0),
+            )
+            if getattr(scroll, '_library_inner_clip_key', None) == clip_key:
+                return
+            margin_key = (content_padding, content_padding, content_padding, content_padding)
+            if getattr(mods_cont, '_library_layout_margin_key', None) != margin_key:
+                m_layout.setContentsMargins(*margin_key)
+                mods_cont._library_layout_margin_key = margin_key
+            apply_stylesheet_if_changed(scroll, f'''QScrollArea {{ background-color: transparent; border: none; }}{scrollbar_qss}''', cache_attr='_library_scroll_stylesheet_cache')
             scrollbar_extent = apply_scroll_area_chrome(scroll, max(0, container_radius - viewport_inset), scrollbar_radius=get_border_radius(self.app_state.local_config), qss=scrollbar_qss)
+            viewport_margin_key = (viewport_inset, viewport_inset, max(viewport_inset, scrollbar_extent + 2), viewport_inset)
             try:
-                scroll.setViewportMargins(viewport_inset, viewport_inset, max(viewport_inset, scrollbar_extent + 2), viewport_inset)
+                if getattr(scroll, '_library_viewport_margin_key', None) != viewport_margin_key:
+                    scroll.setViewportMargins(*viewport_margin_key)
+                    scroll._library_viewport_margin_key = viewport_margin_key
             except (AttributeError, TypeError):
                 logger.exception('LibraryTabBuilder: setViewportMargins failed for viewport_inset=%s', viewport_inset)
+            scroll._library_inner_clip_key = clip_key
 
         mods_cont._inner_clip_callback = _apply_inner_clip
         install_scroll_area_update_handlers(scroll, _apply_inner_clip, 'library_viewport_clip')

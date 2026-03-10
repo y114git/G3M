@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFram
 from utils.path_utils import resource_path, colored_icon
 from .base_mod_widget import BaseModWidget
 from services.localization_service import tr
-from ui.common.styling import get_theme_color, build_button_style, get_border_radius, get_card_button_metrics
+from ui.common.styling import get_theme_color, build_button_style, get_border_radius, get_card_button_metrics, apply_stylesheet_if_changed
 from utils.mod_utils import get_mod_key
 from ui.utils.ui_utils import UIAnimator
 
@@ -15,11 +15,15 @@ from ui.utils.ui_utils import UIAnimator
 class InstalledModWidget(BaseModWidget):
     remove_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
+    _gb_status_pixmaps = {}
+    _checkmark_icons = {}
 
     def _should_run_entry_animation(self) -> bool:
         parent_app = getattr(self, 'parent_app', None)
         if not parent_app:
             return True
+        if getattr(parent_app, '_library_batch_render_in_progress', False):
+            return False
         main_tab_widget = getattr(parent_app, 'main_tab_widget', None)
         library_tab = getattr(parent_app, 'library_tab', None)
         if not main_tab_widget or library_tab is None:
@@ -34,6 +38,7 @@ class InstalledModWidget(BaseModWidget):
         if parent_app:
             self.parent_app = parent_app
         self.hide()
+        self._is_broken_cache = None
         self.use_button = None
         self.added_date = installed_date
         self.is_active = False
@@ -95,10 +100,10 @@ class InstalledModWidget(BaseModWidget):
         self.checkmark_button = QPushButton(self)
         self.checkmark_button.setObjectName('checkmarkButton')
         self.checkmark_button.setFixedSize(40, 40)
-        self.checkmark_button.setStyleSheet('QPushButton { background: transparent; border: none; }')
+        apply_stylesheet_if_changed(self.checkmark_button, 'QPushButton { background: transparent; border: none; }', cache_attr='_checkmark_button_stylesheet_cache')
         self.checkmark_button.setVisible(False)
         _chk_color = get_theme_color(self._resolve_theme_config(), 'secondary_text', '#4CAF50')
-        self.checkmark_button.setIcon(colored_icon('checkmark', _chk_color))
+        self.checkmark_button.setIcon(self._checkmark_icons.setdefault((24, _chk_color), colored_icon('checkmark', _chk_color)))
         self.checkmark_button.setIconSize(QSize(24, 24))
         self.checkmark_button.setEnabled(False)  # Make it non-interactive
         self.main_layout.addWidget(self.checkmark_button)
@@ -118,7 +123,7 @@ class InstalledModWidget(BaseModWidget):
         border = get_theme_color(config, 'border', '#039d5b') if config else '#039d5b'
         br = get_border_radius(config)
         button_width, button_height, button_font_size = get_card_button_metrics(config)
-        self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+        apply_stylesheet_if_changed(self.remove_button, build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_remove_button_stylesheet_cache')
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
         actions_layout.addWidget(self.remove_button)
         self.actions_widget.setVisible(False)
@@ -144,16 +149,16 @@ class InstalledModWidget(BaseModWidget):
             for attr in ('added_label_title', 'game_version_label_title'):
                 label = getattr(self, attr, None)
                 if label:
-                    label.setStyleSheet(f'color: {text_color};')
+                    apply_stylesheet_if_changed(label, f'color: {text_color};', cache_attr=f'_{attr}_stylesheet_cache')
             border = get_theme_color(config, 'border', '#039d5b')
             br = get_border_radius(config)
             button_width, button_height, button_font_size = get_card_button_metrics(config)
             if hasattr(self, 'remove_button') and self.remove_button:
-                self.remove_button.setStyleSheet(build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+                apply_stylesheet_if_changed(self.remove_button, build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_remove_button_stylesheet_cache')
             if hasattr(self, 'checkmark_button') and self.checkmark_button:
                 icon_size = max(18, round(24 * self._layout_scale()))
                 _chk_color = get_theme_color(config, 'secondary_text', '#4CAF50')
-                self.checkmark_button.setIcon(colored_icon('checkmark', _chk_color))
+                self.checkmark_button.setIcon(self._checkmark_icons.setdefault((icon_size, _chk_color), colored_icon('checkmark', _chk_color)))
                 self.checkmark_button.setIconSize(QSize(icon_size, icon_size))
         self._update_button_from_status()
 
@@ -163,38 +168,48 @@ class InstalledModWidget(BaseModWidget):
         style = f'font-size: {font_size}px; font-weight: bold; margin-left: {margin_left}px;'
 
         if self._is_mod_broken():
-            self.status_indicator.setStyleSheet(f'color: #F44336; {style}')
+            apply_stylesheet_if_changed(self.status_indicator, f'color: #F44336; {style}', cache_attr='_status_indicator_stylesheet_cache')
             self.status_indicator.setToolTip(tr('tooltips.mod_broken'))
 
         if self._is_gamebanana_linked():
             gb_icon_path = resource_path('assets/icons/gbicon.png')
             if os.path.exists(gb_icon_path):
                 icon_size = max(12, round(14 * self._layout_scale()))
-                pixmap = QPixmap(gb_icon_path).scaled(icon_size, icon_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                pixmap = self._gb_status_pixmaps.get(icon_size)
+                if pixmap is None:
+                    pixmap = QPixmap(gb_icon_path).scaled(icon_size, icon_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    self._gb_status_pixmaps[icon_size] = pixmap
                 self.status_indicator.setPixmap(pixmap)
                 self.status_indicator.setText('')
             else:
-                self.status_indicator.setStyleSheet(f'color: #FFD700; {style}')
+                apply_stylesheet_if_changed(self.status_indicator, f'color: #FFD700; {style}', cache_attr='_status_indicator_stylesheet_cache')
             self.status_indicator.setToolTip(tr('tooltips.gamebanana_linked'))
             return
 
-        self.status_indicator.setStyleSheet(f'color: #4CAF50; {style}')
+        apply_stylesheet_if_changed(self.status_indicator, f'color: #4CAF50; {style}', cache_attr='_status_indicator_stylesheet_cache')
         self.status_indicator.setToolTip(tr('tooltips.mod_valid'))
 
     def _is_mod_broken(self) -> bool:
+        if self._is_broken_cache is not None:
+            return self._is_broken_cache
         try:
             if not self.mod_data:
+                self._is_broken_cache = True
                 return True
             key = get_mod_key(self.mod_data)
             if not key:
+                self._is_broken_cache = True
                 return True
             if not self.parent_app or not hasattr(self.parent_app, 'mod_service'):
+                self._is_broken_cache = False
                 return False
             mod_folder = self.parent_app.mod_service.get_mod_folder_path(key)
             if not mod_folder or not os.path.exists(mod_folder):
+                self._is_broken_cache = True
                 return True
             files = getattr(self.mod_data, 'files', None)
             if not files or not isinstance(files, dict):
+                self._is_broken_cache = True
                 return True
             from utils.file_utils import get_chapter_folder_name
             for chapter_key, chapter_data in files.items():
@@ -216,9 +231,12 @@ class InstalledModWidget(BaseModWidget):
                         chapter_folder = os.path.join(mod_folder, chapter_key)
                 data_file_path = os.path.join(chapter_folder, data_file)
                 if not os.path.exists(data_file_path):
+                    self._is_broken_cache = True
                     return True
+            self._is_broken_cache = False
             return False
         except Exception:
+            self._is_broken_cache = True
             return True
 
     def _is_gamebanana_linked(self) -> bool:
@@ -236,18 +254,19 @@ class InstalledModWidget(BaseModWidget):
         button_width, button_height, button_font_size = get_card_button_metrics(config)
         if self.status == 'active':
             self.use_button.setText(tr('ui.remove_button'))
-            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+            apply_stylesheet_if_changed(self.use_button, build_button_style('cardButtonInstall', '#FF9800', '#F57C00', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_use_button_stylesheet_cache')
         else:
             self.use_button.setText(tr('ui.use_button'))
-            self.use_button.setStyleSheet(build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+            apply_stylesheet_if_changed(self.use_button, build_button_style('cardButtonInstall', '#4CAF50', '#5cb85c', '#e8e9eb', border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_use_button_stylesheet_cache')
 
     def _sync_status(self):
         self.status = 'active' if self.is_active else 'ready'
         self._update_button_from_status()
-        self._update_indicator()
         self._update_actions_visibility()
 
     def set_active(self, active):
+        if self.is_active == active:
+            return
         self.is_active = active
         self._sync_status()
 

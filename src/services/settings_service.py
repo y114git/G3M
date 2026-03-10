@@ -551,10 +551,11 @@ class SettingsManager(QObject):
                 min_height = max(widget.minimumHeight(), 480)
                 width = max(min_width, min(width or widget.width(), available.width()))
                 height = max(min_height, min(height or widget.height(), available.height()))
-                max_x = max(available.left(), available.right() - width + 1)
-                max_y = max(available.top(), available.bottom() - height + 1)
-                x = min(max(x, available.left()), max_x)
-                y = min(max(y, available.top()), max_y)
+                if apply_maximized_state or not is_maximized:
+                    max_x = max(available.left(), available.right() - width + 1)
+                    max_y = max(available.top(), available.bottom() - height + 1)
+                    x = min(max(x, available.left()), max_x)
+                    y = min(max(y, available.top()), max_y)
             if width > 0 and height > 0:
                 widget.resize(width, height)
             widget.move(x, y)

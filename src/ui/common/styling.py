@@ -265,6 +265,7 @@ def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
 
 
 _theme_color_cache: dict[tuple, str] = {}
+_mod_icon_pixmap_cache: dict[tuple, QPixmap] = {}
 
 
 def get_theme_color(config, color_key, default_color):
@@ -687,6 +688,30 @@ def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, 
         cropped = pixmap.copy((source_width - crop_width) // 2, (source_height - crop_height) // 2, crop_width, crop_height)
         return cropped.scaled(target_width, target_height, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
+    def _stat_key(path):
+        try:
+            stat_result = os.stat(path)
+            return stat_result.st_mtime_ns, stat_result.st_size
+        except OSError:
+            return None
+
+    def _cached_prepared_pixmap(path=None, *, allow_empty=False, fill=None):
+        cache_key = (path, _stat_key(path) if path else None, target_width, target_height, border_radius, border_width, border_color, fill)
+        cached = _mod_icon_pixmap_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if path:
+            pixmap = QPixmap(path)
+            if pixmap.isNull():
+                return None
+            pixmap = _crop_and_scale_pixmap(pixmap, allow_empty=allow_empty)
+        else:
+            pixmap = QPixmap(target_width, target_height)
+            pixmap.fill(QColor(fill or '#333'))
+        pixmap = round_pixmap(pixmap, border_radius, border_width, border_color) if (border_radius > 0 or border_width > 0) else pixmap
+        _mod_icon_pixmap_cache[cache_key] = pixmap
+        return pixmap
+
     if isinstance(size, (tuple, list)):
         target_width = max(1, int(size[0]))
         target_height = max(1, int(size[1]))
@@ -699,17 +724,15 @@ def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, 
     for default_icon_path in (assets_icon_path,):
         if os.path.exists(default_icon_path):
             try:
-                default_pixmap = QPixmap(default_icon_path)
-                if not default_pixmap.isNull():
-                    default_pixmap = _crop_and_scale_pixmap(default_pixmap, allow_empty=True)
+                default_pixmap = _cached_prepared_pixmap(default_icon_path, allow_empty=True)
+                if default_pixmap is not None:
                     break
             except Exception as e:
                 logging.debug(f'load_mod_icon_universal: Error loading default icon from {default_icon_path}: {e}')
                 default_pixmap = None
     if default_pixmap is None:
-        default_pixmap = QPixmap(target_width, target_height)
-        default_pixmap.fill(QColor('#333'))
-    icon_label.setPixmap(round_pixmap(default_pixmap, border_radius, border_width, border_color) if (border_radius > 0 or border_width > 0) else default_pixmap)
+        default_pixmap = _cached_prepared_pixmap(fill='#333')
+    icon_label.setPixmap(default_pixmap)
     try:
         screenshots = getattr(mod_data, 'screenshots_url', None) or []
         preferred_screenshot = next((url for url in screenshots if isinstance(url, str) and url.strip()), None) if prefer_screenshot else None
@@ -743,10 +766,9 @@ def load_mod_icon_universal(icon_label, mod_data, size=80, local_fallback=None, 
             local_icon_to_load = icon_path
         if local_icon_to_load and os.path.exists(local_icon_to_load):
             try:
-                pixmap = QPixmap(local_icon_to_load)
-                if not pixmap.isNull():
-                    scaled_pixmap = _crop_and_scale_pixmap(pixmap)
-                    icon_label.setPixmap(round_pixmap(scaled_pixmap, border_radius, border_width, border_color) if (border_radius > 0 or border_width > 0) else scaled_pixmap)
+                pixmap = _cached_prepared_pixmap(local_icon_to_load)
+                if pixmap is not None:
+                    icon_label.setPixmap(pixmap)
                     return
             except Exception as e:
                 logging.debug(f'load_mod_icon_universal: Error loading pixmap from {local_icon_to_load}: {e}')
