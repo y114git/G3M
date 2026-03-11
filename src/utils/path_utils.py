@@ -260,6 +260,7 @@ _ICON_DEFS = {
     'cross': ('cross_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
     'arrow_down': ('arrow_down.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
     'arrow_up': ('arrow_up.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
+    'add': ('add_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
 }
 
 

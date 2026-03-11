@@ -683,7 +683,7 @@ class AppWindow(QWidget):
             'library_tag_customization', 'library_tag_gameplay', 'library_tag_other',
             'library_tag_gamebanana', 'library_tag_widgets', 'library_search_button',
         ), optional=(
-            'import_export_button', 'installed_mods_label', 'priority_button',
+            'add_mod_button', 'installed_mods_label', 'priority_button',
             'create_modpack_button',
         ))
         if self.priority_button:
@@ -692,8 +692,8 @@ class AppWindow(QWidget):
             self.create_modpack_button.clicked.connect(self.library_display.on_create_modpack_button_click)
         from controllers.mod_import_export_controller import ModImportExportController
         self.mod_import_export_controller = ModImportExportController(self.app_state, self.mod_service, self)
-        if self.import_export_button:
-            self.import_export_button.clicked.connect(self.mod_import_export_controller.show_import_export_dialog)
+        if self.add_mod_button:
+            self.add_mod_button.clicked.connect(self.mod_import_export_controller.show_add_mod_dialog)
         if hasattr(self.installed_mods_container, 'files_dropped'):
             self.installed_mods_container.files_dropped.connect(self.mod_import_export_controller.import_files_sequentially)
         self.game_type_combo.currentIndexChanged.connect(self.settings_ui.on_game_type_changed)

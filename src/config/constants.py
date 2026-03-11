@@ -233,7 +233,7 @@ WIDGET_LOCALIZATIONS = [
     ('library_tag_gamebanana', 'setText', 'ui.only_gamebanana'),
     ('library_search_button', 'setToolTip', 'ui.search_placeholder'),
     ('installed_mods_label', 'setText', 'ui.installed_mods_label'),
-    ('import_export_button', 'setText', 'ui.import_export_mod'),
+    ('add_mod_button', 'setToolTip', 'ui.add_mod'),
     ('theme_button', 'setText', 'buttons.import_export_themes'),
     ('do_not_save_theme_checkbox', 'setText', 'ui.do_not_save_theme_after_import'),
     ('hide_mods_browser_tab_checkbox', 'setText', 'ui.hide_mods_browser_tab'),
@@ -291,7 +291,7 @@ GAMEBANANA_TOOL_ID_DELTAHUB = 20615
 GAMEBANANA_PER_PAGE = 15
 
 """Mod file, archive, cache, and content metadata constants."""
-DATA_FILE_EXTENSIONS = ('.xdelta', '.vcdiff', '.win', '.unx', '.ios', '.droid')
+DATA_FILE_EXTENSIONS = ('.xdelta', '.vcdiff', '.win', '.unx', '.ios', '.droid', '.zip')
 MOD_CONFIG_FILENAME = 'mod_config.json'
 DATA_WIN_FILENAME = 'data.win'
 META_JSON_FILENAME = 'meta.json'

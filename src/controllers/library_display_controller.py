@@ -10,7 +10,7 @@ from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
 from services.mod_filter_service import filter_and_sort_mods
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_key
 from services.game_detection_service import get_chapter_id_for_game_mode
 
 
@@ -149,7 +149,7 @@ class LibraryDisplayController:
                     added_date = mod_info.get('added_date')
                     mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
                     mod_widget.clicked.connect(self.on_mod_clicked)
-                    mod_widget.remove_requested.connect(self.on_mod_remove)
+                    mod_widget.details_requested.connect(self.on_mod_details)
                     mod_widget.use_requested.connect(lambda md=mod_data: self._handle_mod_use(md, selected_chapter_id))
                     mod_widget.set_active(self.used_mods_service.is_mod_used_for_chapter(mod_data, selected_chapter_id))
                     self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
@@ -254,7 +254,7 @@ class LibraryDisplayController:
                             added_date = mod_info.get('added_date')
                             mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
                             mod_widget.clicked.connect(self.on_mod_clicked)
-                            mod_widget.remove_requested.connect(self.on_mod_remove)
+                            mod_widget.details_requested.connect(self.on_mod_details)
                             mod_widget.use_requested.connect(self.on_mod_use)
                             self.app.installed_mods_layout.insertWidget(self.app.installed_mods_layout.count() - 1, mod_widget)
                             mod_widget.show()
@@ -321,35 +321,14 @@ class LibraryDisplayController:
             self.clear_all_selections()
             target_widget.set_selected(True)
 
-    def on_mod_remove(self, mod_data):
+    def on_mod_details(self, mod_data):
+        """Open mod editor dialog for the selected mod."""
         try:
-            key = get_mod_key(mod_data)
-            mod_name = get_mod_name(mod_data)
-            if self.feedback_service.ask_question('dialogs.delete_confirmation', 'dialogs.delete_mod_confirmation', '', False, mod_name=mod_name):
-                self.mod_service.delete_mod_files(mod_data)
-                removal_data = {'key': key, **(({'name': mod_name} if mod_name else {}))} if key else mod_data
-                try:
-                    self.used_mods_service.remove_mod_from_all_chapters(removal_data)
-                except Exception as e:
-                    logging.warning(f'Failed to remove mod from chapters after deletion: {e}', exc_info=True)
-                try:
-                    self.mod_service.invalidate_mods_cache()
-                    self.mod_service.load_local_mods()
-                    self.mod_service.mod_list_updated.emit()
-                    QTimer.singleShot(100, lambda: self._safe_update_after_mod_deletion())
-                except Exception as e:
-                    logging.error(f'Failed to reload mods after deletion: {e}', exc_info=True)
-                    try:
-                        self.mod_service.mod_list_updated.emit()
-                        QTimer.singleShot(100, lambda: self._safe_update_after_mod_deletion())
-                    except Exception as e2:
-                        logging.error(f'Failed to update display after mod deletion: {e2}', exc_info=True)
-        except (OSError, IOError, PermissionError) as e:
-            logging.error(f'File operation failed during mod removal: {e}', exc_info=True)
-            self.feedback_service.show_message('error', 'errors.mod_removal_failed', error=str(e))
+            controller = getattr(self.app, 'mod_import_export_controller', None)
+            if controller:
+                controller.show_mod_details_dialog(mod_data)
         except Exception as e:
-            logging.error(f'Unexpected error during mod removal: {e}', exc_info=True)
-            self.feedback_service.show_message('error', 'errors.mod_removal_failed', error=str(e))
+            logging.error(f'Failed to open mod details: {e}', exc_info=True)
 
     def _refresh_mod_list_targeted(self):
         """Refresh the mod list by only adding/removing changed widgets for smooth animation"""
@@ -410,7 +389,7 @@ class LibraryDisplayController:
 
                     mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
                     mod_widget.clicked.connect(self.on_mod_clicked)
-                    mod_widget.remove_requested.connect(self.on_mod_remove)
+                    mod_widget.details_requested.connect(self.on_mod_details)
                     mod_widget.use_requested.connect(self.on_mod_use)
 
                     insert_index = 0

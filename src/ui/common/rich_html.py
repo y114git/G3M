@@ -7,9 +7,11 @@ document resources so they render inline (including animated GIFs).
 from collections import OrderedDict
 import re
 import logging
-from PyQt6.QtCore import QUrl, QRunnable, QThreadPool, QObject, pyqtSignal, Qt
+from PyQt6.QtCore import QUrl, QRunnable, QThreadPool, QObject, pyqtSignal, Qt, QRectF
 from PyQt6.QtGui import QImage, QTextDocument, QColor, QPainter
+from services.localization_service import tr
 from PyQt6.QtWidgets import QTextBrowser, QTextEdit
+from PyQt6.QtGui import QGuiApplication
 from config.constants import RICH_HTML_IMAGE_CACHE_MAX_SIZE, RICH_HTML_CSS_CLASS_MAP, RICH_HTML_IMG_RE, RICH_HTML_ATTR_RE, RICH_HTML_CLASS_RE, RICH_HTML_FONT_COLOR_RE
 from utils.network_utils import get_session
 
@@ -102,15 +104,19 @@ def _image_requests(html: str, widget_width: int) -> list[dict]:
 def _create_loading_placeholder(width: int, height: int, text: str) -> QImage:
     placeholder_width = max(120, min(int(width) if width else 320, 960))
     placeholder_height = max(80, min(int(height) if height else max(120, placeholder_width // 3), 540))
-    image = QImage(placeholder_width, placeholder_height, QImage.Format.Format_ARGB32_Premultiplied)
+    screen = QGuiApplication.primaryScreen()
+    dpr = screen.devicePixelRatio() if screen else 2.0
+    image = QImage(placeholder_width * dpr, placeholder_height * dpr, QImage.Format.Format_ARGB32_Premultiplied)
+    image.setDevicePixelRatio(dpr)
     image.fill(QColor(0, 0, 0, 0))
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
     left_inset = 5
     top_inset = 5
     right_inset = 20
     bottom_inset = 5
-    content_rect = image.rect().adjusted(left_inset, top_inset, -right_inset, -bottom_inset)
+    content_rect = QRectF(left_inset, top_inset, placeholder_width - left_inset - right_inset, placeholder_height - top_inset - bottom_inset)
     border_rect = content_rect.adjusted(0, 0, -1, -1)
     painter.fillRect(content_rect, QColor(34, 34, 34, 235))
     painter.setPen(QColor(3, 157, 91, 220))
@@ -308,7 +314,7 @@ def load_remote_images(browser: QTextBrowser, html: str, widget_width: int | Non
         _refresh_browser_document(browser, doc)
 
     for url, request in requests_by_url.items():
-        placeholder_text = 'Loading GIF preview...' if url.lower().split('?', 1)[0].endswith('.gif') else 'Loading image...'
+        placeholder_text = tr('ui.loading_placeholder')
         placeholder = _create_loading_placeholder(_placeholder_resource_width(request.get('width', max_width)), request.get('height', 0), placeholder_text)
         doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), placeholder)
     _refresh_browser_document(browser, doc)

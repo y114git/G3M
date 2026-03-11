@@ -2,7 +2,7 @@ import os
 import tempfile
 import logging
 from PyQt6.QtCore import pyqtSignal, Qt, QUrl, QMimeData, QSize
-from PyQt6.QtGui import QDesktopServices, QPixmap, QDrag
+from PyQt6.QtGui import QPixmap, QDrag
 from PyQt6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from utils.path_utils import resource_path, colored_icon
 from .base_mod_widget import BaseModWidget
@@ -13,7 +13,7 @@ from ui.utils.ui_utils import UIAnimator
 
 
 class InstalledModWidget(BaseModWidget):
-    remove_requested = pyqtSignal(object)
+    details_requested = pyqtSignal(object)
     use_requested = pyqtSignal(object)
     _gb_status_pixmaps = {}
     _checkmark_icons = {}
@@ -116,16 +116,18 @@ class InstalledModWidget(BaseModWidget):
         self.use_button.setObjectName('cardButtonInstall')
         self.use_button.clicked.connect(lambda: self.use_requested.emit(self.mod_data))
         actions_layout.addWidget(self.use_button)
-        self.remove_button = QPushButton(tr('buttons.delete'), self.actions_widget)
-        self.remove_button.setObjectName('cardButton')
+        self.details_button = QPushButton(tr('ui.details_button'), self.actions_widget)
+        self.details_button.setObjectName('cardButton')
         config = self._resolve_theme_config()
         text_color = get_theme_color(config, 'text', '#e8e9eb') if config else '#e8e9eb'
         border = get_theme_color(config, 'border', '#039d5b') if config else '#039d5b'
         br = get_border_radius(config)
         button_width, button_height, button_font_size = get_card_button_metrics(config)
-        apply_stylesheet_if_changed(self.remove_button, build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_remove_button_stylesheet_cache')
-        self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.mod_data))
-        actions_layout.addWidget(self.remove_button)
+        btn_bg = get_theme_color(config, 'button', '#222222') if config else '#222222'
+        btn_hover = get_theme_color(config, 'button_hover', '#616b78') if config else '#616b78'
+        apply_stylesheet_if_changed(self.details_button, build_button_style('cardButton', btn_bg, btn_hover, text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_details_button_stylesheet_cache')
+        self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
+        actions_layout.addWidget(self.details_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
         self._update_style()
@@ -153,8 +155,10 @@ class InstalledModWidget(BaseModWidget):
             border = get_theme_color(config, 'border', '#039d5b')
             br = get_border_radius(config)
             button_width, button_height, button_font_size = get_card_button_metrics(config)
-            if hasattr(self, 'remove_button') and self.remove_button:
-                apply_stylesheet_if_changed(self.remove_button, build_button_style('cardButton', '#F44336', '#da190b', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_remove_button_stylesheet_cache')
+            if hasattr(self, 'details_button') and self.details_button:
+                btn_bg = get_theme_color(config, 'button', '#222222')
+                btn_hover = get_theme_color(config, 'button_hover', '#616b78')
+                apply_stylesheet_if_changed(self.details_button, build_button_style('cardButton', btn_bg, btn_hover, text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_details_button_stylesheet_cache')
             if hasattr(self, 'checkmark_button') and self.checkmark_button:
                 icon_size = max(18, round(24 * self._layout_scale()))
                 _chk_color = get_theme_color(config, 'secondary_text', '#4CAF50')
@@ -287,6 +291,13 @@ class InstalledModWidget(BaseModWidget):
         super().set_selected(selected)
         self._update_actions_visibility()
 
+    def update_labels_text(self):
+        super().update_labels_text()
+        if hasattr(self, 'details_button') and self.details_button:
+            self.details_button.setText(tr('ui.details_button'))
+        if hasattr(self, 'use_button') and self.use_button:
+            self._update_button_from_status()
+
     def update_status(self):
         self._sync_status()
 
@@ -325,10 +336,7 @@ class InstalledModWidget(BaseModWidget):
             logging.warning(f'InstalledModWidget: drag export failed: {e}', exc_info=True)
 
     def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.parent_app:
-            key = get_mod_key(self.mod_data)
-            if key and hasattr(self.parent_app, 'mod_service'):
-                mod_folder_path = self.parent_app.mod_service.get_mod_folder_path(key)
-                if mod_folder_path and os.path.exists(mod_folder_path):
-                    QDesktopServices.openUrl(QUrl.fromLocalFile(mod_folder_path))
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.details_requested.emit(self.mod_data)
+            return
         super().mouseDoubleClickEvent(event)

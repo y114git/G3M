@@ -70,10 +70,18 @@ class LibraryTabBuilder(QObject):
         layout.addWidget(f_scroll)
         self.widgets['filters_scroll'] = f_scroll
         ctrl = QHBoxLayout()
-        import_btn = QPushButton(tr('ui.import_export_mod'))
-        import_btn.setObjectName('import_export_button')
+        ctrl.setContentsMargins(0, 0, 0, 0)
+        from PyQt6.QtCore import QSize
+        colors = self._get_colors()
+        add_btn = QPushButton()
+        add_btn.setObjectName('add_mod_button')
+        self.widgets['add_mod_button'] = add_btn
+        self._update_add_mod_button_style(add_btn, colors)
+        add_btn.setIconSize(QSize(20, 20))
+        add_btn.setToolTip(tr('ui.add_mod'))
+        add_btn.setFixedSize(36, 36)
         ctrl.addStretch()
-        ctrl.addWidget(import_btn)
+        ctrl.addWidget(add_btn)
         ctrl.addSpacing(20)
         game_combo = create_modgame_combo(self.app_state, LIBRARY_GAME_OPTIONS, 'selected_game_type')
         ctrl.addWidget(game_combo)
@@ -84,7 +92,6 @@ class LibraryTabBuilder(QObject):
         ctrl.addWidget(f_cb)
         ctrl.addStretch()
         layout.addLayout(ctrl)
-        colors = self._get_colors()
         ch_tabs = QWidget()
         ch_tabs.setObjectName('chapter_tabs_container')
         ch_tabs.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -189,7 +196,7 @@ class LibraryTabBuilder(QObject):
         layout.addWidget(mods_cont)
         self.widgets.update({
             'library_filters_widget': filters,
-            'import_export_button': import_btn,
+            'add_mod_button': add_btn,
             'game_type_combo': game_combo,
             'chapter_mode_checkbox': ch_cb,
             'full_install_checkbox': f_cb,
@@ -229,6 +236,12 @@ class LibraryTabBuilder(QObject):
         self.widgets.update({f'library_tag_{k}': v for k, v in tags.items()})
         return w
 
+    def _update_add_mod_button_style(self, btn, colors):
+        from utils.path_utils import colored_icon
+        br = clamp_border_radius(get_border_radius(self.app_state.local_config), width=36, height=36, border_width=2)
+        btn.setIcon(colored_icon('add', colors['text']))
+        btn.setStyleSheet(f'QPushButton#add_mod_button {{ border: 2px solid {colors["border"]}; border-radius: {br}px; background-color: {colors["button"]}; color: {colors["text"]}; }} QPushButton#add_mod_button:hover {{ background-color: {colors["button_hover"]}; }}')
+
     def _update_priority_button_style(self, btn, btn_clr, brd_clr, hvr_clr):
         n = btn.objectName()
         t = self._get_colors()['text']
@@ -240,6 +253,8 @@ class LibraryTabBuilder(QObject):
         for k in ('priority_button', 'create_modpack_button'):
             if k in self.widgets:
                 self._update_priority_button_style(self.widgets[k], colors['button'], colors['border'], colors['button_hover'])
+        if 'add_mod_button' in self.widgets:
+            self._update_add_mod_button_style(self.widgets['add_mod_button'], colors)
         tag_lbl = self.widgets.get('library_tags_label')
         if tag_lbl:
             tag_lbl.setStyleSheet(f'color: {colors["text"]};')

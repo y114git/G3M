@@ -301,7 +301,7 @@ def get_file_filter(filter_type: str) -> str:
         'image_files': '*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg',
         'background_images': '*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg *.mp4 *.webm *.avi *.mkv *.mov *.m4v *.3gp *.mpg *.mpeg *.flv *.wmv',
         'xdelta_files': '*.xdelta *.vcdiff',
-        'data_files': '*.win *.unx *.ios *.droid *.xdelta *.vcdiff *.csx',
+        'data_files': '*.win *.unx *.ios *.droid *.xdelta *.vcdiff *.csx *.zip',
         'archive_files': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma',
         'all_files': '*',
         'extended_archives': '*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma',

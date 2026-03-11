@@ -5,8 +5,7 @@ import shutil
 import tempfile
 import logging
 import zipfile
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox
 from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file, save_json
 from utils.archive_utils import extract_archive
@@ -29,23 +28,76 @@ class ModImportExportController:
         self.mod_service.load_local_mods(_skip_conversion=True)
         self.mod_service.mod_list_updated.emit()
 
-    def show_import_export_dialog(self):
+    def show_add_mod_dialog(self):
+        """Show dialog with Import Mod / Create Mod options."""
         dialog = QDialog(self.app_window)
-        dialog.setWindowTitle(tr('ui.import_export_mod'))
+        dialog.setWindowTitle(tr('ui.add_mod'))
         dialog.setModal(True)
         layout = QVBoxLayout(dialog)
-        button_layout = QHBoxLayout()
+        btn_layout = QHBoxLayout()
         import_btn = QPushButton(tr('ui.import_mod'))
         import_btn.clicked.connect(lambda: (dialog.accept(), self._show_import_dialog()))
-        button_layout.addWidget(import_btn)
-        export_btn = QPushButton(tr('ui.export_mod'))
-        export_btn.clicked.connect(lambda: (dialog.accept(), self._show_export_dialog()))
-        button_layout.addWidget(export_btn)
-        cancel_btn = QPushButton(tr('ui.cancel_button'))
-        cancel_btn.clicked.connect(dialog.reject)
-        button_layout.addWidget(cancel_btn)
-        layout.addLayout(button_layout)
+        btn_layout.addWidget(import_btn)
+        create_btn = QPushButton(tr('ui.create_mod'))
+        create_btn.clicked.connect(lambda: (dialog.accept(), self._show_create_mod_dialog()))
+        btn_layout.addWidget(create_btn)
+        layout.addLayout(btn_layout)
         dialog.exec()
+
+    def _show_create_mod_dialog(self):
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        editor = ModEditorDialog(self.app_window, is_creating=True)
+        editor.exec()
+
+    def show_mod_details_dialog(self, mod_data):
+        """Open the mod editor dialog in edit mode for the given mod."""
+        import json
+        key = get_mod_key(mod_data)
+        if not key:
+            return
+        mod_folder = self.mod_service.get_mod_folder_path(key)
+        if not mod_folder or not os.path.exists(mod_folder):
+            mod_folder = self._find_mod_dir_by_config(mod_data)
+        config_data = {}
+        if mod_folder:
+            config_path = os.path.join(mod_folder, MOD_CONFIG_FILENAME)
+            legacy_config_path = os.path.join(mod_folder, LEGACY_MOD_CONFIG_FILENAME)
+
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                except Exception as e:
+                    if os.path.exists(legacy_config_path):
+                        try:
+                            with open(legacy_config_path, 'r', encoding='utf-8') as f:
+                                config_data = json.load(f)
+                        except Exception as legacy_e:
+                            raise RuntimeError(f"Failed to load both {MOD_CONFIG_FILENAME} and {LEGACY_MOD_CONFIG_FILENAME}: {e}, {legacy_e}")
+                    else:
+                        raise RuntimeError(f"Failed to load {MOD_CONFIG_FILENAME}: {e}")
+            elif os.path.exists(legacy_config_path):
+                try:
+                    with open(legacy_config_path, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                except Exception as e:
+                    raise RuntimeError(f"Failed to load {LEGACY_MOD_CONFIG_FILENAME}: {e}")
+
+        if not config_data:
+            raise RuntimeError(f"No valid config found in mod folder: {mod_folder}")
+
+        config_data['key'] = key
+        if mod_folder:
+            config_data['folder_path'] = mod_folder
+            config_data['folder_name'] = os.path.basename(mod_folder)
+
+        try:
+            from ui.dialogs.mod_editor_dialog import ModEditorDialog
+            editor = ModEditorDialog(self.app_window, is_creating=False, mod_data=config_data)
+            editor.exec()
+        except RuntimeError as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self.app_window, tr('ui.error'), f"Failed to load mod config: {e}")
 
     def _show_import_dialog(self):
         from ui.dialogs.import_dialog import ImportDialog
@@ -315,62 +367,6 @@ class ModImportExportController:
             self.app_window.feedback_service.update_status(message or tr('errors.error'), 'red')
             self.app_window.feedback_service.show_message('error', 'errors.error', message)
 
-    def _show_export_dialog(self):
-        dialog = QDialog(self.app_window)
-        dialog.setWindowTitle(tr('ui.export_mod'))
-        dialog.setModal(True)
-        dialog.resize(500, 400)
-        layout = QVBoxLayout(dialog)
-        filter_checkbox = QCheckBox(tr('ui.filter_by_game'))
-        filter_checkbox.setChecked(True)
-        layout.addWidget(filter_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        list_label = QLabel(tr('ui.select_mod_to_export'))
-        layout.addWidget(list_label)
-        mod_list = QListWidget()
-        layout.addWidget(mod_list)
-        current_game = None
-        if hasattr(self.app_window, 'game_type_combo'):
-            current_game = self.app_window.game_type_combo.currentData()
-
-        def update_mod_list():
-            mod_list.clear()
-            installed_mods = self.mod_service.get_installed_mods_list()
-            for mod_info in installed_mods:
-                game = mod_info.get('game') or mod_info.get('modgame', 'deltarune')
-                if filter_checkbox.isChecked() and current_game:
-                    if game != current_game:
-                        continue
-                key = mod_info.get('key') or mod_info.get('mod_key')
-                if not key:
-                    continue
-                mod_folder_path = self.mod_service.get_mod_folder_path(key)
-                if not mod_folder_path or not os.path.exists(mod_folder_path):
-                    continue
-                mod_data = None
-                if hasattr(self.app_state, 'all_mods'):
-                    for mod in self.app_state.all_mods:
-                        mod_key_attr = get_mod_key(mod)
-                        if mod_key_attr == key:
-                            mod_data = mod
-                            break
-                if not mod_data:
-                    mod_data = self.mod_service.create_mod_object_from_info(mod_info, self.app_state.all_mods if hasattr(self.app_state, 'all_mods') else None)
-                mod_name = mod_info.get('name', key)
-                item = QListWidgetItem(mod_name)
-                item.setData(Qt.ItemDataRole.UserRole, mod_data)
-                mod_list.addItem(item)
-        filter_checkbox.stateChanged.connect(update_mod_list)
-        update_mod_list()
-        button_layout = QHBoxLayout()
-        export_btn = QPushButton(tr('ui.export_mod'))
-        export_btn.clicked.connect(lambda: self._export_selected_mod(mod_list, dialog))
-        button_layout.addWidget(export_btn)
-        cancel_btn = QPushButton(tr('ui.cancel_button'))
-        cancel_btn.clicked.connect(dialog.reject)
-        button_layout.addWidget(cancel_btn)
-        layout.addLayout(button_layout)
-        dialog.exec()
-
     def _find_mod_dir_by_config(self, mod) -> str | None:
         if not os.path.exists(self.app_state.mods_dir):
             return None
@@ -400,50 +396,6 @@ class ModImportExportController:
             except Exception as e:
                 logging.warning(f'Error reading config {config_path}: {e}')
         return None
-
-    def _export_selected_mod(self, mod_list, dialog):
-        current_item = mod_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self.app_window, tr('errors.error'), tr('ui.no_mod_selected'))
-            return
-        mod = current_item.data(Qt.ItemDataRole.UserRole)
-        if not mod:
-            return
-        export_path, _ = QFileDialog.getSaveFileName(self.app_window, tr('ui.select_export_location'), f'{mod.name}.zip', 'ZIP Archives (*.zip);;All Files (*)')
-        if not export_path:
-            return
-        try:
-            self.mod_service.invalidate_mods_cache()
-            key = get_mod_key(mod)
-            mod_dir = self.mod_service.get_mod_folder_path(key)
-            if not mod_dir or not os.path.exists(mod_dir):
-                mod_dir = self._find_mod_dir_by_config(mod)
-            if not mod_dir or not os.path.exists(mod_dir):
-                logging.error(f'Mod folder not found for mod: {mod.name}')
-                mod_key_attr = get_mod_key(mod)
-                QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_dir or mod_key_attr))
-                return
-            game = getattr(mod, 'game', None) or getattr(mod, 'modgame', None)
-            if not game:
-                config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
-                if os.path.exists(config_path):
-                    try:
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config = json.load(f)
-                            game = config.get('game') or config.get('modgame')
-                    except Exception:
-                        pass
-            with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(mod_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, mod_dir)
-                        zipf.write(file_path, arcname)
-            QMessageBox.information(self.app_window, tr('dialogs.success'), tr('status.mod_exported_success'))
-            dialog.accept()
-        except Exception as e:
-            logging.error(f'Mod export failed: {e}', exc_info=True)
-            QMessageBox.critical(self.app_window, tr('errors.error'), tr('errors.mod_export_failed', error=str(e)))
 
     def import_files_sequentially(self, file_paths: list):
         """Queue archive files for sequential import (drag & drop)."""
