@@ -1,15 +1,12 @@
 """DELTAHUB application entry point.
-
 This module sets up the Python path and launches the application.
 """
 import sys
 import os
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-    path_to_src = os.path.join(getattr(sys, '_MEIPASS'), 'src')
-else:
-    path_to_src = os.path.dirname(os.path.abspath(__file__))
-if path_to_src not in sys.path:
-    sys.path.insert(0, path_to_src)
+    _frozen_src = os.path.join(getattr(sys, '_MEIPASS'), 'src')
+    if _frozen_src not in sys.path:
+        sys.path.insert(0, _frozen_src)
 if __name__ == '__main__':
     if '--shortcut' in sys.argv:
         idx = sys.argv.index('--shortcut')

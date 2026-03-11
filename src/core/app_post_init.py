@@ -1,38 +1,71 @@
 """Post-show initialization logic extracted from AppWindow."""
 import os
 import logging
-from config.constants import UI_COLORS, CLOUD_FUNCTIONS_BASE_URL
+from PyQt6.QtCore import QThread, pyqtSignal
+from config.constants import UI_COLORS, CLOUD_FUNCTIONS_BASE_URL, ONLINE_UPDATE_INTERVAL
 from services.localization_service import tr
 from services.game_detection_service import is_game_running
 from utils.network_utils import get_session, check_internet_connection
 
 
+class _NetworkInitThread(QThread):
+    """Checks internet connectivity and fetches global settings off the main thread."""
+    done = pyqtSignal(bool, dict)
+
+    def __init__(self, app_state, parent=None):
+        super().__init__(parent)
+        self._app_state = app_state
+
+    def run(self):
+        has_internet = check_internet_connection()
+        global_settings = {}
+        if has_internet:
+            try:
+                r = get_session(self._app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
+                if r.status_code == 200:
+                    global_settings = r.json() or {}
+            except Exception:
+                has_internet = False
+        if not has_internet:
+            logging.info('No internet connection detected, running in offline mode')
+        self.done.emit(has_internet, global_settings)
+
+
 def post_show_initialization(app):
-    """Run post-show init: internet check, global settings, config restore, mod scan."""
+    """Run post-show init: recover session, local init, then async network + presence start."""
+    app.game_launcher.recover_previous_session()
     is_first_launch = not app.app_state.local_config.get('first_launch_splash_shown', False)
     if is_first_launch and getattr(app, '_splash_was_shown', False):
         app.app_state.local_config['first_launch_splash_shown'] = True
         app.app_state.local_config['disable_splash'] = True
         app.settings_service.write_local_config()
-    app.app_state.has_internet = check_internet_connection()
-    if not app.app_state.has_internet:
-        logging.info('No internet connection detected, running in offline mode')
-        app.app_state.global_settings = {}
+    if not is_game_running():
+        _finish_local_init(app)
     else:
-        app._init_session()
-        try:
-            import requests
-            response = get_session(app.app_state).get(f'{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings', timeout=5)
-            if response.status_code == 200:
-                app.app_state.global_settings = response.json() or {}
-        except requests.RequestException:
-            app.feedback_service.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
-            app.app_state.has_internet = False
-    if app.app_state.has_internet:
-        app.app_state.pending_announce_check = True
-    if is_game_running():
         app.feedback_service.update_status(tr('status.deltarune_already_running'), UI_COLORS['status_error'])
-        return
+    app.app_state.has_internet = False
+    app._network_init_thread = _NetworkInitThread(app.app_state, parent=app)
+
+    def _on_network_done(has_internet, global_settings):
+        app.app_state.has_internet = has_internet
+        app.app_state.global_settings = global_settings
+        if not has_internet:
+            app.feedback_service.update_status(tr('status.global_settings_load_failed'), UI_COLORS['status_warning'])
+        else:
+            app.app_state.pending_announce_check = True
+            if app.app_state.initialization_completed and not app.app_state.update_in_progress:
+                app._check_and_show_announce()
+        app.presence_thread.start()
+        app._online_timer.start(ONLINE_UPDATE_INTERVAL)
+        from PyQt6.QtCore import QMetaObject, Qt
+        QMetaObject.invokeMethod(app.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
+    app._network_init_thread.done.connect(_on_network_done)
+    app._network_init_thread.finished.connect(app._network_init_thread.deleteLater)
+    app._network_init_thread.start()
+
+
+def _finish_local_init(app):
+    """Local post-show work: config reload, UI restore, mod scan, game path."""
     app._load_local_data()
     app.app_state.game_path = app.app_state.local_config.get('game_path', '')
     app.app_state.demo_game_path = app.app_state.local_config.get('demo_game_path', '')

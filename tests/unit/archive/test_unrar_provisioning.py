@@ -1,18 +1,9 @@
 """Tests for UnRAR provisioning functionality."""
-import os
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Add src to path correctly relative to this file
-# tests/unit/archive -> ../../../src
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_path = os.path.abspath(os.path.join(current_dir, '..', '..', '..', 'src'))
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-
-# pylint: disable=wrong-import-position
-from utils.archive_utils import UnrarMissingError, _ensure_unrar_available, download_and_setup_unrar, _get_unrar_path  # noqa: E402
+from utils.archive_utils import UnrarMissingError, _ensure_unrar_available, download_and_setup_unrar, _get_unrar_path
 
 
 class TestUnrarProvisioning(unittest.TestCase):

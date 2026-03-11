@@ -161,15 +161,6 @@ def sample_mod_folder(temp_mods_dir, sample_mod_config):
 
 
 @pytest.fixture
-def mock_localization():
-    with patch('src.services.localization_service.localization_service') as mock_loc:
-        mock_loc.tr = lambda key, **kwargs: key
-        mock_loc.detect_system_language.return_value = 'en'
-        mock_loc.load_language.return_value = True
-        yield mock_loc
-
-
-@pytest.fixture
 def game_data_dir():
     tests_dir = Path(__file__).parent
     game_data_path = tests_dir / 'fixtures' / 'game_data'
@@ -223,8 +214,3 @@ def all_test_mods_dirs(mods_dir):
     if not mods_path.exists():
         return {}
     return {'full_structure': str(mods_path / 'test_mod_full_structure'), 'chapter1_only': str(mods_path / 'test_mod_chapter1_only'), 'multiple_chapters': str(mods_path / 'test_mod_multiple_chapters'), 'demo': str(mods_path / 'test_mod_demo'), 'undertale': str(mods_path / 'test_mod_undertale')}
-
-
-@pytest.fixture(autouse=True)
-def setup_test_environment(mock_localization):
-    pass

@@ -4,6 +4,21 @@ import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+LANG_DIR = Path('src/assets/lang')
+
+
+def _flatten_lang_keys(data, prefix=''):
+    keys = set()
+    for key, value in data.items():
+        if key == 'metadata' or str(key).startswith('_'):
+            continue
+        dotted = f'{prefix}.{key}' if prefix else key
+        if isinstance(value, dict):
+            keys.update(_flatten_lang_keys(value, dotted))
+        else:
+            keys.add(dotted)
+    return keys
+
 
 class TestLocalizationSystem:
 
@@ -23,33 +38,17 @@ class TestLocalizationSystem:
         assert hasattr(loc_service, 'rescan_languages')
 
     def test_language_files_match_lang_en_key_set(self):
-        lang_dir = Path('src/assets/lang')
-        en_path = lang_dir / 'lang_en.json'
+        en_path = LANG_DIR / 'lang_en.json'
         if not en_path.exists():
             pytest.skip('lang_en.json not found')
-
-        def flatten_keys(data, prefix=''):
-            keys = set()
-            for key, value in data.items():
-                if key == 'metadata' or str(key).startswith('_'):
-                    continue
-                dotted = f'{prefix}.{key}' if prefix else key
-                if isinstance(value, dict):
-                    keys.update(flatten_keys(value, dotted))
-                else:
-                    keys.add(dotted)
-            return keys
-
-        expected_keys = flatten_keys(json.loads(en_path.read_text(encoding='utf-8')))
+        expected_keys = _flatten_lang_keys(json.loads(en_path.read_text(encoding='utf-8')))
         mismatches = []
-
-        for lang_path in sorted(lang_dir.glob('lang_*.json')):
-            actual_keys = flatten_keys(json.loads(lang_path.read_text(encoding='utf-8')))
+        for lang_path in sorted(LANG_DIR.glob('lang_*.json')):
+            actual_keys = _flatten_lang_keys(json.loads(lang_path.read_text(encoding='utf-8')))
             missing = sorted(expected_keys - actual_keys)
             extra = sorted(actual_keys - expected_keys)
             if missing or extra:
                 mismatches.append((lang_path.name, missing[:10], extra[:10]))
-
         assert not mismatches, f'Localization key mismatches found: {mismatches}'
 
 
@@ -100,6 +99,33 @@ class TestWidgetRelocalizeMethods:
                 pass
         if issues:
             pytest.skip(f"Widgets that may need relocalize methods: {', '.join(issues)}")
+
+
+class TestTrKeysExistInLangFiles:
+
+    def test_all_tr_keys_in_source_exist_in_lang_en(self):
+        """Scan all src/ .py files for tr('key') calls and verify each key exists in lang_en.json."""
+        en_path = LANG_DIR / 'lang_en.json'
+        if not en_path.exists():
+            pytest.skip('lang_en.json not found')
+        available_keys = _flatten_lang_keys(json.loads(en_path.read_text(encoding='utf-8')))
+        tr_pattern = re.compile(r"""\btr\(\s*['"]([a-zA-Z0-9_.]+)['"]\s*[,)]""")
+        src_dir = Path('src')
+        if not src_dir.exists():
+            pytest.skip('src/ directory not found')
+        missing = []
+        for py_file in sorted(src_dir.rglob('*.py')):
+            try:
+                for line_num, line in enumerate(py_file.read_text(encoding='utf-8').split('\n'), 1):
+                    if line.strip().startswith('#'):
+                        continue
+                    for m in tr_pattern.finditer(line):
+                        if m.group(1) not in available_keys:
+                            missing.append(f'{py_file.relative_to(Path.cwd())}:{line_num} - tr(\'{m.group(1)}\')')
+            except Exception:
+                pass
+        if missing:
+            pytest.fail(f'Found {len(missing)} tr() key(s) missing from lang_en.json:\n' + '\n'.join(missing))
 
 
 class TestLocalizationRefresh:

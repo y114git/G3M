@@ -106,7 +106,7 @@ def _create_loading_placeholder(width: int, height: int, text: str) -> QImage:
     placeholder_height = max(80, min(int(height) if height else max(120, placeholder_width // 3), 540))
     screen = QGuiApplication.primaryScreen()
     dpr = screen.devicePixelRatio() if screen else 2.0
-    image = QImage(placeholder_width * dpr, placeholder_height * dpr, QImage.Format.Format_ARGB32_Premultiplied)
+    image = QImage(int(placeholder_width * dpr), int(placeholder_height * dpr), QImage.Format.Format_ARGB32_Premultiplied)
     image.setDevicePixelRatio(dpr)
     image.fill(QColor(0, 0, 0, 0))
     painter = QPainter(image)

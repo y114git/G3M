@@ -11,7 +11,7 @@ from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPainterPath, QPen
 from PyQt6.QtWidgets import QApplication, QCheckBox, QFrame, QLabel, QLineEdit, QProgressBar, QPushButton, QTabWidget, QVBoxLayout, QWidget, QHBoxLayout, QSizePolicy, QColorDialog, QSpinBox
 from services.localization_service import localization_service, tr
 from models.game_modes import DeltaruneGame, get_game
-from config.constants import UI_COLORS, SOCIAL_LINKS, ONLINE_UPDATE_INTERVAL, INITIALIZATION_TIMEOUT, CLOUD_FUNCTIONS_BASE_URL
+from config.constants import UI_COLORS, SOCIAL_LINKS, INITIALIZATION_TIMEOUT
 from ui.utils.ui_utils import DebounceTimer, UIAnimator
 from ui.widgets.shared.custom_controls import AnimatedToolTip
 from ui.dialogs.about_dialog import AboutDialog
@@ -19,7 +19,6 @@ from ui.dialogs.changelog_dialog import ChangelogDialog
 from ui.widgets.shared.custom_title_bar import CustomTitleBar
 from ui.common.styling import get_theme_color, get_border_radius, display_hex_to_qt_hex, clamp_border_radius, apply_rounded_mask
 from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir, get_colored_search_icon, get_colored_refresh_icon, get_colored_refresh_icon_svg, colored_icon
-from utils.network_utils import get_session
 from workers.presence_worker import PresenceWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
@@ -123,7 +122,6 @@ class AppWindow(QWidget):
         self.presence_thread.start()
         self._online_timer = QTimer(self)
         self._online_timer.timeout.connect(self.presence_worker.run)
-        self._online_timer.start(ONLINE_UPDATE_INTERVAL)
         from PyQt6.QtCore import QMetaObject, Qt
         QMetaObject.invokeMethod(self.presence_worker, 'run', Qt.ConnectionType.QueuedConnection)
         self.setWindowTitle('DELTAHUB')
@@ -1521,7 +1519,7 @@ class AppWindow(QWidget):
         hover_color = get_theme_color(self.app_state.local_config, 'button_hover', '#616b78')
         text_color = get_theme_color(self.app_state.local_config, 'text', '#e8e9eb')
         fs = max(1, int(14 * self.app_state.local_config.get('ui_scale', 1.0)))
-        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons)):
+        for i, (tab, btn) in enumerate(zip(tabs, self.chapter_tab_buttons, strict=False)):
             border_style = 'dashed' if direct_launch_chapter_id == tab.tab_id else 'solid'
             br = clamp_border_radius(get_border_radius(self.app_state.local_config), height=max(25, btn.sizeHint().height()))
             btn.setStyleSheet(f'\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: {fs}px;\n                    border-radius: {br}px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            ')
@@ -1627,14 +1625,6 @@ class AppWindow(QWidget):
         if not hasattr(self, '_qt_translator_holder'):
             self._qt_translator_holder = {}
         localization_service.update_qt_locale(language_code, self._qt_translator_holder)
-
-    def _init_session(self):
-        if not self.app_state.has_internet:
-            return
-        try:
-            get_session(self.app_state).post(f'{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat', json={'sessionId': self.session_id}, timeout=5)
-        except Exception:
-            self.app_state.has_internet = False
 
     def _set_lib_search_icon(self, is_searching: bool):
         tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')

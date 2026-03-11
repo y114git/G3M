@@ -46,7 +46,7 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
             archive_path = os.path.join(archive_dir, f'deltahub_{timestamp}.log')
             shutil.copy2(log_path, archive_path)
         except Exception:
-            pass
+            logging.debug('Failed to archive previous log file', exc_info=True)
     root = logging.getLogger()
     if not root.handlers:
         root.setLevel(logging.INFO)
@@ -66,7 +66,6 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
 
 
 def install_excepthook(show_message_callback=None):
-
     def _hook(exctype, value, tb):
         try:
             logging.critical('Uncaught exception', exc_info=(exctype, value, tb))
@@ -117,7 +116,6 @@ def register_url_protocol():
 
 
 class SingleInstanceServer(QLocalServer):
-
     def __init__(self, app_instance):
         super().__init__()
         self.app_instance = app_instance
@@ -129,12 +127,18 @@ class SingleInstanceServer(QLocalServer):
             socket.readyRead.connect(lambda: self.read_socket_data(socket))
 
     def read_socket_data(self, socket):
-        data = socket.readAll().data()
-        if data:
-            url = data.decode('utf-8')
-            if url.startswith('deltahub://'):
-                self.app_instance.url_received_signal.emit(url)
-        socket.close()
+        try:
+            data = socket.readAll().data()
+            if data:
+                try:
+                    url = data.decode('utf-8')
+                except UnicodeDecodeError as e:
+                    logging.warning(f'SingleInstanceServer: failed to decode incoming data: {e}')
+                    return
+                if url.startswith('deltahub://'):
+                    self.app_instance.url_received_signal.emit(url)
+        finally:
+            socket.close()
 
 
 def setup_app():
@@ -193,7 +197,8 @@ def _load_config_file() -> dict:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         if not isinstance(config, dict):
-            raise ValueError('Config is not a dict')
+            logging.warning('Config file is not a dict, returning empty config')
+            return {}
         if config_path == old_config_path and (not os.path.exists(settings_path)):
             shutil.move(old_config_path, settings_path)
         return config
@@ -221,7 +226,9 @@ def run_app():
         install_excepthook()
         cleanup_old_temp_directories()
     except Exception as e:
-        logging.warning(f'Failed to initialize logging: {e}')
+        print(f'CRITICAL: Failed to initialize logging: {e}', file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
     parser = argparse.ArgumentParser(description='DELTAHUB')
     parser.add_argument('--force-start', action='store_true', help='Force start even if another instance is detected')
     args, _ = parser.parse_known_args()
@@ -382,19 +389,17 @@ def run_app():
                     fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, 10000)
                     QTimer.singleShot(fallback_time, fallback_show_window)
             except Exception as e:
-                traceback.print_exc()
                 if hasattr(splash, 'movie'):
                     splash.stop_gif_animation()
                 splash.close()
                 error_msg = tr('errors.startup_error_message', details=str(e))
-                logging.error(f'STARTUP ERROR: {error_msg}')
+                logging.exception(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
         create_launcher()
     create_launcher_and_show_splash(app, url_arg, show_animated_splash)
     try:
         sys.exit(app.exec())
     except Exception as e:
-        traceback.print_exc()
         error_msg = tr('errors.startup_error_message', details=str(e))
-        logging.error(f'STARTUP ERROR: {error_msg}')
+        logging.exception(f'STARTUP ERROR: {error_msg}')
         QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)

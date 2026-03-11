@@ -122,7 +122,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size=0, 
 def check_internet_connection(max_attempts=2):
     for attempt in range(max_attempts):
         try:
-            get_session().get('https://www.google.com', timeout=NETWORK_TIMEOUT_SHORT)
+            get_session().get('http://connectivitycheck.gstatic.com', timeout=NETWORK_TIMEOUT_SHORT)
             return True
         except requests.RequestException:
             continue
