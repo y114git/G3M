@@ -1,6 +1,0 @@
-PyQt6==6.7.0
-psutil
-requests
-rarfile
-playsound3
-py7zr

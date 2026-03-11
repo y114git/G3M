@@ -204,7 +204,8 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
                 target_rel = p.read_text(encoding='utf-8').strip()
             except Exception as e:
                 logging.debug(f'fix_macos_python_symlink: failed to read symlink target: {e}')
-                target_rel = 'Python.framework/Versions/3.12/Python'
+                py_ver = f'{sys.version_info.major}.{sys.version_info.minor}'
+                target_rel = f'Python.framework/Versions/{py_ver}/Python'
             p.unlink(missing_ok=True)
             os.symlink(target_rel, p)
             st = os.lstat(p)

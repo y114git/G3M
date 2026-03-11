@@ -41,349 +41,226 @@ permissions:
   contents: write
 
 env:
-  PYTHON_VERSION: "3.12"
-  PUBLISH_RELEASE: ${{ inputs.publish_release != false }}
+  PYTHON_VERSION: "3.14"
+  G3MTOOL_CACHE_VERSION: "1"
   RELEASE_VERSION: ${{ inputs.version_and_tag || 'dev' }}
   RELEASE_TAG_FINAL: ${{ inputs.version_and_tag }}
   RELEASE_NAME_FINAL: ${{ inputs.release_name }}
   DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
   CLOUD_FUNCTIONS_BASE_URL: ${{ secrets.CLOUD_FUNCTIONS_BASE_URL }}
-  INTERNAL_SALT: ${{ secrets.INTERNAL_SALT }}
 
 jobs:
-  linux:
-    name: Linux · Build & Test
-    runs-on: ubuntu-22.04
+  build:
+    name: ${{ matrix.label }} · Build & Test
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux
+            runs_on: ubuntu-22.04
+            artifact_name: DELTAHUB-Linux
+            g3mtool_archive: g3mtool-linux-x64.zip
+            g3mtool_dir: src/assets/bin/g3mtool_linux
+            g3mtool_cache: g3mtool-linux-x64
+            startup_target: archive_content/DELTAHUB
+          - label: macOS x64
+            runs_on: macos-15-intel
+            artifact_name: DELTAHUB-macOS-x86_64
+            g3mtool_archive: g3mtool-osx-x64.zip
+            g3mtool_dir: src/assets/bin/g3mtool_macos
+            g3mtool_cache: g3mtool-macos-x64
+            startup_target: DELTAHUB.app/Contents/MacOS/DELTAHUB
+          - label: macOS arm64
+            runs_on: macos-15
+            artifact_name: DELTAHUB-macOS-arm64
+            g3mtool_archive: g3mtool-osx-arm64.zip
+            g3mtool_dir: src/assets/bin/g3mtool_macos
+            g3mtool_cache: g3mtool-macos-arm64
+            startup_target: DELTAHUB.app/Contents/MacOS/DELTAHUB
+          - label: Windows
+            runs_on: windows-latest
+            artifact_name: DELTAHUB-Windows
+            g3mtool_archive: g3mtool-win-x64.zip
+            g3mtool_dir: src/assets/bin/g3mtool_windows
+            g3mtool_cache: g3mtool-windows-x64
+            startup_target: DELTAHUB.exe
     steps:
       - uses: actions/checkout@v4
-      - name: Set Archive Name
+
+      - name: Set archive names
         id: set_names
+        shell: pwsh
         run: |
-          archive_name="${{ github.event.inputs.archive_name_linux || format('DELTAHUB-Linux-{0}', env.RELEASE_VERSION) }}"
-          echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
-      - name: Install build deps
+          switch ('${{ matrix.label }}') {
+            'Linux' {
+              $archiveName = "${{ github.event.inputs.archive_name_linux }}"
+              if (-not $archiveName) { $archiveName = "DELTAHUB-Linux-${{ env.RELEASE_VERSION }}" }
+            }
+            'macOS x64' {
+              $archiveName = "${{ github.event.inputs.archive_name_macos_x64 }}"
+              if (-not $archiveName) { $archiveName = "DELTAHUB-macOS-x64-${{ env.RELEASE_VERSION }}" }
+            }
+            'macOS arm64' {
+              $archiveName = "${{ github.event.inputs.archive_name_macos_arm64 }}"
+              if (-not $archiveName) { $archiveName = "DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}" }
+            }
+            'Windows' {
+              $archiveName = "${{ github.event.inputs.archive_name_windows }}"
+              if (-not $archiveName) { $archiveName = "DELTAHUB-Windows-${{ env.RELEASE_VERSION }}" }
+              $setupName = "${{ github.event.inputs.archive_name_windows_setup }}"
+              if (-not $setupName) { $setupName = "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}" }
+              "setup_archive_path=$($setupName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            }
+          }
+          "archive_path=$($archiveName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libglib2.0-dev libgl1-mesa-dev patchelf upx zip
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install upx || true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pip deps
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
         run: |
-          python -m pip install -U pip wheel
-          pip install -r builds/requirements.txt pyinstaller
-      - name: Clone G3MTool
-        run: git clone https://github.com/y114git/G3MTool.git G3MTool
-      - name: Build G3MTool for Linux
+          python -m pip install --upgrade pip wheel
+          python -m pip install ".[build]"
+
+      - name: Restore cached G3MTool
+        id: cache-g3mtool
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.g3mtool_dir }}
+          key: ${{ runner.os }}-${{ matrix.g3mtool_cache }}-${{ env.G3MTOOL_CACHE_VERSION }}
+
+      - name: Download G3MTool
+        if: steps.cache-g3mtool.outputs.cache-hit != 'true' && runner.os != 'Windows'
         run: |
-          cd G3MTool
-          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_linux
-          chmod +x ../src/assets/bin/g3mtool_linux/G3MTool
+          mkdir -p "${{ matrix.g3mtool_dir }}"
+          curl -L -o g3mtool.zip "https://github.com/y114git/G3MTool/releases/latest/download/${{ matrix.g3mtool_archive }}"
+          unzip -q g3mtool.zip -d "${{ matrix.g3mtool_dir }}"
+          rm -f g3mtool.zip
+          chmod +x "${{ matrix.g3mtool_dir }}"/* 2>/dev/null || true
+
+      - name: Download G3MTool (Windows)
+        if: steps.cache-g3mtool.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ matrix.g3mtool_dir }}" | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/y114git/G3MTool/releases/latest/download/${{ matrix.g3mtool_archive }}" -OutFile g3mtool.zip
+          Expand-Archive -Path g3mtool.zip -DestinationPath "${{ matrix.g3mtool_dir }}" -Force
+          Remove-Item g3mtool.zip
+
       - name: Generate secrets_embed.py
+        shell: pwsh
         run: |
-          python - <<'PY'
-          import os, base64
-          def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'CLOUD_FUNCTIONS_BASE_URL':os.environ.get('CLOUD_FUNCTIONS_BASE_URL',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
-          with open('secrets_embed.py','w',encoding='utf-8') as f:
-            f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
-            for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
-          PY
+          $vals = @{
+            'DATA_FIREBASE_URL' = "$env:DATA_FIREBASE_URL"
+            'CLOUD_FUNCTIONS_BASE_URL' = "$env:CLOUD_FUNCTIONS_BASE_URL"
+          }
+          $py = @('import base64', "def d(s): return base64.b64decode(s).decode('utf-8')")
+          foreach ($k in $vals.Keys) {
+            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k]))
+            $py += "$k=d('$b64')"
+          }
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllLines('secrets_embed.py', $py, $utf8NoBom)
+
       - name: Build via spec
+        run: pyinstaller -y builds/DELTAHUB.spec
+
+      - name: Optimize Linux binary
+        if: runner.os == 'Linux'
         run: |
-          pyinstaller -y builds/DELTAHUB.spec
           strip dist/DELTAHUB || true
           upx -9 dist/DELTAHUB || true
+
+      - name: Codesign macOS app
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - "dist/DELTAHUB.app"
+
       - name: Cleanup secrets
         if: always()
-        run: rm -f secrets_embed.py || true
-      - name: Create archive
+        shell: pwsh
+        run: Remove-Item secrets_embed.py -ErrorAction SilentlyContinue
+
+      - name: Create archive (Linux)
+        if: runner.os == 'Linux'
         run: |
           mkdir -p archive_content
           mv dist/DELTAHUB archive_content/
-          zip -r ${{ steps.set_names.outputs.archive_path }} archive_content
+          zip -r "${{ steps.set_names.outputs.archive_path }}" archive_content
 
-      # === MERGED TEST STEP ===
-      - name: Test Startup (Linux)
-        run: |
-          echo "=== Unpacking archive for test ==="
-          mkdir -p test_env
-          unzip -q ${{ steps.set_names.outputs.archive_path }} -d test_env
-
-          if [ -f test_env/archive_content/DELTAHUB ]; then
-            chmod +x test_env/archive_content/DELTAHUB
-            echo "=== Testing startup ==="
-            OUTPUT=$(timeout 10 ./test_env/archive_content/DELTAHUB --help 2>&1 || true)
-            echo "$OUTPUT"
-            if echo "$OUTPUT" | grep -q "STARTUP ERROR"; then
-              echo "=== STARTUP ERROR DETECTED ==="
-              exit 1
-            fi
-            echo "✓ Startup test passed"
-          else
-            echo "ERROR: DELTAHUB executable not found in archive"
-            exit 1
-          fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DELTAHUB-Linux
-          path: ${{ steps.set_names.outputs.archive_path }}
-
-  macos-x64:
-    name: macOS · x86_64 · Build & Test
-    runs-on: macos-15-intel
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set Archive Name
-        id: set_names
-        run: |
-          archive_name="${{ github.event.inputs.archive_name_macos_x64 || format('DELTAHUB-macOS-x64-{0}', env.RELEASE_VERSION) }}"
-          echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
-      - name: Extra tools
-        run: brew install upx || true
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pip deps
-        run: |
-          python -m pip install -U pip wheel
-          pip install -r builds/requirements.txt pyinstaller
-      - name: Clone G3MTool
-        run: git clone https://github.com/y114git/G3MTool.git G3MTool
-      - name: Build G3MTool for macOS x64
-        run: |
-          cd G3MTool
-          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_macos
-          chmod +x ../src/assets/bin/g3mtool_macos/G3MTool
-      - name: Generate secrets_embed.py
-        run: |
-          python - <<'PY'
-          import os, base64
-          def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'CLOUD_FUNCTIONS_BASE_URL':os.environ.get('CLOUD_FUNCTIONS_BASE_URL',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
-          with open('secrets_embed.py','w',encoding='utf-8') as f:
-            f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
-            for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
-          PY
-      - name: Build via spec (x86_64)
-        run: pyinstaller -y builds/DELTAHUB.spec
-      - name: Codesign (adhoc)
-        run: codesign --force --deep --sign - "dist/DELTAHUB.app"
-      - name: Cleanup secrets
-        if: always()
-        run: rm -f secrets_embed.py || true
-      - name: Create archive
+      - name: Create archive (macOS)
+        if: runner.os == 'macOS'
         run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
 
-      # === MERGED TEST STEP ===
-      - name: Test Startup (macOS x64)
-        run: |
-          echo "=== Unpacking archive for test ==="
-          mkdir -p test_env
-          unzip -q "${{ steps.set_names.outputs.archive_path }}" -d test_env
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}" -Force
 
-          if [ -d test_env/DELTAHUB.app ]; then
-            echo "=== Testing startup ==="
-            OUTPUT=$(timeout 10 test_env/DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
-            echo "$OUTPUT"
-            if echo "$OUTPUT" | grep -q "STARTUP ERROR"; then
-              echo "=== STARTUP ERROR DETECTED ==="
-              exit 1
-            fi
-            echo "✓ Startup test passed"
-          else
-            echo "ERROR: DELTAHUB.app not found in archive"
-            exit 1
-          fi
+      - name: Test startup (Unix)
+        if: runner.os != 'Windows'
+        env:
+          ARCHIVE_PATH: ${{ steps.set_names.outputs.archive_path }}
+          STARTUP_TARGET: ${{ matrix.startup_target }}
+        run: python tests/test_startup.py
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DELTAHUB-macOS-x86_64
-          path: ${{ steps.set_names.outputs.archive_path }}
-
-  macos-arm64:
-    name: macOS · arm64 · Build & Test
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set Archive Name
-        id: set_names
-        run: |
-          archive_name="${{ github.event.inputs.archive_name_macos_arm64 || format('DELTAHUB-macOS-arm64-{0}', env.RELEASE_VERSION) }}"
-          echo "archive_path=${archive_name}.zip" >> $GITHUB_OUTPUT
-      - name: Extra tools
-        run: brew install upx || true
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pip deps
-        run: |
-          python -m pip install -U pip wheel
-          pip install -r builds/requirements.txt pyinstaller
-      - name: Clone G3MTool
-        run: git clone https://github.com/y114git/G3MTool.git G3MTool
-      - name: Build G3MTool for macOS arm64
-        run: |
-          cd G3MTool
-          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_macos
-          chmod +x ../src/assets/bin/g3mtool_macos/G3MTool
-      - name: Generate secrets_embed.py
-        run: |
-          python - <<'PY'
-          import os, base64
-          def e(v): return base64.b64encode(v.encode('utf-8')).decode('ascii')
-          vals = {'DATA_FIREBASE_URL':os.environ.get('DATA_FIREBASE_URL',''),'CLOUD_FUNCTIONS_BASE_URL':os.environ.get('CLOUD_FUNCTIONS_BASE_URL',''),'INTERNAL_SALT':os.environ.get('INTERNAL_SALT','')}
-          with open('secrets_embed.py','w',encoding='utf-8') as f:
-            f.write('import base64\n'); f.write("def d(s): return base64.b64decode(s).decode('utf-8')\n")
-            for k,v in vals.items(): f.write(f"{k}=d('{e(v)}')\n")
-          PY
-      - name: Build via spec (arm64)
-        run: pyinstaller -y builds/DELTAHUB.spec
-      - name: Codesign (adhoc)
-        run: codesign --force --deep --sign - "dist/DELTAHUB.app"
-      - name: Cleanup secrets
-        if: always()
-        run: rm -f secrets_embed.py || true
-      - name: Create archive
-        run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
-
-      # === MERGED TEST STEP ===
-      - name: Test Startup (macOS arm64)
-        run: |
-          echo "=== Unpacking archive for test ==="
-          mkdir -p test_env
-          unzip -q "${{ steps.set_names.outputs.archive_path }}" -d test_env
-
-          if [ -d test_env/DELTAHUB.app ]; then
-            echo "=== Testing startup ==="
-            OUTPUT=$(timeout 10 test_env/DELTAHUB.app/Contents/MacOS/DELTAHUB --help 2>&1 || true)
-            echo "$OUTPUT"
-            if echo "$OUTPUT" | grep -q "STARTUP ERROR"; then
-              echo "=== STARTUP ERROR DETECTED ==="
-              exit 1
-            fi
-            echo "✓ Startup test passed"
-          else
-            echo "ERROR: DELTAHUB.app not found in archive"
-            exit 1
-          fi
+      - name: Test startup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ARCHIVE_PATH: ${{ steps.set_names.outputs.archive_path }}
+          STARTUP_TARGET: ${{ matrix.startup_target }}
+        run: python tests/test_startup.py
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DELTAHUB-macOS-arm64
-          path: ${{ steps.set_names.outputs.archive_path }}
-
-  windows:
-    name: Windows · Build & Test
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set Archive Names
-        id: set_names
-        shell: powershell
-        run: |
-          $archiveName = "${{ github.event.inputs.archive_name_windows }}"
-          if (-not $archiveName) { $archiveName = "DELTAHUB-Windows-${{ env.RELEASE_VERSION }}" }
-          "archive_path=$($archiveName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-          $setupName = "${{ github.event.inputs.archive_name_windows_setup }}"
-          if (-not $setupName) { $setupName = "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}" }
-          "setup_archive_path=$($setupName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pip deps
-        run: |
-          python -m pip install -U pip wheel
-          pip install -r builds/requirements.txt pyinstaller
-      - name: Clone G3MTool
-        run: git clone https://github.com/y114git/G3MTool.git G3MTool
-      - name: Build G3MTool for Windows
-        shell: powershell
-        run: |
-          cd G3MTool
-          dotnet publish G3MToolCLI/G3MToolCLI.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ../src/assets/bin/g3mtool_windows
-      - name: Generate secrets_embed.py
-        shell: powershell
-        run: |
-          $vals = @{'DATA_FIREBASE_URL'="$env:DATA_FIREBASE_URL";'CLOUD_FUNCTIONS_BASE_URL'="$env:CLOUD_FUNCTIONS_BASE_URL";'INTERNAL_SALT'="$env:INTERNAL_SALT"}
-          $py = @('import base64', "def d(s): return base64.b64decode(s).decode('utf-8')")
-          foreach ($k in $vals.Keys) { $b64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k])); $py += "$k=d('$b64')"}
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllLines('secrets_embed.py',$py,$utf8NoBom)
-      - name: Build via spec
-        run: pyinstaller -y builds/DELTAHUB.spec
-      - name: Create archive for portable exe
-        shell: powershell
-        run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}"
-
-      # === MERGED TEST STEP (Testing the portable version) ===
-      - name: Test Startup (Windows)
-        shell: powershell
-        run: |
-          Write-Host "=== Unpacking archive for test ==="
-          New-Item -ItemType Directory -Force -Path "test_env" | Out-Null
-          Expand-Archive -Path "${{ steps.set_names.outputs.archive_path }}" -DestinationPath "test_env" -Force
-
-          if (Test-Path 'test_env\DELTAHUB.exe') {
-            Write-Host '=== Testing startup ==='
-            $output = & .\test_env\DELTAHUB.exe --help 2>&1
-            Write-Host $output
-            if ($output -match 'STARTUP ERROR') {
-              Write-Host '=== STARTUP ERROR DETECTED ==='
-              exit 1
-            }
-            Write-Host '✓ Startup test passed'
-          } else {
-            Write-Host 'ERROR: DELTAHUB.exe not found in archive'
-            exit 1
-          }
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DELTAHUB-Windows
+          name: ${{ matrix.artifact_name }}
           path: ${{ steps.set_names.outputs.archive_path }}
 
       - name: Install Inno Setup
+        if: runner.os == 'Windows'
         run: choco install innosetup -y
+
       - name: Inject version into setup.iss
-        shell: powershell
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
           $content = Get-Content -Path builds/setup.iss -Raw
           $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
           $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::WriteAllText("$pwd\builds\setup.iss", $newContent, $utf8NoBomEncoding)
-          Write-Host "AppVersion successfully set to $ver in setup.iss"
+
       - name: Build installer (Inno Setup)
-        shell: powershell
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" builds/setup.iss
+
       - name: Create archive for setup exe
-        shell: powershell
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path "Output" -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
-          if (-not $exe) { Write-Error "Installer not found"; exit 1 }
-          Compress-Archive -Path $exe.FullName -DestinationPath "${{ steps.set_names.outputs.setup_archive_path }}"
+          $exe = Get-ChildItem -Path Output -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error 'Installer not found'; exit 1 }
+          Compress-Archive -Path $exe.FullName -DestinationPath "${{ steps.set_names.outputs.setup_archive_path }}" -Force
+
       - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
         with:
           name: DELTAHUB-Windows-Setup
           path: ${{ steps.set_names.outputs.setup_archive_path }}
@@ -391,7 +268,7 @@ jobs:
   release:
     name: Create GitHub Release and upload assets
     runs-on: ubuntu-latest
-    needs: [linux, macos-x64, macos-arm64, windows]
+    needs: [build]
     if: ${{ inputs.publish_release != false }}
     steps:
       - name: Validate release inputs

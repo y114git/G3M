@@ -3,7 +3,7 @@ import os
 import sys
 from dotenv import load_dotenv
 
-_CONFIG_KEYS = ('DATA_FIREBASE_URL', 'CLOUD_FUNCTIONS_BASE_URL', 'INTERNAL_SALT')
+_CONFIG_KEYS = ('DATA_FIREBASE_URL', 'CLOUD_FUNCTIONS_BASE_URL')
 
 
 class ConfigLoader:
@@ -18,7 +18,8 @@ class ConfigLoader:
         root_env = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
         load_dotenv(root_env) if os.path.exists(root_env) else load_dotenv()
         try:
-            exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath('.')
+            exe_dir = os.path.dirname(sys.executable) if getattr(
+                sys, 'frozen', False) else os.path.abspath('.')
             cfg_path = os.path.join(exe_dir, 'config.env')
             if os.path.exists(cfg_path):
                 load_dotenv(cfg_path)
