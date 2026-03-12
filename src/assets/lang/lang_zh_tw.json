@@ -322,7 +322,8 @@
     "patch_apply_failed_details": "補丁應用失敗，錯誤：\\n{error}",
     "add_mod": "新增模組",
     "open_mod_folder": "開啟模組資料夾",
-    "external_url": "外部連結"
+    "external_url": "外部連結",
+    "show_reset_buttons": "顯示重置按鈕"
   },
   "files": {
     "archive_link": "壓縮檔案連結",
@@ -679,7 +680,7 @@
     "delete_save_confirmation": "該存檔將被永久刪除。繼續？",
     "legacy_cleanup_title": "舊檔案",
     "copy_confirmation": "確認拷貝",
-    "reset_settings_confirm_text": "您確定要將所有設置重置為預設值嗎？\\n\\n此操作將影響：\\n- 遊戲路徑\\n- 自訂設置（背景、顏色、音樂、啟動音效）\\n- 庫模組選擇（選中的模組將被取消選擇）\\n\\n不受影響：\\n- 選擇的語言\\n- 已安裝的模組",
+    "reset_settings_confirm_text": "您確定要將 {section} 區段的設定重置為預設值嗎？",
     "file_replacement_warning_title": "安裝警告",
     "mod_installed_title": "模組已安裝",
     "no_collections": "無存檔集",
@@ -710,7 +711,7 @@
     "file_replacement_warning_body": "此模組直接替換核心遊戲檔案，而非使用推薦的、更安全的修補方法（xdelta）。\n\n通常不鼓勵使用此方法，因其可能與遊戲盜版有關並可能帶來風險。\n\n您仍要繼續安裝嗎？",
     "file_read_error": "無法讀取檔案：{error}",
     "changes_under_review": "更改正在審核中",
-    "reset_settings_confirm_title": "重置設置",
+    "reset_settings_confirm_title": "重置為預設值",
     "secret_key_mod": "模組密鑰：",
     "mod_on_moderation_message": "此模組正在審核中，無法更改。\\n請等待管理員批准，之後您可以進行更改。",
     "delete_collection_confirmation": "該存檔集及其所有存檔將被刪除。繼續？",

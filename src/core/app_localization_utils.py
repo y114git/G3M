@@ -49,6 +49,14 @@ def relocalize_texts(w):
                 lbl.setText(tr(key))
             except (RuntimeError, AttributeError):
                 pass
+    if hasattr(w, '_section_reset_buttons'):
+        for reset_btn, *_ in w._section_reset_buttons:
+            try:
+                reset_btn.setToolTip(tr('buttons.reset_settings'))
+            except (RuntimeError, AttributeError):
+                pass
+    if hasattr(w, '_update_section_reset_buttons_visibility'):
+        w._update_section_reset_buttons_visibility()
     w.theme.update_background_button_state()
     w.theme.update_logo_button_state()
     w.change_font_button.setText(w.customization_service.get_font_button_text())

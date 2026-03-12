@@ -322,7 +322,8 @@
     "settings_tab_library": "Library",
     "settings_tab_mods_browser": "Mods Browser",
     "open_mod_folder": "Open Mod Folder",
-    "external_url": "External URL"
+    "external_url": "External URL",
+    "show_reset_buttons": "Show Reset Buttons"
   },
   "files": {
     "archive_link": "Archive link",
@@ -679,7 +680,7 @@
     "delete_save_confirmation": "The save will be permanently deleted. Continue?",
     "legacy_cleanup_title": "Old files",
     "copy_confirmation": "Confirm copy",
-    "reset_settings_confirm_text": "Are you sure you want to reset all settings to their default values?\\n\\nThis action will affect:\\n- Game paths (Settings > Launch / Patching)\\n- Customization settings (background, colors, music, startup sound)\\n- Library mod selections (selected mods will be deselected)\\n\\nUnaffected:\\n- Selected language\\n- Installed mods",
+    "reset_settings_confirm_text": "Are you sure you want to reset the {section} section settings to their default values?",
     "file_replacement_warning_title": "Installation Warning",
     "mod_installed_title": "Mod Installed",
     "no_collections": "No collections",
@@ -710,7 +711,7 @@
     "file_replacement_warning_body": "This mod replaces core game files directly instead of using the recommended and safer patching method (xdelta).\n\nThis is generally discouraged and may carry risks.\n\nDo you still wish to proceed with the installation?",
     "file_read_error": "Could not read file: {error}",
     "changes_under_review": "Changes are under review",
-    "reset_settings_confirm_title": "Reset Settings",
+    "reset_settings_confirm_title": "Reset defaults",
     "secret_key_mod": "Mod secret key:",
     "mod_on_moderation_message": "This mod is under moderation and cannot be changed.\\nWait for moderator approval, after which you can make changes.",
     "delete_collection_confirmation": "The collection and all its saves will be deleted. Continue?",

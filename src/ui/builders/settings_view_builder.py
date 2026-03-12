@@ -63,6 +63,16 @@ class SettingsViewBuilder:
         layout.setContentsMargins(20, 12, 20, 20)
         return page, layout
 
+    @staticmethod
+    def _mark_reset(widget: QWidget, *, config_key: str = '', reset_action: str = '', reset_value=None):
+        if config_key:
+            widget.setProperty('reset_config_key', config_key)
+        if reset_action:
+            widget.setProperty('reset_action', reset_action)
+        if reset_value is not None:
+            widget.setProperty('reset_value', reset_value)
+        return widget
+
     def _collapsible_section(self, title: str, section_key: str, lang_key: str = '', parent: QWidget = None) -> tuple:
         """Create a collapsible section. Returns (section_widget, content_layout)."""
         collapsed_map = self.app_state.local_config.get('settings_collapsed_sections', {})
@@ -93,6 +103,12 @@ class SettingsViewBuilder:
         title_lbl.setStyleSheet('font-weight: bold; background: transparent;')
         header_layout.addWidget(title_lbl)
 
+        reset_btn = self._create_icon_btn('⭯', app_state=self.app_state)
+        reset_btn.setToolTip(tr('buttons.reset_settings'))
+        if not self.app_state.local_config.get('show_reset_buttons', False):
+            reset_btn.setVisible(False)
+        header_layout.addWidget(reset_btn)
+
         arrow = QLabel('\u25B6' if is_collapsed else '\u25BC')
         arrow.setStyleSheet('font-size: 10px; background: transparent;')
         header_layout.addWidget(arrow)
@@ -112,7 +128,8 @@ class SettingsViewBuilder:
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(30, 10, 30, 10)
         content_layout.setSpacing(12)
-        content.setVisible(not is_collapsed)
+        if is_collapsed:
+            content.setVisible(False)
 
         def toggle_section(event=None):
             vis = not content.isVisible()
@@ -136,13 +153,17 @@ class SettingsViewBuilder:
             self.widgets['_collapsible_toggles'] = []
         self.widgets['_collapsible_toggles'].append(toggle_section)
 
+        if '_section_reset_buttons' not in self.widgets:
+            self.widgets['_section_reset_buttons'] = []
+        self.widgets['_section_reset_buttons'].append((reset_btn, section_key, lang_key, content))
+
         return section, content_layout
 
-    def _styled_checkbox(self, text: str, tooltip: str = '') -> QCheckBox:
+    def _styled_checkbox(self, text: str, tooltip: str = '', config_key: str = '', reset_value=None) -> QCheckBox:
         cb = QCheckBox(text)
         if tooltip:
             cb.setToolTip(tooltip)
-        return cb
+        return self._mark_reset(cb, config_key=config_key, reset_value=reset_value)
 
     def _styled_label(self, text: str, bold: bool = False) -> QLabel:
         lbl = QLabel(text)
@@ -150,14 +171,14 @@ class SettingsViewBuilder:
             lbl.setStyleSheet('font-weight: bold;')
         return lbl
 
-    def _styled_button(self, text: str, width: int = 80, tooltip: str = '') -> QPushButton:
+    def _styled_button(self, text: str, width: int = 80, tooltip: str = '', reset_action: str = '') -> QPushButton:
         btn = QPushButton(text)
         btn.setMinimumWidth(width)
         btn.setMinimumHeight(32)
         btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         if tooltip:
             btn.setToolTip(tooltip)
-        return btn
+        return self._mark_reset(btn, reset_action=reset_action)
 
     _EMOJI_TO_ICON = {'⭯': 'reset', '✔': 'checkmark', '🖫': 'save', '🗑': 'delete'}
 
@@ -208,6 +229,7 @@ class SettingsViewBuilder:
         language_layout.addWidget(language_label)
         language_combo = NoScrollComboBox()
         language_combo.setMinimumWidth(120)
+        language_combo = self._mark_reset(language_combo, config_key='language')
         available_languages = localization_service.get_available_languages()
         current_language = localization_service.get_current_language()
         for code, name in available_languages.items():
@@ -216,9 +238,9 @@ class SettingsViewBuilder:
                 language_combo.setCurrentIndex(language_combo.count() - 1)
         language_layout.addWidget(language_combo)
         cl.addWidget(language_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        beta_updates_checkbox = self._styled_checkbox(tr('ui.beta_updates'), tr('tooltips.beta_updates'))
+        beta_updates_checkbox = self._styled_checkbox(tr('ui.beta_updates'), tr('tooltips.beta_updates'), 'beta_updates_enabled')
         cl.addWidget(beta_updates_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        fullscreen_checkbox = self._styled_checkbox(tr('ui.fullscreen'), tr('tooltips.fullscreen_tooltip'))
+        fullscreen_checkbox = self._styled_checkbox(tr('ui.fullscreen'), tr('tooltips.fullscreen_tooltip'), 'fullscreen_enabled')
         cl.addWidget(fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ui_scale_container = QWidget(page)
@@ -234,15 +256,16 @@ class SettingsViewBuilder:
         ui_scale_spinbox.setSuffix("%")
         ui_scale_spinbox.setValue(int(self.app_state.local_config.get('ui_scale', 1.0) * 100))
         ui_scale_spinbox.setMinimumWidth(140)
+        ui_scale_spinbox = self._mark_reset(ui_scale_spinbox, config_key='ui_scale')
         ui_scale_layout.addWidget(ui_scale_spinbox)
         cl.addWidget(ui_scale_container, alignment=Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(sec)
 
-        sec, cl = self._collapsible_section(tr('ui.settings_section_advanced'), 'general_advanced', 'ui.settings_section_advanced', parent=page)
-        reset_button = self._styled_button(tr('buttons.reset_settings'), 80)
-        cl.addWidget(reset_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sec)
+        sec_adv, cl_adv = self._collapsible_section(tr('ui.settings_section_advanced'), 'general_advanced', 'ui.settings_section_advanced', parent=page)
+        show_reset_buttons_checkbox = self._styled_checkbox(tr('ui.show_reset_buttons'), config_key='show_reset_buttons', reset_value=False)
+        cl_adv.addWidget(show_reset_buttons_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(sec_adv)
 
         layout.addStretch()
 
@@ -250,9 +273,9 @@ class SettingsViewBuilder:
         self.widgets['language_combo'] = language_combo
         self.widgets['beta_updates_checkbox'] = beta_updates_checkbox
         self.widgets['fullscreen_checkbox'] = fullscreen_checkbox
+        self.widgets['show_reset_buttons_checkbox'] = show_reset_buttons_checkbox
         self.widgets['ui_scale_label'] = ui_scale_label
         self.widgets['ui_scale_spinbox'] = ui_scale_spinbox
-        self.widgets['reset_button'] = reset_button
         return self._wrap_in_scroll(page, parent)
 
     def _build_appearance_tab(self, parent: QWidget = None) -> QWidget:
@@ -275,21 +298,22 @@ class SettingsViewBuilder:
         cl.addLayout(themes_row)
 
         do_not_save_theme_checkbox = self._styled_checkbox(tr('ui.do_not_save_theme_after_import'))
+        self._mark_reset(do_not_save_theme_checkbox, reset_value=False)
         cl.addWidget(do_not_save_theme_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_media'), 'appearance_general', 'ui.settings_section_media', parent=page)
-        disable_animations_checkbox = self._styled_checkbox(tr('checkboxes.disable_animations'))
-        disable_background_checkbox = self._styled_checkbox(tr('checkboxes.disable_background'))
-        disable_splash_checkbox = self._styled_checkbox(tr('checkboxes.disable_splash'))
+        disable_animations_checkbox = self._styled_checkbox(tr('checkboxes.disable_animations'), config_key='disable_animations')
+        disable_background_checkbox = self._styled_checkbox(tr('checkboxes.disable_background'), config_key='background_disabled')
+        disable_splash_checkbox = self._styled_checkbox(tr('checkboxes.disable_splash'), config_key='disable_splash')
         background_buttons_layout = QHBoxLayout()
         background_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         background_buttons_layout.setSpacing(10)
-        change_background_button = self._styled_button('', 140)
+        change_background_button = self._styled_button('', 140, reset_action='background')
         background_buttons_layout.addWidget(change_background_button)
-        change_logo_button = self._styled_button('', 140)
+        change_logo_button = self._styled_button('', 140, reset_action='logo')
         background_buttons_layout.addWidget(change_logo_button)
-        change_font_button = self._styled_button('', 140)
+        change_font_button = self._styled_button('', 140, reset_action='font')
         background_buttons_layout.addWidget(change_font_button)
         cl.addLayout(background_buttons_layout)
         layout.addWidget(sec)
@@ -298,9 +322,9 @@ class SettingsViewBuilder:
         sound_buttons_layout = QHBoxLayout()
         sound_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sound_buttons_layout.setSpacing(10)
-        background_music_button = self._styled_button('', 180)
+        background_music_button = self._styled_button('', 180, reset_action='background_music')
         sound_buttons_layout.addWidget(background_music_button)
-        startup_sound_button = self._styled_button('', 180)
+        startup_sound_button = self._styled_button('', 180, reset_action='startup_sound')
         sound_buttons_layout.addWidget(startup_sound_button)
         cl_audio.addLayout(sound_buttons_layout)
         layout.addWidget(sec_audio)
@@ -319,6 +343,7 @@ class SettingsViewBuilder:
         border_radius_spinbox.setSuffix("px")
         border_radius_spinbox.setValue(int(get_border_radius(self.app_state.local_config)))
         border_radius_spinbox.setMinimumWidth(100)
+        self._mark_reset(border_radius_spinbox, config_key='custom_border_radius')
         border_radius_layout.addWidget(border_radius_spinbox)
         cl_styling.addWidget(border_radius_container, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec_styling)
@@ -331,6 +356,7 @@ class SettingsViewBuilder:
         color_widgets, color_labels = {}, {}
         for key, lang_key in SETTINGS_COLOR_CONFIG.items():
             row_layout, line_edit, btn, reset_btn, label_widget = self._create_color_row(tr(lang_key))
+            self._mark_reset(line_edit, config_key=f'custom_color_{key}')
             color_widgets[key], color_labels[key] = line_edit, label_widget
             self.widgets[f'color_btn_{key}'], self.widgets[f'color_reset_{key}'] = btn, reset_btn
             custom_style_layout.addLayout(row_layout)
@@ -374,8 +400,8 @@ class SettingsViewBuilder:
     def _build_mods_browser_tab(self, parent: QWidget = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
-        sec, cl = self._collapsible_section(tr('ui.settings_section_general'), 'mods_browser_general', 'ui.settings_section_general', parent=page)
-        hide_mods_browser_tab_checkbox = self._styled_checkbox(tr('ui.hide_mods_browser_tab'))
+        sec, cl = self._collapsible_section(tr('ui.settings_section_general'), 'mods_general', 'ui.settings_section_general', parent=page)
+        hide_mods_browser_tab_checkbox = self._styled_checkbox(tr('ui.hide_mods_browser_tab'), config_key='hide_mods_browser_tab')
         cl.addWidget(hide_mods_browser_tab_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
@@ -394,13 +420,13 @@ class SettingsViewBuilder:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_general'), 'library_general', 'ui.settings_section_general', parent=page)
-        hide_library_tab_checkbox = self._styled_checkbox(tr('ui.hide_library_tab'))
+        hide_library_tab_checkbox = self._styled_checkbox(tr('ui.hide_library_tab'), config_key='hide_library_tab')
         cl.addWidget(hide_library_tab_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_filters'), 'library_filters', 'ui.settings_section_filters', parent=page)
         hide_library_filters_checkbox = self._styled_checkbox(
-            tr('ui.hide_library_filters'), tr('tooltips.hide_library_filters')
+            tr('ui.hide_library_filters'), tr('tooltips.hide_library_filters'), 'hide_library_filters'
         )
         cl.addWidget(hide_library_filters_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
@@ -415,7 +441,7 @@ class SettingsViewBuilder:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_general'), 'plugins_general', 'ui.settings_section_general', parent=page)
-        hide_plugins_tab_checkbox = self._styled_checkbox(tr('ui.hide_plugins_tab'))
+        hide_plugins_tab_checkbox = self._styled_checkbox(tr('ui.hide_plugins_tab'), config_key='hide_plugins_tab')
         cl.addWidget(hide_plugins_tab_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
@@ -435,6 +461,7 @@ class SettingsViewBuilder:
         game_selector_label = self._styled_label(tr('ui.mod_type_label'), bold=True)
         gs_layout.addWidget(game_selector_label)
         settings_game_combo = QComboBox()
+        self._mark_reset(settings_game_combo, config_key='selected_game_type')
         for label, data in [
             ('DELTARUNE', 'deltarune'), ('DELTARUNE DEMO', 'deltarunedemo'),
             ('UNDERTALE', 'undertale'), ('UNDERTALE Yellow', 'undertaleyellow'),
@@ -448,7 +475,7 @@ class SettingsViewBuilder:
         path_exe_layout = QHBoxLayout(path_exe_row)
         path_exe_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         path_exe_layout.setSpacing(10)
-        change_path_button = self._styled_button('', 140)
+        change_path_button = self._styled_button('', 140, reset_action='game_paths')
         change_path_button.setObjectName('settings_change_path_button')
         path_exe_layout.addWidget(change_path_button)
         custom_executable_button = self._styled_button(
@@ -457,7 +484,9 @@ class SettingsViewBuilder:
         custom_executable_button.setObjectName('settings_custom_executable_button')
         path_exe_layout.addWidget(custom_executable_button)
         reset_custom_exe_button = self._create_icon_btn('⭯', app_state=self.app_state)
+        reset_custom_exe_button.setToolTip(tr('buttons.reset_settings'))
         reset_custom_exe_button.setVisible(False)
+        self._mark_reset(reset_custom_exe_button, reset_action='custom_executables')
         path_exe_layout.addWidget(reset_custom_exe_button)
         cl.addWidget(path_exe_row, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
@@ -465,23 +494,25 @@ class SettingsViewBuilder:
         sec, cl = self._collapsible_section(tr('ui.settings_section_launch'), 'launch_launch', 'ui.settings_section_launch', parent=page)
         launch_via_steam_checkbox = self._styled_checkbox(
             tr('ui.steam_launch'),
-            "<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>'
+            "<html><body style='white-space: normal;'>" + tr('tooltips.steam') + '</body></html>', 'launch_via_steam'
         )
         cl.addWidget(launch_via_steam_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         dont_hide_window_checkbox = self._styled_checkbox(
             tr('ui.dont_hide_window_on_launch'),
-            "<html><body style='white-space: normal;'>" + tr('tooltips.dont_hide_window_on_launch') + '</body></html>'
+            "<html><body style='white-space: normal;'>" + tr('tooltips.dont_hide_window_on_launch') + '</body></html>', 'dont_hide_window_on_launch'
         )
         cl.addWidget(dont_hide_window_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         is_linux = platform.system() == 'Linux'
         use_portproton_checkbox = self._styled_checkbox(
             tr('ui.use_portproton'),
-            "<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>'
+            "<html><body style='white-space: normal;'>" + tr('tooltips.portproton') + '</body></html>', 'use_portproton'
         )
-        use_portproton_checkbox.setVisible(is_linux)
+        if not is_linux:
+            use_portproton_checkbox.setVisible(False)
         cl.addWidget(use_portproton_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        select_portproton_path_button = self._styled_button(tr('buttons.select_portproton_path'), 200)
-        select_portproton_path_button.setVisible(is_linux)
+        select_portproton_path_button = self._styled_button(tr('buttons.select_portproton_path'), 200, reset_action='portproton_path')
+        if not is_linux:
+            select_portproton_path_button.setVisible(False)
         portproton_path_label = QLabel(tr('ui.file_not_selected'))
         portproton_path_label.setMinimumHeight(20)
         portproton_frame = QFrame(page)
@@ -495,7 +526,7 @@ class SettingsViewBuilder:
 
         sec, cl = self._collapsible_section(tr('ui.settings_section_patching'), 'launch_patching', 'ui.settings_section_patching', parent=page)
         skip_patching_warnings_checkbox = self._styled_checkbox(
-            tr('ui.skip_patching_warnings'), tr('tooltips.skip_patching_warnings')
+            tr('ui.skip_patching_warnings'), tr('tooltips.skip_patching_warnings'), 'skip_patching_warnings'
         )
         cl.addWidget(skip_patching_warnings_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
@@ -506,7 +537,7 @@ class SettingsViewBuilder:
         mo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         mo_layout.setSpacing(20)
         for key in ('merge_properties', 'merge_code'):
-            cb = self._styled_checkbox(tr(f'checkboxes.{key}'), tr(f'tooltips.{key}'))
+            cb = self._styled_checkbox(tr(f'checkboxes.{key}'), tr(f'tooltips.{key}'), key)
             mo_layout.addWidget(cb)
             self.widgets[f'{key}_checkbox'] = cb
         cl.addWidget(cont, alignment=Qt.AlignmentFlag.AlignCenter)

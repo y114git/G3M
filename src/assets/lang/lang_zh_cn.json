@@ -322,7 +322,8 @@
     "patch_apply_failed_details": "应用补丁失败，错误：\n{error}",
     "add_mod": "添加模组",
     "open_mod_folder": "打开模组文件夹",
-    "external_url": "外部链接"
+    "external_url": "外部链接",
+    "show_reset_buttons": "显示重置按钮"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -679,7 +680,7 @@
     "delete_save_confirmation": "该存档将被永久删除。继续？",
     "legacy_cleanup_title": "旧文件",
     "copy_confirmation": "确认复制",
-    "reset_settings_confirm_text": "您确定要将所有设置重置为默认值吗？\\n\\n此操作将影响：\\n- 游戏路径\\n- 自定义设置（背景、颜色、音乐、启动音效）\\n- 库模组选择（选中的模组将被取消选择）\\n\\n不受影响：\\n- 选择的语言\\n- 已安装的模组",
+    "reset_settings_confirm_text": "您确定要将 {section} 部分的设置重置为默认值吗？",
     "file_replacement_warning_title": "安装警告",
     "mod_installed_title": "模组已安装",
     "no_collections": "无存档集",
@@ -710,7 +711,7 @@
     "file_replacement_warning_body": "此模组直接替换核心游戏文件，而不是使用推荐的、更安全的补丁方法（xdelta）。\n\n通常不鼓励使用此方法，因为它可能与游戏盗版有关并可能带来风险。\n\n您仍要继续安装吗？",
     "file_read_error": "无法读取文件：{error}",
     "changes_under_review": "更改正在审核中",
-    "reset_settings_confirm_title": "重置设置",
+    "reset_settings_confirm_title": "重置为默认值",
     "secret_key_mod": "模组密钥：",
     "mod_on_moderation_message": "此模组正在审核中，无法更改。\\n请等待管理员批准，之后您可以进行更改。",
     "delete_collection_confirmation": "该存档集及其所有存档将被删除。继续？",

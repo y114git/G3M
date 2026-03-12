@@ -66,7 +66,8 @@ class LibraryTabBuilder(QObject):
         filters = self._create_library_filters_widget()
         f_scroll.setWidget(filters)
         install_size_hint_height_sync(filters, f_scroll, attr_name='_library_filters_scroll_height_filter')
-        f_scroll.setVisible(not self.app_state.local_config.get('hide_library_filters', False))
+        if self.app_state.local_config.get('hide_library_filters', False):
+            f_scroll.setVisible(False)
         layout.addWidget(f_scroll)
         self.widgets['filters_scroll'] = f_scroll
         ctrl = QHBoxLayout()

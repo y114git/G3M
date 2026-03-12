@@ -322,7 +322,8 @@
     "patch_apply_failed_details": "Error al aplicar parche, error:\\n{error}",
     "settings_section_graphics": "Gráficos",
     "open_mod_folder": "Abrir Carpeta del Mod",
-    "external_url": "URL externa"
+    "external_url": "URL externa",
+    "show_reset_buttons": "Mostrar botones de restablecimiento"
   },
   "files": {
     "archive_link": "Enlace de archivo",
@@ -679,7 +680,7 @@
     "delete_save_confirmation": "El guardado será eliminado permanentemente. ¿Continuar?",
     "legacy_cleanup_title": "Archivos antiguos",
     "copy_confirmation": "Confirmar copia",
-    "reset_settings_confirm_text": "¿Estás seguro de que quieres restablecer todas las configuraciones a sus valores predeterminados?\\n\\nEsta acción afectará:\\n- Rutas del juego\\n- Configuraciones de personalización (fondo, colores, música, sonido de inicio)\\n- Selecciones de mods en la biblioteca (los mods seleccionados serán deseleccionados)\\n\\nNo afectado:\\n- Idioma seleccionado\\n- Mods instalados",
+    "reset_settings_confirm_text": "¿Seguro que quieres restablecer la configuración de la sección {section} a sus valores predeterminados?",
     "file_replacement_warning_title": "Advertencia de Instalación",
     "mod_installed_title": "Mod Instalado",
     "no_collections": "Sin colecciones",
@@ -710,7 +711,7 @@
     "file_replacement_warning_body": "Este mod reemplaza archivos principales del juego directamente en lugar de usar el método de parcheo recomendado y más seguro (xdelta).\n\nEsto generalmente no se recomienda y puede conllevar riesgos.\n\n¿Aún deseas proceder con la instalación?",
     "file_read_error": "No se pudo leer el archivo: {error}",
     "changes_under_review": "Los cambios están en revisión",
-    "reset_settings_confirm_title": "Restablecer Configuraciones",
+    "reset_settings_confirm_title": "Restablecer valores predeterminados",
     "secret_key_mod": "Clave secreta del mod:",
     "mod_on_moderation_message": "Este mod está en moderación y no puede ser cambiado.\\nEspera la aprobación del moderador, después de lo cual podrás hacer cambios.",
     "delete_collection_confirmation": "La colección y todos sus guardados serán eliminados. ¿Continuar?",

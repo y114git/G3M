@@ -11,8 +11,9 @@ from typing import Optional
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QPoint
 from PyQt6.QtWidgets import QFileDialog, QWidget
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
-from services.localization_service import tr, LocalizationManager
+from services.localization_service import tr, LocalizationManager, localization_service
 from config.constants import LAUNCHER_VERSION, UI_COLORS
+from models.game_modes import get_all_games
 
 from utils.file_utils import get_file_filter
 from ui.common.styling import get_border_radius, display_hex_to_qt_hex
@@ -90,7 +91,7 @@ class SettingsManager(QObject):
             'custom_color_text': '', 'custom_color_secondary_text': '', 'beta_updates_enabled': False,
             'pizzatower_game_path': '', 'pizzatower_custom_executable_path': '', 'skip_patching_warnings': False,
             'merge_properties': False, 'merge_code': False, 'hide_mods_browser_tab': False,
-            'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False,
+            'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False, 'show_reset_buttons': False,
             'custom_border_radius': 7,
         }
         for key, value in defaults.items():
@@ -131,6 +132,7 @@ class SettingsManager(QObject):
     def on_toggle_hide_mods_browser_tab(self, enabled: bool): self._toggle_setting('hide_mods_browser_tab', enabled, None)
     def on_toggle_hide_library_tab(self, enabled: bool): self._toggle_setting('hide_library_tab', enabled, None)
     def on_toggle_hide_plugins_tab(self, enabled: bool): self._toggle_setting('hide_plugins_tab', enabled, None)
+    def on_toggle_show_reset_buttons(self, enabled: bool): self._toggle_setting('show_reset_buttons', enabled, None)
 
     def on_toggle_merge_properties(self, enabled: bool):
         self._toggle_setting('merge_properties', enabled, None)
@@ -491,22 +493,57 @@ class SettingsManager(QObject):
             self.feedback_service.update_status(message or tr('errors.error'), 'red')
             self.feedback_service.show_message('error', 'errors.error', message)
 
-    def on_reset_settings_click(self, callbacks: dict):
-        if not self.feedback_service.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False):
+    def reset_section(self, section: str, config_keys: set[str], reset_actions: set[str], has_ui_reset: bool = False):
+        if not (config_keys or reset_actions or has_ui_reset):
             return
-        language = self.app_state.local_config.get('language', 'en')
-        for base in ('background_music', 'startup_sound'):
-            self._remove_files(self._get_audio_paths(base))
-        self._remove_logo_files()
-        self._remove_font_files()
-        self.app_state.local_config.clear()
-        self.app_state.local_config['language'] = language
-        self.write_local_config()
-        if 'migrate_config' in callbacks:
-            callbacks['migrate_config']()
+        if not self.feedback_service.ask_question('dialogs.reset_settings_confirm_title', 'dialogs.reset_settings_confirm_text', '', False, section=section):
+            return False
+        for action in reset_actions:
+            if action == 'background':
+                self.app_state.local_config.pop('custom_background_path', None)
+            elif action == 'background_music':
+                self._remove_files(self._get_audio_paths('background_music'))
+            elif action == 'startup_sound':
+                self._remove_files(self._get_audio_paths('startup_sound'))
+            elif action == 'logo':
+                self._remove_logo_files()
+            elif action == 'font':
+                self._remove_font_files()
+                if hasattr(self.parent_widget, '_custom_font_id'):
+                    old_id = self.parent_widget._custom_font_id
+                    if old_id is not None and old_id != -1:
+                        from PyQt6.QtGui import QFontDatabase
+                        QFontDatabase.removeApplicationFont(old_id)
+                    self.parent_widget._custom_font_id = None
+                if hasattr(self.parent_widget, 'custom_font_family'):
+                    self.parent_widget.custom_font_family = self.lang_service.load_font()
+                self._update_font_button_text()
+            elif action == 'game_paths':
+                for game in get_all_games():
+                    self.app_state.local_config.pop(game.path_config_key, None)
+            elif action == 'custom_executables':
+                self.app_state.local_config.pop('use_custom_executable', None)
+                for game in get_all_games():
+                    self.app_state.local_config.pop(game.custom_exec_config_key, None)
+            elif action == 'portproton_path':
+                self.app_state.local_config.pop('portproton_path', None)
+        for key in config_keys:
+            self.app_state.local_config.pop(key, None)
+        language_code = None
+        if 'language' in config_keys:
+            language_code = localization_service.initialize_localization(
+                self.app_state.local_config,
+                self.app_state.config_path,
+                self.write_local_config,
+                self.write_json,
+            )
+        self.migrate_config_if_needed()
         self.theme_changed.emit()
         self.settings_changed.emit()
-        self.feedback_service.show_message('info', 'dialogs.success', tr('status.settings_reset_success'))
+        if language_code:
+            self.language_changed.emit(language_code)
+        self.feedback_service.show_message('info', 'dialogs.success', tr('status.settings_reset_success', section=section))
+        return True
 
     def disable_direct_launch(self):
         self.app_state.local_config['direct_launch_chapter'] = ''

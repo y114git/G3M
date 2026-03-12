@@ -1,4 +1,6 @@
 """Controller for settings UI management."""
+from PyQt6.QtWidgets import QWidget
+from core.app_post_init import _restore_ui_state_from_config
 from services.localization_service import tr
 from config.constants import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
@@ -36,30 +38,84 @@ class SettingsUiController:
         from ui.dialogs.report_bug_dialog import ReportBugDialog
         ReportBugDialog(self.app, self.app_state).exec()
 
-    def reset_settings(self):
-        self.customization_service.stop_background_music()
-        self.settings_service.on_reset_settings_click({'migrate_config': lambda: (self.app._load_local_data(), self.settings_service.migrate_config_if_needed())})
-        checkboxes = (
-            'chapter_mode_checkbox', 'beta_updates_checkbox', 'fullscreen_checkbox',
-            'hide_library_filters_checkbox', 'full_install_checkbox', 'disable_animations_checkbox', 'disable_background_checkbox',
-            'disable_splash_checkbox', 'skip_patching_warnings_checkbox',
-            'merge_properties_checkbox', 'merge_code_checkbox',
-            'hide_mods_browser_tab_checkbox', 'hide_library_tab_checkbox', 'hide_plugins_tab_checkbox',
-            'launch_via_steam_checkbox', 'dont_hide_window_checkbox', 'use_portproton_checkbox'
-        )
-        for cb in checkboxes:
-            if (w := getattr(self.app, cb, None)):
-                w.setChecked(False)
-        self._call_if_exists(self.app, '_update_portproton_ui')
-        self.app._update_custom_executable_ui()
-        self.app._update_checkbox_visibility()
-        self.used_mods_service.used_mods.clear()
-        self.used_mods_service.save_used_mods_state()
-        self.used_mods_service.load_used_mods_state()
-        self.customization_service.load_custom_style_settings(self.app.color_widgets, self.app.theme.apply_theme)
-        self.app.game_launch.update_button_state()
+    def _set_combo_data(self, combo, value):
+        was_blocked = combo.blockSignals(True)
+        for i in range(combo.count()):
+            if combo.itemData(i) == value:
+                combo.setCurrentIndex(i)
+                combo.blockSignals(was_blocked)
+                return
+        combo.blockSignals(was_blocked)
+
+    @staticmethod
+    def _set_value_silently(widget, value):
+        was_blocked = widget.blockSignals(True)
+        widget.setValue(value)
+        widget.blockSignals(was_blocked)
+
+    @staticmethod
+    def _collect_reset_targets(section_content):
+        config_keys, reset_actions, reset_values = set(), set(), []
+        for widget in section_content.findChildren(QWidget):
+            if not hasattr(widget, 'property'):
+                continue
+            if key := widget.property('reset_config_key'):
+                config_keys.add(key)
+            if action := widget.property('reset_action'):
+                reset_actions.add(action)
+            if widget.property('reset_value') is not None:
+                reset_values.append((widget, widget.property('reset_value')))
+        return config_keys, reset_actions, reset_values
+
+    def _refresh_after_section_reset(self):
+        config = self.app_state.local_config
+        self._set_combo_data(self.app.language_combo, config.get('language', 'en'))
+        if hasattr(self.app, 'game_type_combo'):
+            game_type = config.get('selected_game_type', 'deltarune')
+            self._set_combo_data(self.app.game_type_combo, game_type)
+            game_def = get_game(game_type)
+            self.app_state.game_mode = game_def if game_def else DeltaruneGame()
+            if hasattr(self.app, '_on_game_mode_updated_by_state'):
+                self.app._on_game_mode_updated_by_state(self.app_state.game_mode)
+        self._set_value_silently(self.app.ui_scale_spinbox, int(config.get('ui_scale', 1.0) * 100))
+        self._set_value_silently(self.app.border_radius_spinbox, int(config.get('custom_border_radius', 7)))
+        _restore_ui_state_from_config(self.app)
+        self.customization_service.load_custom_style_settings(self.app.color_widgets)
+        for key, widget in self.app.color_widgets.items():
+            from ui.common.styling import qt_hex_to_display_hex
+            widget.setText(qt_hex_to_display_hex(config.get(f'custom_color_{key}', '')))
+        if hasattr(self.app, 'disable_animations_checkbox'):
+            self.app.disable_animations_checkbox.setChecked(config.get('disable_animations', False))
+        if hasattr(self.app, 'show_reset_buttons_checkbox'):
+            self.app.show_reset_buttons_checkbox.setChecked(config.get('show_reset_buttons', False))
+        for attr, key in (
+            ('hide_mods_browser_tab_checkbox', 'hide_mods_browser_tab'),
+            ('hide_library_tab_checkbox', 'hide_library_tab'),
+            ('hide_plugins_tab_checkbox', 'hide_plugins_tab'),
+        ):
+            if hasattr(self.app, attr):
+                getattr(self.app, attr).setChecked(config.get(key, False))
+        self._call_if_exists(self.app, '_update_settings_library_tab', '_update_portproton_ui', '_update_custom_executable_ui', '_update_checkbox_visibility', '_update_section_reset_buttons_visibility')
         self.app.background_music_button.setText(self.customization_service.get_background_music_button_text())
         self.app.startup_sound_button.setText(self.customization_service.get_startup_sound_button_text())
+        self.app.change_font_button.setText(self.customization_service.get_font_button_text())
+        self.app.change_logo_button.setText(self.customization_service.get_logo_button_text())
+        if hasattr(self.app, 'search_display'):
+            self.app.search_display.update_filtered_mods()
+        if hasattr(self.app, 'library_display'):
+            self.app.library_display.update_display()
+        self.app.game_launch.update_button_state()
+
+    def reset_section(self, section_key, section_lang_key, section_content):
+        config_keys, reset_actions, reset_values = self._collect_reset_targets(section_content)
+        if not self.settings_service.reset_section(tr(section_lang_key) if section_lang_key else section_key, config_keys, reset_actions, bool(reset_values)):
+            return
+        if 'background_music' in reset_actions:
+            self.customization_service.stop_background_music()
+        for widget, value in reset_values:
+            if hasattr(widget, 'setChecked'):
+                widget.setChecked(bool(value))
+        self._refresh_after_section_reset()
 
     def on_language_changed(self, lang): self.settings_service.on_language_changed(lang)
 
@@ -135,6 +191,10 @@ class SettingsUiController:
         self.settings_service.on_toggle_hide_library_filters(bool(state))
         if hasattr(self.app, 'library_filters_widget'):
             self.app.library_filters_widget.setVisible(not state)
+
+    def on_toggle_show_reset_buttons(self, state):
+        self.settings_service.on_toggle_show_reset_buttons(bool(state))
+        self._call_if_exists(self.app, '_update_section_reset_buttons_visibility')
 
     def on_toggle_disable_animations(self, state):
         self.settings_service.on_toggle_disable_animations(bool(state))

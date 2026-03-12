@@ -199,6 +199,7 @@ WIDGET_LOCALIZATIONS = [
     ('full_install_checkbox', 'setText', 'ui.full_install'),
     ('language_label', 'setText', 'ui.language_label'),
     ('beta_updates_checkbox', 'setText', 'ui.beta_updates'),
+    ('show_reset_buttons_checkbox', 'setText', 'ui.show_reset_buttons'),
     ('skip_patching_warnings_checkbox', 'setText', 'ui.skip_patching_warnings'),
     ('fullscreen_checkbox', 'setText', 'ui.fullscreen'),
     ('fullscreen_checkbox', 'setToolTip', 'tooltips.fullscreen_tooltip'),

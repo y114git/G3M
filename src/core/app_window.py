@@ -768,6 +768,7 @@ class AppWindow(QWidget):
 
     def _setup_settings_tab(self):
         settings_builder = SettingsViewBuilder(self.app_state, self)
+        self.settings_builder = settings_builder
         self.settings_widget = settings_builder.build()
         if hasattr(self, 'main_layout') and self.main_layout:
             insert_index = self.main_layout.indexOf(self.main_tab_widget) if hasattr(self, 'main_tab_widget') else -1
@@ -779,7 +780,8 @@ class AppWindow(QWidget):
         self._bind_widgets(settings_widgets, required=(
             'settings_tab_widget',
             'language_label', 'language_combo',
-            'beta_updates_checkbox', 'reset_button',
+            'beta_updates_checkbox',
+            'show_reset_buttons_checkbox',
             'fullscreen_checkbox', 'disable_animations_checkbox', 'disable_background_checkbox', 'disable_splash_checkbox',
             'change_background_button', 'change_logo_button', 'change_font_button', 'background_music_button',
             'startup_sound_button', 'custom_style_frame', 'color_widgets', 'color_labels',
@@ -800,12 +802,15 @@ class AppWindow(QWidget):
         ))
         self._section_headers = settings_widgets.get('_section_headers', [])
         self._section_lines = settings_widgets.get('_section_lines', [])
+        self._section_reset_buttons = settings_widgets.get('_section_reset_buttons', [])
         self.language_combo.currentTextChanged.connect(lambda: self.settings_ui.on_language_changed(self.language_combo.currentData()))
         self._connect_theme_setting_spinbox(self.ui_scale_spinbox, timer_attr='_ui_scale_timer', config_key='ui_scale', value_transform=lambda value: value / 100.0, after_change=self._refresh_scaled_card_displays)
         self._connect_theme_setting_spinbox(self.border_radius_spinbox, timer_attr='_border_radius_timer', config_key='custom_border_radius')
 
         self.beta_updates_checkbox.stateChanged.connect(self.settings_ui.on_toggle_beta_updates)
-        self.reset_button.clicked.connect(self.settings_ui.reset_settings)
+        for reset_btn, section_key, lang_key, content in self._section_reset_buttons:
+            reset_btn.clicked.connect(lambda _, section=section_key, lang=lang_key, section_content=content: self.settings_ui.reset_section(section, lang, section_content))
+        self.show_reset_buttons_checkbox.stateChanged.connect(self.settings_ui.on_toggle_show_reset_buttons)
         self.fullscreen_checkbox.stateChanged.connect(self.settings_ui.on_toggle_fullscreen)
         self.disable_animations_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_animations)
         self.disable_background_checkbox.stateChanged.connect(self.settings_ui.on_toggle_disable_background)
@@ -962,9 +967,11 @@ class AppWindow(QWidget):
         self.merge_properties_checkbox.stateChanged.connect(self.settings_ui.on_toggle_merge_properties)
         self.merge_code_checkbox.stateChanged.connect(self.settings_ui.on_toggle_merge_code)
 
+        self.show_reset_buttons_checkbox.setChecked(self.app_state.local_config.get('show_reset_buttons', False))
         self.hide_mods_browser_tab_checkbox.setChecked(self.app_state.local_config.get('hide_mods_browser_tab', False))
         self.hide_library_tab_checkbox.setChecked(self.app_state.local_config.get('hide_library_tab', False))
         self.hide_plugins_tab_checkbox.setChecked(self.app_state.local_config.get('hide_plugins_tab', False))
+        self._update_section_reset_buttons_visibility()
 
     def _finish_initialization(self):
         self.app_state.initialization_completed = True
@@ -1074,6 +1081,12 @@ class AppWindow(QWidget):
         if hasattr(self, 'settings_change_path_button'):
             self.settings_change_path_button.setText(self.app_state.game_mode.path_change_button_text)
         self._update_custom_executable_ui(current_game_id)
+
+    def _update_section_reset_buttons_visibility(self):
+        show_reset_buttons = self.app_state.local_config.get('show_reset_buttons', False)
+        for reset_btn, *_ in getattr(self, '_section_reset_buttons', []):
+            if reset_btn:
+                reset_btn.setVisible(show_reset_buttons)
 
     def _full_install_tooltip(self) -> str:
         if platform.system() == 'Darwin':
