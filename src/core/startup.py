@@ -8,7 +8,7 @@ import sys
 import subprocess
 import time
 import psutil
-from PyQt6.QtCore import QLibraryInfo, QTranslator, QTimer
+from PyQt6.QtCore import QLibraryInfo, QTranslator, QTimer, Qt
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from services.localization_service import localization_service, tr
@@ -286,7 +286,17 @@ def run_app():
                 if hasattr(ex, 'app_state') and getattr(ex.app_state, 'game_is_running', False):
                     return
                 try:
+                    ex.setWindowState(ex.windowState() & ~Qt.WindowState.WindowMinimized)
                     ex.show()
+                    ex.raise_()
+                    ex.activateWindow()
+                    ex.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+                    ex.show()
+
+                    def _remove_stay_on_top():
+                        ex.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
+                        ex.show()
+                    QTimer.singleShot(0, _remove_stay_on_top)
                     ex.is_shown_to_user = True
                     if hasattr(ex, 'app_state'):
                         ex.app_state.is_shown_to_user = True

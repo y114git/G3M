@@ -57,6 +57,8 @@ class LibraryTabBuilder(QObject):
     def build(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setSpacing(5)
+        layout.setContentsMargins(10, 10, 10, 10)
         f_scroll = QScrollArea(widget)
         f_scroll.setWidgetResizable(True)
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -71,7 +73,7 @@ class LibraryTabBuilder(QObject):
         layout.addWidget(f_scroll)
         self.widgets['filters_scroll'] = f_scroll
         ctrl = QHBoxLayout()
-        ctrl.setContentsMargins(0, 0, 0, 0)
+        ctrl.setContentsMargins(0, 5, 0, 5)
         from PyQt6.QtCore import QSize
         colors = self._get_colors()
         add_btn = QPushButton()
@@ -80,7 +82,8 @@ class LibraryTabBuilder(QObject):
         self._update_add_mod_button_style(add_btn, colors)
         add_btn.setIconSize(QSize(20, 20))
         add_btn.setToolTip(tr('ui.add_mod'))
-        add_btn.setFixedSize(36, 36)
+        add_btn.setContentsMargins(0, 0, 0, 0)
+        add_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         ctrl.addStretch()
         ctrl.addWidget(add_btn)
         ctrl.addSpacing(20)
@@ -93,6 +96,9 @@ class LibraryTabBuilder(QObject):
         ctrl.addWidget(f_cb)
         ctrl.addStretch()
         layout.addLayout(ctrl)
+
+        self._update_add_mod_button_size_and_style(add_btn, game_combo, colors)
+        layout.addSpacing(5)
         ch_tabs = QWidget()
         ch_tabs.setObjectName('chapter_tabs_container')
         ch_tabs.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -237,11 +243,20 @@ class LibraryTabBuilder(QObject):
         self.widgets.update({f'library_tag_{k}': v for k, v in tags.items()})
         return w
 
+    def _update_add_mod_button_size_and_style(self, add_btn, game_combo, colors):
+        """Update add_mod_button to be square matching the combo height."""
+        from utils.path_utils import colored_icon
+        combo_height = game_combo.sizeHint().height()
+        add_btn.setFixedSize(combo_height, combo_height)
+        br = clamp_border_radius(get_border_radius(self.app_state.local_config), width=combo_height, height=combo_height, border_width=2)
+        add_btn.setIcon(colored_icon('add', colors['text']))
+        add_btn.setStyleSheet(f'QPushButton#add_mod_button {{ border: 2px solid {colors["border"]}; border-radius: {br}px; background-color: {colors["button"]}; color: {colors["text"]}; margin: 0px; padding: 0px; }} QPushButton#add_mod_button:hover {{ background-color: {colors["button_hover"]}; }}')
+
     def _update_add_mod_button_style(self, btn, colors):
         from utils.path_utils import colored_icon
         br = clamp_border_radius(get_border_radius(self.app_state.local_config), width=36, height=36, border_width=2)
         btn.setIcon(colored_icon('add', colors['text']))
-        btn.setStyleSheet(f'QPushButton#add_mod_button {{ border: 2px solid {colors["border"]}; border-radius: {br}px; background-color: {colors["button"]}; color: {colors["text"]}; }} QPushButton#add_mod_button:hover {{ background-color: {colors["button_hover"]}; }}')
+        btn.setStyleSheet(f'QPushButton#add_mod_button {{ border: 2px solid {colors["border"]}; border-radius: {br}px; background-color: {colors["button"]}; color: {colors["text"]}; margin: 0px; padding: 0px; }} QPushButton#add_mod_button:hover {{ background-color: {colors["button_hover"]}; }}')
 
     def _update_priority_button_style(self, btn, btn_clr, brd_clr, hvr_clr):
         n = btn.objectName()
@@ -254,8 +269,8 @@ class LibraryTabBuilder(QObject):
         for k in ('priority_button', 'create_modpack_button'):
             if k in self.widgets:
                 self._update_priority_button_style(self.widgets[k], colors['button'], colors['border'], colors['button_hover'])
-        if 'add_mod_button' in self.widgets:
-            self._update_add_mod_button_style(self.widgets['add_mod_button'], colors)
+        if 'add_mod_button' in self.widgets and 'game_type_combo' in self.widgets:
+            self._update_add_mod_button_size_and_style(self.widgets['add_mod_button'], self.widgets['game_type_combo'], colors)
         tag_lbl = self.widgets.get('library_tags_label')
         if tag_lbl:
             tag_lbl.setStyleSheet(f'color: {colors["text"]};')
