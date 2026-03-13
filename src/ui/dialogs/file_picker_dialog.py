@@ -44,6 +44,7 @@ class GameBananaFilePickerDialog(QDialog):
         self._populate()
 
     def _populate(self):
+        self.files.sort(key=lambda f: f.get('timestamp') or 0, reverse=True)
         for file_data in self.files:
             display_text = file_data.get('name', 'file')
             item = QListWidgetItem(display_text)

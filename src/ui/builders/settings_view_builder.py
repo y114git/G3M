@@ -201,7 +201,6 @@ class SettingsViewBuilder:
         label = QLabel(label_text, parent)
         label.setStyleSheet("padding-left: 5px;")
         disp = QLineEdit(parent)
-        disp.setReadOnly(True)
         disp.setObjectName('color_display')
         disp.setMinimumWidth(180)
         disp.setMaximumWidth(230)
@@ -410,10 +409,22 @@ class SettingsViewBuilder:
         cl.addWidget(blocklist_button, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
+        sec, cl = self._collapsible_section(tr('downloads.title'), 'mods_downloads', 'downloads.title', parent=page)
+        downloads_no_auto_use_cb = self._styled_checkbox(tr('downloads.settings_no_auto_use'), config_key='downloads_no_auto_use')
+        cl.addWidget(downloads_no_auto_use_cb, alignment=Qt.AlignmentFlag.AlignCenter)
+        downloads_delete_after_use_cb = self._styled_checkbox(tr('downloads.settings_delete_after_use'), config_key='downloads_delete_after_use')
+        cl.addWidget(downloads_delete_after_use_cb, alignment=Qt.AlignmentFlag.AlignCenter)
+        downloads_save_local_imports_cb = self._styled_checkbox(tr('downloads.settings_save_local_imports'), config_key='downloads_save_local_imports')
+        cl.addWidget(downloads_save_local_imports_cb, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(sec)
+
         layout.addStretch()
 
         self.widgets['hide_mods_browser_tab_checkbox'] = hide_mods_browser_tab_checkbox
         self.widgets['blocklist_button'] = blocklist_button
+        self.widgets['downloads_no_auto_use_checkbox'] = downloads_no_auto_use_cb
+        self.widgets['downloads_delete_after_use_checkbox'] = downloads_delete_after_use_cb
+        self.widgets['downloads_save_local_imports_checkbox'] = downloads_save_local_imports_cb
         return self._wrap_in_scroll(page, parent)
 
     def _build_library_tab(self, parent: QWidget = None) -> QWidget:

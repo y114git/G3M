@@ -13,7 +13,7 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from services.localization_service import localization_service, tr
 from ui.utils.audio_utils import _audio_service
-from core.splash import create_png_splash
+from ui.splash import create_png_splash
 from utils.path_utils import resource_path, get_user_data_root, get_launcher_dir
 from config.constants import SPLASH_MIN_DURATION, LAUNCHER_FALLBACK_TIMEOUT, SPLASH_WATCHDOG_TIMEOUT, SINGLE_INSTANCE_KEY, GAME_PROCESS_NAMES
 import traceback
@@ -157,6 +157,8 @@ def setup_app():
     from config.constants import LAUNCHER_VERSION
     app.setApplicationVersion(LAUNCHER_VERSION)
     app.setOrganizationName('deltahub')
+    from PyQt6.QtGui import QIcon
+    app.setWindowIcon(QIcon(resource_path('assets/icons/icon.ico')))
     return app
 
 
@@ -269,7 +271,7 @@ def run_app():
         splash = create_png_splash(config_dir)
         if show_animation:
             _splash_start_time = time.time()
-            from core.splash import CustomSplashScreen
+            from ui.splash import CustomSplashScreen
             gif_path = resource_path('assets/images/splash.gif')
             if os.path.exists(gif_path):
                 gif_splash = CustomSplashScreen(gif_path=gif_path)

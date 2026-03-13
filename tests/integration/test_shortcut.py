@@ -17,12 +17,9 @@ from controllers.shortcut_controller import (
     _validate_shortcut_prerequisites,
     _write_shortcut_file,
 )
-from core.shortcut_runner import _parse_shortcut_arg, _find_mod_source_dir, _resolve_chapter_source_dir
+from services.game_runner import _parse_shortcut_arg, _find_mod_source_dir, _resolve_chapter_source_dir
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def game_mode():
@@ -61,7 +58,6 @@ def mock_mod_data():
 @pytest.fixture
 def mock_used_mods_service(mock_mod_data):
     svc = MagicMock()
-    # By default return 1 mod for any chapter
     svc.get_used_mods_list.return_value = [mock_mod_data]
     return svc
 
@@ -93,9 +89,6 @@ def mod_on_disk(shortcut_temp_dir):
     return mod_dir
 
 
-# ---------------------------------------------------------------------------
-# _parse_shortcut_arg tests
-# ---------------------------------------------------------------------------
 
 class TestParseShortcutArg:
     def test_parse_base64(self):
@@ -135,9 +128,6 @@ class TestParseShortcutArg:
         assert result['mod_key'] == 'old_mod'
 
 
-# ---------------------------------------------------------------------------
-# _find_mod_source_dir tests
-# ---------------------------------------------------------------------------
 
 class TestFindModSourceDir:
     PATCH_TARGET = 'utils.path_utils.get_user_mods_dir'
@@ -184,9 +174,6 @@ class TestFindModSourceDir:
             assert result == mod_dir
 
 
-# ---------------------------------------------------------------------------
-# _resolve_chapter_source_dir tests
-# ---------------------------------------------------------------------------
 
 class TestResolveChapterSourceDir:
     def test_chapter_subfolder(self, mod_on_disk):
@@ -215,9 +202,6 @@ class TestResolveChapterSourceDir:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# _collect_chapter_data tests
-# ---------------------------------------------------------------------------
 
 class TestCollectChapterData:
     def test_chapter_mode_all_vanilla(self, mock_used_mods_service_empty, mock_app_state):
@@ -267,9 +251,6 @@ class TestCollectChapterData:
         assert chapter_mods.get('deltarune_3') is None
 
 
-# ---------------------------------------------------------------------------
-# _build_shortcut_config tests
-# ---------------------------------------------------------------------------
 
 class TestBuildShortcutConfig:
     def test_basic_config(self, mock_app_state):
@@ -291,9 +272,6 @@ class TestBuildShortcutConfig:
         assert cfg['chapter_mode'] is False
 
 
-# ---------------------------------------------------------------------------
-# _validate_shortcut_prerequisites tests
-# ---------------------------------------------------------------------------
 
 class TestValidatePrerequisites:
     def test_valid_vanilla(self, mock_app_state):
@@ -325,14 +303,10 @@ class TestValidatePrerequisites:
             assert 'g3mtool' in error.lower()
 
     def test_no_mod_skips_g3mtool_check(self, mock_app_state):
-        # Even if G3MTool is missing, vanilla should pass
         error = _validate_shortcut_prerequisites(mock_app_state, False)
         assert error is None
 
 
-# ---------------------------------------------------------------------------
-# _generate_shortcut_filename tests
-# ---------------------------------------------------------------------------
 
 class TestGenerateShortcutFilename:
     def test_with_mod(self, game_mode, mock_mod_data):
@@ -351,9 +325,6 @@ class TestGenerateShortcutFilename:
         assert all(c.isalnum() or c in ('_', '-') for c in name)
 
 
-# ---------------------------------------------------------------------------
-# _get_platform_extension tests
-# ---------------------------------------------------------------------------
 
 class TestGetPlatformExtension:
     def test_returns_valid_extension(self):
@@ -362,9 +333,6 @@ class TestGetPlatformExtension:
         assert ext in ('.vbs', '.sh', '.command')
 
 
-# ---------------------------------------------------------------------------
-# _write_shortcut_file tests
-# ---------------------------------------------------------------------------
 
 class TestWriteShortcutFile:
     def test_write_creates_file(self, shortcut_temp_dir):

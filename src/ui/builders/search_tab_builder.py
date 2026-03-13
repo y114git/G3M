@@ -5,7 +5,7 @@ from config.constants import BASE_TAG_NAMES, SEARCH_GAME_OPTIONS
 from services.localization_service import tr
 from ui.common.styling import install_size_hint_height_sync, install_scroll_viewport_clip, apply_panel_style, build_tag_checkbox_style, get_theme_color, get_ui_scale_factor
 from ui.builders.shared_filters_builder import (
-    create_sort_controls, create_tag_checkboxes, create_search_button,
+    create_sort_controls, create_tag_checkboxes, create_search_button, create_downloads_button,
     create_filters_frame, create_modgame_combo, apply_filters_frame_style
 )
 
@@ -93,14 +93,16 @@ class ModsBrowserTabBuilder(QObject):
         tags = create_tag_checkboxes(self.app_state, BASE_TAG_NAMES)
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
-        layout.addSpacing(16)
         show_nsfw_checkbox = QCheckBox(tr('ui.show_nsfw'))
         show_nsfw_checkbox.setChecked(bool(self.app_state.local_config.get('show_nsfw', False)))
         layout.addWidget(show_nsfw_checkbox, 0, _vc)
         layout.addStretch()
+        downloads_btn = create_downloads_button(self.app_state)
+        layout.addWidget(downloads_btn, 0, _vc)
+        layout.addSpacing(4)
         search_btn = create_search_button(self.app_state)
         layout.addWidget(search_btn, 0, _vc)
-        self.widgets.update({'sort_combo': sort_combo, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'show_nsfw_checkbox': show_nsfw_checkbox, 'search_button': search_btn})
+        self.widgets.update({'sort_combo': sort_combo, 'modgame_combo': modgame_combo, 'tags_label': tags_label, 'show_nsfw_checkbox': show_nsfw_checkbox, 'search_button': search_btn, 'downloads_button': downloads_btn})
         self.widgets.update({f'tag_{k}': v for k, v in tags.items()})
         self.refresh_dynamic_styles()
         return w

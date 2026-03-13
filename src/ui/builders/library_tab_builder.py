@@ -7,7 +7,7 @@ from services.localization_service import tr
 from ui.widgets.shared.custom_controls import _ZeroHintWidget
 from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, build_button_style, apply_scroll_area_chrome, apply_stylesheet_if_changed
 from ui.builders.shared_filters_builder import (
-    create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button,
+    create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button, create_downloads_button,
     create_filters_frame, apply_filters_frame_style
 )
 
@@ -237,9 +237,12 @@ class LibraryTabBuilder(QObject):
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
         layout.addStretch()
+        downloads_btn = create_downloads_button(self.app_state)
+        layout.addWidget(downloads_btn, 0, _vc)
+        layout.addSpacing(4)
         search_btn = create_search_button(self.app_state)
         layout.addWidget(search_btn, 0, _vc)
-        self.widgets.update({'library_sort_combo': sort_combo, 'library_sort_order_btn': sort_btn, 'library_tags_label': tags_lbl, 'library_search_button': search_btn, 'library_tag_widgets': list(tags.values())})
+        self.widgets.update({'library_sort_combo': sort_combo, 'library_sort_order_btn': sort_btn, 'library_tags_label': tags_lbl, 'library_search_button': search_btn, 'library_downloads_button': downloads_btn, 'library_tag_widgets': list(tags.values())})
         self.widgets.update({f'library_tag_{k}': v for k, v in tags.items()})
         return w
 

@@ -176,12 +176,12 @@ class SearchModCardWidget(ModCardWidget):
         self.details_button.setObjectName('cardButton')
         self.details_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
-        self.install_button = QPushButton(tr('buttons.install'), self.actions_widget)
-        self.install_button.setObjectName('cardButtonInstall')
-        self.install_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.install_button.clicked.connect(self._on_install_button_clicked)
+        self.action_button = QPushButton(tr('buttons.download'), self.actions_widget)
+        self.action_button.setObjectName('cardButtonDownload')
+        self.action_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.action_button.clicked.connect(self._on_action_button_clicked)
         actions_layout.addWidget(self.details_button)
-        actions_layout.addWidget(self.install_button)
+        actions_layout.addWidget(self.action_button)
         expanded_layout.addWidget(self.actions_widget, 0, Qt.AlignmentFlag.AlignHCenter)
         self.main_layout.addWidget(self.expanded_widget)
         self.expanded_widget.setVisible(False)
@@ -368,7 +368,7 @@ class SearchModCardWidget(ModCardWidget):
                 self._update_updated_label()
             tagline_changed = self._update_tagline_text()
             if not self.is_installed:
-                self._apply_gamebanana_install_styles()
+                self._apply_download_style()
             if metrics_changed or name_changed or tagline_changed:
                 self._refresh_card_geometry(invalidate_parent=True, force=True)
         except Exception as e:
@@ -377,12 +377,12 @@ class SearchModCardWidget(ModCardWidget):
     def update_labels_text(self):
         if hasattr(self, 'details_button'):
             self.details_button.setText(tr('ui.details_button'))
-        if hasattr(self, 'install_button'):
+        if hasattr(self, 'action_button'):
             if self.is_installed:
-                self.install_button.setText(tr('buttons.delete'))
+                self.action_button.setText(tr('buttons.delete'))
             else:
-                self.install_button.setText(tr('buttons.install'))
-                self._apply_gamebanana_install_styles()
+                self.action_button.setText(tr('buttons.download'))
+                self._apply_download_style()
         if hasattr(self, 'likes_label'):
             self.likes_label.setToolTip(tr('ui.likes_tooltip'))
         if hasattr(self, 'updated_label'):

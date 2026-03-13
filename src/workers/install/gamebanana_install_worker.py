@@ -6,7 +6,7 @@ from typing import Optional, Dict
 from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from services.localization_service import tr
-from core.exceptions import AppError
+from models.exceptions import AppError
 from adapters.gamebanana_adapter import GameBananaAPI
 from adapters.gamebanana_converter import GameBananaConverter
 from utils.file_utils import normalize_mod_package

@@ -47,7 +47,7 @@ class CompatibilityCheckThread(QThread):
 
 
 class ModCardWidget(BaseModWidget):
-    install_requested = pyqtSignal(object)
+    download_requested = pyqtSignal(object)
     uninstall_requested = pyqtSignal(object)
     details_requested = pyqtSignal(object)
 
@@ -74,10 +74,10 @@ class ModCardWidget(BaseModWidget):
         self._compatibility_thread = None
         self._init_ui()
         self._check_installation_status()
-        self.update_install_button_state()
+        self.update_action_button_state()
         self._update_style()
-        if self.is_installed and hasattr(self, 'install_button'):
-            self._apply_uninstall_button_style()
+        if self.is_installed and hasattr(self, 'action_button'):
+            self._apply_unaction_button_style()
         try:
             self.destroyed.connect(self._cleanup_compatibility_thread)
         except Exception:
@@ -110,11 +110,11 @@ class ModCardWidget(BaseModWidget):
             label = getattr(self, attr, None)
             if label:
                 label.setStyleSheet(f'color: {self._get_theme_text_color()};')
-        if hasattr(self, 'install_button'):
+        if hasattr(self, 'action_button'):
             if self.is_installed:
-                self._apply_uninstall_button_style()
+                self._apply_unaction_button_style()
             else:
-                self._apply_gamebanana_install_styles()
+                self._apply_download_style()
 
     def _get_theme_text_color(self, fallback='#e8e9eb'):
         config = self._resolve_theme_config()
@@ -127,6 +127,11 @@ class ModCardWidget(BaseModWidget):
     def _get_app_state(self):
         if self.parent_app and hasattr(self.parent_app, 'app_state'):
             return self.parent_app.app_state
+        return None
+
+    def _get_downloads_manager(self):
+        if self.parent_app and hasattr(self.parent_app, 'downloads_manager'):
+            return self.parent_app.downloads_manager
         return None
 
     def _get_likes_text(self):
@@ -191,11 +196,11 @@ class ModCardWidget(BaseModWidget):
         self.details_button = QPushButton(tr('ui.details_button'), self.actions_widget)
         self.details_button.setObjectName('cardButton')
         self.details_button.clicked.connect(lambda: self.details_requested.emit(self.mod_data))
-        self.install_button = QPushButton(tr('buttons.install'), self.actions_widget)
-        self.install_button.setObjectName('cardButtonInstall')
-        self.install_button.clicked.connect(self._on_install_button_clicked)
+        self.action_button = QPushButton(tr('buttons.download'), self.actions_widget)
+        self.action_button.setObjectName('cardButtonDownload')
+        self.action_button.clicked.connect(self._on_action_button_clicked)
         actions_layout.addWidget(self.details_button)
-        actions_layout.addWidget(self.install_button)
+        actions_layout.addWidget(self.action_button)
         self.actions_widget.setVisible(False)
         self.main_layout.addWidget(self.actions_widget)
 
@@ -218,7 +223,7 @@ class ModCardWidget(BaseModWidget):
                     logging.warning(f'ModCardWidget: Error checking cache for key {key}: {e}', exc_info=True)
         else:
             self.is_installed = False
-        self._update_install_button()
+        self._update_action_button()
 
     def _start_compatibility_check(self):
         if getattr(self.mod_data, 'gamebanana_compatibility_checked', False):
@@ -284,12 +289,12 @@ class ModCardWidget(BaseModWidget):
         try:
             for attr, (info_key, default) in self._COMPAT_ATTR_MAP.items():
                 setattr(self.mod_data, attr, compat_info.get(info_key, default))
-            self._apply_gamebanana_install_styles()
+            self._apply_download_style()
         except Exception as e:
             logging.warning(f'ModCardWidget: Error updating compatibility info: {e}', exc_info=True)
 
-    def _apply_uninstall_button_style(self):
-        if not hasattr(self, 'install_button'):
+    def _apply_unaction_button_style(self):
+        if not hasattr(self, 'action_button'):
             return
         text_color = self._get_theme_text_color('#e8e9eb')
         border = self._get_theme_border_color('#039d5b')
@@ -297,37 +302,54 @@ class ModCardWidget(BaseModWidget):
         br = get_border_radius(config)
         button_width, button_height, button_font_size = get_card_button_metrics(config)
         from ui.common.styling import build_button_style
-        self.install_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
+        self.action_button.setStyleSheet(build_button_style('cardButtonUninstall', '#F44336', '#d32f2f', text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br))
 
-    def _update_install_button(self):
+    def _update_action_button(self):
         if self.is_installed:
-            self.install_button.setText(tr('buttons.delete'))
-            self.install_button.setObjectName('cardButtonUninstall')
-            self._apply_uninstall_button_style()
-            self.install_button.setToolTip('')
+            self.action_button.setText(tr('buttons.delete'))
+            self.action_button.setObjectName('cardButtonUninstall')
+            self._apply_unaction_button_style()
+            self.action_button.setToolTip('')
         else:
-            self.install_button.setText(tr('buttons.install'))
-            self.install_button.setObjectName('cardButtonInstall')
-            self._apply_gamebanana_install_styles()
-        self.update_install_button_state()
+            self.action_button.setText(tr('buttons.download'))
+            self.action_button.setObjectName('cardButtonDownload')
+            self._apply_download_style()
+        self.update_action_button_state()
 
-    def update_install_button_state(self):
-        if not hasattr(self, 'install_button'):
+    def update_action_button_state(self):
+        if not hasattr(self, 'action_button'):
+            return
+        if self.is_installed:
+            self.action_button.setEnabled(True)
             return
         app_state = self._get_app_state()
-        if app_state:
-            is_installing = getattr(app_state, 'is_installing', False)
-            self.install_button.setEnabled(not is_installing)
+        if not app_state:
+            self.action_button.setEnabled(True)
+            return
+        if getattr(app_state, 'is_installing', False):
+            self.action_button.setEnabled(False)
+            return
+        key = get_mod_key(self.mod_data)
+        if key and key.startswith('gb_'):
+            dm = self._get_downloads_manager()
+            if dm:
+                prefix = f'gb_mod_{key.replace("gb_", "", 1)}'
+                for r in dm.records:
+                    if r.canonical_key and r.canonical_key.startswith(prefix) and r.is_active:
+                        self.action_button.setEnabled(False)
+                        self.action_button.setToolTip(tr('downloads.already_downloading'))
+                        return
+        self.action_button.setEnabled(True)
 
-    def _apply_gamebanana_install_styles(self):
-        self.install_button.setStyleSheet('')
-        self.install_button.setToolTip('')
+    def _apply_download_style(self):
+        self.action_button.setStyleSheet('')
+        self.action_button.setToolTip('')
 
-    def _on_install_button_clicked(self):
+    def _on_action_button_clicked(self):
         if self.is_installed:
             self.uninstall_requested.emit(self.mod_data)
         else:
-            self.install_requested.emit(self.mod_data)
+            self.download_requested.emit(self.mod_data)
 
     def update_installation_status(self):
         was_installed = self.is_installed
@@ -338,7 +360,7 @@ class ModCardWidget(BaseModWidget):
                 if not self.is_installed:
                     for attr, val in [('gamebanana_compatibility_checked', False), ('gamebanana_is_tool_compatible', False), ('gamebanana_supported_files', [])]:
                         setattr(self.mod_data, attr, val)
-                self._apply_gamebanana_install_styles()
+                self._apply_download_style()
 
     def update_mod_data(self):
         try:
@@ -364,7 +386,7 @@ class ModCardWidget(BaseModWidget):
                     tagline = tagline[:197] + '...'
                 self.tagline_label.setText(tagline)
             if not self.is_installed:
-                self._apply_gamebanana_install_styles()
+                self._apply_download_style()
         except Exception as e:
             logging.warning(f'ModCardWidget: Error updating mod data: {e}', exc_info=True)
 
@@ -373,10 +395,10 @@ class ModCardWidget(BaseModWidget):
         if hasattr(self, '_update_actions_visibility'):
             self._update_actions_visibility()
         self._update_style()
-        if hasattr(self, 'install_button') and self.is_installed:
-            button_obj_name = self.install_button.objectName()
+        if hasattr(self, 'action_button') and self.is_installed:
+            button_obj_name = self.action_button.objectName()
             if button_obj_name == 'cardButtonUninstall':
-                self._apply_uninstall_button_style()
+                self._apply_unaction_button_style()
 
     def update_labels_text(self):
         super().update_labels_text()
@@ -388,9 +410,9 @@ class ModCardWidget(BaseModWidget):
             self.likes_label.setToolTip(tr('ui.likes_tooltip'))
         if hasattr(self, 'details_button'):
             self.details_button.setText(tr('ui.details_button'))
-        if hasattr(self, 'install_button'):
+        if hasattr(self, 'action_button'):
             if self.is_installed:
-                self.install_button.setText(tr('buttons.delete'))
+                self.action_button.setText(tr('buttons.delete'))
             else:
-                self.install_button.setText(tr('buttons.install'))
-                self._apply_gamebanana_install_styles()
+                self.action_button.setText(tr('buttons.download'))
+                self._apply_download_style()

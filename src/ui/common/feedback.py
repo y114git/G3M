@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import QObject, pyqtSignal
 from services.localization_service import tr
 if TYPE_CHECKING:
-    from core.app_state import AppState
+    from models.app_state import AppState
 
 
 class FeedbackManager(QObject):

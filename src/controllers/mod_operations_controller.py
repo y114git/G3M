@@ -66,7 +66,7 @@ class ModOperationsController:
         self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
         self.feedback_service.show_message('error', 'errors.gamebanana_install_failed', error=str(error))
 
-    def on_mod_install_requested(self, mod):
+    def on_mod_download_requested(self, mod):
         if self.app_state.is_installing:
             logging.debug('ModOperationsController: Installation already in progress, ignoring request')
             return
@@ -77,50 +77,75 @@ class ModOperationsController:
 
     def _install_gamebanana_mod(self, mod, force=False, is_update=False, selected_file=None):
         try:
-            self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
-            if self.app_state.current_task and self.app_state.current_task.isRunning():
-                logging.info('ModOperationsController: Previous task is still running, cancelling it first')
-                previous_task = self.app_state.current_task
-                try:
-                    self._disconnect_task_signals(previous_task)
-                except Exception as e:
-                    logging.warning(f'ModOperationsController: Error disconnecting signals: {e}')
-                if hasattr(previous_task, 'cancel'):
-                    logging.info('ModOperationsController: Cancelling previous task')
-                    try:
-                        previous_task.cancel()
-                    except Exception as e:
-                        logging.warning(f'ModOperationsController: Error cancelling previous task: {e}')
-                self.app_state.clear_current_task()
-
-                def on_previous_task_finished():
-                    logging.info('ModOperationsController: Previous task finished, starting new installation')
-                    try:
-                        if previous_task.isFinished():
-                            previous_task.deleteLater()
-                    except Exception as e:
-                        logging.debug(f'ModOperationsController: Error deleting previous task: {e}')
-                    self._start_gamebanana_install(mod, selected_file=selected_file)
-                if hasattr(previous_task, 'finished'):
-                    previous_task.finished.connect(on_previous_task_finished)
-                elif not previous_task.isRunning():
-                    on_previous_task_finished()
-                else:
-                    QTimer.singleShot(100, lambda: on_previous_task_finished() if not previous_task.isRunning() else None)
-                return
-            if self.app_state.current_task:
-                logging.info('ModOperationsController: Cleaning up finished previous task')
-                previous_task = self.app_state.current_task
-                try:
-                    if previous_task.isFinished():
-                        previous_task.deleteLater()
-                except Exception:
-                    pass
-                self.app_state.clear_current_task()
-            self._start_gamebanana_install(mod, selected_file=selected_file)
+            downloads_manager = getattr(self.app, 'downloads_manager', None)
+            if downloads_manager:
+                self._enqueue_gamebanana_download(mod, selected_file)
+            else:
+                self._start_gamebanana_install_legacy(mod, selected_file=selected_file)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation: {e}', exc_info=True)
             self._handle_install_start_error(e)
+
+    def _enqueue_gamebanana_download(self, mod, selected_file=None):
+        """Route a GameBanana mod install through the Downloads system."""
+        from models.download_models import SourceKind, TargetKind
+        mod_id_str = get_gamebanana_mod_id(mod)
+        if not mod_id_str:
+            self.feedback_service.show_message('error', 'errors.invalid_gamebanana_mod_id')
+            return
+        mod_id = int(mod_id_str)
+        download_url = None
+        file_id = None
+        file_name = None
+        compatibility = None
+        if selected_file:
+            download_url = selected_file.get('download_url') or selected_file.get('_sDownloadUrl')
+            file_id = selected_file.get('id') or selected_file.get('_idRow')
+            file_name = selected_file.get('name') or selected_file.get('_sFile')
+            compatibility = selected_file.get('compatibility')
+        if not download_url:
+            self.feedback_service.show_message('error', 'errors.no_download_url')
+            return
+        canonical_key = f'gb_mod_{mod_id}_{file_id}' if file_id else f'gb_mod_{mod_id}'
+        metadata = {
+            'gb_mod_id': mod_id,
+            'gb_file_id': file_id,
+            'file_name': file_name,
+            'compatibility': compatibility,
+            'profile_url': getattr(mod, 'external_url', None),
+            'icon_url': getattr(mod, 'icon_url', None),
+            'tags': getattr(mod, 'tags', None) or [],
+            'category': getattr(mod, 'gamebanana_category', None),
+            'game': getattr(mod, 'game', 'deltarune'),
+        }
+        display_name = get_mod_name(mod, file_name or f'GameBanana mod {mod_id}')
+        self.app.downloads_manager.enqueue_with_feedback(
+            self.feedback_service,
+            display_name=display_name,
+            source_kind=SourceKind.GAMEBANANA,
+            target_kind=TargetKind.MOD,
+            source_url=download_url,
+            canonical_key=canonical_key,
+            metadata=metadata,
+        )
+        self._safe_execute(lambda: self.app.search_display.update_search_cards(), 'Failed to refresh cards')
+
+    def _start_gamebanana_install_legacy(self, mod, selected_file=None):
+        """Legacy path: direct InstallGameBananaModThread (fallback if downloads_manager unavailable)."""
+        self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
+        if self.app_state.current_task and self.app_state.current_task.isRunning():
+            previous_task = self.app_state.current_task
+            try:
+                self._disconnect_task_signals(previous_task)
+            except Exception as e:
+                logging.warning(f'ModOperationsController: Error disconnecting signals: {e}')
+            if hasattr(previous_task, 'cancel'):
+                try:
+                    previous_task.cancel()
+                except Exception as e:
+                    logging.warning(f'ModOperationsController: Error cancelling previous task: {e}')
+            self.app_state.clear_current_task()
+        self._start_gamebanana_install(mod, selected_file=selected_file)
 
     def _start_install_thread(self, install_thread, op_id: int):
         try:
@@ -295,14 +320,14 @@ class ModOperationsController:
             if self.app_state.is_installing and (not force):
                 return
             if hasattr(mod, 'is_gamebanana_mod') and callable(mod.is_gamebanana_mod) and mod.is_gamebanana_mod():
-                available_files = self._get_available_gamebanana_files(mod)
-                if available_files:
-                    selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
-                    if selected_file is None:
-                        return
-                    self._install_gamebanana_mod(mod, force, is_update, selected_file=selected_file)
+                available_files = self._get_available_gamebanana_files(mod) or self._get_all_gamebanana_files(mod)
+                if not available_files:
+                    self.feedback_service.show_message('warning', 'errors.mod_no_files', mod_name=mod.name)
                     return
-                self._show_incompatible_gamebanana_dialog(mod=mod)
+                selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
+                if selected_file is None:
+                    return
+                self._install_gamebanana_mod(mod, force, is_update, selected_file=selected_file)
                 return
             available_chapters = []
             if mod.game == 'undertale':

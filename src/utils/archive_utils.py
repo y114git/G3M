@@ -400,7 +400,7 @@ def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
         from services.localization_service import tr
         if not parent_widget:
             try:
-                from core.app_state import app_state
+                from models.app_state import app_state
                 parent_widget = app_state.main_window
             except (ImportError, AttributeError):
                 return False

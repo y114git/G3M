@@ -568,19 +568,19 @@ class SearchDisplayController(QObject):
                                     if hasattr(card, 'update_installation_status'):
                                         card.update_installation_status()
                                 self._place_layout_widget(card, target_position)
-                                if hasattr(card, 'update_install_button_state'):
-                                    card.update_install_button_state()
+                                if hasattr(card, 'update_action_button_state'):
+                                    card.update_action_button_state()
                                 widgets_shown += 1
                                 target_position += 1
                             else:
                                 parent_widget = self.app.mod_list_widget if hasattr(self.app, 'mod_list_widget') else self.app
                                 card = SearchModCardWidget(mod, parent=parent_widget, parent_app=self.app)
-                                card.install_requested.connect(self.mod_ops.on_mod_install_requested)
+                                card.download_requested.connect(self.mod_ops.on_mod_download_requested)
                                 card.uninstall_requested.connect(self.mod_ops.on_mod_uninstall_requested)
                                 card.clicked.connect(self.on_mod_clicked)
                                 card.details_requested.connect(self.show_details)
-                                if hasattr(card, 'update_install_button_state'):
-                                    card.update_install_button_state()
+                                if hasattr(card, 'update_action_button_state'):
+                                    card.update_action_button_state()
                                 self._place_layout_widget(card, target_position)
                                 self.card_widget_cache[cache_key] = card
                                 widgets_created += 1
@@ -766,8 +766,8 @@ class SearchDisplayController(QObject):
             widget.update_mod_data()
         if hasattr(widget, 'update_installation_status'):
             widget.update_installation_status()
-        if hasattr(widget, 'update_install_button_state'):
-            widget.update_install_button_state()
+        if hasattr(widget, 'update_action_button_state'):
+            widget.update_action_button_state()
 
     def on_mod_clicked(self, mod):
         target_widget = None

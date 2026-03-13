@@ -12,8 +12,8 @@ from utils.network_utils import get_session
 from PyQt6.QtCore import QObject, pyqtSignal
 from services.localization_service import tr
 from config.constants import LAUNCHER_VERSION, UI_COLORS, ARCH
-from core.exceptions import AppError
-from core.app_state import AppState
+from models.exceptions import AppError
+from models.app_state import AppState
 from ui.common.feedback import FeedbackManager
 
 

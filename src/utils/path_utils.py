@@ -262,6 +262,8 @@ _ICON_DEFS = {
     'arrow_down': ('arrow_down.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
     'arrow_up': ('arrow_up.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
     'add': ('add_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'download': ('download_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
+    'folder': ('folder_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
 }
 
 

@@ -28,7 +28,7 @@ from controllers.theme_controller import ThemeController
 from controllers.game_launch_controller import GameLaunchController
 from ui.common.feedback import FeedbackManager
 from core.startup import SingleInstanceServer
-from core.app_state import AppState
+from models.app_state import AppState
 from adapters.gamebanana_adapter import GameBananaAPI
 from services.mod_service import ModManager
 from services.launch_service import GameLauncher
@@ -39,6 +39,7 @@ from ui.builders.settings_view_builder import SettingsViewBuilder
 from services.plugin_service import PluginManager
 from services.customization_service import CustomizationManager
 from services.used_mods_service import UsedModsManager
+from services.downloads_manager import DownloadsManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -193,6 +194,9 @@ class AppWindow(QWidget):
         self.customization_service = CustomizationManager(self.app_state, self)
         self.used_mods_service = UsedModsManager(self.app_state, self.mod_service, self.feedback_service, self.settings_service, self)
         self.used_mods_service.used_mods_updated.connect(self._on_used_mods_service_used_mods_updated)
+        self.downloads_manager = DownloadsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
+        self.downloads_manager.startup()
+        self._downloads_dialog = None
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self)
@@ -220,6 +224,7 @@ class AppWindow(QWidget):
 
     def _finalize_window_setup(self):
         self.init_ui()
+        self.setAcceptDrops(True)
         self._update_plugin_tabs()
         self.custom_font_family = localization_service.load_font()
         if (cfp := self.customization_service.get_custom_font_path()) and os.path.exists(cfp):
@@ -264,6 +269,9 @@ class AppWindow(QWidget):
         self.game_launch.pending_updates_changed.connect(lambda updates: setattr(self, 'pending_updates', updates))
         self.settings_service.theme_changed.connect(self.theme.on_theme_changed_by_service)
         self.settings_service.settings_changed.connect(self.search_display.update_filtered_mods)
+        self.downloads_manager.set_app_context(mods_dir=self.app_state.mods_dir)
+        self.downloads_manager.use_completed.connect(self._on_downloads_use_completed)
+        self.downloads_manager.record_updated.connect(self._on_downloads_record_updated)
 
     def _connect_own_signals(self):
         """Connect AppWindow's own pyqtSignals to their handlers."""
@@ -316,6 +324,14 @@ class AppWindow(QWidget):
         self._restoring_window_geometry = False
         self._schedule_window_layout_refresh(220)
 
+    def refresh_after_install(self) -> None:
+        """Public method to refresh after installing a mod."""
+        self._refresh_after_install()
+
+    def refresh(self, is_initial: bool = False) -> None:
+        """Public method to refresh the mods list and UI."""
+        self._on_refresh_clicked(is_initial=is_initial)
+
     def _refresh_after_install(self) -> None:
         if self.plugin_service:
             self.plugin_service.convert_plugin_archives()
@@ -337,7 +353,7 @@ class AppWindow(QWidget):
             self.settings_service.theme_changed.emit()
 
     def handle_one_click_install(self, url: str):
-        from core.app_install_handler import handle_one_click_install
+        from core.protocol_handler import handle_one_click_install
         handle_one_click_install(self, url)
 
     def _on_url_install_finished(self, success: bool, message: str):
@@ -637,7 +653,7 @@ class AppWindow(QWidget):
             'mods_browser_container', 'mods_browser_scroll', 'mod_list_widget', 'mod_list_layout', 'mod_list_columns',
             'sort_combo', 'modgame_combo', 'tags_label', 'show_nsfw_checkbox', 'tag_textedit',
             'tag_customization', 'tag_gameplay', 'tag_other', 'search_button',
-        ))
+        ), optional=('downloads_button',))
         self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
         if 'selected_search_game' not in self.app_state.local_config:
             default_game = self.modgame_combo.currentData() or 'deltarune'
@@ -661,6 +677,10 @@ class AppWindow(QWidget):
             self.search_display.update_filtered_mods()
         self.show_nsfw_checkbox.stateChanged.connect(on_show_nsfw_changed)
         self.search_button.clicked.connect(self.search_display.show_search_dialog)
+        if hasattr(self, 'downloads_button') and self.downloads_button:
+            self.downloads_button.clicked.connect(self._open_downloads_dialog)
+            self.downloads_manager.badge_changed.connect(lambda count, _: self._update_downloads_badge(self.downloads_button, count))
+            self.downloads_manager._emit_badge()
         try:
             self.mods_browser_scroll.verticalScrollBar().valueChanged.connect(self.search_display.on_scroll_value_changed)
         except Exception:
@@ -682,7 +702,7 @@ class AppWindow(QWidget):
             'library_tag_gamebanana', 'library_tag_widgets', 'library_search_button',
         ), optional=(
             'add_mod_button', 'installed_mods_label', 'priority_button',
-            'create_modpack_button',
+            'create_modpack_button', 'library_downloads_button',
         ))
         if self.priority_button:
             self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
@@ -708,6 +728,9 @@ class AppWindow(QWidget):
         for tag in self.library_tag_widgets:
             tag.stateChanged.connect(self.library_display.update_display)
         self.library_search_button.clicked.connect(self._show_library_search_dialog)
+        if self.library_downloads_button:
+            self.library_downloads_button.clicked.connect(self._open_downloads_dialog)
+            self.downloads_manager.badge_changed.connect(lambda count, _: self._update_downloads_badge(self.library_downloads_button, count))
         saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
@@ -717,7 +740,7 @@ class AppWindow(QWidget):
         self.game_launch._full_install_checkbox_is_checked = saved_full_install
         self.app_state.is_installing_changed.connect(self.game_launch.update_button_state)
         self.app_state.is_installing_changed.connect(lambda v: self.mod_ops.set_install_buttons_enabled(not v))
-        self.app_state.is_installing_changed.connect(lambda v: self._update_all_install_buttons())
+        self.app_state.is_installing_changed.connect(lambda v: self._update_all_action_buttons())
         self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
         self.game_launch.update_button_state()
         self._previous_mode = self.app_state.current_mode
@@ -799,6 +822,8 @@ class AppWindow(QWidget):
         ), optional=(
             'use_portproton_checkbox', 'select_portproton_path_button',
             'portproton_path_label', 'portproton_frame',
+            'downloads_no_auto_use_checkbox', 'downloads_delete_after_use_checkbox',
+            'downloads_save_local_imports_checkbox',
         ))
         self._section_headers = settings_widgets.get('_section_headers', [])
         self._section_lines = settings_widgets.get('_section_lines', [])
@@ -927,7 +952,7 @@ class AppWindow(QWidget):
 
         def pick_color_for_edit(target_edit):
             current_text = target_edit.text().strip()
-            initial_text = current_text or target_edit.placeholderText().strip()
+            initial_text = current_text
             initial_color = QColor(display_hex_to_qt_hex(initial_text)) if initial_text else QColor()
             dialog = QColorDialog(self)
             prepare_color_dialog(dialog)
@@ -936,13 +961,26 @@ class AppWindow(QWidget):
             if dialog.exec() == QColorDialog.DialogCode.Accepted:
                 target_edit.setText(color_to_display_hex(dialog.currentColor()))
                 self.theme.on_custom_style_edited()
+
+        def commit_color_edit(target_edit: QLineEdit):
+            color_text = target_edit.text().strip().upper()
+            if self.settings_service.is_valid_hex_color(color_text):
+                target_edit.setText(color_text)
+                self.theme.on_custom_style_edited()
+                return
+            last_valid_display_hex = (target_edit.property('last_valid_display_hex') or '').strip().upper()
+            if last_valid_display_hex:
+                was_blocked = target_edit.blockSignals(True)
+                target_edit.setText(last_valid_display_hex)
+                target_edit.blockSignals(was_blocked)
+
         self._color_btns = {}
         for key in self.color_config.keys():
             line_edit = self.color_widgets[key]
             btn = settings_widgets[f'color_btn_{key}']
             self._color_btns[key] = btn
             reset_btn = settings_widgets[f'color_reset_{key}']
-            line_edit.editingFinished.connect(self.theme.on_custom_style_edited)
+            line_edit.editingFinished.connect(lambda le=line_edit: commit_color_edit(le))
             btn.clicked.connect(lambda _, le=line_edit: pick_color_for_edit(le))
             reset_btn.clicked.connect(lambda _, le=line_edit: (le.clear(), self.theme.on_custom_style_edited()))
         self.blocklist_button.clicked.connect(self.search_display.show_blocklist_dialog)
@@ -971,6 +1009,15 @@ class AppWindow(QWidget):
         self.hide_mods_browser_tab_checkbox.setChecked(self.app_state.local_config.get('hide_mods_browser_tab', False))
         self.hide_library_tab_checkbox.setChecked(self.app_state.local_config.get('hide_library_tab', False))
         self.hide_plugins_tab_checkbox.setChecked(self.app_state.local_config.get('hide_plugins_tab', False))
+        if self.downloads_no_auto_use_checkbox:
+            self.downloads_no_auto_use_checkbox.setChecked(self.app_state.local_config.get('downloads_no_auto_use', False))
+            self.downloads_no_auto_use_checkbox.stateChanged.connect(lambda s: self.settings_service.on_toggle_downloads_no_auto_use(bool(s)))
+        if self.downloads_delete_after_use_checkbox:
+            self.downloads_delete_after_use_checkbox.setChecked(self.app_state.local_config.get('downloads_delete_after_use', False))
+            self.downloads_delete_after_use_checkbox.stateChanged.connect(lambda s: self.settings_service.on_toggle_downloads_delete_after_use(bool(s)))
+        if self.downloads_save_local_imports_checkbox:
+            self.downloads_save_local_imports_checkbox.setChecked(self.app_state.local_config.get('downloads_save_local_imports', False))
+            self.downloads_save_local_imports_checkbox.stateChanged.connect(lambda s: self.settings_service.on_toggle_downloads_save_local_imports(bool(s)))
         self._update_section_reset_buttons_visibility()
 
     def _finish_initialization(self):
@@ -1710,7 +1757,7 @@ class AppWindow(QWidget):
             return
         self.game_launch.update_button_state()
 
-    def _update_all_install_buttons(self):
+    def _update_all_action_buttons(self):
         if hasattr(self, 'search_display'):
             self.search_display.update_search_cards()
 
@@ -1874,6 +1921,49 @@ class AppWindow(QWidget):
         chat_window = ChatWindow(self.app_state, self)
         chat_window.exec()
 
+    def _on_downloads_record_updated(self, record):
+        """Show yellow status feedback when a download record needs manual install, and refresh card buttons."""
+        from models.download_models import UseStatus
+        if record.use_status == UseStatus.NEEDS_MANUAL:
+            name = record.display_name or record.id
+            self.feedback_service.update_status(f'{name} — {tr("downloads.status_needs_manual")}', UI_COLORS['status_warning'])
+        self._refresh_mod_card_buttons()
+
+    def _on_downloads_use_completed(self):
+        """Refresh UI after Downloads system finishes a successful Use."""
+        try:
+            self.mod_service.invalidate_mods_cache()
+            self.mod_service.load_local_mods(_skip_conversion=True)
+            self.mod_service.mod_list_updated.emit()
+            if hasattr(self, 'search_display'):
+                self.search_display.update_search_cards()
+                self.search_display.update_filtered_mods(preserve_page=True)
+            if hasattr(self, 'library_display'):
+                self.library_display.update_display()
+            self.game_launch.update_button_state()
+            self.feedback_service.update_status(tr('downloads.install_success'), UI_COLORS['status_success'])
+        except Exception as e:
+            logging.debug(f'_on_downloads_use_completed: {e}')
+
+    def _refresh_mod_card_buttons(self):
+        """Refresh download/install button enabled state on all visible mod cards."""
+        if hasattr(self, 'search_display') and hasattr(self.search_display, 'card_widget_cache'):
+            for card in self.search_display.card_widget_cache.values():
+                if hasattr(card, 'update_action_button_state'):
+                    card.update_action_button_state()
+
+    def _open_downloads_dialog(self):
+        from ui.dialogs.downloads_dialog import DownloadsDialog
+        if self._downloads_dialog and self._downloads_dialog.isVisible():
+            self._downloads_dialog.raise_()
+            self._downloads_dialog.activateWindow()
+            return
+        self._downloads_dialog = DownloadsDialog(self.downloads_manager, self.app_state, self)
+        self._downloads_dialog.show()
+
+    def _update_downloads_badge(self, btn, count: int):
+        btn.setText(str(count) if count > 0 else '')
+
     def _on_shortcut_button_click(self):
         from controllers.shortcut_controller import on_shortcut_button_click
         on_shortcut_button_click(self.app_state, self.feedback_service, self.used_mods_service, self)
@@ -1900,6 +1990,44 @@ class AppWindow(QWidget):
         for dialog_type, dialog_data in pending:
             if dialog_type == 'update':
                 self._prompt_for_update(dialog_data)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        elif event.mimeData().hasText():
+            text = event.mimeData().text().strip()
+            if text.startswith(('http://', 'https://')):
+                event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        url = None
+        if event.mimeData().hasUrls():
+            for u in event.mimeData().urls():
+                s = u.toString()
+                if s.startswith(('http://', 'https://')):
+                    url = s
+                    break
+        if not url and event.mimeData().hasText():
+            text = event.mimeData().text().strip()
+            if text.startswith(('http://', 'https://')):
+                url = text
+        if url:
+            event.acceptProposedAction()
+            self._confirm_and_enqueue_url(url)
+
+    def _confirm_and_enqueue_url(self, url: str):
+        from ui.dialogs.confirm_external_download_dialog import ConfirmExternalDownloadDialog
+        dialog = ConfirmExternalDownloadDialog(url, self.app_state, self)
+        if dialog.exec():
+            from models.download_models import SourceKind, TargetKind
+            display_name = os.path.basename(url.split('?')[0]) or 'External download'
+            self.downloads_manager.enqueue_with_feedback(
+                self.feedback_service,
+                display_name=display_name,
+                source_kind=SourceKind.EXTERNAL_URL,
+                target_kind=TargetKind.MOD,
+                source_url=url,
+            )
 
     def _zoom_ui(self, direction):
         current_zoom = self.app_state.local_config.get('ui_scale', 1.0)

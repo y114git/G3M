@@ -4,7 +4,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from typing import Dict, Optional, Any, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from core.app_window import AppWindow
-from core.app_state import AppState
+from models.app_state import AppState
 from ui.common.feedback import FeedbackManager
 from services.mod_service import ModManager
 from services.settings_service import SettingsManager

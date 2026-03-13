@@ -141,7 +141,7 @@ QLabel#primaryText {{
     color: {text_color};
     font-size: {primary_font_size}px;
 }}
-QPushButton#cardButton, QPushButton#cardButtonInstall, QPushButton#cardButtonUninstall {{
+QPushButton#cardButton, QPushButton#cardButtonDownload, QPushButton#cardButtonUninstall {{
     min-width: {button_width}px;
     max-width: {button_width}px;
     min-height: {button_height}px;
@@ -150,11 +150,11 @@ QPushButton#cardButton, QPushButton#cardButtonInstall, QPushButton#cardButtonUni
     padding: 1px;
     border-radius: {button_border_radius};
 }}
-QPushButton#cardButtonInstall {{
+QPushButton#cardButtonDownload {{
     background-color: #4CAF50;
     font-weight: bold;
 }}
-QPushButton#cardButtonInstall:hover {{
+QPushButton#cardButtonDownload:hover {{
     background-color: #5cb85c;
 }}
 QPushButton#cardButtonUninstall {{
@@ -244,6 +244,9 @@ WIDGET_LOCALIZATIONS = [
     ('merge_code_checkbox', 'setText', 'checkboxes.merge_code'),
     ('merge_properties_checkbox', 'setToolTip', 'tooltips.merge_properties'),
     ('merge_code_checkbox', 'setToolTip', 'tooltips.merge_code'),
+    ('downloads_no_auto_use_checkbox', 'setText', 'downloads.settings_no_auto_use'),
+    ('downloads_delete_after_use_checkbox', 'setText', 'downloads.settings_delete_after_use'),
+    ('downloads_save_local_imports_checkbox', 'setText', 'downloads.settings_save_local_imports'),
 ]
 PLUGIN_WIDGET_LOCALIZATIONS = [
     ('plugins_search_button', 'setText', 'plugins.search_plugins'),

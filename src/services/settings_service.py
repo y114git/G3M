@@ -93,6 +93,9 @@ class SettingsManager(QObject):
             'merge_properties': False, 'merge_code': False, 'hide_mods_browser_tab': False,
             'hide_library_tab': False, 'hide_plugins_tab': False, 'hide_library_filters': False, 'show_reset_buttons': False,
             'custom_border_radius': 7,
+            'downloads_no_auto_use': False,
+            'downloads_delete_after_use': False,
+            'downloads_save_local_imports': False,
         }
         for key, value in defaults.items():
             self.app_state.local_config.setdefault(key, value)
@@ -133,6 +136,9 @@ class SettingsManager(QObject):
     def on_toggle_hide_library_tab(self, enabled: bool): self._toggle_setting('hide_library_tab', enabled, None)
     def on_toggle_hide_plugins_tab(self, enabled: bool): self._toggle_setting('hide_plugins_tab', enabled, None)
     def on_toggle_show_reset_buttons(self, enabled: bool): self._toggle_setting('show_reset_buttons', enabled, None)
+    def on_toggle_downloads_no_auto_use(self, enabled: bool): self._toggle_setting('downloads_no_auto_use', enabled, None)
+    def on_toggle_downloads_delete_after_use(self, enabled: bool): self._toggle_setting('downloads_delete_after_use', enabled, None)
+    def on_toggle_downloads_save_local_imports(self, enabled: bool): self._toggle_setting('downloads_save_local_imports', enabled, None)
 
     def on_toggle_merge_properties(self, enabled: bool):
         self._toggle_setting('merge_properties', enabled, None)
@@ -321,8 +327,14 @@ class SettingsManager(QObject):
 
     def on_custom_style_edited(self, color_widgets: dict):
         for key, widget in color_widgets.items():
-            color = widget.text().strip()
-            self.app_state.local_config[f'custom_color_{key}'] = display_hex_to_qt_hex(color) if color and self.is_valid_hex_color(color) else ''
+            color = widget.text().strip().upper()
+            default_display_hex = (widget.property('default_display_hex') or '').strip().upper()
+            if color and self.is_valid_hex_color(color):
+                stored_color = '' if color == default_display_hex else display_hex_to_qt_hex(color)
+                self.app_state.local_config[f'custom_color_{key}'] = stored_color
+                widget.setProperty('last_valid_display_hex', color)
+            else:
+                self.app_state.local_config[f'custom_color_{key}'] = ''
         self.write_local_config()
         self.theme_changed.emit()
 

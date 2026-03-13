@@ -30,7 +30,7 @@ class GameBananaConverter:
         try:
             self.temp_extract_dir = tempfile.mkdtemp(prefix='gb_convert_')
             if not self._check_compatibility():
-                logger.error(f'Archive {self.archive_path} does not contain deltamod info file')
+                logger.debug(f'Archive {self.archive_path} does not contain deltamod info file')
                 return None
             self._extract_archive()
             normalize_mod_package(self.temp_extract_dir, require_manifest=True)

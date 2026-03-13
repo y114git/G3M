@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QApplication
-from core.app_state import AppState
+from models.app_state import AppState
 from ui.common.feedback import FeedbackManager
 
 

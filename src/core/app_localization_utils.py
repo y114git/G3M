@@ -95,6 +95,14 @@ def relocalize_texts(w):
                 reset_btn.setToolTip(tr('buttons.reset_settings'))
     if hasattr(w, '_update_portproton_ui') and w.portproton_frame:
         w._update_portproton_ui()
+    for btn_attr in ('downloads_button', 'library_downloads_button'):
+        btn = getattr(w, btn_attr, None)
+        if btn:
+            btn.setToolTip(tr('downloads.title'))
+    if hasattr(w, 'downloads_manager'):
+        w.downloads_manager._emit_badge()
+    if hasattr(w, '_downloads_dialog') and w._downloads_dialog and w._downloads_dialog.isVisible():
+        w._downloads_dialog.relocalize_ui()
 
 
 def relocalize_ui(w):

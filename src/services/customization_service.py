@@ -178,8 +178,13 @@ class CustomizationManager(QObject):
             'secondary_text': defaults.get('secondary_text', '#6de985'),
         }
         for key, widget in color_widgets.items():
-            widget.setText(qt_hex_to_display_hex(self.app_state.local_config.get(f'custom_color_{key}', '')))
-            widget.setPlaceholderText(qt_hex_to_display_hex(placeholder_defaults.get(key, '#000000')))
+            default_display_hex = qt_hex_to_display_hex(placeholder_defaults.get(key, '#000000'))
+            custom_display_hex = qt_hex_to_display_hex(self.app_state.local_config.get(f'custom_color_{key}', ''))
+            effective_display_hex = custom_display_hex or default_display_hex
+            widget.setText(effective_display_hex)
+            widget.setPlaceholderText('')
+            widget.setProperty('default_display_hex', default_display_hex)
+            widget.setProperty('last_valid_display_hex', effective_display_hex)
         if apply_theme_callback:
             apply_theme_callback()
 

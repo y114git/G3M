@@ -67,6 +67,19 @@ def create_search_button(app_state=None):
     return search_btn
 
 
+def create_downloads_button(app_state=None):
+    """Create Downloads button with icon only. Badge count managed externally."""
+    btn = QPushButton()
+    btn.setObjectName('downloadsBtn')
+    btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    btn.setToolTip(tr('downloads.title'))
+    btn.setAccessibleName(tr('downloads.title'))
+    tc = get_theme_color(app_state.local_config, 'text', '#ffffff') if app_state else '#ffffff'
+    btn.setIcon(colored_icon('download', tc))
+    btn.setIconSize(QSize(16, 16))
+    return btn
+
+
 def apply_filters_frame_style(frame: QFrame, app_state):
     if not frame or not app_state:
         return

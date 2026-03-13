@@ -81,9 +81,6 @@ class SettingsUiController:
         self._set_value_silently(self.app.border_radius_spinbox, int(config.get('custom_border_radius', 7)))
         _restore_ui_state_from_config(self.app)
         self.customization_service.load_custom_style_settings(self.app.color_widgets)
-        for key, widget in self.app.color_widgets.items():
-            from ui.common.styling import qt_hex_to_display_hex
-            widget.setText(qt_hex_to_display_hex(config.get(f'custom_color_{key}', '')))
         if hasattr(self.app, 'disable_animations_checkbox'):
             self.app.disable_animations_checkbox.setChecked(config.get('disable_animations', False))
         if hasattr(self.app, 'show_reset_buttons_checkbox'):

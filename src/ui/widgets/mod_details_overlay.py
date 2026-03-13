@@ -188,6 +188,9 @@ class ModDetailsOverlay(QWidget):
     def _can_update(self) -> bool:
         return (not self.dialog_closed) and self._is_alive(self)
 
+    def _can_update_screenshot(self) -> bool:
+        return self._can_update() and self._is_alive(self._img_label)
+
     @staticmethod
     def _clear_mask_if_needed(target):
         if not getattr(target, '_rounded_mask_applied', False):
@@ -411,10 +414,10 @@ class ModDetailsOverlay(QWidget):
         container.setLayout(left)
         return container
 
-    def _configure_install_button(self):
-        if self.source_card and hasattr(self.source_card, 'install_button'):
+    def _configure_action_button(self):
+        if self.source_card and hasattr(self.source_card, 'action_button'):
             self._sync_button_from_card()
-            self.install_button.clicked.connect(lambda: self.source_card.install_button.click())
+            self.action_button.clicked.connect(lambda: self.source_card.action_button.click())
             try:
                 self._sync_timer = QTimer()
                 self._sync_timer.timeout.connect(self._sync_button_from_card)
@@ -422,19 +425,19 @@ class ModDetailsOverlay(QWidget):
             except Exception as e:
                 logging.debug(f'QTimer setup failed for _sync_timer: {e}', exc_info=True)
             return
-        self.install_button.setText(tr('buttons.install'))
-        self.install_button.setObjectName('cardButtonInstall')
-        self._set_install_button_style(self._colors['border'])
+        self.action_button.setText(tr('buttons.download'))
+        self.action_button.setObjectName('cardButtonDownload')
+        self._set_action_button_style(self._colors['border'])
         if parent_app := self.parent():
             if hasattr(parent_app, 'install_mod'):
-                self.install_button.clicked.connect(lambda: parent_app.install_mod(self.mod_data))
+                self.action_button.clicked.connect(lambda: parent_app.install_mod(self.mod_data))
 
     def _build_action_buttons(self):
         buttons = self._layout(QHBoxLayout)
         buttons.addStretch()
-        self.install_button = QPushButton()
-        self._configure_install_button()
-        buttons.addWidget(self.install_button)
+        self.action_button = QPushButton()
+        self._configure_action_button()
+        buttons.addWidget(self.action_button)
         buttons.addWidget(self._create_button(tr('buttons.close'), obj_name='cardButtonClose', style=self._button_style('cardButtonClose'), clicked=self.close_overlay))
         return buttons
 
@@ -478,14 +481,14 @@ class ModDetailsOverlay(QWidget):
                 logging.debug(f'cleanup_thread: failed to stop/delete {attr_name}: {e}', exc_info=True)
             setattr(self, attr_name, None)
 
-    def _sync_install_button_style(self, src_btn, border: str):
+    def _sync_action_button_style(self, src_btn, border: str):
         style_args = {
             'cardButtonUninstall': ('cardButtonUninstall', '#F44336', '#d32f2f'),
         }.get(src_btn.objectName())
         if style_args:
-            self._set_install_button_style(border, *style_args)
+            self._set_action_button_style(border, *style_args)
             return
-        self._set_install_button_style(border)
+        self._set_action_button_style(border)
 
     def _update_tagline_label(self, tagline):
         if not hasattr(self, 'tagline_label'):
@@ -534,19 +537,19 @@ class ModDetailsOverlay(QWidget):
         self._update_ss_nav()
         self._load_description()
 
-    def _set_install_button_style(self, border, obj_name='cardButtonInstall', bg='#4CAF50', hover='#5cb85c'):
-        """Set install button stylesheet."""
-        self.install_button.setStyleSheet(build_button_style(obj_name, bg, hover, '#e8e9eb', border, border_radius=self._border_radius))
+    def _set_action_button_style(self, border, obj_name='cardButtonDownload', bg='#4CAF50', hover='#5cb85c'):
+        """Set action button stylesheet."""
+        self.action_button.setStyleSheet(build_button_style(obj_name, bg, hover, '#e8e9eb', border, border_radius=self._border_radius))
 
     def _sync_button_from_card(self):
-        """Synchronizes the Install button with the button from the mod card."""
-        if not (src_btn := getattr(self.source_card, 'install_button', None)):
+        """Synchronize action button state with the source mod card."""
+        if not (src_btn := getattr(self.source_card, 'action_button', None)):
             return
-        self.install_button.setText(src_btn.text())
-        self.install_button.setObjectName(src_btn.objectName())
-        self.install_button.setToolTip(src_btn.toolTip())
-        self.install_button.setEnabled(src_btn.isEnabled())
-        self._sync_install_button_style(src_btn, self._colors.get('border', '#039d5b'))
+        self.action_button.setText(src_btn.text())
+        self.action_button.setObjectName(src_btn.objectName())
+        self.action_button.setToolTip(src_btn.toolTip())
+        self.action_button.setEnabled(src_btn.isEnabled())
+        self._sync_action_button_style(src_btn, self._colors.get('border', '#039d5b'))
 
     def update_screenshots(self, urls):
         urls = [u for u in urls if isinstance(u, str) and u.startswith(('http://', 'https://'))][:self.SCREENSHOT_LIMIT]
@@ -589,6 +592,8 @@ class ModDetailsOverlay(QWidget):
         self._update_ss_nav()
 
     def _set_screenshot_text(self, text: str):
+        if not self._can_update_screenshot():
+            return
         self._img_label.clear()
         self._img_label.setText(text)
 
@@ -606,6 +611,8 @@ class ModDetailsOverlay(QWidget):
         self._thread_pool.start(ImageLoaderRunnable(self._ss_urls[idx], signals))
 
     def _ss_fade_to(self, qimg):
+        if not self._can_update_screenshot():
+            return
         self._ss_set_pixmap(qimg)
         effect = UIAnimator.get_opacity_effect(self._img_label)
         effect.setOpacity(0.0)
@@ -632,6 +639,8 @@ class ModDetailsOverlay(QWidget):
 
     def _ss_on_loaded(self, idx, qimg):
         self._ss_store_image(idx, qimg)
+        if not self._can_update_screenshot():
+            return
         if idx == self._ss_index:
             self._ss_fade_to(qimg)
             self._ss_unload_distant()
@@ -639,6 +648,8 @@ class ModDetailsOverlay(QWidget):
     def _ss_on_error(self, idx, msg):
         if idx < len(self._ss_loading):
             self._ss_loading[idx] = False
+        if not self._can_update_screenshot():
+            return
         if idx == self._ss_index:
             self._set_screenshot_text(tr('errors.file_not_available'))
 
@@ -650,6 +661,8 @@ class ModDetailsOverlay(QWidget):
 
     def _ss_on_preloaded(self, idx, qimg):
         self._ss_store_image(idx, qimg)
+        if not self._can_update_screenshot():
+            return
         if idx == self._ss_index:
             self._ss_fade_to(qimg)
 

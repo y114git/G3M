@@ -17,8 +17,15 @@ class ManualModInstallDialog(QDialog):
         self.prepared_files_path = prepared_files_path
         self.gamebanana_metadata = gamebanana_metadata or {}
         self.source_file_path = source_file_path
-        self.app_state = parent.app_state if hasattr(parent, 'app_state') else None
-        self.mod_service = parent.mod_service if hasattr(parent, 'mod_service') else None
+        self.app_state = None
+        self.mod_service = None
+        p = parent
+        while p:
+            if hasattr(p, 'app_state') and hasattr(p, 'mod_service'):
+                self.app_state = p.app_state
+                self.mod_service = p.mod_service
+                break
+            p = p.parent() if hasattr(p, 'parent') and callable(p.parent) else None
         self.temp_dir_to_cleanup = None
         self.initial_game_type = initial_game_type
         self.data_file_selections = {}
@@ -47,7 +54,7 @@ class ManualModInstallDialog(QDialog):
         self.all_files = []
         if not os.path.exists(self.prepared_files_path):
             return
-        for root, files in os.walk(self.prepared_files_path):
+        for root, _dirs, files in os.walk(self.prepared_files_path):
             for file in files:
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, self.prepared_files_path)
@@ -678,7 +685,7 @@ class ManualModInstallDialog(QDialog):
             try:
                 os.makedirs(os.path.dirname(archive_path), exist_ok=True)
                 with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    for file_path, internal_path in file_list:
+                    for file_path, _rel_path, internal_path in file_list:
                         zipf.write(file_path, internal_path)
                         logging.debug(f'Added {file_path} to archive {archive_path} with internal path: {internal_path}')
                 logging.debug(f'Created extra_file archive: {archive_path} with {len(file_list)} file(s)')

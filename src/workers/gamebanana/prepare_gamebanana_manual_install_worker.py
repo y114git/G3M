@@ -10,7 +10,7 @@ from typing import Dict
 from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
 from services.localization_service import tr
-from core.exceptions import AppError
+from models.exceptions import AppError
 from utils.file_utils import download_file_with_progress
 from utils.network_utils import get_session
 from utils.mod_utils import get_mod_key

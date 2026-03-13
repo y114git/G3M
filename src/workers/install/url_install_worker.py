@@ -9,7 +9,7 @@ from typing import Optional
 from PyQt6.QtCore import pyqtSignal
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
 from services.localization_service import tr
-from core.exceptions import AppError
+from models.exceptions import AppError
 from utils.file_utils import has_deltamod_info_file, check_filename_is_deltamod_info
 from utils.network_utils import get_session, download_file
 from workers.base_install_worker import BaseInstallWorker

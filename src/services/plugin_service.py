@@ -146,7 +146,7 @@ class PluginManager(QObject):
             single_dir = os.path.join(temp_dir, contents[0])
             if os.path.isdir(single_dir) and os.path.isfile(os.path.join(single_dir, 'plugin_init.py')):
                 return single_dir
-        for root, files in os.walk(temp_dir):
+        for root, _dirs, files in os.walk(temp_dir):
             if 'plugin_init.py' in files:
                 rel_path = os.path.relpath(root, temp_dir)
                 if rel_path != '.' and os.path.dirname(rel_path) == '':

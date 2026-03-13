@@ -13,7 +13,7 @@ if __name__ == '__main__':
         if idx + 1 >= len(sys.argv):
             print('Error: --shortcut requires a config argument', file=sys.stderr)
             sys.exit(2)
-        from core.shortcut_runner import run_shortcut
+        from services.game_runner import run_shortcut
         run_shortcut(sys.argv[idx + 1])
         sys.exit(0)
 

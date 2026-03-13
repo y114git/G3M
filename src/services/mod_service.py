@@ -20,7 +20,7 @@ from utils.mod_utils import get_mod_key, get_mod_name, resolve_mod_icon, sort_ga
 from utils.mod_config_parser import resolve_local_icon_url, parse_extra_files_raw, resolve_data_file_version, resolve_chapter_folder
 from config.constants import UI_COLORS, MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
 import time
-from core.exceptions import ModUninstallationError
+from models.exceptions import ModUninstallationError
 from utils.mod_key_utils import ModKeyManager
 from utils.mod_scan_utils import (
     ModFolderInfo,
