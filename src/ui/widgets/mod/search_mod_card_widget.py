@@ -3,6 +3,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QWidget, QSizePolicy
 from services.localization_service import tr
 from ui.common.styling import get_theme_color, get_border_radius, load_mod_icon_universal, apply_stylesheet_if_changed
+from utils.path_utils import colored_icon
 from utils.mod_utils import get_mod_key
 from .mod_card_widget import ModCardWidget
 
@@ -140,16 +141,24 @@ class SearchModCardWidget(ModCardWidget):
         metadata_layout.setSpacing(10)
         metadata_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.metadata_layout = metadata_layout
+        self.likes_icon_label = QLabel(metadata_widget)
+        self.likes_icon_label.setObjectName('secondaryText')
+        self.likes_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.likes_label = QLabel(self)
         self.likes_label.setObjectName('secondaryText')
         self.likes_label.setToolTip(tr('ui.likes_tooltip'))
+        self.updated_icon_label = QLabel(metadata_widget)
+        self.updated_icon_label.setObjectName('secondaryText')
+        self.updated_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.updated_label = QLabel(self)
         self.updated_label.setObjectName('secondaryText')
         self.updated_label.setToolTip(tr('ui.updated_label'))
         separator = QLabel('|', metadata_widget)
         separator.setObjectName('secondaryText')
+        metadata_layout.addWidget(self.likes_icon_label)
         metadata_layout.addWidget(self.likes_label)
         metadata_layout.addWidget(separator)
+        metadata_layout.addWidget(self.updated_icon_label)
         metadata_layout.addWidget(self.updated_label)
         self.metadata_widget = metadata_widget
         self.main_layout.addWidget(metadata_widget)
@@ -324,7 +333,20 @@ class SearchModCardWidget(ModCardWidget):
 
     def _update_updated_label(self):
         if hasattr(self, 'updated_label'):
-            self.updated_label.setText(f'↻ {getattr(self.mod_data, "last_updated", None) or "N/A"}')
+            self.updated_label.setText(str(getattr(self.mod_data, 'last_updated', None) or 'N/A'))
+
+    def _update_metadata_icons(self, color: str, size: int):
+        icon_size = max(12, size)
+        if hasattr(self, 'likes_icon_label'):
+            likes_pixmap = colored_icon('like', color).pixmap(icon_size, icon_size)
+            if not likes_pixmap.isNull():
+                self.likes_icon_label.setPixmap(likes_pixmap)
+            self.likes_icon_label.setFixedSize(icon_size, icon_size)
+        if hasattr(self, 'updated_icon_label'):
+            updated_pixmap = colored_icon('update', color).pixmap(icon_size, icon_size)
+            if not updated_pixmap.isNull():
+                self.updated_icon_label.setPixmap(updated_pixmap)
+            self.updated_icon_label.setFixedSize(icon_size, icon_size)
 
     def _update_style(self):
         super()._update_style()
@@ -335,6 +357,7 @@ class SearchModCardWidget(ModCardWidget):
         metrics_changed = bool(self._apply_metrics())
         if hasattr(self, 'name_label'):
             apply_stylesheet_if_changed(self.name_label, f'font-size: {max(15, int(round(18 * scale)))}px; font-weight: bold; color: {text_color};', cache_attr='_search_name_stylesheet_cache')
+        self._update_metadata_icons(secondary, max(12, int(round(14 * scale))))
         for label in ('likes_label', 'updated_label'):
             widget = getattr(self, label, None)
             if widget:

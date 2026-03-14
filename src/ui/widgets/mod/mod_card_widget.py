@@ -142,9 +142,9 @@ class ModCardWidget(BaseModWidget):
                 has_full = getattr(self.mod_data, 'has_full_metadata', True)
                 if not has_full:
                     return tr('ui.loading_placeholder')
-            return f'❤ {likes_value if likes_value is not None else 0}'
+            return str(likes_value if likes_value is not None else 0)
         except Exception:
-            return '❤ N/A'
+            return 'N/A'
 
     def _init_ui(self):
         super()._init_ui()

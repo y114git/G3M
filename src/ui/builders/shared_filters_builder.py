@@ -8,6 +8,18 @@ from ui.common.styling import get_theme_color, build_tag_checkbox_style, get_bor
 from utils.path_utils import colored_icon
 
 
+def _install_themed_button_icon(button: QPushButton, icon_name: str, app_state, icon_size: QSize) -> None:
+    if not button:
+        return
+    install_widget_update_handler(button, lambda target=button, target_state=app_state, target_icon=icon_name, target_size=icon_size: _apply_themed_button_icon(target, target_icon, target_state, target_size), attr_name=f'_{icon_name}_button_icon_filter')
+
+
+def _apply_themed_button_icon(button: QPushButton, icon_name: str, app_state, icon_size: QSize) -> None:
+    tc = get_theme_color(app_state.local_config, 'text', '#ffffff') if app_state else '#ffffff'
+    button.setIcon(colored_icon(icon_name, tc))
+    button.setIconSize(icon_size)
+
+
 def create_sort_controls(app_state, items=None, config_key=None, include_order_button=True):
     """Create sort combo and optional order button."""
     sort_combo = NoScrollComboBox()
@@ -28,8 +40,7 @@ def create_sort_controls(app_state, items=None, config_key=None, include_order_b
         sort_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         sort_btn.setToolTip(tr('ui.sort_direction_tooltip'))
         sort_btn.setAccessibleName(tr('ui.sort_direction_tooltip'))
-        sort_btn.setIcon(colored_icon('arrow_down', get_theme_color(app_state.local_config, 'text', '#ffffff')))
-        sort_btn.setIconSize(QSize(12, 12))
+        _install_themed_button_icon(sort_btn, 'arrow_down', app_state, QSize(12, 12))
     return sort_combo, sort_btn
 
 
@@ -61,9 +72,7 @@ def create_search_button(app_state=None):
     search_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     search_btn.setToolTip(tr('ui.search_placeholder'))
     search_btn.setAccessibleName(tr('ui.search_placeholder'))
-    tc = get_theme_color(app_state.local_config, 'text', '#ffffff') if app_state else '#ffffff'
-    search_btn.setIcon(colored_icon('search', tc))
-    search_btn.setIconSize(QSize(16, 16))
+    _install_themed_button_icon(search_btn, 'search', app_state, QSize(16, 16))
     return search_btn
 
 
@@ -74,9 +83,7 @@ def create_downloads_button(app_state=None):
     btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     btn.setToolTip(tr('downloads.title'))
     btn.setAccessibleName(tr('downloads.title'))
-    tc = get_theme_color(app_state.local_config, 'text', '#ffffff') if app_state else '#ffffff'
-    btn.setIcon(colored_icon('download', tc))
-    btn.setIconSize(QSize(16, 16))
+    _install_themed_button_icon(btn, 'download', app_state, QSize(16, 16))
     return btn
 
 

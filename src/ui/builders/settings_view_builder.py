@@ -11,7 +11,7 @@ from services.localization_service import localization_service, tr
 from config.constants import SETTINGS_COLOR_CONFIG
 from ui.widgets.shared.custom_controls import NoScrollComboBox
 from ui.utils.ui_utils import UIAnimator
-from ui.common.styling import get_border_radius, get_theme_color
+from ui.common.styling import get_border_radius, get_theme_color, install_widget_update_handler
 from utils.path_utils import colored_icon
 
 
@@ -21,6 +21,7 @@ class SettingsViewBuilder:
         self.app_state = app_state
         self.parent = parent
         self.widgets = {}
+        self._dynamic_style_signal_connected = False
 
     def build(self) -> QFrame:
         settings_widget = QFrame(self.parent)
@@ -41,11 +42,40 @@ class SettingsViewBuilder:
         tab_widget.addTab(self._build_plugins_tab(tab_widget), tr('ui.settings_tab_plugins'))
         settings_layout.addWidget(tab_widget, stretch=1)
 
+        settings_layout.addStretch()
+
         settings_widget.setVisible(False)
+
+        self._connect_dynamic_style_refresh()
 
         self.widgets['settings_widget'] = settings_widget
         self.widgets['settings_tab_widget'] = tab_widget
         return settings_widget
+
+    def refresh_dynamic_styles(self) -> None:
+        tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
+        seen = set()
+        for btn in self.widgets.values():
+            icon_name = getattr(btn, '_themed_icon_name', None) if btn else None
+            if btn and icon_name and id(btn) not in seen:
+                seen.add(id(btn))
+                btn.setIcon(colored_icon(icon_name, tc))
+                btn.setIconSize(QSize(20, 20))
+        for btn, *_ in self.widgets.get('_section_reset_buttons', []):
+            icon_name = getattr(btn, '_themed_icon_name', None) if btn else None
+            if btn and icon_name and id(btn) not in seen:
+                seen.add(id(btn))
+                btn.setIcon(colored_icon(icon_name, tc))
+                btn.setIconSize(QSize(20, 20))
+
+    def _connect_dynamic_style_refresh(self) -> None:
+        if self._dynamic_style_signal_connected:
+            return
+        settings_service = getattr(self.parent, 'settings_service', None)
+        if settings_service is None:
+            return
+        settings_service.theme_changed.connect(self.refresh_dynamic_styles)
+        self._dynamic_style_signal_connected = True
 
     def _wrap_in_scroll(self, content_widget: QWidget, parent: QWidget = None) -> QScrollArea:
         scroll = QScrollArea(parent)
@@ -188,9 +218,11 @@ class SettingsViewBuilder:
         btn.setFixedSize(35, 35)
         icon_name = self._EMOJI_TO_ICON.get(icon_text)
         if icon_name and app_state:
-            tc = get_theme_color(app_state.local_config, 'text', '#ffffff')
-            btn.setIcon(colored_icon(icon_name, tc))
-            btn.setIconSize(QSize(20, 20))
+            btn._themed_icon_name = icon_name
+            def _apply_icon(b=btn, i=icon_name, s=app_state):
+                b.setIcon(colored_icon(i, get_theme_color(s.local_config, 'text', '#ffffff')))
+                b.setIconSize(QSize(20, 20))
+            install_widget_update_handler(btn, _apply_icon, attr_name='_themed_icon_update_filter')
         else:
             btn.setText(icon_text)
         return btn

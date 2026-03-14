@@ -2,7 +2,7 @@ import os
 import sys
 import platform
 from unittest.mock import patch
-from utils.path_utils import get_user_data_root, get_user_mods_dir, get_user_plugins_dir, resource_path, resolve_game_executable, find_chapter_resource_dir
+from utils.path_utils import _replace_svg_color_tokens, get_user_data_root, get_user_mods_dir, get_user_plugins_dir, resource_path, resolve_game_executable, find_chapter_resource_dir
 
 
 class TestPathUtils:
@@ -46,6 +46,11 @@ class TestPathUtils:
                 sys.frozen = frozen_attr
             if _meipass_attr is not None:
                 sys._MEIPASS = _meipass_attr
+
+    def test_replace_svg_color_tokens_matches_root_fill_without_required_space(self):
+        svg = '<svg fill="#000000"viewBox="0 0 16 16"></svg>'
+        result = _replace_svg_color_tokens(svg, '#abcdef', [])
+        assert 'fill="#abcdef"' in result
 
     def test_resolve_game_executable_deltarune(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
@@ -216,7 +221,6 @@ class TestPathUtils:
             os.chmod(exe_path, 493)
         is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
         assert is_valid is True
-        # Test with invalid path
         invalid_dir = os.path.join(temp_dir, 'invalid')
         os.makedirs(invalid_dir, exist_ok=True)
         is_invalid = is_valid_game_path(invalid_dir, skip_data_check=False, game_type='pizzatower')
@@ -224,20 +228,14 @@ class TestPathUtils:
 
     def test_autodetect_pizzatower_variations(self, temp_dir):
         from utils.path_utils import autodetect_path
-        # Create mock Steam directory structure with Pizza Tower variation
         system = platform.system()
         if system == 'Windows':
             steam_common = os.path.join(temp_dir, 'Steam', 'steamapps', 'common')
             os.makedirs(steam_common, exist_ok=True)
-            # Create PizzaTower folder (without space) - this tests the variation handling
             pizzatower_dir = os.path.join(steam_common, 'PizzaTower')
             os.makedirs(pizzatower_dir, exist_ok=True)
             exe_path = os.path.join(pizzatower_dir, 'PizzaTower.exe')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            # Test that autodetect_path can handle variations
-            # Since we're in a temp directory, it won't find it, but we verify the code handles variations
-            # by checking that the function doesn't crash and returns None when path doesn't exist
             result = autodetect_path('Pizza Tower')
-            # The function should handle the variation gracefully (return None if not found)
             assert result is None or 'Pizza' in result

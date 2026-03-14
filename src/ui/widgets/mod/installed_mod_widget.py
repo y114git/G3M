@@ -102,7 +102,7 @@ class InstalledModWidget(BaseModWidget):
         self.checkmark_button.setFixedSize(40, 40)
         apply_stylesheet_if_changed(self.checkmark_button, 'QPushButton { background: transparent; border: none; }', cache_attr='_checkmark_button_stylesheet_cache')
         self.checkmark_button.setVisible(False)
-        _chk_color = get_theme_color(self._resolve_theme_config(), 'secondary_text', '#4CAF50')
+        _chk_color = get_theme_color(self._resolve_theme_config(), 'text', '#e8e9eb')
         self.checkmark_button.setIcon(self._checkmark_icons.setdefault((24, _chk_color), colored_icon('checkmark', _chk_color)))
         self.checkmark_button.setIconSize(QSize(24, 24))
         self.checkmark_button.setEnabled(False)  # Make it non-interactive
@@ -161,7 +161,7 @@ class InstalledModWidget(BaseModWidget):
                 apply_stylesheet_if_changed(self.details_button, build_button_style('cardButton', btn_bg, btn_hover, text_color, border, width=button_width, height=button_height, font_size=button_font_size, border_radius=br), cache_attr='_details_button_stylesheet_cache')
             if hasattr(self, 'checkmark_button') and self.checkmark_button:
                 icon_size = max(18, round(24 * self._layout_scale()))
-                _chk_color = get_theme_color(config, 'secondary_text', '#4CAF50')
+                _chk_color = get_theme_color(config, 'text', '#e8e9eb')
                 self.checkmark_button.setIcon(self._checkmark_icons.setdefault((icon_size, _chk_color), colored_icon('checkmark', _chk_color)))
                 self.checkmark_button.setIconSize(QSize(icon_size, icon_size))
         self._update_button_from_status()

@@ -264,7 +264,19 @@ _ICON_DEFS = {
     'add': ('add_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
     'download': ('download_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
     'folder': ('folder_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
+    'like': ('like_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
+    'update': ('update_icon.svg', [('fill="#000000"', 'fill="{c}"')], True),
 }
+
+
+def _replace_svg_color_tokens(svg: str, color: str, replacements: list[tuple[str, str]]) -> str:
+    for old, new_tpl in replacements:
+        svg = svg.replace(old, new_tpl.format(c=color))
+    svg = re.sub(r'fill="(?:#(?:0F0F0F|010002|000000|444)|black)"', f'fill="{color}"', svg, flags=re.IGNORECASE)
+    svg = re.sub(r'stroke="(?:#(?:0C0310|000000)|black)"', f'stroke="{color}"', svg, flags=re.IGNORECASE)
+    svg = re.sub(r'style="fill:\s*(?:#(?:0F0F0F|010002|000000|444)|black);?"', f'style="fill:{color};"', svg, flags=re.IGNORECASE)
+    svg = re.sub(r'<svg([^>]*?)\bfill="(?:#(?:0F0F0F|010002|000000|444)|black)"', f'<svg\\1fill="{color}"', svg, flags=re.IGNORECASE)
+    return svg
 
 
 def colored_icon(name: str, color: str) -> QIcon:
@@ -280,8 +292,7 @@ def colored_icon(name: str, color: str) -> QIcon:
             svg = f.read()
         if use_renderer:
             svg = re.sub(r'<\?xml[^?]*\?>', '', svg, count=1)
-        for old, new_tpl in replacements:
-            svg = svg.replace(old, new_tpl.format(c=color))
+        svg = _replace_svg_color_tokens(svg, color, replacements)
         svg_bytes = QByteArray(svg.encode('utf-8'))
         if use_renderer:
             from PyQt6.QtSvg import QSvgRenderer
@@ -321,3 +332,5 @@ def get_colored_restore_icon(color: str) -> QIcon: return colored_icon('restore'
 def get_colored_cross_icon(color: str) -> QIcon: return colored_icon('cross', color)
 def get_colored_arrow_down_icon(color: str) -> QIcon: return colored_icon('arrow_down', color)
 def get_colored_arrow_up_icon(color: str) -> QIcon: return colored_icon('arrow_up', color)
+def get_colored_like_icon(color: str) -> QIcon: return colored_icon('like', color)
+def get_colored_update_icon(color: str) -> QIcon: return colored_icon('update', color)
