@@ -94,28 +94,6 @@ class TestModImportExport:
 
 class TestManualInstall:
 
-    def test_prepare_gamebanana_manual_install_worker_initialization(self):
-        from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
-        from unittest.mock import Mock
-        mock_mod = Mock()
-        mock_mod.key = 'gb_12345'
-        mock_mod.name = 'Test Mod'
-        selected_file = {'download_url': 'https://example.com/mod.zip', 'name': 'mod.zip'}
-        worker = PrepareGameBananaManualInstallWorker(mock_mod, selected_file)
-        assert worker is not None
-        assert worker.mod == mock_mod
-        assert worker.selected_file == selected_file
-
-    def test_mod_operations_controller_manual_install_methods(self, app_state, feedback_service):
-        from controllers.mod_operations_controller import ModOperationsController
-        from services.mod_service import ModManager
-        from unittest.mock import Mock
-        mod_service = ModManager(app_state, feedback_service)
-        mock_app_window = Mock()
-        controller = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=mock_app_window)
-        assert hasattr(controller, '_start_manual_install_from_gamebanana')
-        assert hasattr(controller, '_start_prepare_worker')
-
     def test_chapter_display_name(self, tmp_path):
         from unittest.mock import MagicMock, patch
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
@@ -137,9 +115,7 @@ class TestManualInstall:
         assert get_chapter_folder_name('undertale') == 'chapter_0'
         assert get_chapter_folder_name('pizzatower') == 'pizzatower'
 
-        # Test new game parameter functionality
         assert get_chapter_folder_name('deltarune_0', game='deltarune') == 'chapter_0'
         assert get_chapter_folder_name('pizzatower', game='pizzatower') == 'pizzatower'
         assert get_chapter_folder_name('chapter_1', game='deltarune') == 'chapter_1'
-        # Test backward compatibility - game parameter is optional
         assert get_chapter_folder_name('deltarune_1') == 'chapter_1'

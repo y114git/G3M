@@ -125,7 +125,7 @@ class SettingsUiController:
         self.app_state.game_mode = game_def if game_def else DeltaruneGame()
         self.app_state.local_config['selected_game_type'] = game_type
         self.settings_service.write_local_config()
-        self._call_if_exists(self.app, '_update_saves_button_state', '_update_checkbox_visibility')
+        self._call_if_exists(self.app, '_update_checkbox_visibility')
         self._call_if_exists(self.used_mods_service, '_update_steam_checkbox_state')
 
     def on_chapter_mode_changed(self, state):

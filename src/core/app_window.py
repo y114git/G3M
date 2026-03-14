@@ -324,10 +324,6 @@ class AppWindow(QWidget):
         self._restoring_window_geometry = False
         self._schedule_window_layout_refresh(220)
 
-    def refresh_after_install(self) -> None:
-        """Public method to refresh after installing a mod."""
-        self._refresh_after_install()
-
     def refresh(self, is_initial: bool = False) -> None:
         """Public method to refresh the mods list and UI."""
         self._on_refresh_clicked(is_initial=is_initial)
@@ -355,18 +351,6 @@ class AppWindow(QWidget):
     def handle_one_click_install(self, url: str):
         from core.protocol_handler import handle_one_click_install
         handle_one_click_install(self, url)
-
-    def _on_url_install_finished(self, success: bool, message: str):
-        self.app_state.is_installing = False
-        self.mod_ops.set_install_buttons_enabled(True)
-        self.progress_bar.setVisible(False)
-        if success:
-            self.library_display.update_display()
-            if hasattr(self, 'search_display'):
-                self.search_display.update_search_cards()
-                self.search_display.update_filtered_mods(preserve_page=True)
-        status_color = UI_COLORS['status_success'] if success else UI_COLORS['status_error']
-        self._update_status(message, status_color)
 
     def _handle_url_install_prompt(self, title, message):
         reply = self.feedback_service.ask_question(title, message)

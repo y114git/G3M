@@ -14,10 +14,6 @@ def perform_close_cleanup(w):
         threads_to_stop = []
         if w.game_launcher.monitor_thread:
             threads_to_stop.append(w.game_launcher.monitor_thread)
-        for attr in ('install_thread', 'full_install_thread', 'current_install_thread'):
-            thread = getattr(w, attr, None)
-            if thread:
-                threads_to_stop.append(thread)
         for attr in ('fetch_thread', 'details_thread'):
             thread = getattr(w.refresh_controller, attr, None)
             if thread:

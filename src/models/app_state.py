@@ -23,7 +23,6 @@ class AppState(QObject):
     current_task_changed = pyqtSignal(object)
     action_button_text_changed = pyqtSignal(str)
     action_button_enabled_changed = pyqtSignal(bool)
-    saves_button_enabled_changed = pyqtSignal(bool)
     progress_bar_visible_changed = pyqtSignal(bool)
     progress_bar_value_changed = pyqtSignal(int)
     all_mods_updated = pyqtSignal(list)
@@ -75,9 +74,6 @@ class AppState(QObject):
         self.gamebanana_loading: bool = False
         self.has_internet: bool = True
         self.pending_announce_check: bool = False
-        self.current_install_mod_identifier: Optional[str] = None
-        self.current_install_is_gamebanana: bool = False
-        self.current_install_progress: int = 0
         self.network_session: Optional[Any] = None
 
     def __setattr__(self, name: str, value: Any) -> None:

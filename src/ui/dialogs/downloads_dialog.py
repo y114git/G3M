@@ -75,7 +75,7 @@ class _RecordWidget(QFrame):
             self._buttons[key] = btn
         layout.addLayout(self._btn_row)
         self._buttons['install'].clicked.connect(lambda: self._manager.action_install(self._record.id))
-        self._buttons['reinstall'].clicked.connect(lambda: self._manager.action_install(self._record.id, parent_widget=self.window()))
+        self._buttons['reinstall'].clicked.connect(lambda: self._manager.action_install(self._record.id))
         self._buttons['delete'].clicked.connect(lambda: self._manager.action_delete(self._record.id))
         self._buttons['cancel'].clicked.connect(lambda: self._manager.action_cancel_download(self._record.id))
         self._buttons['retry'].clicked.connect(lambda: self._manager.action_retry(self._record.id))

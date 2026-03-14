@@ -35,7 +35,6 @@ class ModManager(QObject):
     progress_updated = pyqtSignal(int)
     status_changed = pyqtSignal(str, str)
     mod_list_updated = pyqtSignal()
-    installation_finished = pyqtSignal(bool, str)
     url_prompt_required = pyqtSignal(str, str)
 
     def __init__(self, app_state, feedback_service, settings_service=None, parent=None):
@@ -822,7 +821,6 @@ class ModManager(QObject):
             self.status_changed.emit(tr('status.install_cancelled_by_user'), 'status_info')
         else:
             self.status_changed.emit(tr('status.installation_failed'), 'status_error')
-        self.installation_finished.emit(success, message)
 
     def handle_url_prompt_response(self, response: bool):
         if self.app_state.current_task:

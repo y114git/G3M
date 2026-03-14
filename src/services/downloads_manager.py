@@ -230,14 +230,11 @@ class DownloadsManager(QObject):
         self._emit_badge()
         self.use_completed.emit()
 
-    def action_install(self, record_id: str, parent_widget=None):
+    def action_install(self, record_id: str):
         record = self._store.find(record_id)
         if not record or not record.file_exists or record.use_status != UseStatus.READY:
             return
-        if record.ever_installed:
-            self._open_manual_install_dialog(record, parent_widget)
-        else:
-            self._start_use(record_id)
+        self._start_use(record_id)
 
     def action_overwrite(self, record_id: str):
         record = self._store.find(record_id)

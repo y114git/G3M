@@ -2,16 +2,14 @@
 import os
 import shutil
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QDialog, QMessageBox
+from PyQt6.QtWidgets import QDialog
 from services.localization_service import tr
 from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod_utils import sort_gamebanana_files_by_priority
 from workers.install.batch_install_worker import InstallModsThread
-from workers.install.gamebanana_install_worker import InstallGameBananaModThread
-from workers.gamebanana.prepare_gamebanana_manual_install_worker import PrepareGameBananaManualInstallWorker
 from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id
 from adapters.gamebanana_adapter import GameBananaAPI
 from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
@@ -25,7 +23,6 @@ class ModOperationsController:
         self.feedback_service = feedback_service
         self.mod_service = mod_service
         self.app = app_window
-        self._last_gamebanana_progress = -1
         from ui.utils.ui_utils import DebounceTimer
         self._update_debounce_short = DebounceTimer(delay_ms=200)
         self._update_debounce_long = DebounceTimer(delay_ms=1000)
@@ -77,11 +74,7 @@ class ModOperationsController:
 
     def _install_gamebanana_mod(self, mod, force=False, is_update=False, selected_file=None):
         try:
-            downloads_manager = getattr(self.app, 'downloads_manager', None)
-            if downloads_manager:
-                self._enqueue_gamebanana_download(mod, selected_file)
-            else:
-                self._start_gamebanana_install_legacy(mod, selected_file=selected_file)
+            self._enqueue_gamebanana_download(mod, selected_file)
         except Exception as e:
             logging.error(f'Error starting GameBanana mod installation: {e}', exc_info=True)
             self._handle_install_start_error(e)
@@ -130,23 +123,6 @@ class ModOperationsController:
         )
         self._safe_execute(lambda: self.app.search_display.update_search_cards(), 'Failed to refresh cards')
 
-    def _start_gamebanana_install_legacy(self, mod, selected_file=None):
-        """Legacy path: direct InstallGameBananaModThread (fallback if downloads_manager unavailable)."""
-        self._safe_execute(lambda: setattr(self.app_state, 'operation_cancelled', False), 'Failed to set operation_cancelled')
-        if self.app_state.current_task and self.app_state.current_task.isRunning():
-            previous_task = self.app_state.current_task
-            try:
-                self._disconnect_task_signals(previous_task)
-            except Exception as e:
-                logging.warning(f'ModOperationsController: Error disconnecting signals: {e}')
-            if hasattr(previous_task, 'cancel'):
-                try:
-                    previous_task.cancel()
-                except Exception as e:
-                    logging.warning(f'ModOperationsController: Error cancelling previous task: {e}')
-            self.app_state.clear_current_task()
-        self._start_gamebanana_install(mod, selected_file=selected_file)
-
     def _start_install_thread(self, install_thread, op_id: int):
         try:
             self.app_state.is_installing = True
@@ -155,64 +131,17 @@ class ModOperationsController:
             self.app.action_button.setText(tr('ui.cancel_button'))
             install_thread.progress.connect(lambda v, oid=op_id: self.on_install_progress_token(v, oid))
             install_thread.status.connect(lambda msg, col, oid=op_id: self.on_install_status_token(msg, col, oid))
-            if isinstance(install_thread, InstallGameBananaModThread):
-                install_thread.finished.connect(lambda ok, msg, oid=op_id: self._on_gamebanana_install_finished(ok, msg, oid))
-            else:
-                install_thread.finished.connect(lambda ok, oid=op_id: self._on_install_task_finished(ok, oid))
+            install_thread.finished.connect(lambda ok, oid=op_id: self._on_install_task_finished(ok, oid))
             self.app.progress_bar.setVisible(True)
             self.app.progress_bar.setValue(0)
             self._safe_execute(lambda: self.feedback_service.update_status(tr('status.preparing_download'), UI_COLORS['status_warning']), 'Feedback manager update failed')
             self.app_state.current_task = install_thread
             self.app.game_launch.update_button_state()
             install_thread.start()
-            thread_type = 'GameBanana' if isinstance(install_thread, InstallGameBananaModThread) else 'Standard'
-            logging.info(f'ModOperationsController: Started {thread_type} mod installation thread (op_id={op_id})')
+            logging.info(f'ModOperationsController: Started mod installation thread (op_id={op_id})')
         except Exception as e:
             logging.error(f'Error starting install thread: {e}', exc_info=True)
             self._handle_install_start_error(e)
-
-    def _start_gamebanana_install(self, mod, selected_file=None):
-        try:
-            self.app._install_op_id += 1
-            op_id = self.app._install_op_id
-            identifier = self._get_mod_identifier(mod)
-            self.app_state.current_install_mod_identifier = identifier
-            self.app_state.current_install_is_gamebanana = True
-            self.app_state.current_install_progress = 0
-            self._last_gamebanana_progress = -1
-            self._safe_execute(lambda: self.app.search_display.update_search_cards(), 'Failed to refresh cards before download')
-            install_thread = InstallGameBananaModThread(self.app, mod, selected_file=selected_file)
-            self._start_install_thread(install_thread, op_id)
-        except Exception as e:
-            logging.error(f'Error starting GameBanana mod installation thread: {e}', exc_info=True)
-            self._handle_install_start_error(e)
-
-    def _show_incompatible_gamebanana_dialog(self, mod=None, mod_url: Optional[str] = None):
-        import webbrowser
-        url_to_open = mod_url
-        if not url_to_open and mod:
-            url_to_open = getattr(mod, 'external_url', None)
-            if not url_to_open:
-                key = get_mod_key(mod)
-                if key and key.startswith('gb_'):
-                    mod_id = key.replace('gb_', '', 1)
-                    if mod_id:
-                        url_to_open = f'https://gamebanana.com/mods/{mod_id}'
-        msg_box = QMessageBox(self.app)
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        msg_box.setWindowTitle(tr('errors.mod_not_compatible_title'))
-        msg_box.setText(tr('errors.mod_requires_manual_installation'))
-        msg_box.setInformativeText(tr('dialogs.manual_install_available'))
-        manual_install_btn = msg_box.addButton(tr('ui.manual_install'), QMessageBox.ButtonRole.AcceptRole)
-        open_btn = msg_box.addButton(tr('ui.open_instructions'), QMessageBox.ButtonRole.AcceptRole)
-        msg_box.addButton(tr('buttons.close'), QMessageBox.ButtonRole.RejectRole)
-        msg_box.setDefaultButton(manual_install_btn)
-        msg_box.exec()
-        clicked_btn = msg_box.clickedButton()
-        if clicked_btn == manual_install_btn and mod:
-            self._start_manual_install_from_gamebanana(mod)
-        elif clicked_btn == open_btn and url_to_open:
-            webbrowser.open(url_to_open)
 
     def _get_available_gamebanana_files(self, mod) -> List[Dict]:
         files = getattr(mod, 'gamebanana_supported_files', []) or []
@@ -278,42 +207,12 @@ class ModOperationsController:
             logging.error(f'ModOperationsController: Failed to get all GameBanana files for {mod_id}: {e}', exc_info=True)
             return []
 
-    def _get_mod_identifier(self, mod) -> Optional[str]:
-        try:
-            key = get_mod_key(mod)
-            if key:
-                if key.startswith('gb_'):
-                    mod_id = key.replace('gb_', '', 1)
-                    if mod_id:
-                        return f'gb::{mod_id}'
-                return f'key::{key}'
-        except Exception as e:
-            logging.debug(f'ModOperationsController: Failed to get identifier for mod: {e}')
-        return None
-
     def _notify_gamebanana_card_refresh(self):
         try:
             if hasattr(self.app, 'search_display'):
                 self.app.search_display.update_search_cards()
         except Exception as e:
             logging.debug('_notify_gamebanana_card_refresh failed', exc_info=e)
-
-    def _on_gamebanana_install_finished(self, success: bool, message: str, op_id: int):
-        current_op_id = getattr(self.app, '_install_op_id', 0)
-        if current_op_id != op_id:
-            logging.debug(f'ModOperationsController: Ignoring finished signal for old operation {op_id}, current is {current_op_id}')
-            return
-        if not success and message and (message == tr('status.operation_cancelled') or 'cancelled' in message.lower()):
-            logging.info('ModOperationsController: GameBanana mod installation was cancelled')
-            self._on_install_complete(False, tr('status.operation_cancelled'), was_installed_before=False)
-            return
-        if not success and message and message.startswith('MOD_NOT_COMPATIBLE:'):
-            mod_url = message.replace('MOD_NOT_COMPATIBLE:', '')
-            if mod_url:
-                self._show_incompatible_gamebanana_dialog(mod_url=mod_url)
-            self._on_install_complete(False, '', was_installed_before=False)
-            return
-        self._on_install_complete(success, message, was_installed_before=False)
 
     def install_mod(self, mod, force=False, is_update=False):
         try:
@@ -368,8 +267,6 @@ class ModOperationsController:
         current_op_id = getattr(self.app, '_install_op_id', 0)
         if current_op_id == op_id and self.app_state.is_installing:
             self.app.progress_bar.setValue(value)
-            if getattr(self.app_state, 'current_install_is_gamebanana', False):
-                self.app_state.current_install_progress = value
 
     def on_install_status_token(self, message: str, color: str, op_id: int):
         current_op_id = getattr(self.app, '_install_op_id', 0)
@@ -394,10 +291,6 @@ class ModOperationsController:
         self.app.progress_bar.setVisible(False)
         self.app_state.clear_current_task()
         self.app_state.is_installing = False
-        self.app_state.current_install_progress = 0
-        self.app_state.current_install_mod_identifier = None
-        self.app_state.current_install_is_gamebanana = False
-        self._last_gamebanana_progress = -1
         self.set_install_buttons_enabled(True)
         self._safe_execute(lambda: self.app.game_launch.update_button_state(), 'Failed to update button state')
         if not success:
@@ -553,62 +446,6 @@ class ModOperationsController:
             self.feedback_service.show_message('error', tr('errors.error'), tr('errors.mod_uninstall_failed', error=str(e)))
             return
 
-    def _start_manual_install_from_gamebanana(self, mod):
-        try:
-            available_files = self._get_all_gamebanana_files(mod)
-            if not available_files:
-                self.feedback_service.show_message('error', tr('errors.error'), tr('errors.no_gamebanana_files_for_manual_install'))
-                return
-            selected_file = self._pick_gamebanana_file(available_files, mod.name, getattr(mod, 'external_url', None))
-            if selected_file is None:
-                return
-            self._start_prepare_worker(mod, selected_file)
-        except Exception as e:
-            logging.error(f'Manual install from GameBanana failed: {e}', exc_info=True)
-            self.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
-
-    def _start_prepare_worker(self, mod, selected_file: Dict):
-        worker = PrepareGameBananaManualInstallWorker(mod, selected_file, parent=self.app)
-        self.app_state.is_installing = True
-        self.app_state._scan_blocked = True
-        self.set_install_buttons_enabled(False)
-        self.app.game_launch.update_button_state()
-
-        def on_finished(success: bool, result):
-            self.app_state.reset_install_state()
-            self.app_state._scan_blocked = False
-            self.set_install_buttons_enabled(True)
-            self.app.game_launch.update_button_state()
-            if success and isinstance(result, tuple):
-                prepared_path, gb_metadata, temp_dir = result
-                try:
-                    from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-                    from services.game_detection_service import get_game_type_string
-                    initial_game_type = getattr(mod, 'game', None)
-                    if not initial_game_type and self.app_state and hasattr(self.app_state, 'game_mode'):
-                        initial_game_type = get_game_type_string(self.app_state.game_mode)
-                    dialog = ManualModInstallDialog(self.app, prepared_path, gamebanana_metadata=gb_metadata, source_file_path=None, initial_game_type=initial_game_type)
-                    dialog.temp_dir_to_cleanup = temp_dir
-                    if dialog.exec() == QDialog.DialogCode.Accepted:
-                        self.mod_service.invalidate_mods_cache()
-                        self.mod_service.load_local_mods(_skip_conversion=True)
-                        self.mod_service.mod_list_updated.emit()
-                        if hasattr(self.app, 'search_display'):
-                            self.app.search_display.update_search_cards()
-                        QMessageBox.information(self.app, tr('dialogs.success'), tr('dialogs.mod_created_successfully'))
-                except Exception as e:
-                    logging.error(f'Failed to open manual install dialog: {e}', exc_info=True)
-                    self.feedback_service.show_message('error', tr('errors.error'), tr('errors.manual_install_failed', error=str(e)))
-            else:
-                error_msg = result if isinstance(result, str) else tr('errors.manual_install_failed', error='Unknown error')
-                self.feedback_service.show_message('error', tr('errors.error'), error_msg)
-        worker.finished_with_result.connect(on_finished)
-        worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
-        worker.status.connect(lambda s, c: self.feedback_service.update_status(s, c))
-        self.app_state.progress_bar_visible = True
-        self.app_state.progress_bar_value = 0
-        self.app_state.current_task = worker
-        worker.start()
-
     def set_install_buttons_enabled(self, enabled: bool):
-        self._safe_execute(lambda: (self.app.action_button.setEnabled(True if self.app_state.is_installing else enabled), self.app.saves_button.setEnabled(True)), 'Failed to set install buttons enabled')
+        button_enabled = self.app_state.is_installing or enabled
+        self._safe_execute(lambda: self.app.action_button.setEnabled(button_enabled), 'Failed to set install buttons enabled')

@@ -72,7 +72,6 @@ UI_COLORS = {
     'status_info': 'gray',
     'status_ready': 'lightgreen',
     'status_steam': 'blue',
-    'saves_button': 'yellow',
 }
 THEMES = {
     'default': {
