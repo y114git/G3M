@@ -42,7 +42,6 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.14"
-  G3MTOOL_CACHE_VERSION: "1"
   RELEASE_VERSION: ${{ inputs.version_and_tag || 'dev' }}
   RELEASE_TAG_FINAL: ${{ inputs.version_and_tag }}
   RELEASE_NAME_FINAL: ${{ inputs.release_name }}
@@ -60,30 +59,26 @@ jobs:
           - label: Linux
             runs_on: ubuntu-22.04
             artifact_name: DELTAHUB-Linux
-            g3mtool_archive: g3mtool-linux-x64.zip
+            g3mtool_runtime: linux-x64
             g3mtool_dir: src/assets/bin/g3mtool_linux
-            g3mtool_cache: g3mtool-linux-x64
             startup_target: archive_content/DELTAHUB
           - label: macOS x64
             runs_on: macos-15-intel
             artifact_name: DELTAHUB-macOS-x86_64
-            g3mtool_archive: g3mtool-osx-x64.zip
+            g3mtool_runtime: osx-x64
             g3mtool_dir: src/assets/bin/g3mtool_macos
-            g3mtool_cache: g3mtool-macos-x64
             startup_target: DELTAHUB.app/Contents/MacOS/DELTAHUB
           - label: macOS arm64
             runs_on: macos-15
             artifact_name: DELTAHUB-macOS-arm64
-            g3mtool_archive: g3mtool-osx-arm64.zip
+            g3mtool_runtime: osx-arm64
             g3mtool_dir: src/assets/bin/g3mtool_macos
-            g3mtool_cache: g3mtool-macos-arm64
             startup_target: DELTAHUB.app/Contents/MacOS/DELTAHUB
           - label: Windows
             runs_on: windows-latest
             artifact_name: DELTAHUB-Windows
-            g3mtool_archive: g3mtool-win-x64.zip
+            g3mtool_runtime: win-x64
             g3mtool_dir: src/assets/bin/g3mtool_windows
-            g3mtool_cache: g3mtool-windows-x64
             startup_target: DELTAHUB.exe
     steps:
       - uses: actions/checkout@v4
@@ -132,35 +127,35 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip wheel
           python -m pip install ".[build]"
 
-      - name: Restore cached G3MTool
-        id: cache-g3mtool
-        uses: actions/cache@v4
-        with:
-          path: ${{ matrix.g3mtool_dir }}
-          key: ${{ runner.os }}-${{ matrix.g3mtool_cache }}-${{ env.G3MTOOL_CACHE_VERSION }}
-
-      - name: Download G3MTool
-        if: steps.cache-g3mtool.outputs.cache-hit != 'true' && runner.os != 'Windows'
+      - name: Build G3MTool from source
+        if: runner.os != 'Windows'
         run: |
+          rm -rf g3mtool-src
+          git clone --depth 1 https://github.com/y114git/G3MTool.git g3mtool-src
           mkdir -p "${{ matrix.g3mtool_dir }}"
-          curl -L -o g3mtool.zip "https://github.com/y114git/G3MTool/releases/latest/download/${{ matrix.g3mtool_archive }}"
-          unzip -q g3mtool.zip -d "${{ matrix.g3mtool_dir }}"
-          rm -f g3mtool.zip
+          dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
           chmod +x "${{ matrix.g3mtool_dir }}"/* 2>/dev/null || true
+          rm -rf g3mtool-src
 
-      - name: Download G3MTool (Windows)
-        if: steps.cache-g3mtool.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      - name: Build G3MTool from source (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          if (Test-Path g3mtool-src) { Remove-Item g3mtool-src -Recurse -Force }
+          git clone --depth 1 https://github.com/y114git/G3MTool.git g3mtool-src
           New-Item -ItemType Directory -Force -Path "${{ matrix.g3mtool_dir }}" | Out-Null
-          Invoke-WebRequest -Uri "https://github.com/y114git/G3MTool/releases/latest/download/${{ matrix.g3mtool_archive }}" -OutFile g3mtool.zip
-          Expand-Archive -Path g3mtool.zip -DestinationPath "${{ matrix.g3mtool_dir }}" -Force
-          Remove-Item g3mtool.zip
+          dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
+          Remove-Item g3mtool-src -Recurse -Force
 
       - name: Generate secrets_embed.py
         shell: pwsh
