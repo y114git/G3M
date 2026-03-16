@@ -1,64 +1,23 @@
 """Persistent storage for download history. No business logic."""
-import json
 import logging
 import os
-import shutil
-import tempfile
-from typing import List, Optional
+from typing import Optional
 
 from models.download_models import DownloadRecord, DownloadStatus, UseStatus
+from services.base_json_store import BaseJsonStore
 
 logger = logging.getLogger(__name__)
 
 
-class DownloadsStore:
-    """Thin persistence layer: load/save downloads_history.json, atomic writes, startup recovery."""
+class DownloadsStore(BaseJsonStore):
+    """Thin persistence layer: downloads_history.json, atomic writes, startup recovery."""
 
     def __init__(self, base_dir: str):
-        self._downloads_dir = os.path.join(base_dir, 'downloads')
-        self._history_path = os.path.join(self._downloads_dir, 'downloads_history.json')
-        self._records: List[DownloadRecord] = []
-        self._ensure_dirs()
+        super().__init__(base_dir, 'downloads', 'downloads_history.json', DownloadRecord)
 
     @property
     def downloads_dir(self) -> str:
-        return self._downloads_dir
-
-    @property
-    def records(self) -> List[DownloadRecord]:
-        return self._records
-
-    def _ensure_dirs(self):
-        os.makedirs(self._downloads_dir, exist_ok=True)
-
-    def load(self) -> List[DownloadRecord]:
-        if not os.path.exists(self._history_path):
-            self._records = []
-            return self._records
-        try:
-            with open(self._history_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            self._records = [DownloadRecord.from_dict(d) for d in data if isinstance(d, dict)]
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error('DownloadsStore: corrupt history, backing up and resetting: %s', e)
-            self._backup_corrupt()
-            self._records = []
-        return self._records
-
-    def save(self):
-        self._ensure_dirs()
-        data = [r.to_dict() for r in self._records]
-        try:
-            fd, tmp_path = tempfile.mkstemp(dir=self._downloads_dir, suffix='.tmp')
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, self._history_path)
-        except OSError as e:
-            logger.error('DownloadsStore: save failed: %s', e)
-
-    def add(self, record: DownloadRecord):
-        self._records.append(record)
-        self.save()
+        return self._store_dir
 
     def remove(self, record_id: str):
         self._records = [r for r in self._records if r.id != record_id]
@@ -106,14 +65,6 @@ class DownloadsStore:
                 changed = True
         if changed:
             self.save()
-
-    def _backup_corrupt(self):
-        if os.path.exists(self._history_path):
-            bak = self._history_path + '.bak'
-            try:
-                shutil.copy2(self._history_path, bak)
-            except OSError:
-                pass
 
     def delete_file_for_record(self, record: DownloadRecord):
         if record.file_path and os.path.exists(record.file_path):

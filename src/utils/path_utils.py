@@ -252,9 +252,9 @@ _ICON_DEFS = {
     'search': ('search_icon.svg', [('fill="#444"', 'fill="{c}"')]),
     'reset': ('reset_icon.svg', [('stroke="#0C0310"', 'stroke="{c}"')]),
     'refresh': ('refresh_icon.svg', [('stroke="#000000"', 'stroke="{c}"')]),
-    'checkmark': ('checkmark_icon.svg', [('fill="#010002"', 'fill="{c}"'), ('style="fill:#010002;"', 'style="fill:{c};"')], True),
-    'save': ('save_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
-    'delete': ('delete_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
+    'checkmark': ('checkmark_icon.svg', [('fill="#010002"', 'fill="{c}"'), ('style="fill:#010002;"', 'style="fill:{c};"')]),
+    'save': ('save_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'delete': ('delete_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
     'minimize': ('minimize_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
     'maximize': ('maximize_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
     'restore': ('restore_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
@@ -262,10 +262,13 @@ _ICON_DEFS = {
     'arrow_down': ('arrow_down.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
     'arrow_up': ('arrow_up.svg', [('fill="#e8e9eb"', 'fill="{c}"')]),
     'add': ('add_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
-    'download': ('download_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
-    'folder': ('folder_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
-    'like': ('like_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')], True),
-    'update': ('update_icon.svg', [('fill="#000000"', 'fill="{c}"')], True),
+    'download': ('download_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'folder': ('folder_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'like': ('like_icon.svg', [('fill="#0F0F0F"', 'fill="{c}"')]),
+    'update': ('update_icon.svg', [('fill="#000000"', 'fill="{c}"')]),
+    'filerestore': ('filerestore_icon.svg', [('fill="#000000"', 'fill="{c}"')]),
+    'export': ('export_icon.svg', [('fill="#0D0D0D"', 'fill="{c}"')]),
+    'import': ('import_icon.svg', [('fill="#0D0D0D"', 'fill="{c}"')]),
 }
 
 
@@ -285,52 +288,27 @@ def colored_icon(name: str, color: str) -> QIcon:
     if not defn:
         return QIcon()
     svg_file, replacements = defn[0], defn[1]
-    use_renderer = len(defn) > 2 and defn[2]
     svg_path = resource_path(f'assets/icons/{svg_file}')
     try:
         with open(svg_path, 'r', encoding='utf-8', errors='replace') as f:
             svg = f.read()
-        if use_renderer:
-            svg = re.sub(r'<\?xml[^?]*\?>', '', svg, count=1)
+        svg = re.sub(r'<\?xml[^?]*\?>', '', svg, count=1)
         svg = _replace_svg_color_tokens(svg, color, replacements)
         svg_bytes = QByteArray(svg.encode('utf-8'))
-        if use_renderer:
-            from PyQt6.QtSvg import QSvgRenderer
-            from PyQt6.QtGui import QPainter
-            renderer = QSvgRenderer(svg_bytes)
-            if not renderer.isValid():
-                return QIcon(svg_path)
-            pixmap = QPixmap(64, 64)
-            pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            renderer.render(painter)
-            painter.end()
-            icon = QIcon()
-            icon.addPixmap(pixmap, QIcon.Mode.Normal)
-            icon.addPixmap(pixmap, QIcon.Mode.Disabled)
-            return icon
-        pixmap = QPixmap()
-        pixmap.loadFromData(svg_bytes, 'svg')
+        from PyQt6.QtSvg import QSvgRenderer
+        from PyQt6.QtGui import QPainter
+        renderer = QSvgRenderer(svg_bytes)
+        if not renderer.isValid():
+            return QIcon(svg_path)
+        pixmap = QPixmap(128, 128)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
         icon = QIcon()
-        icon.addPixmap(pixmap)
+        icon.addPixmap(pixmap, QIcon.Mode.Normal)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled)
         return icon
     except Exception as e:
         logging.debug(f'colored_icon: failed to render {name}: {e}')
         return QIcon(svg_path)
-
-
-def get_colored_search_icon(color: str) -> QIcon: return colored_icon('search', color)
-def get_colored_reset_icon(color: str) -> QIcon: return colored_icon('reset', color)
-def get_colored_refresh_icon(color: str) -> QIcon: return colored_icon('reset', color)
-def get_colored_refresh_icon_svg(color: str) -> QIcon: return colored_icon('refresh', color)
-def get_colored_checkmark_icon(color: str) -> QIcon: return colored_icon('checkmark', color)
-def get_colored_save_icon(color: str) -> QIcon: return colored_icon('save', color)
-def get_colored_delete_icon(color: str) -> QIcon: return colored_icon('delete', color)
-def get_colored_minimize_icon(color: str) -> QIcon: return colored_icon('minimize', color)
-def get_colored_maximize_icon(color: str) -> QIcon: return colored_icon('maximize', color)
-def get_colored_restore_icon(color: str) -> QIcon: return colored_icon('restore', color)
-def get_colored_cross_icon(color: str) -> QIcon: return colored_icon('cross', color)
-def get_colored_arrow_down_icon(color: str) -> QIcon: return colored_icon('arrow_down', color)
-def get_colored_arrow_up_icon(color: str) -> QIcon: return colored_icon('arrow_up', color)
-def get_colored_like_icon(color: str) -> QIcon: return colored_icon('like', color)
-def get_colored_update_icon(color: str) -> QIcon: return colored_icon('update', color)

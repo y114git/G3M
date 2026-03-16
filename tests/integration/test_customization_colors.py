@@ -133,13 +133,13 @@ class TestColorWidgetLoading:
         manager.load_custom_style_settings({'background': widget})
         widget.setText.assert_called_once_with('#00FF0080')
 
-    def test_background_placeholder_uses_theme_background_default(self, app_state):
+    def test_background_default_is_loaded_into_text(self, app_state):
         from services.customization_service import CustomizationManager
         from unittest.mock import Mock
         manager = CustomizationManager(app_state)
         widget = Mock()
         manager.load_custom_style_settings({'background': widget})
-        widget.setPlaceholderText.assert_called_once_with('#282828')
+        widget.setText.assert_called_once_with('#282828')
 
 
 class TestColorDialogBlackHandling:
@@ -207,6 +207,19 @@ class TestNoHardcodedGrayColors:
             pytest.fail(f'Found {len(issues)} potential hardcoded gray colors:\n' + '\n'.join(issues[:30]))
 
 
+def _build_test_stylesheet(custom_border_radius='7px', **extra):
+    from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
+    invalidate_stylesheet_cache()
+    return build_stylesheet(
+        frame_bg_color='rgba(40,40,40,150)', button_color='#222',
+        border_color='#039d5b', button_hover_color='#616b78',
+        main_text_color='#e8e9eb', font_family_main='Arial',
+        font_size_main=16, font_size_small=12,
+        checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
+        custom_border_radius=custom_border_radius, **extra,
+    )
+
+
 class TestBorderRadius:
 
     def test_default_border_radius_defaults_to_seven(self, app_state):
@@ -229,29 +242,11 @@ class TestBorderRadius:
         assert app_state.local_config['custom_border_radius'] == 7
 
     def test_border_radius_in_stylesheet(self):
-        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-        invalidate_stylesheet_cache()
-        sheet = build_stylesheet(
-            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
-            border_color='#039d5b', button_hover_color='#616b78',
-            main_text_color='#e8e9eb', font_family_main='Arial',
-            font_size_main=16, font_size_small=12,
-            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
-            custom_border_radius='7px',
-        )
+        sheet = _build_test_stylesheet('7px')
         assert 'border-radius: 7px' in sheet
 
     def test_button_radii_in_stylesheet_saturate_to_control_geometry(self):
-        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-        invalidate_stylesheet_cache()
-        sheet = build_stylesheet(
-            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
-            border_color='#039d5b', button_hover_color='#616b78',
-            main_text_color='#e8e9eb', font_family_main='Arial',
-            font_size_main=16, font_size_small=12,
-            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
-            custom_border_radius='50px',
-        )
+        sheet = _build_test_stylesheet('50px')
         button_section = re.search(r'\nQPushButton \{(?P<section>.*?)\n\}', sheet, re.DOTALL).group('section')
         top_refresh_section = re.search(r'\nQPushButton#topRefreshBtn \{(?P<section>.*?)\n\}', sheet, re.DOTALL).group('section')
         field_section = re.search(r'\nQLineEdit \{(?P<section>.*?)\n\}', sheet, re.DOTALL).group('section')
@@ -260,16 +255,7 @@ class TestBorderRadius:
         assert 'border-radius: 17px;' in field_section
 
     def test_title_bar_window_button_radius_uses_safe_scaled_geometry(self):
-        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-        invalidate_stylesheet_cache()
-        sheet = build_stylesheet(
-            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
-            border_color='#039d5b', button_hover_color='#616b78',
-            main_text_color='#e8e9eb', font_family_main='Arial',
-            font_size_main=16, font_size_small=12,
-            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
-            custom_border_radius='50px', zoom_factor=1.5,
-        )
+        sheet = _build_test_stylesheet('50px', zoom_factor=1.5)
         title_bar_section = re.search(
             r'\nQPushButton#titleBarMinimizeButton, QPushButton#titleBarMaximizeButton, QPushButton#titleBarCloseButton \{(?P<section>.*?)\n\}',
             sheet,
@@ -280,32 +266,14 @@ class TestBorderRadius:
         assert 'border-radius: 22px;' in title_bar_section
 
     def test_checkbox_indicator_radius_saturates_at_safe_circle_value(self):
-        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-        invalidate_stylesheet_cache()
-        sheet = build_stylesheet(
-            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
-            border_color='#039d5b', button_hover_color='#616b78',
-            main_text_color='#e8e9eb', font_family_main='Arial',
-            font_size_main=16, font_size_small=12,
-            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
-            custom_border_radius='15px',
-        )
+        sheet = _build_test_stylesheet('15px')
         checkbox_section = sheet.split('QCheckBox::indicator {', 1)[1].split('}', 1)[0]
         assert 'border-radius: 11px;' in checkbox_section
         assert 'width: 18px;' in checkbox_section
         assert 'height: 18px;' in checkbox_section
 
     def test_scrollbar_styles_use_custom_radius_and_hide_arrows(self):
-        from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-        invalidate_stylesheet_cache()
-        sheet = build_stylesheet(
-            frame_bg_color='rgba(40,40,40,150)', button_color='#222',
-            border_color='#039d5b', button_hover_color='#616b78',
-            main_text_color='#e8e9eb', font_family_main='Arial',
-            font_size_main=16, font_size_small=12,
-            checkbox_checked_color='#fff', scroll_handle_color='#e8e9eb',
-            custom_border_radius='15px',
-        )
+        sheet = _build_test_stylesheet('15px')
         scrollbar_handle_section = sheet.split('QScrollBar::handle:vertical {', 1)[1].split('}', 1)[0]
         assert 'border-radius: 7px;' in scrollbar_handle_section
         assert 'border: none;' in scrollbar_handle_section

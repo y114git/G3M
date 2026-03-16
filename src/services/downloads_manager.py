@@ -9,9 +9,10 @@ from typing import Optional, Tuple
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from models.download_models import (
-    DownloadRecord, DownloadStatus, UseStatus, SourceKind, TargetKind, _utc_now_iso,
+    DownloadRecord, DownloadStatus, UseStatus, SourceKind, TargetKind,
 )
 from services.downloads_store import DownloadsStore
+from utils.time_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class DownloadsManager(QObject):
             record.download_status = DownloadStatus.CANCELLED if is_cancel else DownloadStatus.FAILED
             record.use_status = UseStatus.CANCELLED if is_cancel else UseStatus.FAILED
             record.error_message = None if is_cancel else error
-            record.finished_at = _utc_now_iso()
+            record.finished_at = utc_now_iso()
             record.file_exists = False
             self._store.update(record)
             self.record_updated.emit(record)
@@ -154,7 +155,7 @@ class DownloadsManager(QObject):
         record.progress = 100
         record.file_path = saved_path
         record.file_exists = True
-        record.finished_at = _utc_now_iso()
+        record.finished_at = utc_now_iso()
 
         if record.auto_use:
             record.use_status = UseStatus.PENDING_AUTO
@@ -262,7 +263,7 @@ class DownloadsManager(QObject):
         record.download_status = DownloadStatus.CANCELLED
         record.use_status = UseStatus.CANCELLED
         record.file_exists = False
-        record.finished_at = _utc_now_iso()
+        record.finished_at = utc_now_iso()
         self._store.update(record)
         self.record_updated.emit(record)
         self._emit_badge()

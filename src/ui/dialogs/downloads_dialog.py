@@ -1,17 +1,18 @@
 """Non-modal Downloads dialog showing download history with per-item actions."""
 import logging
+import os
 from typing import Dict
 
 from PyQt6.QtCore import Qt, QSize, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QFrame, QProgressBar, QSizePolicy,
+    QScrollArea, QWidget, QFrame, QProgressBar, QSizePolicy, QMessageBox,
 )
 
 from models.download_models import DownloadRecord
 from services.localization_service import tr
-from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values
+from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values, get_dialog_text_color
 from utils.path_utils import colored_icon
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ class _RecordWidget(QFrame):
         layout.addLayout(self._btn_row)
         self._buttons['install'].clicked.connect(lambda: self._manager.action_install(self._record.id))
         self._buttons['reinstall'].clicked.connect(lambda: self._manager.action_install(self._record.id))
-        self._buttons['delete'].clicked.connect(lambda: self._manager.action_delete(self._record.id))
+        self._buttons['delete'].clicked.connect(self._on_delete)
         self._buttons['cancel'].clicked.connect(lambda: self._manager.action_cancel_download(self._record.id))
         self._buttons['retry'].clicked.connect(lambda: self._manager.action_retry(self._record.id))
         self._buttons['overwrite'].clicked.connect(lambda: self._manager.action_overwrite(self._record.id))
@@ -120,6 +121,16 @@ class _RecordWidget(QFrame):
         for key, btn in self._buttons.items():
             btn.setVisible(key in visible)
 
+    def _on_delete(self):
+        reply = QMessageBox.question(
+            self.window(), tr('downloads.confirm_delete_title'),
+            tr('downloads.confirm_delete_text', name=self._record.display_name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._manager.action_delete(self._record.id)
+
     def update_record(self, record: DownloadRecord):
         self._record = record
         self._refresh()
@@ -160,7 +171,7 @@ class DownloadsDialog(QDialog):
         self._title_label.setFont(font)
         header.addWidget(self._title_label)
         header.addStretch()
-        tc = self._get_theme_text_color()
+        tc = get_dialog_text_color(self._app_state)
         self._folder_btn = QPushButton()
         self._folder_btn.setObjectName('downloads_folder_btn')
         self._folder_btn.setToolTip(tr('downloads.open_folder'))
@@ -199,7 +210,7 @@ class DownloadsDialog(QDialog):
         extra = f'''
             QFrame#downloads_record {{
                 background-color: {theme["button"]};
-                border: 1px solid {theme["border"]};
+                border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
             }}
             QLabel#downloads_record_name {{
@@ -238,6 +249,12 @@ class DownloadsDialog(QDialog):
         self._manager.record_updated.connect(self._on_record_updated)
         self._manager.record_removed.connect(self._on_record_removed)
 
+    def closeEvent(self, event):
+        self._manager.record_added.disconnect(self._on_record_added)
+        self._manager.record_updated.disconnect(self._on_record_updated)
+        self._manager.record_removed.disconnect(self._on_record_removed)
+        super().closeEvent(event)
+
     def _populate(self):
         for record in self._manager.records:
             self._add_record_widget(record)
@@ -266,12 +283,7 @@ class DownloadsDialog(QDialog):
             w.deleteLater()
         self._update_empty_visibility()
 
-    def _get_theme_text_color(self):
-        from ui.common.styling import get_theme_color
-        return get_theme_color(self._app_state.local_config, 'text', '#ffffff') if self._app_state else '#ffffff'
-
     def _on_open_folder(self):
-        import os
         downloads_dir = self._manager.store.downloads_dir
         if os.path.isdir(downloads_dir):
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(downloads_dir)):
@@ -289,7 +301,7 @@ class DownloadsDialog(QDialog):
         """Update all translatable texts when language changes."""
         self.setWindowTitle(tr('downloads.title'))
         self._title_label.setText(tr('downloads.title'))
-        tc = self._get_theme_text_color()
+        tc = get_dialog_text_color(self._app_state)
         self._folder_btn.setIcon(colored_icon('folder', tc))
         self._folder_btn.setToolTip(tr('downloads.open_folder'))
         self._clear_btn.setText(tr('downloads.clear_downloads'))
@@ -301,4 +313,4 @@ class DownloadsDialog(QDialog):
     def refresh_theme(self):
         """Refresh theme/styles."""
         self._apply_theme()
-        self._folder_btn.setIcon(colored_icon('folder', self._get_theme_text_color()))
+        self._folder_btn.setIcon(colored_icon('folder', get_dialog_text_color(self._app_state)))

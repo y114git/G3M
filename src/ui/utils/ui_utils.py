@@ -32,7 +32,6 @@ class DebounceTimer:
             try:
                 self._callback()
             except Exception as e:
-                import logging
                 logging.error(f'DebounceTimer: Error executing callback: {e}', exc_info=True)
         self._callback = None
 
@@ -46,6 +45,18 @@ def format_size_mb(size_bytes: int) -> str:
     if size_bytes <= 0:
         return '0 MB'
     return f'{size_bytes / (1024 * 1024):.1f} MB'
+
+
+def format_size(size_bytes: int) -> str:
+    if size_bytes <= 0:
+        return '0 B'
+    if size_bytes < 1024:
+        return f'{size_bytes} B'
+    if size_bytes < 1024 * 1024:
+        return f'{size_bytes / 1024:.1f} KB'
+    if size_bytes < 1024 * 1024 * 1024:
+        return f'{size_bytes / (1024 * 1024):.1f} MB'
+    return f'{size_bytes / (1024 * 1024 * 1024):.2f} GB'
 
 
 def refresh_ui_after_mod_install(main_window, mod_service=None):

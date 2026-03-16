@@ -1,3 +1,4 @@
+import os
 from typing import Optional
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QDialogButtonBox
 from services.localization_service import tr
@@ -53,8 +54,8 @@ class ImportDialog(QDialog):
 
     def _import_from_file(self):
         file_filter_text = self._get_file_filter_text()
-        import os
-        start_dir = self.parent()._last_open_dir if hasattr(self.parent(), '_last_open_dir') else os.path.expanduser('~')
+        parent = self.parent()
+        start_dir = getattr(parent, '_last_open_dir', None) or os.path.expanduser('~')
         file_path, _ = QFileDialog.getOpenFileName(self, tr(self.select_archive_key), start_dir, file_filter_text)
         if file_path:
             self.selected_file = file_path
@@ -62,9 +63,9 @@ class ImportDialog(QDialog):
             self.accept()
 
     def _get_import_keys(self) -> dict[str, str]:
-        if self.import_type == 'themes':
-            return {'title_key': 'themes.import_themes', 'instructions_key': 'themes.import_instructions', 'from_file_key': 'themes.import_from_file', 'from_url_key': 'themes.import_from_url', 'from_url_button_key': 'themes.import_from_url_button', 'url_placeholder_key': 'themes.url_placeholder', 'url_required_key': 'themes.url_required', 'select_archive_key': 'themes.select_theme_archive'}
-        return {'title_key': f'{self.import_type}.import_{self.import_type}', 'instructions_key': f'{self.import_type}.import_instructions', 'from_file_key': f'{self.import_type}.import_from_file', 'from_url_key': f'{self.import_type}.import_from_url', 'from_url_button_key': f'{self.import_type}.import_from_url_button', 'url_placeholder_key': f'{self.import_type}.url_placeholder', 'url_required_key': f'{self.import_type}.url_required', 'select_archive_key': f'{self.import_type}.select_{self.import_type[:-1]}_archive'}
+        t = self.import_type
+        title_key = 'versions.import_title' if t == 'versions' else f'{t}.import_{t}'
+        return {'title_key': title_key, 'instructions_key': f'{t}.import_instructions', 'from_file_key': f'{t}.import_from_file', 'from_url_key': f'{t}.import_from_url', 'from_url_button_key': f'{t}.import_from_url_button', 'url_placeholder_key': f'{t}.url_placeholder', 'url_required_key': f'{t}.url_required', 'select_archive_key': f'{t}.select_{t[:-1]}_archive'}
 
     def _get_file_filter_text(self) -> str:
         if self.file_filter:

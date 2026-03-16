@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QSize
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QCheckBox, QScrollArea, QSizePolicy
 from config.constants import BASE_TAG_NAMES, LIBRARY_GAME_OPTIONS, LIBRARY_IMPORT_ARCHIVE_EXTENSIONS
 from services.localization_service import tr
@@ -8,7 +8,7 @@ from ui.widgets.shared.custom_controls import _ZeroHintWidget
 from ui.common.styling import get_theme_colors, get_border_radius, clamp_border_radius, install_size_hint_height_sync, install_panel_style_handler, install_scroll_area_update_handlers, get_widget_border_radius, build_scrollbar_qss, build_button_style, apply_scroll_area_chrome, apply_stylesheet_if_changed
 from ui.builders.shared_filters_builder import (
     create_modgame_combo, create_sort_controls, create_tag_checkboxes, create_search_button, create_downloads_button,
-    create_filters_frame, apply_filters_frame_style
+    create_versions_button, create_filters_frame, apply_filters_frame_style
 )
 
 logger = logging.getLogger(__name__)
@@ -74,12 +74,10 @@ class LibraryTabBuilder(QObject):
         self.widgets['filters_scroll'] = f_scroll
         ctrl = QHBoxLayout()
         ctrl.setContentsMargins(0, 5, 0, 5)
-        from PyQt6.QtCore import QSize
         colors = self._get_colors()
         add_btn = QPushButton()
         add_btn.setObjectName('add_mod_button')
         self.widgets['add_mod_button'] = add_btn
-        self._update_add_mod_button_style(add_btn, colors)
         add_btn.setIconSize(QSize(20, 20))
         add_btn.setToolTip(tr('ui.add_mod'))
         add_btn.setContentsMargins(0, 0, 0, 0)
@@ -237,29 +235,26 @@ class LibraryTabBuilder(QObject):
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
         layout.addStretch()
+        versions_btn = create_versions_button(self.app_state)
+        layout.addWidget(versions_btn, 0, _vc)
+        layout.addSpacing(4)
         downloads_btn = create_downloads_button(self.app_state)
         layout.addWidget(downloads_btn, 0, _vc)
         layout.addSpacing(4)
         search_btn = create_search_button(self.app_state)
         layout.addWidget(search_btn, 0, _vc)
-        self.widgets.update({'library_sort_combo': sort_combo, 'library_sort_order_btn': sort_btn, 'library_tags_label': tags_lbl, 'library_search_button': search_btn, 'library_downloads_button': downloads_btn, 'library_tag_widgets': list(tags.values())})
+        self.widgets.update({'library_sort_combo': sort_combo, 'library_sort_order_btn': sort_btn, 'library_tags_label': tags_lbl, 'library_search_button': search_btn, 'library_downloads_button': downloads_btn, 'library_versions_button': versions_btn, 'library_tag_widgets': list(tags.values())})
         self.widgets.update({f'library_tag_{k}': v for k, v in tags.items()})
         return w
 
     def _update_add_mod_button_size_and_style(self, add_btn, game_combo, colors):
         """Update add_mod_button to be square matching the combo height."""
-        from utils.path_utils import colored_icon
+        from utils.path_utils import colored_icon  # deferred to avoid circular import
         combo_height = game_combo.sizeHint().height()
         add_btn.setFixedSize(combo_height, combo_height)
         br = clamp_border_radius(get_border_radius(self.app_state.local_config), width=combo_height, height=combo_height, border_width=2)
         add_btn.setIcon(colored_icon('add', colors['text']))
         add_btn.setStyleSheet(f'QPushButton#add_mod_button {{ border: 2px solid {colors["border"]}; border-radius: {br}px; background-color: {colors["button"]}; color: {colors["text"]}; margin: 0px; padding: 0px; }} QPushButton#add_mod_button:hover {{ background-color: {colors["button_hover"]}; }}')
-
-    def _update_add_mod_button_style(self, btn, colors):
-        from utils.path_utils import colored_icon
-        br = clamp_border_radius(get_border_radius(self.app_state.local_config), width=36, height=36, border_width=2)
-        btn.setIcon(colored_icon('add', colors['text']))
-        btn.setStyleSheet(f'QPushButton#add_mod_button {{ border: 2px solid {colors["border"]}; border-radius: {br}px; background-color: {colors["button"]}; color: {colors["text"]}; margin: 0px; padding: 0px; }} QPushButton#add_mod_button:hover {{ background-color: {colors["button_hover"]}; }}')
 
     def _update_priority_button_style(self, btn, btn_clr, brd_clr, hvr_clr):
         n = btn.objectName()

@@ -121,7 +121,7 @@ class ModEditorDialog(QDialog):
         self.icon_preview.setFixedSize(64, 64)
         bc = self._color('border', '#039d5b')
         pr = self._br(64, 64)
-        self.icon_preview.setStyleSheet(f'border: 1px solid {bc}; border-radius: {pr}px;')
+        self.icon_preview.setStyleSheet(f'border: 2px solid {bc}; border-radius: {pr}px;')
         self.icon_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.icon_preview.setText(tr('ui.icon_preview'))
         icon_row.addWidget(self.icon_preview)

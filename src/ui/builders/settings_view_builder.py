@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import (
     QCheckBox, QLineEdit, QSizePolicy, QTabWidget,
     QScrollArea, QSpinBox, QComboBox,
 )
-from PyQt6.QtGui import QIcon  # noqa: F401
 from services.localization_service import localization_service, tr
 from config.constants import SETTINGS_COLOR_CONFIG
 from ui.widgets.shared.custom_controls import NoScrollComboBox
@@ -219,6 +218,7 @@ class SettingsViewBuilder:
         icon_name = self._EMOJI_TO_ICON.get(icon_text)
         if icon_name and app_state:
             btn._themed_icon_name = icon_name
+
             def _apply_icon(b=btn, i=icon_name, s=app_state):
                 b.setIcon(colored_icon(i, get_theme_color(s.local_config, 'text', '#ffffff')))
                 b.setIconSize(QSize(20, 20))
@@ -474,10 +474,18 @@ class SettingsViewBuilder:
         cl.addWidget(hide_library_filters_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
+        sec, cl = self._collapsible_section(tr('versions.title'), 'library_versions', 'versions.title', parent=page)
+        versions_full_replace_cb = self._styled_checkbox(
+            tr('versions.settings_full_replace'), tr('versions.settings_full_replace_tooltip'), 'versions_full_replace_files'
+        )
+        cl.addWidget(versions_full_replace_cb, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(sec)
+
         layout.addStretch()
 
         self.widgets['hide_library_tab_checkbox'] = hide_library_tab_checkbox
         self.widgets['hide_library_filters_checkbox'] = hide_library_filters_checkbox
+        self.widgets['versions_full_replace_checkbox'] = versions_full_replace_cb
         return self._wrap_in_scroll(page, parent)
 
     def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:

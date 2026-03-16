@@ -18,7 +18,7 @@ from ui.dialogs.about_dialog import AboutDialog
 from ui.dialogs.changelog_dialog import ChangelogDialog
 from ui.widgets.shared.custom_title_bar import CustomTitleBar
 from ui.common.styling import get_theme_color, get_border_radius, display_hex_to_qt_hex, clamp_border_radius, apply_rounded_mask
-from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir, get_colored_search_icon, get_colored_refresh_icon, get_colored_refresh_icon_svg, colored_icon
+from utils.path_utils import get_user_data_root, resource_path, get_launcher_dir, get_user_plugins_dir, colored_icon
 from workers.presence_worker import PresenceWorker
 from controllers.mod_operations_controller import ModOperationsController
 from controllers.library_display_controller import LibraryDisplayController
@@ -40,6 +40,7 @@ from services.plugin_service import PluginManager
 from services.customization_service import CustomizationManager
 from services.used_mods_service import UsedModsManager
 from services.downloads_manager import DownloadsManager
+from services.versions_manager import VersionsManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -197,6 +198,9 @@ class AppWindow(QWidget):
         self.downloads_manager = DownloadsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
         self.downloads_manager.startup()
         self._downloads_dialog = None
+        self.versions_manager = VersionsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
+        self.versions_manager.startup()
+        self._versions_dialog = None
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self)
@@ -529,7 +533,7 @@ class AppWindow(QWidget):
         self.top_refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
         main_text_color = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
-        self.top_refresh_button.setIcon(get_colored_refresh_icon_svg(main_text_color))
+        self.top_refresh_button.setIcon(colored_icon('refresh', main_text_color))
         self.top_refresh_button.setIconSize(QSize(20, 20))
         self.top_refresh_button.setFixedSize(30, 30)
         self.top_frame.addWidget(self.top_refresh_button)
@@ -686,7 +690,7 @@ class AppWindow(QWidget):
             'library_tag_gamebanana', 'library_tag_widgets', 'library_search_button',
         ), optional=(
             'add_mod_button', 'installed_mods_label', 'priority_button',
-            'create_modpack_button', 'library_downloads_button',
+            'create_modpack_button', 'library_downloads_button', 'library_versions_button',
         ))
         if self.priority_button:
             self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
@@ -715,6 +719,8 @@ class AppWindow(QWidget):
         if self.library_downloads_button:
             self.library_downloads_button.clicked.connect(self._open_downloads_dialog)
             self.downloads_manager.badge_changed.connect(lambda count, _: self._update_downloads_badge(self.library_downloads_button, count))
+        if self.library_versions_button:
+            self.library_versions_button.clicked.connect(self._open_versions_dialog)
         saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
@@ -898,7 +904,7 @@ class AppWindow(QWidget):
                 preview_base = QFrame(preview_container)
                 preview_base.setFixedSize(int(92 * zoom_factor), int(56 * zoom_factor))
                 preview_base.setStyleSheet(
-                    f'background-color: {background_color}; border: 1px solid #808080; '
+                    f'background-color: {background_color}; border: 2px solid #808080; '
                     f'border-radius: {preview_outer_radius}px;'
                 )
                 preview_base_layout = QVBoxLayout(preview_base)
@@ -1672,18 +1678,18 @@ class AppWindow(QWidget):
 
     def _set_lib_search_icon(self, is_searching: bool):
         tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
-        self.library_search_button.setIcon(get_colored_refresh_icon(tc) if is_searching else get_colored_search_icon(tc))
+        self.library_search_button.setIcon(colored_icon('reset', tc) if is_searching else colored_icon('search', tc))
         self.library_search_button.setIconSize(QSize(16, 16))
 
     def _refresh_themed_icons(self):
         """Re-read theme color and regenerate all SVG-based button icons."""
         tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
         if hasattr(self, 'top_refresh_button'):
-            self.top_refresh_button.setIcon(get_colored_refresh_icon_svg(tc))
+            self.top_refresh_button.setIcon(colored_icon('refresh', tc))
             self.top_refresh_button.setIconSize(QSize(20, 20))
         if hasattr(self, 'library_search_button'):
             is_searching = bool(getattr(self, 'library_search_text', ''))
-            self.library_search_button.setIcon(get_colored_refresh_icon(tc) if is_searching else get_colored_search_icon(tc))
+            self.library_search_button.setIcon(colored_icon('reset', tc) if is_searching else colored_icon('search', tc))
             self.library_search_button.setIconSize(QSize(16, 16))
         if hasattr(self, 'library_sort_order_btn') and self.library_sort_order_btn:
             is_asc = getattr(self, 'library_sort_ascending', False)
@@ -1944,6 +1950,16 @@ class AppWindow(QWidget):
             return
         self._downloads_dialog = DownloadsDialog(self.downloads_manager, self.app_state, self)
         self._downloads_dialog.show()
+
+    def _open_versions_dialog(self):
+        from ui.dialogs.versions_dialog import VersionsDialog
+        if self._versions_dialog and self._versions_dialog.isVisible():
+            self._versions_dialog.raise_()
+            self._versions_dialog.activateWindow()
+            return
+        initial_game = self.app_state.local_config.get('selected_game_type', 'deltarune')
+        self._versions_dialog = VersionsDialog(self.versions_manager, self.app_state, initial_game, self)
+        self._versions_dialog.show()
 
     def _update_downloads_badge(self, btn, count: int):
         btn.setText(str(count) if count > 0 else '')

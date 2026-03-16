@@ -59,7 +59,7 @@ QWidget#titleBarLeftWidget, QWidget#titleBarRightWidget {
 QToolButton#titleBarMenuButton {
     background: transparent;
     color: %main_text_color%;
-    border: 1px solid transparent;
+    border: 2px solid transparent;
     padding: 2px 7px;
     min-height: 20px;
     border-radius: %title_bar_menu_button_radius%;
@@ -68,7 +68,7 @@ QToolButton#titleBarMenuButton {
 }
 QToolButton#titleBarMenuButton:hover, QToolButton#titleBarMenuButton:pressed {
     background-color: %button_hover_color%;
-    border: 1px solid %border_color%;
+    border: 2px solid %border_color%;
 }
 QToolButton#titleBarMenuButton::menu-indicator {
     image: none;
@@ -219,7 +219,7 @@ QPushButton#sortOrderBtn {
     font-weight: bold;
     font-size: 12px;
 }
-QPushButton#searchBtn {
+QPushButton#searchBtn, QPushButton#versionsBtn {
     min-width: 35px;
     max-width: 35px;
     min-height: 30px;
@@ -228,6 +228,15 @@ QPushButton#searchBtn {
     padding-right: 0px;
     font-weight: bold;
     font-size: 16px;
+}
+QPushButton#downloadsBtn {
+    min-width: 35px;
+    min-height: 30px;
+    max-height: 30px;
+    padding-left: 4px;
+    padding-right: 4px;
+    font-weight: bold;
+    font-size: 12px;
 }
 QPushButton#actionIconBtn {
     min-width: 35px;

@@ -14,7 +14,7 @@ from workers.gamebanana.search_worker import SearchGameBananaModsThread
 from config.constants import GAMEBANANA_GAME_IDS, SEARCH_EXHAUSTED_PAGE_SENTINEL
 from ui.utils.ui_utils import DebounceTimer
 from ui.common.styling import get_theme_color
-from utils.path_utils import get_colored_search_icon, get_colored_refresh_icon
+from utils.path_utils import colored_icon
 import logging
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ class SearchDisplayController(QObject):
 
     def _set_search_btn_icon(self, is_searching: bool):
         tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
-        icon = get_colored_refresh_icon(tc) if is_searching else get_colored_search_icon(tc)
+        icon = colored_icon('reset', tc) if is_searching else colored_icon('search', tc)
         self.ui_button_icon_update.emit('search_button', icon)
         tooltip = tr('ui.clear_search_tooltip', text=self.app_state.search_text) if is_searching else tr('ui.search_placeholder')
         self.ui_button_tooltip_update.emit('search_button', tooltip)

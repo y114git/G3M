@@ -1,8 +1,9 @@
 """Data models for the Downloads system."""
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
+
+from utils.time_utils import utc_now_iso
 
 
 class DownloadStatus(str, Enum):
@@ -39,16 +40,12 @@ class TargetKind(str, Enum):
     MOD = "mod"
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec='seconds')
-
-
 @dataclass
 class DownloadRecord:
     """Persistent download history record. Serialized to JSON."""
     id: str = ""
-    created_at: str = field(default_factory=_utc_now_iso)
-    updated_at: str = field(default_factory=_utc_now_iso)
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
     finished_at: Optional[str] = None
     source_kind: SourceKind = SourceKind.EXTERNAL_URL
     target_kind: TargetKind = TargetKind.MOD
@@ -80,7 +77,7 @@ class DownloadRecord:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def touch(self):
-        self.updated_at = _utc_now_iso()
+        self.updated_at = utc_now_iso()
 
     @property
     def is_active(self) -> bool:

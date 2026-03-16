@@ -49,7 +49,7 @@ def build_dialog_theme_stylesheet(app_state):
         }}
         QListWidget::item {{
             padding: 8px;
-            border-bottom: 1px solid {theme["border"]};
+            border-bottom: 2px solid {theme["border"]};
         }}
         QListWidget::item:selected {{
             background-color: {theme["button_hover"]};
@@ -73,6 +73,11 @@ def build_dialog_theme_stylesheet(app_state):
             font-size: 13px;
         }}
     '''
+
+
+def get_dialog_text_color(app_state, fallback='#ffffff') -> str:  # get_theme_color wrapper
+    from ui.common.styling import get_theme_color
+    return get_theme_color(app_state.local_config, 'text', fallback) if app_state else fallback
 
 
 def apply_dialog_theme(dialog, app_state):

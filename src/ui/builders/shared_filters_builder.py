@@ -1,6 +1,6 @@
 """Shared filter widget components for UI builders."""
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QCheckBox, QSizePolicy
+from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QPushButton, QCheckBox, QSizePolicy
 
 from services.localization_service import tr
 from ui.widgets.shared.custom_controls import NoScrollComboBox
@@ -55,7 +55,6 @@ def create_tag_checkboxes(app_state, tag_names):
 
 def create_modgame_combo(app_state, games_list, config_key=None):
     """Create game selection combo."""
-    from PyQt6.QtWidgets import QComboBox
     modgame_combo = QComboBox()
     for name, data in games_list:
         modgame_combo.addItem(tr(f'ui.{name}') if isinstance(name, str) and not name.isupper() else name, data)
@@ -83,7 +82,18 @@ def create_downloads_button(app_state=None):
     btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     btn.setToolTip(tr('downloads.title'))
     btn.setAccessibleName(tr('downloads.title'))
-    _install_themed_button_icon(btn, 'download', app_state, QSize(16, 16))
+    _install_themed_button_icon(btn, 'download', app_state, QSize(22, 22))
+    return btn
+
+
+def create_versions_button(app_state=None):
+    """Create Versions Manager button with icon only."""
+    btn = QPushButton()
+    btn.setObjectName('versionsBtn')
+    btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    btn.setToolTip(tr('versions.title'))
+    btn.setAccessibleName(tr('versions.title'))
+    _install_themed_button_icon(btn, 'filerestore', app_state, QSize(22, 22))
     return btn
 
 
