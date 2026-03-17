@@ -103,6 +103,15 @@ def relocalize_texts(w):
         w.downloads_manager._emit_badge()
     if hasattr(w, '_downloads_dialog') and w._downloads_dialog and w._downloads_dialog.isVisible():
         w._downloads_dialog.relocalize_ui()
+    if hasattr(w, '_versions_dialog') and w._versions_dialog and w._versions_dialog.isVisible():
+        w._versions_dialog.relocalize_ui()
+    if hasattr(w, '_g3m_actions_dialog') and w._g3m_actions_dialog and w._g3m_actions_dialog.isVisible():
+        w._g3m_actions_dialog.relocalize_ui()
+    for btn_attr in ('library_g3m_actions_button',):
+        btn = getattr(w, btn_attr, None)
+        if btn:
+            btn.setToolTip(tr('g3m_actions.title'))
+            btn.setAccessibleName(tr('g3m_actions.title'))
 
 
 def relocalize_ui(w):

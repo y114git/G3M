@@ -269,6 +269,7 @@ _ICON_DEFS = {
     'filerestore': ('filerestore_icon.svg', [('fill="#000000"', 'fill="{c}"')]),
     'export': ('export_icon.svg', [('fill="#0D0D0D"', 'fill="{c}"')]),
     'import': ('import_icon.svg', [('fill="#0D0D0D"', 'fill="{c}"')]),
+    'tool': ('tool_icon.svg', [('stroke="#000000"', 'stroke="{c}"')]),
 }
 
 

@@ -219,7 +219,7 @@ QPushButton#sortOrderBtn {
     font-weight: bold;
     font-size: 12px;
 }
-QPushButton#searchBtn, QPushButton#versionsBtn {
+QPushButton#searchBtn, QPushButton#versionsBtn, QPushButton#g3mActionsBtn {
     min-width: 35px;
     max-width: 35px;
     min-height: 30px;

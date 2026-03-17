@@ -201,6 +201,7 @@ class AppWindow(QWidget):
         self.versions_manager = VersionsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
         self.versions_manager.startup()
         self._versions_dialog = None
+        self._g3m_actions_dialog = None
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
         self.library_display = LibraryDisplayController(self.app_state, self.feedback_service, self.mod_service, self.used_mods_service, self)
@@ -691,6 +692,7 @@ class AppWindow(QWidget):
         ), optional=(
             'add_mod_button', 'installed_mods_label', 'priority_button',
             'create_modpack_button', 'library_downloads_button', 'library_versions_button',
+            'library_g3m_actions_button',
         ))
         if self.priority_button:
             self.priority_button.clicked.connect(self.library_display.on_priority_button_click)
@@ -721,6 +723,8 @@ class AppWindow(QWidget):
             self.downloads_manager.badge_changed.connect(lambda count, _: self._update_downloads_badge(self.library_downloads_button, count))
         if self.library_versions_button:
             self.library_versions_button.clicked.connect(self._open_versions_dialog)
+        if hasattr(self, 'library_g3m_actions_button') and self.library_g3m_actions_button:
+            self.library_g3m_actions_button.clicked.connect(self._open_g3m_actions_dialog)
         saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
@@ -1960,6 +1964,21 @@ class AppWindow(QWidget):
         initial_game = self.app_state.local_config.get('selected_game_type', 'deltarune')
         self._versions_dialog = VersionsDialog(self.versions_manager, self.app_state, initial_game, self)
         self._versions_dialog.show()
+
+    def _open_g3m_actions_dialog(self):
+        from adapters.g3mtool_adapter import G3MToolManager
+        from ui.dialogs.g3mtool_dialog import G3MActionsDialog
+        if self._g3m_actions_dialog and self._g3m_actions_dialog.isVisible():
+            self._g3m_actions_dialog.raise_()
+            self._g3m_actions_dialog.activateWindow()
+            return
+        g3m = getattr(self, '_g3m_manager', None)
+        if not g3m:
+            g3m = G3MToolManager()
+            self._g3m_manager = g3m
+        self._g3m_actions_dialog = G3MActionsDialog(g3m, self.app_state, self)
+        self._g3m_actions_dialog.destroyed.connect(lambda: setattr(self, '_g3m_actions_dialog', None))
+        self._g3m_actions_dialog.show()
 
     def _update_downloads_badge(self, btn, count: int):
         btn.setText(str(count) if count > 0 else '')

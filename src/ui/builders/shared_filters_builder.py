@@ -97,6 +97,17 @@ def create_versions_button(app_state=None):
     return btn
 
 
+def create_g3m_actions_button(app_state=None):
+    """Create G3M Actions button with icon only."""
+    btn = QPushButton()
+    btn.setObjectName('g3mActionsBtn')
+    btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    btn.setToolTip(tr('g3m_actions.title'))
+    btn.setAccessibleName(tr('g3m_actions.title'))
+    _install_themed_button_icon(btn, 'tool', app_state, QSize(22, 22))
+    return btn
+
+
 def apply_filters_frame_style(frame: QFrame, app_state):
     if not frame or not app_state:
         return

@@ -89,6 +89,45 @@ class G3MToolManager:
         cmd = [self.g3mtool_path, 'xpatch', 'create', original_file, modified_file, output_path]
         return self._run(cmd)
 
+    def patch_create(
+        self,
+        original_file: str,
+        modified_file: str,
+        output_path: str,
+    ) -> Tuple[int, str, str]:
+        """Call g3mtool patch create <original> <modified> [output]."""
+        if not self.g3mtool_path:
+            return (-1, '', 'G3MTool is not available')
+        cmd = [self.g3mtool_path, 'patch', 'create', original_file, modified_file, output_path]
+        return self._run(cmd)
+
+    def info(
+        self,
+        target: str,
+        verbose: bool = False,
+    ) -> Tuple[int, str, str]:
+        """Call g3mtool info <target> [--verbose]."""
+        if not self.g3mtool_path:
+            return (-1, '', 'G3MTool is not available')
+        cmd = [self.g3mtool_path, 'info', target]
+        if verbose:
+            cmd.append('--verbose')
+        return self._run(cmd)
+
+    def diff(
+        self,
+        file1: str,
+        file2: str,
+        output_dir: Optional[str] = None,
+    ) -> Tuple[int, str, str]:
+        """Call g3mtool diff <file1> <file2> [output-dir]."""
+        if not self.g3mtool_path:
+            return (-1, '', 'G3MTool is not available')
+        cmd = [self.g3mtool_path, 'diff', file1, file2]
+        if output_dir:
+            cmd.append(output_dir)
+        return self._run(cmd)
+
     def cancel_active_processes(self):
         for process in list(self._active_processes):
             try:
