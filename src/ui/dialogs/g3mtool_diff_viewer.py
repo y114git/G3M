@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 
 from services.localization_service import tr
 from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values
+from ui.common.styling import get_theme_color, rgba_from_color
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,10 @@ def _looks_like_diff(lines):
     return False
 
 
-def _format_code_block(code_lines, lang):
+def _format_code_block(code_lines, lang, background_color):
     """Format a fenced code block with optional diff highlighting."""
     is_diff = lang == 'diff' or (not lang and _looks_like_diff(code_lines))
-    parts = ['<pre style="background:rgba(0,0,0,0.3);border-radius:4px;padding:8px;'
+    parts = [f'<pre style="background:{background_color};border-radius:4px;padding:8px;'
              'font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap">']
     for raw in code_lines:
         e = _esc(raw)
@@ -66,7 +67,7 @@ def _format_code_block(code_lines, lang):
     return ''.join(parts)
 
 
-def _md_to_html(body: str) -> str:
+def _md_to_html(body: str, quote_border_color: str, quote_text_color: str, code_background_color: str, inline_code_background_color: str) -> str:
     """Convert markdown body to styled HTML."""
     lines = []
     in_table = in_list = in_code = False
@@ -76,7 +77,7 @@ def _md_to_html(body: str) -> str:
         s = raw.strip()
         if s.startswith('```'):
             if in_code:
-                lines.append(_format_code_block(code_lines, code_lang))
+                lines.append(_format_code_block(code_lines, code_lang, code_background_color))
                 code_lines, code_lang, in_code = [], '', False
             else:
                 if in_list:
@@ -101,7 +102,7 @@ def _md_to_html(body: str) -> str:
                 continue
             cells = [c.strip() for c in s.strip('|').split('|')]
             tag = 'th' if not any('<td' in ln for ln in lines[-3:]) else 'td'
-            lines.append('<tr>' + ''.join(f'<{tag}>{_inline(c)}</{tag}>' for c in cells) + '</tr>')
+            lines.append('<tr>' + ''.join(f'<{tag}>{_inline(c, inline_code_background_color)}</{tag}>' for c in cells) + '</tr>')
             continue
         if in_table:
             lines.append('</table><br>')
@@ -110,29 +111,29 @@ def _md_to_html(body: str) -> str:
             if in_list:
                 lines.append('</ul>')
                 in_list = False
-            lines.append(f'<blockquote style="border-left:3px solid rgba(255,255,255,0.3);'
-                         f'margin:4px 0;padding:2px 12px;color:rgba(255,255,255,0.7)">'
-                         f'{_inline(s[2:])}</blockquote>')
+            lines.append(f'<blockquote style="border-left:3px solid {quote_border_color};'
+                         f'margin:4px 0;padding:2px 12px;color:{quote_text_color}">'
+                         f'{_inline(s[2:], inline_code_background_color)}</blockquote>')
         elif s.startswith('- '):
             if not in_list:
                 lines.append('<ul>')
                 in_list = True
-            lines.append(f'<li>{_inline(s[2:])}</li>')
+            lines.append(f'<li>{_inline(s[2:], inline_code_background_color)}</li>')
         elif s.startswith('### '):
             if in_list:
                 lines.append('</ul>')
                 in_list = False
-            lines.append(f'<h4>{_inline(s[4:])}</h4>')
+            lines.append(f'<h4>{_inline(s[4:], inline_code_background_color)}</h4>')
         elif s.startswith('## '):
             if in_list:
                 lines.append('</ul>')
                 in_list = False
-            lines.append(f'<h3>{_inline(s[3:])}</h3>')
+            lines.append(f'<h3>{_inline(s[3:], inline_code_background_color)}</h3>')
         elif s:
             if in_list:
                 lines.append('</ul>')
                 in_list = False
-            lines.append(f'<p>{_inline(s)}</p>')
+            lines.append(f'<p>{_inline(s, inline_code_background_color)}</p>')
         else:
             if in_list:
                 lines.append('</ul>')
@@ -143,14 +144,14 @@ def _md_to_html(body: str) -> str:
     if in_list:
         lines.append('</ul>')
     if in_code:
-        lines.append(_format_code_block(code_lines, code_lang))
+        lines.append(_format_code_block(code_lines, code_lang, code_background_color))
     return '\n'.join(lines)
 
 
-def _inline(text: str) -> str:
+def _inline(text: str, inline_code_background_color: str) -> str:
     text = _esc(text)
     text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-    text = re.sub(r'`(.+?)`', r'<code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px">\1</code>', text)
+    text = re.sub(r'`(.+?)`', f'<code style="background:{inline_code_background_color};padding:1px 4px;border-radius:3px">\\1</code>', text)
     return text
 
 
@@ -252,7 +253,6 @@ class DiffViewerDialog(QDialog):
         self._export_btn.setFixedSize(30, 30)
         try:
             from utils.path_utils import colored_icon
-            from ui.common.styling import get_theme_color
             tc = get_theme_color(self._app_state.local_config, 'text', '#ffffff')
             self._export_btn.setIcon(colored_icon('export', tc))
             self._export_btn.setIconSize(QSize(18, 18))
@@ -275,8 +275,13 @@ class DiffViewerDialog(QDialog):
         self._container_lay.setSpacing(4)
 
         font_family = _get_app_font(self._app_state)
+        config = getattr(self._app_state, 'local_config', None)
+        quote_border_color = rgba_from_color(get_theme_color(config, 'text', '#ffffff'), alpha=76, fallback='rgba(255, 255, 255, 76)')
+        quote_text_color = rgba_from_color(get_theme_color(config, 'text', '#ffffff'), alpha=178, fallback='rgba(255, 255, 255, 178)')
+        code_background_color = rgba_from_color(get_theme_color(config, 'background', '#000000'), alpha=76, fallback='rgba(0, 0, 0, 76)')
+        inline_code_background_color = rgba_from_color(get_theme_color(config, 'text', '#ffffff'), alpha=15, fallback='rgba(255, 255, 255, 15)')
         for i, (level, title, body) in enumerate(self._sections):
-            html = _md_to_html(body)
+            html = _md_to_html(body, quote_border_color, quote_text_color, code_background_color, inline_code_background_color)
             sec = _CollapsibleSection(i, title, html, font_family)
             indent = (level - 1) * 16
             if indent > 0:

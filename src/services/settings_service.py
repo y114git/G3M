@@ -598,8 +598,8 @@ class SettingsManager(QObject):
                 available = screen.availableGeometry()
                 min_width = max(widget.minimumWidth(), 640)
                 min_height = max(widget.minimumHeight(), 480)
-                width = max(min_width, min(width or widget.width(), available.width()))
-                height = max(min_height, min(height or widget.height(), available.height()))
+                width = max(min_width, width or widget.width())
+                height = max(min_height, height or widget.height())
                 if apply_maximized_state or not is_maximized:
                     max_x = max(available.left(), available.right() - width + 1)
                     max_y = max(available.top(), available.bottom() - height + 1)
