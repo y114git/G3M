@@ -225,6 +225,9 @@ class _PatchTab(QWidget):
         else:
             self._status_label.setText(tr('g3m_actions.failed', error=err[:300]))
 
+    def has_user_interaction(self) -> bool:
+        return bool(self._original_row.path() or self._second_row.path() or self._output_row.path() or self._worker)
+
     def relocalize(self):
         self._mode_label.setText(tr('g3m_actions.patch_mode'))
         self._action_label.setText(tr('g3m_actions.patch_action'))
@@ -351,6 +354,9 @@ class _MergeTab(QWidget):
         else:
             self._status_label.setText(tr('g3m_actions.failed', error=err[:300]))
 
+    def has_user_interaction(self) -> bool:
+        return bool(self._original_row.path() or self._file_list.count() or self._output_row.path() or self._worker)
+
     def relocalize(self):
         self._code_cb.setText(tr('checkboxes.merge_code'))
         self._props_cb.setText(tr('checkboxes.merge_properties'))
@@ -369,6 +375,8 @@ class _InfoTab(QWidget):
         super().__init__(parent)
         self._g3m, self._app_state = g3m, app_state
         self._worker = None
+        self._output_user_modified = False
+        self._setting_output_text = False
         self._build_ui()
 
     def _build_ui(self):
@@ -392,6 +400,7 @@ class _InfoTab(QWidget):
         self._output = QTextEdit()
         self._output.setReadOnly(True)
         self._output.setObjectName('g3m_actions_info_output')
+        self._output.textChanged.connect(self._on_output_text_changed)
         lay.addWidget(self._output, 1)
 
     def _on_run(self):
@@ -403,7 +412,7 @@ class _InfoTab(QWidget):
             QMessageBox.warning(self, tr('g3m_actions.title'), tr('g3m_actions.select_all_paths'))
             return
         self._run_btn.setEnabled(False)
-        self._output.setPlainText(tr('g3m_actions.running'))
+        self._set_output_text(tr('g3m_actions.running'))
         self._worker = _WorkerThread(self._g3m.info, (target, self._verbose_cb.isChecked()))
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
@@ -412,9 +421,24 @@ class _InfoTab(QWidget):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc == 0:
-            self._output.setPlainText(out)
+            self._set_output_text(out)
         else:
-            self._output.setPlainText(tr('g3m_actions.failed', error=err[:500]) + '\n\n' + out)
+            self._set_output_text(tr('g3m_actions.failed', error=err[:500]) + '\n\n' + out)
+
+    def _set_output_text(self, text: str):
+        self._setting_output_text = True
+        self._output_user_modified = False
+        try:
+            self._output.setPlainText(text)
+        finally:
+            self._setting_output_text = False
+
+    def _on_output_text_changed(self):
+        if not self._setting_output_text:
+            self._output_user_modified = True
+
+    def has_user_interaction(self) -> bool:
+        return bool(self._file_row.path() or self._output_user_modified or self._worker)
 
     def relocalize(self):
         self._file_row.relocalize()
@@ -501,6 +525,9 @@ class _DiffTab(QWidget):
             if f.endswith('.md'):
                 return os.path.join(directory, f)
         return None
+
+    def has_user_interaction(self) -> bool:
+        return bool(self._file1_row.path() or self._file2_row.path() or self._worker)
 
     def relocalize(self):
         self._file1_row.relocalize()
@@ -642,18 +669,22 @@ class G3MActionsDialog(QDialog):
         if self._g3m and hasattr(self._g3m, 'cancel_active_processes'):
             self._g3m.cancel_active_processes()
 
+    def _has_any_interaction(self) -> bool:
+        return any(tab.has_user_interaction() for tab in (self._patch_tab, self._merge_tab, self._info_tab, self._diff_tab))
+
     def closeEvent(self, event):
-        reply = QMessageBox.question(
-            self, tr('g3m_actions.title'), tr('g3m_actions.confirm_close'),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self._stop_all_workers()
-            event.accept()
-            self.deleteLater()
-        else:
-            event.ignore()
+        if self._has_any_interaction():
+            reply = QMessageBox.question(
+                self, tr('g3m_actions.title'), tr('g3m_actions.confirm_close'),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+        self._stop_all_workers()
+        event.accept()
+        self.deleteLater()
 
     def refresh_theme(self):
         self._apply_theme()

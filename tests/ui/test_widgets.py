@@ -103,7 +103,7 @@ class TestModWidgets:
             qapp.processEvents()
             assert widget.expanded_widget.isVisible()
             assert hasattr(widget, 'likes_label')
-            assert widget.updated_label.text() == '↻ 2024-05-01'
+            assert widget.updated_label.text() == '2024-05-01'
             assert widget.name_label.text()
             assert len(widget.name_label.text().splitlines()) <= 2
             assert not hasattr(widget, 'gb_status_label')
@@ -322,7 +322,6 @@ class TestCommonWidgets:
         overlay = ModDetailsOverlay(None, mod_data)
         meta_texts = [label.text() for label in overlay.findChildren(QLabel)]
 
-        # Find the positions of version and author in the metadata
         version_pos = None
         author_pos = None
         for i, text in enumerate(meta_texts):
@@ -331,7 +330,6 @@ class TestCommonWidgets:
             if '>Test Author</span>' in text:  # Author text
                 author_pos = i
 
-        # Verify that version comes before author
         assert version_pos is not None, "Version not found in metadata"
         assert author_pos is not None, "Author not found in metadata"
         assert version_pos < author_pos, f"Version should come before author, but version is at position {version_pos} and author is at position {author_pos}"

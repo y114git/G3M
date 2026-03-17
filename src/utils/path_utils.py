@@ -42,41 +42,39 @@ def resource_path(relative_path):
     return os.path.join(base, relative_path)
 
 
-def resolve_game_executable(base_dir, is_undertale=False, game_type=None):
+def resolve_game_executable(base_dir, executable_type='deltarune'):
     try:
         if not base_dir or not os.path.isdir(base_dir):
             return None
-        game_types = [game_type] if game_type else (['undertaleyellow', 'undertale'] if is_undertale else ['deltarune'])
         search_order = {'Windows': ['windows', 'linux', 'mac'], 'Linux': ['linux', 'windows', 'mac'], 'Darwin': ['mac', 'linux', 'windows']}.get(CURRENT_PLATFORM, ['windows', 'linux', 'mac'])
         for plat_key in search_order:
-            for gt in game_types:
-                for name in list(GAME_EXECUTABLES.get(gt, {}).get(plat_key, ())):
-                    if plat_key == 'mac':
-                        app = base_dir if base_dir.endswith('.app') and os.path.isdir(base_dir) else None
-                        if not app:
-                            candidate = os.path.join(base_dir, name)
-                            if os.path.isdir(candidate):
-                                app = candidate
-                        if app:
-                            return app
-                    else:
-                        exe_path = os.path.join(base_dir, name)
-                        if os.path.isfile(exe_path) and (plat_key != 'linux' or name.endswith('.exe') or os.access(exe_path, os.X_OK)):
-                            return exe_path
+            for name in GAME_EXECUTABLES.get(executable_type, {}).get(plat_key, ()):
+                if plat_key == 'mac':
+                    app = base_dir if base_dir.endswith('.app') and os.path.isdir(base_dir) else None
+                    if not app:
+                        candidate = os.path.join(base_dir, name)
+                        if os.path.isdir(candidate):
+                            app = candidate
+                    if app:
+                        return app
+                else:
+                    exe_path = os.path.join(base_dir, name)
+                    if os.path.isfile(exe_path) and (plat_key != 'linux' or name.endswith('.exe') or os.access(exe_path, os.X_OK)):
+                        return exe_path
         return None
     except Exception as e:
         logging.debug(f'resolve_game_executable: failed for {base_dir}: {e}')
         return None
 
 
-def find_chapter_resource_dir(base_dir, chapter_id: str):
+def find_chapter_resource_dir(base_dir, chapter_id: str, macos_app_names=('DELTARUNE.app', 'DELTARUNEdemo.app')):
     try:
         if not base_dir:
             return None
         target_base = base_dir
         if CURRENT_PLATFORM == 'Darwin':
             if not target_base.endswith('.app'):
-                for app_name in ('DELTARUNE.app', 'DELTARUNEdemo.app'):
+                for app_name in macos_app_names:
                     candidate = os.path.join(target_base, app_name)
                     if os.path.isdir(candidate):
                         target_base = candidate

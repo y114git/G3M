@@ -273,8 +273,7 @@ class GameLauncher(QObject):
                 target_exe = os.path.join(chapter_folder, os.path.basename(source_exe))
             else:
                 from services.game_detection_service import get_executable_name_for_game
-                game_type = get_game_type_string(self.app_state.game_mode)
-                exe_name = get_executable_name_for_game(game_type) or 'DELTARUNE.exe'
+                exe_name = get_executable_name_for_game(self.app_state.game_mode.executable_type) or 'DELTARUNE.exe'
                 target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             game_root = self._get_current_game_path()
@@ -304,10 +303,7 @@ class GameLauncher(QObject):
         current_game_path = self._get_current_game_path()
         if not current_game_path or not os.path.isdir(current_game_path):
             return None
-        is_undertale = self.app_state.game_mode.game_id in ('undertale', 'undertaleyellow')
-        if self.app_state.game_mode.game_id in ('pizzatower', 'sugaryspire'):
-            return resolve_game_executable(current_game_path, is_undertale=False, game_type=get_game_type_string(self.app_state.game_mode))
-        return resolve_game_executable(current_game_path, is_undertale)
+        return resolve_game_executable(current_game_path, self.app_state.game_mode.executable_type)
 
     def _get_source_executable_path(self):
         cfg_key = self.app_state.game_mode.get_custom_exec_config_key()

@@ -131,7 +131,8 @@ class G3MToolPatchingService(QObject):
 
                 chapter_index += 1
                 progress_pct = min(int((chapter_index - 1) / max(total_chapters, 1) * 90) + 5, 95)
-                self.progress_update.emit(progress_pct, f'Processing chapter {chapter_id} ({chapter_index}/{total_chapters})...')
+                display_name = self._get_chapter_display_name(chapter_id)
+                self.progress_update.emit(progress_pct, f'Processing {display_name} ({chapter_index}/{total_chapters})...')
 
                 success = self._patch_chapter(chapter_id, mods_list, is_modpack, modpack_dir)
                 if not success:
@@ -155,6 +156,14 @@ class G3MToolPatchingService(QObject):
                 if is_modpack:
                     safe_rmtree(self._temp_dir)
                     self._temp_dir = None
+
+    def _get_chapter_display_name(self, chapter_id: str) -> str:
+        """Human-readable name like 'DELTARUNE Chapter 1' or 'Pizza Tower'."""
+        from models.game_modes import get_game
+        game_def = get_game(self.app_state.game_mode.game_id) if self.app_state and self.app_state.game_mode else None
+        if game_def:
+            return game_def.get_tab_display_name(chapter_id)
+        return chapter_id
 
     def _patch_chapter(self, chapter_id: str, mods_list: List[Any], is_modpack: bool, modpack_dir: Optional[str]) -> bool:
         target_dir = get_target_dir(chapter_id, self.app_state, self.patching_logger)

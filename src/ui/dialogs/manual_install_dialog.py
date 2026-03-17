@@ -145,11 +145,13 @@ class ManualModInstallDialog(QDialog):
     def _update_file_tabs(self):
         self.data_tabs.clear()
         game = self.game_combo.currentData()
-        if game == 'deltarune':
-            chapters = [('deltarune_0', tr('tabs.menu_root')), ('deltarune_1', tr('tabs.chapter_1')), ('deltarune_2', tr('tabs.chapter_2')), ('deltarune_3', tr('tabs.chapter_3')), ('deltarune_4', tr('tabs.chapter_4'))]
-            for chapter_id, chapter_name in chapters:
-                chapter_widget = self._create_chapter_data_widget(chapter_id, display_name=chapter_name)
-                self.data_tabs.addTab(chapter_widget, chapter_name)
+        from models.game_modes import get_game
+        game_def = get_game(game)
+        if game_def and game_def.is_multi_tab:
+            for tab in game_def.tabs:
+                name = tr(tab.name_key)
+                widget = self._create_chapter_data_widget(tab.tab_id, display_name=name)
+                self.data_tabs.addTab(widget, name)
         else:
             game_display = self.game_combo.currentText()
             single_widget = self._create_chapter_data_widget(game, display_name=game_display)
@@ -160,14 +162,8 @@ class ManualModInstallDialog(QDialog):
         widget._chapter_id = chapter_id
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        game = self.game_combo.currentData()
-        info_key_map = {'deltarunedemo': 'dialogs.select_data_file_info_demo', 'undertale': 'dialogs.select_data_file_info_undertale', 'undertaleyellow': 'dialogs.select_data_file_info_undertaleyellow', 'pizzatower': 'dialogs.select_data_file_info_pizzatower', 'sugaryspire': 'dialogs.select_data_file_info_sugaryspire'}
-        if game == 'deltarune':
-            label = display_name or self._chapter_display_name(chapter_id)
-            info_text = tr('dialogs.select_data_file_info', chapter=label)
-        else:
-            info_key = info_key_map.get(game)
-            info_text = tr(info_key) if info_key else tr('dialogs.select_data_file_info', chapter=display_name or game)
+        label = display_name or self._chapter_display_name(chapter_id)
+        info_text = tr('dialogs.select_data_file_info', chapter=label)
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

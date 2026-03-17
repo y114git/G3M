@@ -249,21 +249,35 @@ def remove_archive_extension(filename: str) -> str:
 
 def get_chapter_folder_name(chapter_id, game=None) -> str:
     cid = str(chapter_id)
+    from models.game_modes import get_game
+    game_def = get_game(game) if game else None
+    if game_def:
+        return game_def.get_folder_name(cid)
     if '_' in cid:
+        prefix = cid.rsplit('_', 1)[0]
+        game_def = get_game(prefix)
+        if game_def:
+            return game_def.get_folder_name(cid)
         return f'chapter_{cid.rsplit("_", 1)[1]}'
-    if game == 'pizzatower':
-        return 'pizzatower'
-    return 'demo' if cid == 'deltarunedemo' else ('chapter_0' if cid in ('deltarune', 'undertale', 'undertaleyellow') else cid)
+    game_def = get_game(cid)
+    if game_def:
+        return game_def.get_folder_name(cid)
+    return cid
 
 
 def chapter_id_to_file_key(chapter_id) -> str:
     """Convert chapter_id to the file key used in mod config 'files' dict."""
     cid = str(chapter_id)
-    if cid == 'deltarunedemo':
-        return 'demo'
+    from models.game_modes import get_game
+    for lookup in (cid, cid.rsplit('_', 1)[0] if '_' in cid else None):
+        if lookup:
+            game_def = get_game(lookup)
+            if game_def:
+                tab = game_def.get_tab(cid)
+                if tab:
+                    return tab.files_key
     if '_' in cid:
-        _, suffix = cid.rsplit('_', 1)
-        return suffix
+        return cid.rsplit('_', 1)[1]
     return cid
 
 

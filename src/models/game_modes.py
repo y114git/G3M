@@ -18,14 +18,11 @@ def tr(key: str) -> str:
 
 @dataclass(frozen=True)
 class GameTab:
-    """A tab in the UI representing a section of game content.
-
-    For multi-chapter games like DELTARUNE each chapter is a separate tab.
-    For single-content games the whole game is one tab.
-    """
+    """A tab in the UI representing a section of game content."""
     tab_id: str
     files_key: str
     name_key: str
+    folder_name: str = ''
     direct_launch: bool = True
 
 
@@ -44,6 +41,7 @@ class GameDefinition:
     path_button_key: str = ''
     gamebanana_id: int = 0
     tabs: List[GameTab] = []
+    executable_type: str = 'deltarune'
 
     supports_full_install: bool = False
     block_steam_with_direct_launch: bool = False
@@ -90,6 +88,24 @@ class GameDefinition:
     def get_tab(self, tab_id: str) -> Optional[GameTab]:
         return next((t for t in self.tabs if t.tab_id == tab_id), None)
 
+    def get_tab_display_name(self, tab_id: str) -> str:
+        """Human-readable name like 'DELTARUNE Chapter 1' or 'Pizza Tower'."""
+        tab = self.get_tab(tab_id)
+        if not tab:
+            return self.display_name
+        if self.is_multi_tab:
+            return f'{self.display_name} {tr(tab.name_key)}'
+        return self.display_name
+
+    def get_folder_name(self, tab_id: str) -> str:
+        """Mod storage folder name for a given tab."""
+        tab = self.get_tab(tab_id)
+        if tab and tab.folder_name:
+            return tab.folder_name
+        if tab:
+            return self.game_id
+        return tab_id
+
     def get_tab_by_index(self, ui_index: int) -> Optional[GameTab]:
         return self.tabs[ui_index] if 0 <= ui_index < len(self.tabs) else None
 
@@ -127,11 +143,11 @@ class DeltaruneGame(GameDefinition):
     gamebanana_id = 6755
     block_steam_with_direct_launch = True
     tabs = [
-        GameTab(tab_id='deltarune_0', files_key='0', name_key='tabs.main_menu'),
-        GameTab(tab_id='deltarune_1', files_key='1', name_key='tabs.chapter_1'),
-        GameTab(tab_id='deltarune_2', files_key='2', name_key='tabs.chapter_2'),
-        GameTab(tab_id='deltarune_3', files_key='3', name_key='tabs.chapter_3'),
-        GameTab(tab_id='deltarune_4', files_key='4', name_key='tabs.chapter_4'),
+        GameTab(tab_id='deltarune_0', files_key='0', name_key='tabs.main_menu', folder_name='chapter_0'),
+        GameTab(tab_id='deltarune_1', files_key='1', name_key='tabs.chapter_1', folder_name='chapter_1'),
+        GameTab(tab_id='deltarune_2', files_key='2', name_key='tabs.chapter_2', folder_name='chapter_2'),
+        GameTab(tab_id='deltarune_3', files_key='3', name_key='tabs.chapter_3', folder_name='chapter_3'),
+        GameTab(tab_id='deltarune_4', files_key='4', name_key='tabs.chapter_4', folder_name='chapter_4'),
     ]
 
     def filter_mods_for_tab(self, tab, all_mods):
@@ -151,7 +167,7 @@ class DeltaruneDemoGame(GameDefinition):
     path_button_key = 'buttons.change_demo_path'
     gamebanana_id = 6755
     supports_full_install = True
-    tabs = [GameTab(tab_id='deltarunedemo', files_key='demo', name_key='tabs.demo', direct_launch=False)]
+    tabs = [GameTab(tab_id='deltarunedemo', files_key='demo', name_key='tabs.demo', folder_name='demo', direct_launch=False)]
     path_select_dialog_key = 'dialogs.select_demo_folder'
     path_not_found_dialog_key = 'dialogs.demo_not_found'
     used_mods_config_key = 'used_mods_deltarunedemo'
@@ -169,7 +185,8 @@ class UndertaleGame(GameDefinition):
     custom_exec_config_key = 'undertale_custom_executable_path'
     path_button_key = 'buttons.change_undertale_path'
     gamebanana_id = 5506
-    tabs = [GameTab(tab_id='undertale', files_key='undertale', name_key='tabs.undertale')]
+    executable_type = 'undertale'
+    tabs = [GameTab(tab_id='undertale', files_key='undertale', name_key='tabs.undertale', folder_name='chapter_0')]
     macos_app_names = ('UNDERTALE.app',)
     path_select_dialog_key = 'dialogs.select_undertale_folder'
     path_not_found_dialog_key = 'dialogs.undertale_not_found'
@@ -184,8 +201,9 @@ class UndertaleYellowGame(GameDefinition):
     custom_exec_config_key = 'undertaleyellow_custom_executable_path'
     path_button_key = 'buttons.change_undertaleyellow_path'
     gamebanana_id = 19606
+    executable_type = 'undertaleyellow'
     supports_full_install = True
-    tabs = [GameTab(tab_id='undertaleyellow', files_key='undertale', name_key='tabs.undertaleyellow')]
+    tabs = [GameTab(tab_id='undertaleyellow', files_key='undertale', name_key='tabs.undertaleyellow', folder_name='chapter_0')]
     macos_app_names = ('UNDERTALE.app',)
     path_select_dialog_key = 'dialogs.select_undertaleyellow_folder'
     path_not_found_dialog_key = 'dialogs.undertaleyellow_not_found'
@@ -201,7 +219,8 @@ class PizzaTowerGame(GameDefinition):
     custom_exec_config_key = 'pizzatower_custom_executable_path'
     path_button_key = 'buttons.change_pizzatower_path'
     gamebanana_id = 7692
-    tabs = [GameTab(tab_id='pizzatower', files_key='pizzatower', name_key='tabs.pizzatower')]
+    executable_type = 'pizzatower'
+    tabs = [GameTab(tab_id='pizzatower', files_key='pizzatower', name_key='tabs.pizzatower', folder_name='pizzatower')]
     macos_app_names = ('PizzaTower.app',)
     path_select_dialog_key = 'dialogs.select_pizzatower_folder'
     path_not_found_dialog_key = 'dialogs.pizzatower_not_found'
@@ -222,6 +241,7 @@ class SugarySpireGame(GameDefinition):
     custom_exec_config_key = 'sugaryspire_custom_executable_path'
     path_button_key = 'buttons.change_sugaryspire_path'
     gamebanana_id = 18218
+    executable_type = 'sugaryspire'
     supports_full_install = True
     tabs = [GameTab(tab_id='sugaryspire', files_key='undertale', name_key='tabs.sugaryspire')]
     macos_app_names = ('SugarySpire_ExhibitionNight.app',)

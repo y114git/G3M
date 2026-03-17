@@ -111,4 +111,5 @@ def get_target_dir(chapter_id: str, app_state, logger, game: Optional[str] = Non
         resolved = _try_macos_resolve(gm, base_path)
         if resolved:
             return resolved
-    return find_chapter_resource_dir(base_path, chapter_id)
+    mac_names = gm.macos_app_names if gm else ('DELTARUNE.app', 'DELTARUNEdemo.app')
+    return find_chapter_resource_dir(base_path, chapter_id, mac_names)

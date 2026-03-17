@@ -158,29 +158,14 @@ class CreateModpackThread(QThread):
 
     def _find_original_data_file(self, chapter_id: str, game: str, data_filename: str) -> str:
         try:
-            from models.game_modes import get_game, DeltaruneGame
+            from models.game_modes import get_game
             from utils.path_utils import find_chapter_resource_dir
-            game_mode = None
-            base_game_path = None
-            if game == 'deltarune_demo' or self.app_state.game_mode.game_id == 'deltarunedemo':
-                game_mode = get_game('deltarunedemo')
-                base_game_path = self.app_state.demo_game_path
-            elif game == 'undertale' or self.app_state.game_mode.game_id == 'undertale':
-                game_mode = get_game('undertale')
-                base_game_path = game_mode.get_game_path(self.app_state.local_config)
-            elif game == 'undertaleyellow' or self.app_state.game_mode.game_id == 'undertaleyellow':
-                game_mode = get_game('undertaleyellow')
-                base_game_path = game_mode.get_game_path(self.app_state.local_config)
-            elif game == 'pizzatower' or self.app_state.game_mode.game_id == 'pizzatower':
-                game_mode = get_game('pizzatower')
-                base_game_path = game_mode.get_game_path(self.app_state.local_config)
-            else:
-                game_mode = get_game('deltarune') or DeltaruneGame()
-                base_game_path = self.app_state.game_path
+            game_mode = get_game(game) or get_game(self.app_state.game_mode.game_id) or self.app_state.game_mode
+            base_game_path = game_mode.get_game_path(self.app_state.local_config)
             if not base_game_path or not os.path.exists(base_game_path):
                 logging.warning(f'Base game path not found: {base_game_path}')
                 return None
-            chapter_dir = find_chapter_resource_dir(base_game_path, chapter_id)
+            chapter_dir = find_chapter_resource_dir(base_game_path, chapter_id, game_mode.macos_app_names)
             if not chapter_dir or not os.path.exists(chapter_dir):
                 logging.warning(f'Chapter directory not found for chapter {chapter_id} in {base_game_path}')
                 return None

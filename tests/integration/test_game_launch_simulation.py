@@ -32,22 +32,22 @@ class TestGameLaunchSimulation:
         return game_dir
 
     def test_resolve_game_executable_deltarune(self, mock_game_executable):
-        exe_path = resolve_game_executable(mock_game_executable, is_undertale=False)
+        exe_path = resolve_game_executable(mock_game_executable, 'deltarune')
         assert exe_path is not None
         assert 'DELTARUNE' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_resolve_game_executable_undertale(self, mock_game_executable):
-        exe_path = resolve_game_executable(mock_game_executable, is_undertale=True)
+        exe_path = resolve_game_executable(mock_game_executable, 'undertale')
         assert exe_path is not None
         assert 'UNDERTALE' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_resolve_game_executable_pizzatower(self, mock_game_executable):
-        exe_path = resolve_game_executable(mock_game_executable, is_undertale=False, game_type='pizzatower')
+        exe_path = resolve_game_executable(mock_game_executable, 'pizzatower')
         assert exe_path is not None
         assert 'PIZZATOWER' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_resolve_game_executable_sugaryspire(self, mock_game_executable):
-        exe_path = resolve_game_executable(mock_game_executable, is_undertale=False, game_type='sugaryspire')
+        exe_path = resolve_game_executable(mock_game_executable, 'sugaryspire')
         assert exe_path is not None
         assert 'SUGARYSPIRE' in exe_path.upper() or os.path.exists(exe_path)
 
@@ -193,7 +193,7 @@ class TestGameExecutableSimulation:
             assert os.path.exists(os.path.join(simulated_game_dir, 'chapter1_', 'data.win'))
 
     def test_find_executable_in_simulated_dir(self, simulated_game_dir):
-        exe_path = resolve_game_executable(simulated_game_dir, is_undertale=False)
+        exe_path = resolve_game_executable(simulated_game_dir, 'deltarune')
         assert exe_path is not None
         assert os.path.exists(exe_path) or 'DELTARUNE' in exe_path.upper()
 

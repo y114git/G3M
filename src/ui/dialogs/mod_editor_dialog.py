@@ -169,17 +169,13 @@ class ModEditorDialog(QDialog):
         while self.file_tabs.count():
             self.file_tabs.removeTab(0)
         game = self.game_combo.currentData()
-        if game == 'deltarunedemo':
-            self._add_file_tab(tr('tabs.demo'))
-        elif game in ('undertale', 'undertaleyellow'):
-            self._add_file_tab('UNDERTALE')
-        elif game == 'pizzatower':
-            self._add_file_tab('Pizza Tower')
-        elif game == 'sugaryspire':
-            self._add_file_tab('Sugary Spire')
+        from models.game_modes import get_game
+        game_def = get_game(game)
+        if game_def:
+            for tab in game_def.tabs:
+                self._add_file_tab(tr(tab.name_key))
         else:
-            for name in [tr('tabs.menu_root'), tr('tabs.chapter_1'), tr('tabs.chapter_2'), tr('tabs.chapter_3'), tr('tabs.chapter_4')]:
-                self._add_file_tab(name)
+            self._add_file_tab(game or 'Unknown')
 
     def _add_file_tab(self, name):
         tab = QWidget()

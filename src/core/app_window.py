@@ -1967,7 +1967,7 @@ class AppWindow(QWidget):
 
     def _open_g3m_actions_dialog(self):
         from adapters.g3mtool_adapter import G3MToolManager
-        from ui.dialogs.g3mtool_dialog import G3MActionsDialog
+        from ui.dialogs.g3m_actions_dialog import G3MActionsDialog
         if self._g3m_actions_dialog and self._g3m_actions_dialog.isVisible():
             self._g3m_actions_dialog.raise_()
             self._g3m_actions_dialog.activateWindow()

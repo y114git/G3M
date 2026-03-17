@@ -19,7 +19,6 @@ from typing import Dict, Optional
 from models.game_modes import get_game
 from services.game_detection_service import (
     get_executable_name_for_game,
-    get_game_type_string,
     is_game_running,
 )
 from utils.path_utils import (
@@ -316,9 +315,7 @@ def _get_executable_path(game_mode, local_config: dict, game_path: str) -> Optio
         return custom_path
     if not game_path or not os.path.isdir(game_path):
         return None
-    is_undertale = game_mode.game_id in ('undertale', 'undertaleyellow')
-    game_type = get_game_type_string(game_mode) if game_mode.game_id in ('pizzatower', 'sugaryspire') else None
-    return resolve_game_executable(game_path, is_undertale, game_type=game_type) if game_type else resolve_game_executable(game_path, is_undertale)
+    return resolve_game_executable(game_path, game_mode.executable_type)
 
 
 def _wait_for_game_exit(process: Optional[subprocess.Popen] = None, wait_for_start: bool = False):
@@ -376,8 +373,7 @@ def _launch_game(shortcut_config: dict, game_mode, local_config: dict, game_path
         chapter_folder = find_chapter_resource_dir(game_path, direct_launch_chapter)
         source_exe = _get_executable_path(game_mode, local_config, game_path)
         if chapter_folder and source_exe:
-            game_type = get_game_type_string(game_mode)
-            exe_name = get_executable_name_for_game(game_type) or 'DELTARUNE.exe'
+            exe_name = get_executable_name_for_game(game_mode.executable_type) or 'DELTARUNE.exe'
             target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             launch_target = target_exe

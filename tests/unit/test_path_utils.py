@@ -68,7 +68,7 @@ class TestPathUtils:
             with open(exe_path, 'w') as f:
                 f.write('mock')
             os.chmod(exe_path, 493)
-        resolved = resolve_game_executable(game_dir, is_undertale=False)
+        resolved = resolve_game_executable(game_dir, 'deltarune')
         assert resolved is not None
 
     def test_resolve_game_executable_undertale(self, temp_dir):
@@ -87,7 +87,7 @@ class TestPathUtils:
             with open(exe_path, 'w') as f:
                 f.write('mock')
             os.chmod(exe_path, 493)
-        resolved = resolve_game_executable(game_dir, is_undertale=True)
+        resolved = resolve_game_executable(game_dir, 'undertale')
         assert resolved is not None
 
     def test_resolve_game_executable_pizzatower(self, temp_dir):
@@ -106,7 +106,7 @@ class TestPathUtils:
             with open(exe_path, 'w') as f:
                 f.write('mock')
             os.chmod(exe_path, 493)
-        resolved = resolve_game_executable(game_dir, is_undertale=False, game_type='pizzatower')
+        resolved = resolve_game_executable(game_dir, 'pizzatower')
         assert resolved is not None
 
     def test_resolve_game_executable_sugaryspire(self, temp_dir):
@@ -125,13 +125,13 @@ class TestPathUtils:
             with open(exe_path, 'w') as f:
                 f.write('mock')
             os.chmod(exe_path, 493)
-        resolved = resolve_game_executable(game_dir, is_undertale=False, game_type='sugaryspire')
+        resolved = resolve_game_executable(game_dir, 'sugaryspire')
         assert resolved is not None
 
     def test_resolve_game_executable_not_found(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'empty_game')
         os.makedirs(game_dir, exist_ok=True)
-        resolved = resolve_game_executable(game_dir, is_undertale=False)
+        resolved = resolve_game_executable(game_dir)
         assert resolved is None
 
     def test_find_chapter_resource_dir(self, temp_dir):
