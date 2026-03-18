@@ -75,9 +75,8 @@ class UseWorker(QThread):
                 pass
 
     def _extract(self, target_dir: str):
-        from utils.archive_utils import extract_with_unrar_retry, extract_archive
-        extract_with_unrar_retry(self._file_path, target_dir, worker=None,
-                                 extract_func=extract_archive)
+        from utils.archive_utils import extract_archive
+        extract_archive(self._file_path, target_dir)
 
     @staticmethod
     def _resolve_content_root(extract_dir: str) -> str:

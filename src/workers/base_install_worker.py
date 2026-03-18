@@ -2,7 +2,6 @@
 import os
 import shutil
 import logging
-import threading
 from typing import Optional, Callable, List
 from PyQt6.QtCore import QThread, pyqtSignal
 from config.constants import UI_COLORS, NETWORK_TIMEOUT_HEAD
@@ -16,26 +15,12 @@ class BaseInstallWorker(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str, str)
     finished = pyqtSignal(bool, str)
-    unrar_needed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cancelled = False
         self._session = None
         self._active_response = None
-        self._unrar_event = threading.Event()
-        self._unrar_installed = False
-
-    def signal_unrar_installed(self, success: bool):
-        self._unrar_installed = success
-        self._unrar_event.set()
-
-    def wait_for_unrar_install(self, timeout: float = 120.0) -> bool:
-        self._unrar_event.clear()
-        self._unrar_installed = False
-        self.unrar_needed.emit()
-        self._unrar_event.wait(timeout=timeout)
-        return self._unrar_installed
 
     def _safe_close(self, resource, label: str) -> None:
         if resource is None:

@@ -20,22 +20,12 @@ class PluginInstallWorker(BaseInstallWorker):
         self.plugin_service = plugin_service
 
     def _check_archive_has_plugin_init_py(self, archive_path: str) -> bool:
-        from utils.archive_utils import ArchiveExtractor, UnrarMissingError
+        from utils.archive_utils import ArchiveExtractor
         try:
             return ArchiveExtractor.check_archive_has_file(archive_path, 'plugin_init.py')
         except Exception as e:
-            if 'File is not a zip file' in str(e) or isinstance(e, UnrarMissingError):
-                if not self.wait_for_unrar_install():
-                    logging.error('PluginInstallWorker: User declined UnRAR installation')
-                    return False
-                try:
-                    return ArchiveExtractor.check_archive_has_file(archive_path, 'plugin_init.py')
-                except Exception as retry_e:
-                    logging.error(f'PluginInstallWorker: Error checking archive: {retry_e}')
-                    return False
-            else:
-                logging.error(f'PluginInstallWorker: Error checking archive: {e}')
-                return False
+            logging.error(f'PluginInstallWorker: Error checking archive: {e}')
+            return False
 
     def _download_archive(self, url: str, target_path: str) -> bool:
         return self._download_archive_base(url, target_path, tr('plugins.downloading_plugin'))

@@ -177,8 +177,8 @@ class PluginManager(QObject):
                         continue
                     try:
                         with tempfile.TemporaryDirectory() as temp_dir:
-                            from utils.archive_utils import extract_with_unrar_retry
-                            extract_with_unrar_retry(item_path, temp_dir)
+                            from utils.archive_utils import extract_any_archive
+                            extract_any_archive(item_path, temp_dir)
                             source_dir = self._find_plugin_root(temp_dir)
                             os.makedirs(plugin_folder_path, exist_ok=True)
                             for item in os.listdir(source_dir):

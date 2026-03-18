@@ -11,23 +11,24 @@ import platform
 from typing import List, Callable
 from urllib.parse import urlparse, unquote
 from utils.file_utils import safe_move, safe_remove, safe_rmtree, _safe_join, _is_symlink
+from utils.path_utils import resource_path
 
 
 def _is_safe_path(path: str) -> bool: return not ('..' in path or path.startswith('/'))
 
 
-class UnrarMissingError(Exception):
-    pass
-
-
 def _get_unrar_path() -> str:
-    from utils.path_utils import get_user_data_root
-    bin_dir = os.path.join(get_user_data_root(), 'bin')
-    return os.path.join(bin_dir, 'UnRAR.exe' if platform.system() == 'Windows' else 'unrar')
+    """Return path to the bundled unrar binary in src/assets/bin/unrar/."""
+    name = 'UnRAR.exe' if platform.system() == 'Windows' else 'unrar'
+    return resource_path(os.path.join('assets', 'bin', 'unrar', name))
 
 
 def _ensure_unrar_available():
     import rarfile
+    bundled = _get_unrar_path()
+    if os.path.exists(bundled):
+        rarfile.UNRAR_TOOL = bundled
+        return
     import subprocess
     for tool in ([rarfile.UNRAR_TOOL] if rarfile.UNRAR_TOOL else []) + (['unrar'] if rarfile.UNRAR_TOOL != 'unrar' else []):
         try:
@@ -36,66 +37,8 @@ def _ensure_unrar_available():
             return
         except FileNotFoundError:
             pass
-    local_unrar = _get_unrar_path()
-    if os.path.exists(local_unrar):
-        rarfile.UNRAR_TOOL = local_unrar
-        return
-    raise UnrarMissingError('UnRAR utility is missing')
-
-
-def download_and_setup_unrar(status_callback: Callable[[str], None] = None) -> bool:
-    import platform
-    import gzip
-    try:
-        import requests
-        import rarfile
-        target_path = _get_unrar_path()
-        if os.path.exists(target_path):
-            rarfile.UNRAR_TOOL = target_path
-            return True
-        system_os = platform.system()
-        is_gz = system_os == 'Darwin'
-        if system_os == 'Windows':
-            url, target_path = 'https://www.rarlab.com/rar/unrarw64.exe', os.path.join(os.path.dirname(target_path), 'unrar_sfx.exe')
-        elif system_os == 'Darwin':
-            url = 'https://www.rarlab.com/rar/unrar_MacOSX_10.13.2_64bit.gz'
-            is_gz = True
-        else:
-            return False
-        if status_callback:
-            status_callback('Downloading UnRAR utility...')
-        bin_dir = os.path.dirname(target_path)
-        os.makedirs(bin_dir, exist_ok=True)
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        if is_gz:
-            final_path = _get_unrar_path()
-            with gzip.open(response.raw, 'rb') as f_in, open(final_path, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-            os.chmod(final_path, 493)
-        else:
-            with open(target_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            if status_callback:
-                status_callback('Installing UnRAR...')
-            import subprocess
-            subprocess.run([target_path, '/S'], cwd=bin_dir, check=True)
-            try:
-                os.remove(target_path)
-            except OSError:
-                pass
-            final_path = _get_unrar_path()
-            if not os.path.exists(final_path):
-                raise FileNotFoundError('Extraction failed')
-        if status_callback:
-            status_callback('UnRAR installed successfully.')
-        import rarfile
-        rarfile.UNRAR_TOOL = _get_unrar_path()
-        return True
-    except Exception as e:
-        logging.error(f'Failed to download UnRAR: {e}')
-        return False
+    expected = 'UnRAR.exe' if os.name == 'nt' else 'unrar'
+    raise FileNotFoundError(f'UnRAR binary not found. Place {expected} in src/assets/bin/unrar/ for local development.')
 
 
 def _extract_lzma(tmp_path: str, target_dir: str, fname: str):
@@ -125,7 +68,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
         out_dir: Output directory.
 
     Raises:
-        UnrarMissingError: If RAR extraction requires UnRAR utility.
+        FileNotFoundError: If UnRAR binary is not available.
     """
     import rarfile
     try:
@@ -155,10 +98,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
             logging.warning(f'_extract_archive_raw: Failed to extract TAR archive: {e}')
         return
     if fname_lower.endswith('.rar') or detected_format == 'rar':
-        try:
-            _ensure_unrar_available()
-        except UnrarMissingError:
-            raise
+        _ensure_unrar_available()
         with rarfile.RarFile(src_path, 'r') as rf:
             targets = _collect_safe_members(rf.namelist(), lambda member: member, 'RAR')
             if targets:
@@ -264,7 +204,7 @@ class ArchiveExtractor:
         except Exception as e:
             error_msg = f'Failed to extract archive {archive_path}: {e}'
             logging.error(error_msg, exc_info=True)
-            if isinstance(e, (FileNotFoundError, PermissionError, OSError, ValueError, UnrarMissingError)):
+            if isinstance(e, (FileNotFoundError, PermissionError, OSError, ValueError)):
                 raise
             raise ValueError(error_msg) from e
 
@@ -342,8 +282,6 @@ class ArchiveExtractor:
                                     os.remove(tmp_target)
                             except Exception as e:
                                 logging.warning(f'extract_archive_with_backup: tmp cleanup failed: {e}', exc_info=True)
-        except UnrarMissingError:
-            raise
         except Exception as e:
             error_msg = f'Archive unpack error: {os.path.basename(archive_path)}: {e}'
             if status_callback:
@@ -379,38 +317,8 @@ class ArchiveExtractor:
                 import py7zr
                 with py7zr.SevenZipFile(archive_path, mode='r') as zf:
                     return any((ArchiveExtractor._matches_target(n, target_filename) for n in zf.getnames()))
-        except UnrarMissingError:
-            raise
         except Exception as e:
             logging.error(f'ArchiveExtractor.check_archive_has_file: Error: {e}', exc_info=True)
-        return False
-
-
-def prompt_for_unrar_install(parent_widget=None, signal_callback=None) -> bool:
-    try:
-        _ensure_unrar_available()
-        return True
-    except UnrarMissingError:
-        pass
-    if signal_callback:
-        signal_callback()
-        return False
-    try:
-        from PyQt6.QtWidgets import QMessageBox
-        from services.localization_service import tr
-        if not parent_widget:
-            try:
-                from models.app_state import app_state
-                parent_widget = app_state.main_window
-            except (ImportError, AttributeError):
-                return False
-        if QMessageBox.question(parent_widget, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-            success = download_and_setup_unrar()
-            if success:
-                logging.info('UnRAR installed')
-            return success
-        return False
-    except ImportError:
         return False
 
 
@@ -450,23 +358,6 @@ def get_file_extension_from_content(file_path: str) -> str:
 
 def extract_any_archive(archive_path: str, target_dir: str) -> None:
     ArchiveExtractor.extract(archive_path, target_dir)
-
-
-def extract_with_unrar_retry(archive_path: str, target_dir: str, worker=None, extract_func=None) -> None:
-    if extract_func is None:
-        extract_func = extract_any_archive
-    try:
-        extract_func(archive_path, target_dir)
-    except Exception as e:
-        if 'File is not a zip file' in str(e) or isinstance(e, UnrarMissingError):
-            if worker is not None and hasattr(worker, 'wait_for_unrar_install'):
-                if not worker.wait_for_unrar_install():
-                    raise UnrarMissingError('RAR archive requires UnRAR utility to be installed')
-            elif not prompt_for_unrar_install():
-                raise UnrarMissingError('RAR archive requires UnRAR utility to be installed')
-            extract_func(archive_path, target_dir)
-        else:
-            raise
 
 
 def extract_archive(archive_path: str, target_dir: str, fname: str | None = None, is_game_installation: bool = False, size_cap_bytes: int | None = None) -> None:

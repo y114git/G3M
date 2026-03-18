@@ -157,6 +157,23 @@ jobs:
           dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
           Remove-Item g3mtool-src -Recurse -Force
 
+      - name: Build UnRAR from source
+        if: runner.os != 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/pmachapman/unrar.git unrar-src
+          make -C unrar-src -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+          mkdir -p src/assets/bin/unrar
+          cp unrar-src/unrar src/assets/bin/unrar/unrar
+          chmod +x src/assets/bin/unrar/unrar
+          rm -rf unrar-src
+
+      - name: Copy bundled UnRAR (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src\assets\bin\unrar | Out-Null
+          Copy-Item "builds\assets\bin\UnRAR.exe" "src\assets\bin\unrar\UnRAR.exe"
+
       - name: Generate secrets_embed.py
         shell: pwsh
         run: |

@@ -508,26 +508,9 @@ class ModManager(QObject):
         url_install_thread.status.connect(self.status_changed.emit)
         url_install_thread.finished.connect(self._on_url_install_finished)
         url_install_thread.prompt_required.connect(self.url_prompt_required.emit)
-        url_install_thread.unrar_needed.connect(self._on_unrar_needed)
         url_install_thread.manual_install_required.connect(self._on_manual_install_required)
         self.app_state.current_task = url_install_thread
         url_install_thread.start()
-
-    def _on_unrar_needed(self):
-        try:
-            from utils.archive_utils import prompt_for_unrar_install
-            worker = self.app_state.current_task
-            success = prompt_for_unrar_install(parent_widget=self.parent())
-            if success:
-                logging.info('UnRAR installed successfully from mod manager worker request')
-            else:
-                logging.info('User declined UnRAR installation from mod manager worker request')
-            if worker and hasattr(worker, 'signal_unrar_installed'):
-                worker.signal_unrar_installed(success)
-        except Exception as e:
-            logging.error(f'ModManager: Error handling UnRAR installation request: {e}')
-            if self.app_state.current_task and hasattr(self.app_state.current_task, 'signal_unrar_installed'):
-                self.app_state.current_task.signal_unrar_installed(False)
 
     def _on_manual_install_required(self, prepared_path: str, archive_path: str, temp_dir: str):
         try:

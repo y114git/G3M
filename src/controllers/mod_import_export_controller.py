@@ -112,16 +112,7 @@ class ModImportExportController:
         from utils.file_utils import sanitize_filename, remove_archive_extension
         try:
             with tempfile.TemporaryDirectory(prefix='deltahub_import_') as temp_dir:
-                try:
-                    extract_archive(file_path, temp_dir)
-                except Exception as e:
-                    if 'UnRAR utility is missing' in str(e):
-                        if self._prompt_for_unrar_install():
-                            extract_archive(file_path, temp_dir)
-                        else:
-                            return
-                    else:
-                        raise e
+                extract_archive(file_path, temp_dir)
                 content_path = temp_dir
                 contents = os.listdir(temp_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
@@ -218,35 +209,6 @@ class ModImportExportController:
             logging.error(f'[IMPORT] Mod import failed: {e}', exc_info=True)
             self._show_import_error_with_manual_install(file_path, tr('errors.mod_import_failed', error=str(e)))
 
-    def _prompt_for_unrar_install(self) -> bool:
-        reply = QMessageBox.question(self.app_window, tr('errors.unrar_missing_title'), tr('errors.unrar_missing_text'), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
-        if reply == QMessageBox.StandardButton.Yes:
-            from utils.archive_utils import download_and_setup_unrar, _get_unrar_path
-            success = download_and_setup_unrar(status_callback=lambda msg: self.app_window.feedback_service.update_status(msg, 'blue'))
-            if success:
-                self.app_window.feedback_service.update_status(tr('status.ready'), 'green')
-                return True
-            from PyQt6.QtGui import QDesktopServices
-            from PyQt6.QtCore import QUrl
-            import platform
-            bin_path = os.path.dirname(_get_unrar_path())
-            system_os = platform.system()
-            platform_info = {'Linux': ('https://www.rarlab.com/rar_add.htm', 'errors.unrar_manual_install_linux'), 'Darwin': ('https://www.rarlab.com/rar/unrar_MacOSX_10.13.2_64bit.gz', 'errors.unrar_manual_install_mac')}
-            url_to_open, msg_key = platform_info.get(system_os, ('https://www.rarlab.com/rar/unrarw64.exe', 'errors.unrar_manual_install_windows'))
-            msg_text = tr(msg_key, url=url_to_open, path=bin_path)
-            msg = QMessageBox(self.app_window)
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle(tr('errors.error'))
-            msg.setText(tr('errors.unrar_download_failed', error='Download failed/Platform not supported'))
-            msg.setInformativeText(msg_text)
-            open_btn = msg.addButton(tr('buttons.open_browser') if tr('buttons.open_browser') != 'buttons.open_browser' else 'Open Website', QMessageBox.ButtonRole.ActionRole)
-            _ = msg.addButton(tr('buttons.ok'), QMessageBox.ButtonRole.AcceptRole)
-            msg.exec()
-            if msg.clickedButton() == open_btn:
-                QDesktopServices.openUrl(QUrl(url_to_open))
-            return False
-        return False
-
     def _install_mod_from_url(self, url: str):
         try:
             from workers.install.url_install_worker import UrlInstallThread
@@ -254,7 +216,6 @@ class ModImportExportController:
             worker.status.connect(lambda msg, color: self.app_window.feedback_service.update_status(msg, color))
             worker.progress.connect(lambda p: setattr(self.app_state, 'progress_bar_value', p))
             worker.finished.connect(self._on_mod_install_finished)
-            worker.unrar_needed.connect(self._on_unrar_needed)
             worker.manual_install_required.connect(self._on_manual_install_required)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True
@@ -264,16 +225,6 @@ class ModImportExportController:
         except Exception as e:
             logging.error(f'ModImportExportController: Error installing mod from URL: {e}', exc_info=True)
             self.app_window.feedback_service.show_message('error', 'errors.error', tr('mods.installation_error', error=str(e)))
-
-    def _on_unrar_needed(self):
-        worker = self.app_state.current_task
-        success = self._prompt_for_unrar_install()
-        if success:
-            logging.info('UnRAR installed successfully from worker request')
-        else:
-            logging.info('User declined UnRAR installation from worker request')
-        if worker and hasattr(worker, 'signal_unrar_installed'):
-            worker.signal_unrar_installed(success)
 
     def _open_manual_install_dialog(self, prepared_path, source_file_path, temp_dir, on_accept=None):
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
@@ -333,16 +284,7 @@ class ModImportExportController:
     def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
         temp_dir = tempfile.mkdtemp(prefix='deltahub_manual_install_')
         try:
-            try:
-                extract_archive(file_path, temp_dir)
-            except Exception as e:
-                if 'UnRAR utility is missing' in str(e):
-                    if hasattr(self, '_prompt_for_unrar_install') and self._prompt_for_unrar_install():
-                        extract_archive(file_path, temp_dir)
-                    else:
-                        raise Exception('UnRAR required')
-                else:
-                    raise e
+            extract_archive(file_path, temp_dir)
             content_path = temp_dir
             contents = os.listdir(temp_dir)
             if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):

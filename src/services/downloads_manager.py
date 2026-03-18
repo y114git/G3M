@@ -306,9 +306,9 @@ class DownloadsManager(QObject):
             import tempfile
             from PyQt6.QtWidgets import QDialog
             from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-            from utils.archive_utils import extract_with_unrar_retry, extract_archive
+            from utils.archive_utils import extract_archive
             temp_dir = tempfile.mkdtemp(prefix='dh_manual_')
-            extract_with_unrar_retry(record.file_path, temp_dir, worker=None, extract_func=extract_archive)
+            extract_archive(record.file_path, temp_dir)
             contents = os.listdir(temp_dir)
             content_path = temp_dir
             if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
@@ -338,6 +338,10 @@ class DownloadsManager(QObject):
                 shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception as e:
             logger.error('DownloadsManager: manual install dialog failed: %s', e, exc_info=True)
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
             record.use_status = UseStatus.NEEDS_MANUAL
             record.error_message = str(e)
             self._store.update(record)

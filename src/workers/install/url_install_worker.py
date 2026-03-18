@@ -224,7 +224,7 @@ class UrlInstallThread(BaseInstallWorker):
 
     def _prepare_for_manual_install(self, archive_path: str):
         try:
-            from utils.archive_utils import extract_archive, extract_with_unrar_retry
+            from utils.archive_utils import extract_archive
             persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub_url_manual_install_')
             try:
                 archive_filename = os.path.basename(archive_path)
@@ -232,7 +232,7 @@ class UrlInstallThread(BaseInstallWorker):
                 shutil.copy2(archive_path, preserved_archive_path)
                 extract_dir = os.path.join(persistent_temp_dir, 'extracted')
                 os.makedirs(extract_dir, exist_ok=True)
-                extract_with_unrar_retry(preserved_archive_path, extract_dir, self, extract_archive)
+                extract_archive(preserved_archive_path, extract_dir)
                 content_path = extract_dir
                 contents = os.listdir(extract_dir)
                 if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
