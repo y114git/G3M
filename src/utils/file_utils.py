@@ -84,6 +84,10 @@ def _is_symlink(path: str) -> bool:
 
 def _safe_join(base: str, *paths: str) -> str:
     base_abs = os.path.abspath(base)
+    for path in paths:
+        normalized = str(path).replace('\\', '/')
+        if normalized.startswith('/') or normalized.startswith('..') or '/../' in normalized or re.match(r'^[A-Za-z]:', str(path)):
+            raise ValueError('path_traversal')
     final = os.path.abspath(os.path.join(base_abs, *paths))
     if os.path.commonpath([final, base_abs]) != base_abs:
         raise ValueError('path_traversal')

@@ -1,5 +1,6 @@
 """Path resolution and platform-specific utilities."""
 import logging
+import ntpath
 import os
 import re
 import stat
@@ -20,7 +21,7 @@ def get_launcher_dir():
 def get_user_data_root():
     home = os.path.expanduser('~')
     if CURRENT_PLATFORM == 'Windows':
-        return os.path.join(os.getenv('LOCALAPPDATA') or os.getenv('APPDATA') or home, 'DELTAHUB')
+        return ntpath.join(os.getenv('LOCALAPPDATA') or os.getenv('APPDATA') or home, 'DELTAHUB')
     if CURRENT_PLATFORM == 'Darwin':
         return os.path.join(home, 'Library', 'Application Support', 'DELTAHUB')
     return os.path.join(home, '.local', 'share', 'DELTAHUB')
