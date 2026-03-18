@@ -28,17 +28,34 @@ def test_startup_from_environment():
 
 def test_startup_with_sample_archive(tmp_path):
     """Test startup with a sample archive (for local testing)."""
-    # This test can be expanded to create test archives for local development
-    pytest.skip("Sample archive test not implemented yet")
+
+    project_root = pathlib.Path(__file__).parent.parent
+    main_py_path = project_root / "src" / "main.py"
+
+    if not main_py_path.exists():
+        pytest.skip(f"main.py not found at {main_py_path}")
+
+    sample_archive_path = tmp_path / "sample_app.zip"
+
+    with zipfile.ZipFile(sample_archive_path, 'w', zipfile.ZIP_DEFLATED) as archive:
+        archive.write(main_py_path, "main.py")
+
+        src_dir = project_root / "src"
+        if src_dir.exists():
+            for file_path in src_dir.rglob("*.py"):
+                if file_path.is_file():
+                    arc_path = file_path.relative_to(project_root)
+                    if file_path.samefile(main_py_path):
+                        continue
+                    archive.write(file_path, arc_path)
+
+    success = _test_startup_with_archive(sample_archive_path, "main.py")
+    assert success, "Sample archive startup test failed"
 
 
 def test_local_startup():
     """Test local application startup by running main.py initialization."""
-    import sys
-    import subprocess
-    import pathlib
 
-    # Get the project root directory
     project_root = pathlib.Path(__file__).parent.parent
     main_py_path = project_root / "src" / "main.py"
 
@@ -46,8 +63,6 @@ def test_local_startup():
         pytest.skip(f"main.py not found at {main_py_path}")
 
     try:
-        # Run main.py with --help flag to test initialization
-        # This should initialize the app without actually starting the GUI
         result = subprocess.run(
             [sys.executable, str(main_py_path), "--help"],
             capture_output=True,
@@ -56,22 +71,15 @@ def test_local_startup():
             cwd=str(project_root)
         )
 
-        # Check for startup errors in output
         output = (result.stdout or '') + (result.stderr or '')
 
-        # Print output for debugging
         print("STDOUT:", result.stdout)
         print("STDERR:", result.stderr)
         print("Return code:", result.returncode)
 
-        # Assert no startup errors
         assert "STARTUP ERROR" not in output, "Application startup failed with STARTUP ERROR"
         assert "CRITICAL ERROR" not in output, "Application startup failed with CRITICAL ERROR"
         assert "Fatal error" not in output, "Application startup failed with fatal error"
-
-        # Check if process completed successfully (help should return 0)
-        # Or if it's a normal startup that was interrupted, it might return non-zero
-        # We're mainly checking for absence of startup errors
 
     except subprocess.TimeoutExpired:
         pytest.fail("Application startup timed out after 30 seconds")
@@ -82,26 +90,31 @@ def test_local_startup():
 def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) -> bool:
     """Core startup testing logic."""
     try:
-        # Extract archive
         with tempfile.TemporaryDirectory() as extract_dir:
             extract_path = pathlib.Path(extract_dir)
             with zipfile.ZipFile(archive_path) as archive:
                 archive.extractall(extract_path)
 
-            # Find and validate target
             target = extract_path / startup_target
             if not target.exists():
                 print(f'ERROR: {target} not found in archive', file=sys.stderr)
                 return False
 
-            # Make executable (Unix systems)
             target.chmod(target.stat().st_mode | 0o111)
+            cwd = str(extract_path)
 
-            # Test startup with timeout
-            result = subprocess.run([str(target), '--help'],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=10)
+            if startup_target.endswith('.py'):
+                result = subprocess.run([sys.executable, str(target), '--help'],
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=10,
+                                        cwd=cwd)
+            else:
+                result = subprocess.run([str(target), '--help'],
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=10,
+                                        cwd=cwd)
             output = (result.stdout or '') + (result.stderr or '')
             print(output)
 

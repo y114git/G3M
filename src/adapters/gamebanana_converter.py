@@ -36,7 +36,8 @@ class GameBananaConverter:
             normalize_mod_package(self.temp_extract_dir, require_manifest=True)
             target_mod_key = None
             if self.gamebanana_metadata.get('mod_id'):
-                target_mod_key = f"gb_{self.gamebanana_metadata['mod_id']}"
+                item_type = self.gamebanana_metadata.get('item_type', 'mod')
+                target_mod_key = f"gb_{item_type}_{self.gamebanana_metadata['mod_id']}"
             if target_mod_key:
                 self._update_deltamod_info_mod_key(target_mod_key)
                 self._remove_existing_mod_folder(target_mod_key)
@@ -132,7 +133,17 @@ class GameBananaConverter:
                         config_data = json.load(f)
                     if (config_data.get('key') or config_data.get('mod_key')) == key:
                         logger.info(f'GameBananaConverter: Removing existing mod folder {folder_path} with key {key}')
-                        shutil.rmtree(folder_path)
+                        for item in os.listdir(folder_path):
+                            if item == 'mod_versions':
+                                continue
+                            item_path = os.path.join(folder_path, item)
+                            if os.path.isdir(item_path):
+                                shutil.rmtree(item_path, ignore_errors=True)
+                            else:
+                                try:
+                                    os.remove(item_path)
+                                except OSError:
+                                    pass
                         break
                 except Exception as e:
                     logger.debug(f'GameBananaConverter: Error checking config in {folder_path}: {e}')
@@ -153,7 +164,8 @@ class GameBananaConverter:
                 return mod_dir
             if self.gamebanana_metadata.get('mod_id'):
                 mod_id = str(self.gamebanana_metadata['mod_id'])
-                expected_mod_key = f'gb_{mod_id}'
+                item_type = self.gamebanana_metadata.get('item_type', 'mod')
+                expected_mod_key = f'gb_{item_type}_{mod_id}'
                 config_data['key'] = expected_mod_key
                 if 'mod_key' in config_data:
                     del config_data['mod_key']

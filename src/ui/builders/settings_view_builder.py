@@ -474,18 +474,18 @@ class SettingsViewBuilder:
         cl.addWidget(hide_library_filters_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
-        sec, cl = self._collapsible_section(tr('versions.title'), 'library_versions', 'versions.title', parent=page)
-        versions_full_replace_cb = self._styled_checkbox(
-            tr('versions.settings_full_replace'), tr('versions.settings_full_replace_tooltip'), 'versions_full_replace_files'
+        sec, cl = self._collapsible_section(tr('game_versions.title'), 'library_game_versions', 'game_versions.title', parent=page)
+        game_versions_full_replace_cb = self._styled_checkbox(
+            tr('game_versions.settings_full_replace'), tr('game_versions.settings_full_replace_tooltip'), 'versions_full_replace_files'
         )
-        cl.addWidget(versions_full_replace_cb, alignment=Qt.AlignmentFlag.AlignCenter)
+        cl.addWidget(game_versions_full_replace_cb, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         layout.addStretch()
 
         self.widgets['hide_library_tab_checkbox'] = hide_library_tab_checkbox
         self.widgets['hide_library_filters_checkbox'] = hide_library_filters_checkbox
-        self.widgets['versions_full_replace_checkbox'] = versions_full_replace_cb
+        self.widgets['game_versions_full_replace_checkbox'] = game_versions_full_replace_cb
         return self._wrap_in_scroll(page, parent)
 
     def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:

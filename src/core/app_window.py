@@ -40,7 +40,7 @@ from services.plugin_service import PluginManager
 from services.customization_service import CustomizationManager
 from services.used_mods_service import UsedModsManager
 from services.downloads_manager import DownloadsManager
-from services.versions_manager import VersionsManager
+from services.game_versions_manager import GameVersionsManager
 _translator = QTranslator()
 _lock_file = None
 
@@ -198,9 +198,9 @@ class AppWindow(QWidget):
         self.downloads_manager = DownloadsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
         self.downloads_manager.startup()
         self._downloads_dialog = None
-        self.versions_manager = VersionsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
-        self.versions_manager.startup()
-        self._versions_dialog = None
+        self.game_versions_manager = GameVersionsManager(get_user_data_root(), lambda: self.app_state.local_config, self)
+        self.game_versions_manager.startup()
+        self._game_versions_dialog = None
         self._g3m_actions_dialog = None
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.mod_ops = ModOperationsController(self.app_state, self.feedback_service, self.mod_service, self)
@@ -229,7 +229,6 @@ class AppWindow(QWidget):
 
     def _finalize_window_setup(self):
         self.init_ui()
-        self.setAcceptDrops(True)
         self._update_plugin_tabs()
         self.custom_font_family = localization_service.load_font()
         if (cfp := self.customization_service.get_custom_font_path()) and os.path.exists(cfp):
@@ -691,7 +690,7 @@ class AppWindow(QWidget):
             'library_tag_gamebanana', 'library_tag_widgets', 'library_search_button',
         ), optional=(
             'add_mod_button', 'installed_mods_label', 'priority_button',
-            'create_modpack_button', 'library_downloads_button', 'library_versions_button',
+            'create_modpack_button', 'library_downloads_button', 'library_game_versions_button',
             'library_g3m_actions_button',
         ))
         if self.priority_button:
@@ -721,8 +720,8 @@ class AppWindow(QWidget):
         if self.library_downloads_button:
             self.library_downloads_button.clicked.connect(self._open_downloads_dialog)
             self.downloads_manager.badge_changed.connect(lambda count, _: self._update_downloads_badge(self.library_downloads_button, count))
-        if self.library_versions_button:
-            self.library_versions_button.clicked.connect(self._open_versions_dialog)
+        if self.library_game_versions_button:
+            self.library_game_versions_button.clicked.connect(self._open_game_versions_dialog)
         if hasattr(self, 'library_g3m_actions_button') and self.library_g3m_actions_button:
             self.library_g3m_actions_button.clicked.connect(self._open_g3m_actions_dialog)
         saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
@@ -1955,15 +1954,15 @@ class AppWindow(QWidget):
         self._downloads_dialog = DownloadsDialog(self.downloads_manager, self.app_state, self)
         self._downloads_dialog.show()
 
-    def _open_versions_dialog(self):
-        from ui.dialogs.versions_dialog import VersionsDialog
-        if self._versions_dialog and self._versions_dialog.isVisible():
-            self._versions_dialog.raise_()
-            self._versions_dialog.activateWindow()
-            return
-        initial_game = self.app_state.local_config.get('selected_game_type', 'deltarune')
-        self._versions_dialog = VersionsDialog(self.versions_manager, self.app_state, initial_game, self)
-        self._versions_dialog.show()
+    def _open_game_versions_dialog(self):
+        from ui.dialogs.game_versions_dialog import GameVersionsDialog
+        if self._game_versions_dialog is None:
+            initial_game = self.app_state.local_config.get('selected_game_type', 'deltarune')
+            self._game_versions_dialog = GameVersionsDialog(self.game_versions_manager, self.app_state, initial_game, self)
+            self._game_versions_dialog.destroyed.connect(lambda: setattr(self, '_game_versions_dialog', None))
+        self._game_versions_dialog.show()
+        self._game_versions_dialog.raise_()
+        self._game_versions_dialog.activateWindow()
 
     def _open_g3m_actions_dialog(self):
         from adapters.g3mtool_adapter import G3MToolManager
@@ -2009,44 +2008,6 @@ class AppWindow(QWidget):
         for dialog_type, dialog_data in pending:
             if dialog_type == 'update':
                 self._prompt_for_update(dialog_data)
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        elif event.mimeData().hasText():
-            text = event.mimeData().text().strip()
-            if text.startswith(('http://', 'https://')):
-                event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        url = None
-        if event.mimeData().hasUrls():
-            for u in event.mimeData().urls():
-                s = u.toString()
-                if s.startswith(('http://', 'https://')):
-                    url = s
-                    break
-        if not url and event.mimeData().hasText():
-            text = event.mimeData().text().strip()
-            if text.startswith(('http://', 'https://')):
-                url = text
-        if url:
-            event.acceptProposedAction()
-            self._confirm_and_enqueue_url(url)
-
-    def _confirm_and_enqueue_url(self, url: str):
-        from ui.dialogs.confirm_external_download_dialog import ConfirmExternalDownloadDialog
-        dialog = ConfirmExternalDownloadDialog(url, self.app_state, self)
-        if dialog.exec():
-            from models.download_models import SourceKind, TargetKind
-            display_name = os.path.basename(url.split('?')[0]) or 'External download'
-            self.downloads_manager.enqueue_with_feedback(
-                self.feedback_service,
-                display_name=display_name,
-                source_kind=SourceKind.EXTERNAL_URL,
-                target_kind=TargetKind.MOD,
-                source_url=url,
-            )
 
     def _zoom_ui(self, direction):
         current_zoom = self.app_state.local_config.get('ui_scale', 1.0)

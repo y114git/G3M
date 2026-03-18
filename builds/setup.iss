@@ -1,9 +1,9 @@
 #define AppName        "DELTAHUB"
 #define AppVersion     "2.4.7stable"
 #define AppExeName     "DELTAHUB.exe"
-#define AppIcon        "..\\src\\assets\\icons\\icon.ico"
-#define AppSmallIcon   "icon_small.bmp"
-#define AppWizardImage "vertical_banner.bmp"
+#define AppIcon        "assets\\icons\\icon.ico"
+#define AppSmallIcon   "assets\\SmallIcon.bmp"
+#define AppWizardImage "assets\\WizardImage.bmp"
 
 [Setup]
 AppId={{6A8E9F32-1B3A-4F2F-9C0A-6E28B9B8C5D1}}

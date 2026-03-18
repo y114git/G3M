@@ -28,20 +28,6 @@ class GameBananaAPI:
         self._min_request_interval = 0.2
         self._rate_limit_wait_time = 0.0
 
-    @staticmethod
-    def _get_item_type_from_url(external_url: Optional[str]) -> str:
-        if not external_url:
-            return 'Mod'
-        normalized_url = str(external_url).strip().lower()
-        if '/wips/' in normalized_url:
-            return 'Wip'
-        if '/mods/' in normalized_url:
-            return 'Mod'
-        match = re.search(r'/(mods|wips)(?:/|$)', normalized_url)
-        if match:
-            return 'Wip' if match.group(1) == 'wips' else 'Mod'
-        return 'Wip' if '/wip' in normalized_url else 'Mod'
-
     def _reset_rate_limit_state(self):
         if self._app_state and self._app_state.local_config.get('gb_rate_limit_start', 0):
             self._app_state.local_config['gb_rate_limit_start'] = 0
@@ -139,8 +125,8 @@ class GameBananaAPI:
                 mapped_mods.append(mod_info)
         return (mapped_mods, [])
 
-    def _get_item_field(self, mod_id, field_name, extractor_func=None, itemtype=None, external_url=None, max_retries=2):
-        profile = self.get_mod_profile_page(mod_id, external_url=external_url, max_retries=max_retries)
+    def _get_item_field(self, mod_id, field_name, extractor_func=None, itemtype='Mod', max_retries=2):
+        profile = self.get_mod_profile_page(mod_id, itemtype=itemtype, max_retries=max_retries)
         if not isinstance(profile, dict):
             return None
         field_map = {
@@ -157,12 +143,12 @@ class GameBananaAPI:
                 return None
         return value
 
-    def get_mod_downloads_only(self, mod_id, external_url=None, max_retries=2):
-        value = self._get_item_field(mod_id, 'downloads', external_url=external_url, max_retries=max_retries)
+    def get_mod_downloads_only(self, mod_id, itemtype='Mod', max_retries=2):
+        value = self._get_item_field(mod_id, 'downloads', itemtype=itemtype, max_retries=max_retries)
         return self._safe_int(value)
 
-    def _fetch_fields(self, mod_id, fields, external_url=None, max_retries=2, timeout=None):
-        profile = self.get_mod_profile_page(mod_id, external_url=external_url, max_retries=max_retries, timeout=timeout)
+    def _fetch_fields(self, mod_id, fields, itemtype='Mod', max_retries=2, timeout=None):
+        profile = self.get_mod_profile_page(mod_id, itemtype=itemtype, max_retries=max_retries, timeout=timeout)
         if not isinstance(profile, dict):
             return None
         result = {}
@@ -172,21 +158,20 @@ class GameBananaAPI:
             elif field == 'description':
                 result[field] = profile.get('_sDescription')
             elif field == 'screenshots':
-                result[field] = self._extract_preview_urls(profile.get('_aPreviewMedia'), external_url=external_url)
+                result[field] = self._extract_preview_urls(profile.get('_aPreviewMedia'), is_wip=itemtype == 'Wip')
             else:
                 result[field] = profile.get(field)
         return result
 
-    def get_mod_full_details_for_display(self, mod_id, external_url=None, max_retries=2):
-        return self._fetch_fields(mod_id, ('text', 'description', 'screenshots', '_nDownloadCount'), external_url, max_retries)
+    def get_mod_full_details_for_display(self, mod_id, itemtype='Mod', max_retries=2):
+        return self._fetch_fields(mod_id, ('text', 'description', 'screenshots', '_nDownloadCount'), itemtype, max_retries)
 
-    def get_mod_profile_page(self, mod_id, external_url=None, max_retries=2, timeout=None):
-        itemtype = self._get_item_type_from_url(external_url)
+    def get_mod_profile_page(self, mod_id, itemtype='Mod', max_retries=2, timeout=None):
         data = self._api_request(f'{self.base_url}/{itemtype}/{mod_id}/ProfilePage', max_retries=max_retries, timeout=timeout, operation='get_mod_profile_page', mod_id=mod_id)
         return data if isinstance(data, dict) else None
 
-    def get_mod_files(self, mod_id, external_url=None, max_retries=2):
-        profile = self.get_mod_profile_page(mod_id, external_url=external_url, max_retries=max_retries)
+    def get_mod_files(self, mod_id, itemtype='Mod', max_retries=2):
+        profile = self.get_mod_profile_page(mod_id, itemtype=itemtype, max_retries=max_retries)
         if not isinstance(profile, dict):
             return None
         profile_files = profile.get('_aFiles', [])
@@ -194,13 +179,13 @@ class GameBananaAPI:
             return [value for value in profile_files.values() if isinstance(value, dict)]
         return [value for value in profile_files if isinstance(value, dict)] if isinstance(profile_files, list) else None
 
-    def _get_mod_file_compatibility(self, mod_id, external_url=None):
+    def _get_mod_file_compatibility(self, mod_id, itemtype='Mod'):
         cached = self._compatibility_cache.get(mod_id)
         if cached:
             return cached
         compatibility = {'supported_files': [], 'has_supported_files': False, 'preferred_format': None, 'tool_ids': set(), 'has_deltahub_file': False, 'has_deltamod_file': False, 'compatibility_checked': False}
         try:
-            profile_data = self.get_mod_profile_page(mod_id, external_url=external_url) or {}
+            profile_data = self.get_mod_profile_page(mod_id, itemtype=itemtype) or {}
             profile_files = list(profile_data.get('_aFiles', {}).values()) if isinstance(profile_data.get('_aFiles'), dict) else profile_data.get('_aFiles', [])
             compatibility['compatibility_checked'] = isinstance(profile_files, list)
             for file_entry in profile_files:
@@ -228,8 +213,8 @@ class GameBananaAPI:
         self._compatibility_cache[mod_id] = compatibility
         return compatibility
 
-    def get_supported_files_for_mod(self, mod_id: int, external_url: Optional[str] = None) -> Dict[str, Any]:
-        return self._get_mod_file_compatibility(int(mod_id), external_url=external_url)
+    def get_supported_files_for_mod(self, mod_id: int, itemtype: str = 'Mod') -> Dict[str, Any]:
+        return self._get_mod_file_compatibility(int(mod_id), itemtype=itemtype)
 
     @staticmethod
     def _safe_int(value: Any) -> Optional[int]:
@@ -270,20 +255,19 @@ class GameBananaAPI:
             return None
 
     @staticmethod
-    def fix_screenshot_urls(screenshots, external_url=None):
-        if not screenshots or not isinstance(screenshots, list) or not (external_url and '/wips/' in external_url):
+    def fix_screenshot_urls(screenshots, is_wip=False):
+        if not screenshots or not isinstance(screenshots, list) or not is_wip:
             return screenshots
         return [u.replace('/img/ss/mods/', '/img/ss/wips/') if isinstance(u, str) and '/img/ss/mods/' in u else u for u in screenshots]
 
     @staticmethod
-    def extract_screenshots_from_api(screenshots_data: Optional[str], external_url: Optional[str] = None) -> List[str]:
+    def extract_screenshots_from_api(screenshots_data: Optional[str], is_wip: bool = False) -> List[str]:
         if not screenshots_data or not isinstance(screenshots_data, str):
             return []
         try:
             screenshots_list = json.loads(screenshots_data)
             if not isinstance(screenshots_list, list):
                 return []
-            is_wip = external_url and '/wips/' in external_url
             base_url = 'https://images.gamebanana.com/img/ss/wips' if is_wip else 'https://images.gamebanana.com/img/ss/mods'
             return [f'{base_url}/{screenshot_obj.get("_sFile") or screenshot_obj.get("_sFile800") or screenshot_obj.get("_sFile530") or screenshot_obj.get("_sFile220")}' for screenshot_obj in screenshots_list if isinstance(screenshot_obj, dict) and (screenshot_obj.get('_sFile') or screenshot_obj.get('_sFile800') or screenshot_obj.get('_sFile530') or screenshot_obj.get('_sFile220'))]
         except (json.JSONDecodeError, TypeError, AttributeError) as e:
@@ -300,7 +284,7 @@ class GameBananaAPI:
         return None
 
     @staticmethod
-    def _extract_preview_urls(preview_media, external_url: Optional[str] = None) -> List[str]:
+    def _extract_preview_urls(preview_media, is_wip: bool = False) -> List[str]:
         if not isinstance(preview_media, dict):
             return []
         urls = []
@@ -311,7 +295,7 @@ class GameBananaAPI:
             file_name = image.get('_sFile800') or image.get('_sFile530') or image.get('_sFile220') or image.get('_sFile') or image.get('_sFile100')
             if base_url and file_name:
                 urls.append(f'{base_url}/{file_name}')
-        return GameBananaAPI.fix_screenshot_urls(urls, external_url=external_url)
+        return GameBananaAPI.fix_screenshot_urls(urls, is_wip=is_wip)
 
     @staticmethod
     def extract_tags(tags):
@@ -377,4 +361,4 @@ class GameBananaAPI:
         preview_media = gb_data.get('_aPreviewMedia', {})
         raw_has_files = gb_data.get('_bHasFiles', True)
         has_files = raw_has_files not in (False, 0, '0', 'false', 'False', None)
-        return ModInfo(key=f'gb_{mod_id}', name=gb_data.get('_sName', 'Unknown Mod'), version=gb_data.get('_sVersion', '') or '1.0.0', author=submitter.get('_sName', 'Unknown') if isinstance(submitter, dict) else 'Unknown', tagline=tagline, game_version='Not specified', description_url=gb_data.get('_sTextUrl', ''), downloads=downloads, game=game_name, is_verified=gb_data.get('_bIsVerified', False), like_count=like_count, icon_url=self.extract_icon_url(preview_media), tags=tags, hide_mod=False, ban_status=False, is_nsfw=is_nsfw, has_files=has_files, is_wip=is_wip, files={}, demo_url=None, demo_version=None, created_date=self.timestamp_to_date(gb_data.get('_tsDateAdded')) or 'N/A', last_updated=self.timestamp_to_date(gb_data.get('_tsDateModified') or gb_data.get('_tsDateUpdated')) or 'N/A', external_url=external_url, screenshots_url=self._extract_preview_urls(preview_media, external_url=external_url), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False, has_full_metadata=True)
+        return ModInfo(key=f'gb_{"wip" if is_wip else "mod"}_{mod_id}', name=gb_data.get('_sName', 'Unknown Mod'), version=gb_data.get('_sVersion', '') or '1.0.0', author=submitter.get('_sName', 'Unknown') if isinstance(submitter, dict) else 'Unknown', tagline=tagline, game_version='Not specified', description_url=gb_data.get('_sTextUrl', ''), downloads=downloads, game=game_name, is_verified=gb_data.get('_bIsVerified', False), like_count=like_count, icon_url=self.extract_icon_url(preview_media), tags=tags, hide_mod=False, ban_status=False, is_nsfw=is_nsfw, has_files=has_files, is_wip=is_wip, files={}, demo_url=None, demo_version=None, created_date=self.timestamp_to_date(gb_data.get('_tsDateAdded')) or 'N/A', last_updated=self.timestamp_to_date(gb_data.get('_tsDateModified') or gb_data.get('_tsDateUpdated')) or 'N/A', external_url=external_url, screenshots_url=self._extract_preview_urls(preview_media, is_wip=is_wip), full_description=None, gamebanana_has_compatible_file=False, gamebanana_category=category, gamebanana_is_tool_compatible=False, gamebanana_supported_files=[], gamebanana_supported_tool_ids=[], gamebanana_preferred_format=None, gamebanana_has_deltahub_file=False, gamebanana_has_deltamod_file=False, gamebanana_compatibility_checked=False, has_full_metadata=True)

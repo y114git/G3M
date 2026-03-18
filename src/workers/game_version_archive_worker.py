@@ -1,4 +1,4 @@
-"""Workers for Versions Manager file operations (create/apply/export/import/download)."""
+"""Workers for Game Versions file operations (create/apply/export/import/download)."""
 import json
 import logging
 import os
@@ -10,7 +10,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_FILENAME = 'version_data.json'
+MANIFEST_FILENAME = 'game_version_data.json'
 
 
 class CreateVersionWorker(QThread):
@@ -56,8 +56,8 @@ class CreateVersionWorker(QThread):
         try:
             if os.path.exists(self._archive_path):
                 os.remove(self._archive_path)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug(f'Failed to cleanup archive {self._archive_path}: {e}')
 
 
 class ApplyVersionWorker(QThread):
@@ -120,19 +120,19 @@ class ApplyVersionWorker(QThread):
                 if rel not in archive_norm:
                     try:
                         os.remove(full)
-                    except OSError:
-                        pass
+                    except OSError as e:
+                        logger.debug(f'Failed to remove file {full}: {e}')
             for dname in dirs:
                 full = os.path.join(root, dname)
                 try:
                     if not os.listdir(full):
                         os.rmdir(full)
-                except OSError:
-                    pass
+                except OSError as e:
+                    logging.debug(f'Failed to remove empty directory {full}: {e}')
 
 
-class ExportVersionWorker(QThread):
-    """Export internal version as a standalone zip with version_data.json manifest."""
+class GameExportVersionWorker(QThread):
+    """Export internal game version as a standalone zip with game_version_data.json manifest."""
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
 
@@ -166,12 +166,12 @@ class ExportVersionWorker(QThread):
                 pass
             self.finished.emit(False, 'cancelled')
         except Exception as e:
-            logger.error('ExportVersionWorker failed: %s', e, exc_info=True)
+            logger.error('GameExportVersionWorker failed: %s', e, exc_info=True)
             self.finished.emit(False, str(e))
 
 
-class ImportVersionWorker(QThread):
-    """Import an external zip (with version_data.json) into internal versions storage."""
+class GameImportVersionWorker(QThread):
+    """Import an external zip(with game_version_data.json) into internal game versions storage."""
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str, dict)
 
@@ -187,9 +187,12 @@ class ImportVersionWorker(QThread):
                 return
             with zipfile.ZipFile(self._source, 'r') as zf:
                 if MANIFEST_FILENAME not in zf.namelist():
-                    self.finished.emit(False, 'Missing version_data.json manifest', {})
+                    self.finished.emit(False, 'Missing game_version_data.json manifest', {})
                     return
                 manifest = json.loads(zf.read(MANIFEST_FILENAME))
+                if not isinstance(manifest, dict):
+                    self.finished.emit(False, 'Invalid manifest type', {})
+                    return
                 entries = [info for info in zf.infolist() if not info.is_dir() and info.filename != MANIFEST_FILENAME]
                 total = len(entries) or 1
                 with zipfile.ZipFile(self._dest, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as dst:
@@ -207,10 +210,10 @@ class ImportVersionWorker(QThread):
                 pass
             self.finished.emit(False, 'cancelled', {})
         except json.JSONDecodeError as e:
-            logger.error('ImportVersionWorker: invalid manifest: %s', e)
-            self.finished.emit(False, 'Invalid version_data.json manifest', {})
+            logger.error('GameImportVersionWorker: invalid manifest: %s', e)
+            self.finished.emit(False, 'Invalid game_version_data.json manifest', {})
         except Exception as e:
-            logger.error('ImportVersionWorker failed: %s', e, exc_info=True)
+            logger.error('GameImportVersionWorker failed: %s', e, exc_info=True)
             self.finished.emit(False, str(e), {})
 
 

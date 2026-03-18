@@ -86,13 +86,13 @@ def create_downloads_button(app_state=None):
     return btn
 
 
-def create_versions_button(app_state=None):
-    """Create Versions Manager button with icon only."""
+def create_game_versions_button(app_state=None):
+    """Create Game Versions button with icon only."""
     btn = QPushButton()
-    btn.setObjectName('versionsBtn')
+    btn.setObjectName('gameVersionsBtn')
     btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-    btn.setToolTip(tr('versions.title'))
-    btn.setAccessibleName(tr('versions.title'))
+    btn.setToolTip(tr('game_versions.title'))
+    btn.setAccessibleName(tr('game_versions.title'))
     _install_themed_button_icon(btn, 'filerestore', app_state, QSize(22, 22))
     return btn
 

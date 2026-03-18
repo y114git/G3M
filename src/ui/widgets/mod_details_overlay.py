@@ -47,13 +47,19 @@ class LoadModDetailsThread(QThread):
         self.mod_data = mod_data
 
     def _get_mod_id(self):
-        mod_key = get_mod_key(self.mod_data) or ''
-        if not mod_key.startswith('gb_'):
+        from utils.mod_utils import parse_gamebanana_key
+        gb_type, gb_id = parse_gamebanana_key(get_mod_key(self.mod_data) or '')
+        if not gb_id:
             return None
         try:
-            return int(mod_key.removeprefix('gb_'))
+            return int(gb_id)
         except ValueError:
             return None
+
+    def _is_wip(self):
+        from utils.mod_utils import parse_gamebanana_key
+        gb_type, _ = parse_gamebanana_key(get_mod_key(self.mod_data) or '')
+        return gb_type == 'wip'
 
     def _coerce_text(self, text_field):
         if isinstance(text_field, list):
@@ -61,23 +67,23 @@ class LoadModDetailsThread(QThread):
         return text_field if isinstance(text_field, str) else (str(text_field) if text_field else None)
 
     def _extract_screenshots(self, api, screenshots_field):
-        external_url = getattr(self.mod_data, 'external_url', None)
+        is_wip = self._is_wip()
         screenshots_data = screenshots_field
         if isinstance(screenshots_data, list) and len(screenshots_data) == 1 and isinstance(screenshots_data[0], list):
             screenshots_data = screenshots_data[0]
         if isinstance(screenshots_data, list) and all(isinstance(item, str) for item in screenshots_data):
             return [item for item in screenshots_data if item.startswith(('http://', 'https://'))]
         if isinstance(screenshots_data, str):
-            return api.extract_screenshots_from_api(screenshots_data, external_url=external_url)
+            return api.extract_screenshots_from_api(screenshots_data, is_wip=is_wip)
         if isinstance(screenshots_data, dict):
             try:
                 screenshots_data = json.dumps(screenshots_data)
             except (TypeError, ValueError):
                 return []
-            return api.extract_screenshots_from_api(screenshots_data, external_url=external_url)
+            return api.extract_screenshots_from_api(screenshots_data, is_wip=is_wip)
         if not isinstance(screenshots_data, list):
             return []
-        base_url = 'https://images.gamebanana.com/img/ss/wips' if external_url and '/wips/' in external_url else 'https://images.gamebanana.com/img/ss/mods'
+        base_url = 'https://images.gamebanana.com/img/ss/wips' if is_wip else 'https://images.gamebanana.com/img/ss/mods'
         screenshots = []
         for screenshot_obj in screenshots_data:
             if self.isInterruptionRequested():
@@ -98,8 +104,8 @@ class LoadModDetailsThread(QThread):
             if self.isInterruptionRequested():
                 return
             api = GameBananaAPI()
-            external_url = getattr(self.mod_data, 'external_url', None)
-            details = api.get_mod_full_details_for_display(mod_id, external_url=external_url)
+            itemtype = 'Wip' if self._is_wip() else 'Mod'
+            details = api.get_mod_full_details_for_display(mod_id, itemtype=itemtype)
             if details and (not self.isInterruptionRequested()):
                 full_description = self._coerce_text(details.get('text'))
                 tagline = self._coerce_text(details.get('description'))

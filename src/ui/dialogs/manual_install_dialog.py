@@ -602,7 +602,8 @@ class ManualModInstallDialog(QDialog):
         if not self.app_state or not self.mod_service:
             raise ValueError('app_state or mod_service not available')
         if self.gamebanana_metadata.get('mod_id'):
-            mod_key = f"gb_{self.gamebanana_metadata['mod_id']}"
+            item_type = self.gamebanana_metadata.get('item_type', 'mod').lower()
+            mod_key = f"gb_{item_type}_{self.gamebanana_metadata['mod_id']}"
         else:
             import time
             mod_key = f'local_manual_{int(time.time())}'

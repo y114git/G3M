@@ -69,7 +69,7 @@ def resolve_game_executable(base_dir, executable_type='deltarune'):
 
 def find_chapter_resource_dir(base_dir, chapter_id: str, macos_app_names=('DELTARUNE.app', 'DELTARUNEdemo.app')):
     try:
-        if not base_dir:
+        if not base_dir or not chapter_id:
             return None
         target_base = base_dir
         if CURRENT_PLATFORM == 'Darwin':
@@ -95,6 +95,8 @@ def find_chapter_resource_dir(base_dir, chapter_id: str, macos_app_names=('DELTA
 
 def _match_steam_path(normalized, steam_path):
     try:
+        if not normalized or not steam_path:
+            return False
         if os.path.exists(steam_path):
             sp = os.path.normpath(os.path.abspath(steam_path)).lower().replace('\\', '/')
             if normalized == sp or normalized.startswith(sp + '/'):
@@ -136,6 +138,8 @@ def _pizza_names(game_name):
 
 
 def autodetect_path(game_name: str) -> str | None:
+    if not game_name:
+        return None
     if game_name in ('UNDERTALE YELLOW', 'UndertaleYellow', 'undertaleyellow', 'SUGARY SPIRE', 'SugarySpire', 'sugaryspire'):
         return None
     system, paths, names = CURRENT_PLATFORM, [], _pizza_names(game_name)

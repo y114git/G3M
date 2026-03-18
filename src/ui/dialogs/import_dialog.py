@@ -64,8 +64,13 @@ class ImportDialog(QDialog):
 
     def _get_import_keys(self) -> dict[str, str]:
         t = self.import_type
-        title_key = 'versions.import_title' if t == 'versions' else f'{t}.import_{t}'
-        return {'title_key': title_key, 'instructions_key': f'{t}.import_instructions', 'from_file_key': f'{t}.import_from_file', 'from_url_key': f'{t}.import_from_url', 'from_url_button_key': f'{t}.import_from_url_button', 'url_placeholder_key': f'{t}.url_placeholder', 'url_required_key': f'{t}.url_required', 'select_archive_key': f'{t}.select_{t[:-1]}_archive'}
+        if t in ('game_versions', 'mod_versions'):
+            title_key = f'{t}.import_title'
+            select_key = f'{t}.select_archive'
+        else:
+            title_key = f'{t}.import_{t}'
+            select_key = f'{t}.select_{t[:-1]}_archive'
+        return {'title_key': title_key, 'instructions_key': f'{t}.import_instructions', 'from_file_key': f'{t}.import_from_file', 'from_url_key': f'{t}.import_from_url', 'from_url_button_key': f'{t}.import_from_url_button', 'url_placeholder_key': f'{t}.url_placeholder', 'url_required_key': f'{t}.url_required', 'select_archive_key': select_key}
 
     def _get_file_filter_text(self) -> str:
         if self.file_filter:

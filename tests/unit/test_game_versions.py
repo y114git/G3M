@@ -1,19 +1,19 @@
-"""Tests for the Versions Manager system: models, store, utils, workers."""
+"""Tests for the Game Versions system: models, store, utils, workers."""
 import json
 import os
 import zipfile
 
-from models.version_models import VersionRecord
-from services.versions_store import VersionsStore
-from utils.version_utils import (
+from models.game_version_models import GameVersionRecord
+from services.game_versions_store import GameVersionsStore
+from utils.game_version_utils import (
     get_base_game_folder, safe_archive_name, unique_archive_path,
 )
 
 
-class TestVersionRecord:
+class TestGameVersionRecord:
 
     def test_default_values(self):
-        r = VersionRecord()
+        r = GameVersionRecord()
         assert r.archive_path == ''
         assert r.game == ''
         assert r.archive_exists is True
@@ -23,110 +23,110 @@ class TestVersionRecord:
         assert r.imported is False
 
     def test_to_dict_round_trip(self):
-        r = VersionRecord(archive_path='/tmp/test.zip', game='deltarune', size_bytes=1024, file_count=10)
+        r = GameVersionRecord(archive_path='/tmp/test.zip', game='deltarune', size_bytes=1024, file_count=10)
         d = r.to_dict()
         assert d['archive_path'] == '/tmp/test.zip'
         assert d['game'] == 'deltarune'
-        r2 = VersionRecord.from_dict(d)
+        r2 = GameVersionRecord.from_dict(d)
         assert r2.archive_path == r.archive_path
         assert r2.game == r.game
         assert r2.size_bytes == r.size_bytes
 
     def test_from_dict_ignores_unknown_keys(self):
         d = {'archive_path': '/x.zip', 'unknown_field': 42, 'game': 'undertale'}
-        r = VersionRecord.from_dict(d)
+        r = GameVersionRecord.from_dict(d)
         assert r.archive_path == '/x.zip'
         assert r.game == 'undertale'
 
     def test_touch_updates_timestamp(self):
-        r = VersionRecord()
+        r = GameVersionRecord()
         old = r.updated_at
         r.touch()
         assert r.updated_at >= old
 
     def test_display_name(self):
-        r = VersionRecord(archive_path='/path/to/my_save.zip')
+        r = GameVersionRecord(archive_path='/path/to/my_save.zip')
         assert r.display_name == 'my_save'
 
     def test_display_name_empty(self):
-        r = VersionRecord(archive_path='')
+        r = GameVersionRecord(archive_path='')
         assert r.display_name == ''
 
     def test_effective_status_key(self):
-        r = VersionRecord(archive_exists=True)
+        r = GameVersionRecord(archive_exists=True)
         assert r.effective_status_key == 'ready'
         r.archive_exists = False
         assert r.effective_status_key == 'missing'
 
 
-class TestVersionsStore:
+class TestGameVersionsStore:
 
     def test_load_empty(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         records = store.load()
         assert records == []
 
     def test_add_and_find(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         store.load()
-        r = VersionRecord(archive_path='/tmp/v1.zip', game='deltarune')
+        r = GameVersionRecord(archive_path='/tmp/v1.zip', game='deltarune')
         store.add(r)
         found = store.find('/tmp/v1.zip')
         assert found is not None
         assert found.game == 'deltarune'
 
     def test_remove(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         store.load()
-        r = VersionRecord(archive_path='/tmp/v1.zip', game='deltarune')
+        r = GameVersionRecord(archive_path='/tmp/v1.zip', game='deltarune')
         store.add(r)
         store.remove('/tmp/v1.zip')
         assert store.find('/tmp/v1.zip') is None
 
     def test_records_for_game(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         store.load()
-        store.add(VersionRecord(archive_path='/a.zip', game='deltarune'))
-        store.add(VersionRecord(archive_path='/b.zip', game='undertale'))
-        store.add(VersionRecord(archive_path='/c.zip', game='deltarune'))
+        store.add(GameVersionRecord(archive_path='/a.zip', game='deltarune'))
+        store.add(GameVersionRecord(archive_path='/b.zip', game='undertale'))
+        store.add(GameVersionRecord(archive_path='/c.zip', game='deltarune'))
         assert len(store.records_for_game('deltarune')) == 2
         assert len(store.records_for_game('undertale')) == 1
 
     def test_persistence(self, temp_dir):
-        store1 = VersionsStore(temp_dir)
+        store1 = GameVersionsStore(temp_dir)
         store1.load()
-        store1.add(VersionRecord(archive_path='/tmp/persist.zip', game='deltarune'))
-        store2 = VersionsStore(temp_dir)
+        store1.add(GameVersionRecord(archive_path='/tmp/persist.zip', game='deltarune'))
+        store2 = GameVersionsStore(temp_dir)
         store2.load()
         assert store2.find('/tmp/persist.zip') is not None
 
     def test_atomic_write_creates_file(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         store.load()
-        store.add(VersionRecord(archive_path='/tmp/test.zip', game='deltarune'))
-        data_path = os.path.join(temp_dir, 'versions', 'versions_data.json')
+        store.add(GameVersionRecord(archive_path='/tmp/test.zip', game='deltarune'))
+        data_path = os.path.join(temp_dir, 'game_versions', 'game_versions_data.json')
         assert os.path.exists(data_path)
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         assert len(data) == 1
 
     def test_corrupt_data_recovery(self, temp_dir):
-        versions_dir = os.path.join(temp_dir, 'versions')
+        versions_dir = os.path.join(temp_dir, 'game_versions')
         os.makedirs(versions_dir, exist_ok=True)
-        data_path = os.path.join(versions_dir, 'versions_data.json')
+        data_path = os.path.join(versions_dir, 'game_versions_data.json')
         with open(data_path, 'w') as f:
             f.write('{invalid json')
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         records = store.load()
         assert records == []
         assert os.path.exists(data_path + '.bak')
 
     def test_startup_recovery_marks_missing(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         store.load()
-        r = VersionRecord(archive_path='/nonexistent/path.zip', game='deltarune', archive_exists=True)
+        r = GameVersionRecord(archive_path='/nonexistent/path.zip', game='deltarune', archive_exists=True)
         store.add(r)
-        store2 = VersionsStore(temp_dir)
+        store2 = GameVersionsStore(temp_dir)
         store2.load()
         store2.startup_recovery()
         found = store2.find('/nonexistent/path.zip')
@@ -134,24 +134,24 @@ class TestVersionsStore:
         assert found.archive_exists is False
 
     def test_startup_recovery_removes_stale(self, temp_dir):
-        store = VersionsStore(temp_dir)
+        store = GameVersionsStore(temp_dir)
         store.load()
-        r = VersionRecord(archive_path='/nonexistent/stale.zip', game='deltarune', archive_exists=False)
+        r = GameVersionRecord(archive_path='/nonexistent/stale.zip', game='deltarune', archive_exists=False)
         store.add(r)
-        store2 = VersionsStore(temp_dir)
+        store2 = GameVersionsStore(temp_dir)
         store2.load()
         store2.startup_recovery()
         assert store2.find('/nonexistent/stale.zip') is None
 
     def test_startup_recovery_marks_existing(self, temp_dir):
-        archive_path = os.path.join(temp_dir, 'versions', 'test.zip')
-        store = VersionsStore(temp_dir)
+        archive_path = os.path.join(temp_dir, 'game_versions', 'test.zip')
+        store = GameVersionsStore(temp_dir)
         store.load()
         with open(archive_path, 'wb') as f:
             f.write(b'fake zip')
-        r = VersionRecord(archive_path=archive_path, game='deltarune', archive_exists=False)
+        r = GameVersionRecord(archive_path=archive_path, game='deltarune', archive_exists=False)
         store.add(r)
-        store2 = VersionsStore(temp_dir)
+        store2 = GameVersionsStore(temp_dir)
         store2.load()
         store2.startup_recovery()
         found = store2.find(archive_path)
@@ -159,8 +159,8 @@ class TestVersionsStore:
         assert found.archive_exists is True
 
     def test_versions_dir_property(self, temp_dir):
-        store = VersionsStore(temp_dir)
-        assert store.versions_dir == os.path.join(temp_dir, 'versions')
+        store = GameVersionsStore(temp_dir)
+        assert store.versions_dir == os.path.join(temp_dir, 'game_versions')
 
 
 class TestVersionUtils:
@@ -219,7 +219,7 @@ class TestCreateVersionWorker:
         archive_path = os.path.join(temp_dir, 'test_version.zip')
         protected = {'game.exe'}
 
-        from workers.version_archive_worker import CreateVersionWorker
+        from workers.game_version_archive_worker import CreateVersionWorker
         results = []
         worker = CreateVersionWorker(archive_path, game_dir, protected)
         worker.finished.connect(lambda *args: results.append(args))
@@ -240,7 +240,7 @@ class TestCreateVersionWorker:
         archive_path = os.path.join(temp_dir, 'empty.zip')
         empty_dir = os.path.join(temp_dir, 'empty_game')
         os.makedirs(empty_dir)
-        from workers.version_archive_worker import CreateVersionWorker
+        from workers.game_version_archive_worker import CreateVersionWorker
         results = []
         worker = CreateVersionWorker(archive_path, empty_dir, set())
         worker.finished.connect(lambda *args: results.append(args))
@@ -261,7 +261,7 @@ class TestApplyVersionWorker:
             zf.writestr('data.win', 'restored data')
             zf.writestr('subdir/extra.txt', 'extra file')
 
-        from workers.version_archive_worker import ApplyVersionWorker
+        from workers.game_version_archive_worker import ApplyVersionWorker
         results = []
         worker = ApplyVersionWorker(archive_path, game_dir, set(), full_replace=False)
         worker.finished.connect(lambda *args: results.append(args))
@@ -283,7 +283,7 @@ class TestApplyVersionWorker:
         with zipfile.ZipFile(archive_path, 'w') as zf:
             zf.writestr('data.win', 'new data')
 
-        from workers.version_archive_worker import ApplyVersionWorker
+        from workers.game_version_archive_worker import ApplyVersionWorker
         results = []
         worker = ApplyVersionWorker(archive_path, game_dir, {'game.exe'}, full_replace=True)
         worker.finished.connect(lambda *args: results.append(args))
@@ -295,7 +295,7 @@ class TestApplyVersionWorker:
         assert os.path.isfile(os.path.join(game_dir, 'game.exe'))  # protected
 
     def test_apply_missing_archive(self, temp_dir, qapp):
-        from workers.version_archive_worker import ApplyVersionWorker
+        from workers.game_version_archive_worker import ApplyVersionWorker
         results = []
         worker = ApplyVersionWorker('/nonexistent.zip', temp_dir, set(), full_replace=False)
         worker.finished.connect(lambda *args: results.append(args))
@@ -313,22 +313,22 @@ class TestExportImportWorkers:
         exported_path = os.path.join(temp_dir, 'exported.zip')
         manifest = {'manifest_version': 1, 'display_name': 'Test', 'game': 'deltarune'}
 
-        from workers.version_archive_worker import ExportVersionWorker
+        from workers.game_version_archive_worker import GameExportVersionWorker
         export_results = []
-        ew = ExportVersionWorker(source_archive, exported_path, manifest)
+        ew = GameExportVersionWorker(source_archive, exported_path, manifest)
         ew.finished.connect(lambda *args: export_results.append(args))
         ew.run()
         assert export_results[0][0] is True
         assert os.path.isfile(exported_path)
 
         with zipfile.ZipFile(exported_path, 'r') as zf:
-            assert 'version_data.json' in zf.namelist()
+            assert 'game_version_data.json' in zf.namelist()
             assert 'data.win' in zf.namelist()
 
         reimport_path = os.path.join(temp_dir, 'reimported.zip')
-        from workers.version_archive_worker import ImportVersionWorker
+        from workers.game_version_archive_worker import GameImportVersionWorker
         import_results = []
-        iw = ImportVersionWorker(exported_path, reimport_path)
+        iw = GameImportVersionWorker(exported_path, reimport_path)
         iw.finished.connect(lambda *args: import_results.append(args))
         iw.run()
         assert import_results[0][0] is True
@@ -336,7 +336,7 @@ class TestExportImportWorkers:
         assert os.path.isfile(reimport_path)
         with zipfile.ZipFile(reimport_path, 'r') as zf:
             assert 'data.win' in zf.namelist()
-            assert 'version_data.json' not in zf.namelist()
+            assert 'game_version_data.json' not in zf.namelist()
 
     def test_import_missing_manifest(self, temp_dir, qapp):
         source = os.path.join(temp_dir, 'no_manifest.zip')
@@ -344,9 +344,9 @@ class TestExportImportWorkers:
             zf.writestr('data.win', 'data')
 
         dest = os.path.join(temp_dir, 'imported.zip')
-        from workers.version_archive_worker import ImportVersionWorker
+        from workers.game_version_archive_worker import GameImportVersionWorker
         results = []
-        iw = ImportVersionWorker(source, dest)
+        iw = GameImportVersionWorker(source, dest)
         iw.finished.connect(lambda *args: results.append(args))
         iw.run()
         assert results[0][0] is False

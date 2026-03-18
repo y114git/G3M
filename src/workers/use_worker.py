@@ -98,6 +98,7 @@ class UseWorker(QThread):
             return {}
         return {
             'mod_id': self._metadata['gb_mod_id'],
+            'item_type': self._metadata.get('item_type', 'mod'),
             'profile_url': self._metadata.get('profile_url'),
             'icon_url': self._metadata.get('icon_url'),
             'tags': self._metadata.get('tags') or [],
@@ -184,7 +185,8 @@ class UseWorker(QThread):
     def _apply_gb_metadata(config_data: dict, gb_metadata: dict):
         mod_id = gb_metadata.get('mod_id')
         if mod_id:
-            config_data['key'] = f'gb_{mod_id}'
+            item_type = gb_metadata.get('item_type', 'mod')
+            config_data['key'] = f'gb_{item_type}_{mod_id}'
             config_data.pop('mod_key', None)
         if gb_metadata.get('profile_url') and not config_data.get('external_url'):
             config_data['external_url'] = gb_metadata['profile_url']

@@ -1,4 +1,4 @@
-"""Base JSON persistence layer shared by DownloadsStore and VersionsStore."""
+"""Base JSON persistence layer shared by DownloadsStore and GameVersionsStore."""
 import json
 import logging
 import os

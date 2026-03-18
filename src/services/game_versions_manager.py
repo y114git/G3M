@@ -1,4 +1,4 @@
-"""Versions Manager coordinator. Created once in AppWindow."""
+"""Game Versions coordinator. Created once in AppWindow."""
 import logging
 import os
 
@@ -6,10 +6,10 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QFileDialog
 
 from models.game_modes import get_game
-from models.version_models import VersionRecord
-from services.versions_store import VersionsStore
+from models.game_version_models import GameVersionRecord
+from services.game_versions_store import GameVersionsStore
 from utils.time_utils import utc_now_iso
-from utils.version_utils import (
+from utils.game_version_utils import (
     get_base_game_folder, get_protected_exe_paths_with_config,
     unique_archive_path,
 )
@@ -17,8 +17,8 @@ from utils.version_utils import (
 logger = logging.getLogger(__name__)
 
 
-class VersionsManager(QObject):
-    """Coordinator for all version operations."""
+class GameVersionsManager(QObject):
+    """Coordinator for all game version operations."""
     record_added = pyqtSignal(object)
     record_removed = pyqtSignal(str)
     record_updated = pyqtSignal(object)
@@ -28,13 +28,13 @@ class VersionsManager(QObject):
 
     def __init__(self, base_dir: str, settings_getter, parent=None):
         super().__init__(parent)
-        self._store = VersionsStore(base_dir)
+        self._store = GameVersionsStore(base_dir)
         self._settings = settings_getter
         self._workers = {}
         self._applying = set()
 
     @property
-    def store(self) -> VersionsStore:
+    def store(self) -> GameVersionsStore:
         return self._store
 
     def startup(self):
@@ -74,13 +74,13 @@ class VersionsManager(QObject):
             return
         game_def, game_path, base_folder, protected, config = ctx
         archive_path = unique_archive_path(self._store.versions_dir, version_name)
-        record = VersionRecord(
+        record = GameVersionRecord(
             archive_path=archive_path, game=game_id,
             source_game_path=game_path, archive_exists=False,
         )
         self._store.add(record)
 
-        from workers.version_archive_worker import CreateVersionWorker
+        from workers.game_version_archive_worker import CreateVersionWorker
         worker = CreateVersionWorker(archive_path, base_folder, protected, parent=self)
         self._workers[archive_path] = worker
         worker.progress.connect(lambda p: self.progress_updated.emit(archive_path, p))
@@ -119,7 +119,7 @@ class VersionsManager(QObject):
         game_def, game_path, base_folder, protected, config = ctx
         full_replace = config.get('versions_full_replace_files', False)
 
-        from workers.version_archive_worker import ApplyVersionWorker
+        from workers.game_version_archive_worker import ApplyVersionWorker
         worker = ApplyVersionWorker(archive_path, base_folder, protected, full_replace, parent=self)
         self._workers[archive_path] = worker
         self._applying.add(archive_path)
@@ -155,11 +155,11 @@ class VersionsManager(QObject):
             try:
                 os.remove(archive_path)
             except OSError as e:
-                logger.warning('VersionsManager: could not delete archive %s: %s', archive_path, e)
+                logger.warning('GameVersionsManager: could not delete archive %s: %s', archive_path, e)
         self._store.remove(archive_path)
         self.record_removed.emit(archive_path)
 
-    def export_version(self, archive_path: str, parent_widget=None):
+    def export_game_version(self, archive_path: str, parent_widget=None):
         record = self._store.find(archive_path)
         if not record:
             self.operation_error.emit('Version record not found')
@@ -169,7 +169,7 @@ class VersionsManager(QObject):
             return
         from services.localization_service import tr
         dest, _ = QFileDialog.getSaveFileName(
-            parent_widget, tr('versions.export_title'),
+            parent_widget, tr('game_versions.export_title'),
             record.display_name + '.zip', 'ZIP (*.zip)',
         )
         if not dest:
@@ -185,8 +185,8 @@ class VersionsManager(QObject):
             'file_count': record.file_count,
             'size_bytes': record.size_bytes,
         }
-        from workers.version_archive_worker import ExportVersionWorker
-        worker = ExportVersionWorker(archive_path, dest, manifest, parent=self)
+        from workers.game_version_archive_worker import GameExportVersionWorker
+        worker = GameExportVersionWorker(archive_path, dest, manifest, parent=self)
         key = f'export_{archive_path}'
         self._workers[key] = worker
         worker.progress.connect(lambda p: self.progress_updated.emit(archive_path, p))
@@ -205,76 +205,83 @@ class VersionsManager(QObject):
         worker.finished.connect(on_finished)
         worker.start()
 
-    def import_version_from_file(self, game_id: str, source: str):
+    def import_game_version_from_file(self, game_id: str, source: str, cleanup_source_path=None):
         temp_name = os.path.splitext(os.path.basename(source))[0]
         dest_path = unique_archive_path(self._store.versions_dir, temp_name)
-        record = VersionRecord(
+        record = GameVersionRecord(
             archive_path=dest_path, game=game_id, imported=True, archive_exists=False,
         )
         self._store.add(record)
 
-        from workers.version_archive_worker import ImportVersionWorker
-        worker = ImportVersionWorker(source, dest_path, parent=self)
+        from workers.game_version_archive_worker import GameImportVersionWorker
+        worker = GameImportVersionWorker(source, dest_path, parent=self)
         self._workers[dest_path] = worker
         worker.progress.connect(lambda p: self.progress_updated.emit(dest_path, p))
 
         def on_finished(success, error, manifest):
             self._workers.pop(dest_path, None)
             worker.deleteLater()
-            if not success:
-                self._store.remove(dest_path)
-                self.record_removed.emit(dest_path)
-                if error != 'cancelled':
-                    self.operation_error.emit(error or 'Import failed')
-                return
-            manifest_game = manifest.get('game', '')
-            if manifest_game and manifest_game != game_id:
-                self.operation_error.emit(
-                    f'Version is for {manifest_game}, but current game is {game_id}'
-                )
-                self._store.remove(dest_path)
-                self.record_removed.emit(dest_path)
-                try:
-                    os.remove(dest_path)
-                except OSError:
-                    pass
-                return
-            display_name = manifest.get('display_name', temp_name)
-            final_path = unique_archive_path(self._store.versions_dir, display_name)
-            if final_path != dest_path:
-                try:
-                    os.rename(dest_path, final_path)
+            try:
+                if not success:
                     self._store.remove(dest_path)
-                except OSError:
-                    final_path = dest_path
-            size = os.path.getsize(final_path) if os.path.isfile(final_path) else 0
-            if final_path != dest_path:
-                new_record = VersionRecord(
-                    archive_path=final_path, game=game_id,
-                    source_game_path=manifest.get('source_game_path'),
-                    size_bytes=size, file_count=manifest.get('file_count', 0),
-                    imported=True, archive_exists=True,
-                    created_at=manifest.get('created_at', utc_now_iso()),
-                )
-                self._store.add(new_record)
-                self.record_removed.emit(dest_path)
-                self.record_added.emit(new_record)
-            else:
-                record.archive_exists = True
-                record.size_bytes = size
-                record.file_count = manifest.get('file_count', 0)
-                record.source_game_path = manifest.get('source_game_path')
-                record.created_at = manifest.get('created_at', record.created_at)
-                self._store.update(record)
-                self.record_updated.emit(record)
-            self.operation_finished.emit()
+                    self.record_removed.emit(dest_path)
+                    if error != 'cancelled':
+                        self.operation_error.emit(error or 'Import failed')
+                    return
+                manifest_game = manifest.get('game', '')
+                if manifest_game and manifest_game != game_id:
+                    self.operation_error.emit(
+                        f'Version is for {manifest_game}, but current game is {game_id}'
+                    )
+                    self._store.remove(dest_path)
+                    self.record_removed.emit(dest_path)
+                    try:
+                        os.remove(dest_path)
+                    except OSError:
+                        pass
+                    return
+                display_name = manifest.get('display_name', temp_name)
+                final_path = unique_archive_path(self._store.versions_dir, display_name)
+                if final_path != dest_path:
+                    try:
+                        os.rename(dest_path, final_path)
+                        self._store.remove(dest_path)
+                    except OSError:
+                        final_path = dest_path
+                size = os.path.getsize(final_path) if os.path.isfile(final_path) else 0
+                if final_path != dest_path:
+                    new_record = GameVersionRecord(
+                        archive_path=final_path, game=game_id,
+                        source_game_path=manifest.get('source_game_path'),
+                        size_bytes=size, file_count=manifest.get('file_count', 0),
+                        imported=True, archive_exists=True,
+                        created_at=manifest.get('created_at', utc_now_iso()),
+                    )
+                    self._store.add(new_record)
+                    self.record_removed.emit(dest_path)
+                    self.record_added.emit(new_record)
+                else:
+                    record.archive_exists = True
+                    record.size_bytes = size
+                    record.file_count = manifest.get('file_count', 0)
+                    record.source_game_path = manifest.get('source_game_path')
+                    record.created_at = manifest.get('created_at', record.created_at)
+                    self._store.update(record)
+                    self.record_updated.emit(record)
+                self.operation_finished.emit()
+            finally:
+                if cleanup_source_path and cleanup_source_path != dest_path:
+                    try:
+                        os.remove(cleanup_source_path)
+                    except OSError as e:
+                        logger.warning('GameVersionsManager: could not delete import source %s: %s', cleanup_source_path, e)
 
         worker.finished.connect(on_finished)
         worker.start()
         self.record_added.emit(record)
 
-    def import_version_from_url(self, game_id: str, url: str):
-        from workers.version_archive_worker import UrlDownloadWorker
+    def import_game_version_from_url(self, game_id: str, url: str):
+        from workers.game_version_archive_worker import UrlDownloadWorker
         import tempfile
         filename = os.path.basename(url.split('?')[0]) or 'version.zip'
         dest = os.path.join(tempfile.gettempdir(), filename)
@@ -288,7 +295,7 @@ class VersionsManager(QObject):
             if not success:
                 self.operation_error.emit(error or 'URL download failed')
                 return
-            self.import_version_from_file(game_id, dest)
+            self.import_game_version_from_file(game_id, dest, cleanup_source_path=dest)
 
         worker.finished.connect(on_finished)
         worker.start()

@@ -396,6 +396,10 @@ class ModEditorDialog(QDialog):
             open_folder_btn = QPushButton(tr('ui.open_mod_folder'))
             open_folder_btn.clicked.connect(self._open_mod_folder)
             row.addWidget(open_folder_btn)
+            row.addSpacing(10)
+            switch_version_btn = QPushButton(tr('mod_versions.switch_version_button'))
+            switch_version_btn.clicked.connect(self._open_mod_versions)
+            row.addWidget(switch_version_btn)
         row.addStretch()
         cancel_btn = QPushButton(tr('ui.cancel_button'))
         cancel_btn.clicked.connect(self._on_cancel)
@@ -757,6 +761,19 @@ class ModEditorDialog(QDialog):
             QDesktopServices.openUrl(QUrl.fromLocalFile(mod_folder))
         else:
             QMessageBox.warning(self, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_folder or ''))
+
+    def _open_mod_versions(self):
+        mod_folder = self._find_mod_folder()
+        if not mod_folder or not os.path.exists(mod_folder):
+            QMessageBox.warning(self, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_folder or ''))
+            return
+        from ui.dialogs.mod_versions_dialog import ModVersionsDialog
+        app_state = getattr(self.parent_app, 'app_state', None)
+        if not app_state:
+            logging.warning('ModEditorDialog: Cannot open mod versions - app_state not available')
+            return
+        dialog = ModVersionsDialog(mod_folder, self.mod_data, app_state, self)
+        dialog.exec()
 
     def _populate_fields(self):
         d = self.mod_data

@@ -20,7 +20,6 @@ from controllers.shortcut_controller import (
 from services.game_runner import _parse_shortcut_arg, _find_mod_source_dir, _resolve_chapter_source_dir
 
 
-
 @pytest.fixture
 def game_mode():
     from models.game_modes import get_game
@@ -89,10 +88,9 @@ def mod_on_disk(shortcut_temp_dir):
     return mod_dir
 
 
-
 class TestParseShortcutArg:
     def test_parse_base64(self):
-        cfg = {'game_id': 'deltarune', 'chapter_mods': {'deltarune_2': 'gb_123'}}
+        cfg = {'game_id': 'deltarune', 'chapter_mods': {'deltarune_2': 'gb_mod_123'}}
         b64 = base64.b64encode(json.dumps(cfg).encode()).decode()
         result = _parse_shortcut_arg(b64)
         assert result == cfg
@@ -126,7 +124,6 @@ class TestParseShortcutArg:
         b64 = base64.b64encode(json.dumps(cfg).encode()).decode()
         result = _parse_shortcut_arg(b64)
         assert result['mod_key'] == 'old_mod'
-
 
 
 class TestFindModSourceDir:
@@ -174,7 +171,6 @@ class TestFindModSourceDir:
             assert result == mod_dir
 
 
-
 class TestResolveChapterSourceDir:
     def test_chapter_subfolder(self, mod_on_disk):
         result = _resolve_chapter_source_dir(mod_on_disk, 'deltarune_2')
@@ -200,7 +196,6 @@ class TestResolveChapterSourceDir:
     def test_none_for_empty_input(self):
         result = _resolve_chapter_source_dir('', 'deltarune_2')
         assert result is None
-
 
 
 class TestCollectChapterData:
@@ -251,7 +246,6 @@ class TestCollectChapterData:
         assert chapter_mods.get('deltarune_3') is None
 
 
-
 class TestBuildShortcutConfig:
     def test_basic_config(self, mock_app_state):
         chapter_mods = {'deltarune_0': None, 'deltarune_2': 'test_mod'}
@@ -270,7 +264,6 @@ class TestBuildShortcutConfig:
         mock_app_state.current_mode = 'full'
         cfg = _build_shortcut_config(mock_app_state, {'deltarune': None})
         assert cfg['chapter_mode'] is False
-
 
 
 class TestValidatePrerequisites:
@@ -307,7 +300,6 @@ class TestValidatePrerequisites:
         assert error is None
 
 
-
 class TestGenerateShortcutFilename:
     def test_with_mod(self, game_mode, mock_mod_data):
         name = _generate_shortcut_filename(game_mode, {'deltarune_2': mock_mod_data})
@@ -325,13 +317,11 @@ class TestGenerateShortcutFilename:
         assert all(c.isalnum() or c in ('_', '-') for c in name)
 
 
-
 class TestGetPlatformExtension:
     def test_returns_valid_extension(self):
         ext = _get_platform_extension()
         assert ext.startswith('.')
         assert ext in ('.vbs', '.sh', '.command')
-
 
 
 class TestWriteShortcutFile:
@@ -371,7 +361,7 @@ class TestWriteShortcutFile:
         assert os.access(filepath, os.X_OK)
 
     def test_config_roundtrip_via_base64(self, shortcut_temp_dir):
-        cfg = {'game_id': 'deltarune', 'chapter_mods': {'deltarune_0': None, 'deltarune_2': 'gb_12345'},
+        cfg = {'game_id': 'deltarune', 'chapter_mods': {'deltarune_0': None, 'deltarune_2': 'gb_mod_12345'},
                'chapter_mode': True, 'launch_via_steam': True}
         filepath = os.path.join(shortcut_temp_dir, f'test{_get_platform_extension()}')
         _write_shortcut_file(filepath, cfg)

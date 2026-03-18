@@ -34,8 +34,23 @@ class DeltamodConverter:
             folder_name = get_unique_mod_dir(self.mods_dir, mod_name)
             target_mod_dir = os.path.join(self.mods_dir, folder_name)
             if os.path.exists(target_mod_dir):
-                shutil.rmtree(target_mod_dir)
-            os.makedirs(target_mod_dir)
+                for item in os.listdir(target_mod_dir):
+                    if item == 'mod_versions':
+                        continue
+                    item_path = os.path.join(target_mod_dir, item)
+                    if os.path.isdir(item_path):
+                        try:
+                            shutil.rmtree(item_path)
+                        except OSError as e:
+                            logging.error(f"Failed to remove directory {item_path} in {target_mod_dir}: {e}")
+                            raise
+                    else:
+                        try:
+                            os.remove(item_path)
+                        except OSError as e:
+                            logging.error(f"Failed to remove file {item_path} in {target_mod_dir}: {e}")
+                            raise
+            os.makedirs(target_mod_dir, exist_ok=True)
             self._process_files(target_mod_dir)
             icon_path = os.path.join(target_mod_dir, '_icon.png')
             if not os.path.exists(icon_path):

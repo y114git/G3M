@@ -11,12 +11,37 @@ def get_mod_name(mod_data, default='Unknown'): return default if mod_data is Non
 def get_gamebanana_key(mod_data):
     """Get GameBanana key if mod is from GameBanana."""
     key = _get_mod_field(mod_data, 'key') or _get_mod_field(mod_data, 'mod_key')
-    return key if key and key.startswith('gb_') else None
+    return key if key and isinstance(key, str) and (key.startswith('gb_mod_') or key.startswith('gb_wip_')) else None
+
+
+def parse_gamebanana_key(key):
+    """Parse gb_{type}_{id} key → (type_str, numeric_id_str) or (None, None)."""
+    if not key or not isinstance(key, str):
+        return None, None
+    if key.startswith('gb_mod_'):
+        return 'mod', key[7:]
+    if key.startswith('gb_wip_'):
+        return 'wip', key[7:]
+    return None, None
 
 
 def get_gamebanana_mod_id(mod_data):
-    """Get GameBanana mod ID (numeric part after gb_)."""
-    return key[3:] if (key := get_gamebanana_key(mod_data)) else None
+    """Get GameBanana numeric ID string from mod data."""
+    _, mod_id = parse_gamebanana_key(get_gamebanana_key(mod_data))
+    return mod_id
+
+
+def get_gamebanana_item_type(mod_data):
+    """Get GB API item type ('Mod' or 'Wip') from mod data key.
+
+    Returns 'Wip' if gb_type == 'wip', otherwise returns 'Mod' as default.
+    Falls back to 'Mod' when parse_gamebanana_key(get_gamebanana_key(mod_data))
+    yields gb_type == None (invalid/non-GameBanana key). Callers who need to
+    distinguish "actual Mod" vs "couldn't parse" should call parse_gamebanana_key
+    directly and inspect its return value.
+    """
+    gb_type, _ = parse_gamebanana_key(get_gamebanana_key(mod_data))
+    return 'Wip' if gb_type == 'wip' else 'Mod'
 
 
 def resolve_mod_icon(config_data: dict, mod_folder_path: str):

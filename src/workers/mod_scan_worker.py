@@ -79,8 +79,8 @@ class ModScanThread(QThread):
                         continue
         except OSError:
             logging.error(f'ModScanThread: failed to list directory {self.mods_dir}')
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f'ModScanThread: Unexpected error during scan: {e}')
         try:
             self.scan_completed.emit(result)
         except Exception as e:

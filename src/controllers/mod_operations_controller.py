@@ -10,7 +10,7 @@ from config.constants import UI_COLORS
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod_utils import sort_gamebanana_files_by_priority
 from workers.install.batch_install_worker import InstallModsThread
-from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id
+from utils.mod_utils import get_mod_key, get_mod_name, get_gamebanana_mod_id, get_gamebanana_item_type
 from adapters.gamebanana_adapter import GameBananaAPI
 from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 
@@ -87,6 +87,8 @@ class ModOperationsController:
             self.feedback_service.show_message('error', 'errors.invalid_gamebanana_mod_id')
             return
         mod_id = int(mod_id_str)
+        itemtype = get_gamebanana_item_type(mod)
+        item_type_lower = 'wip' if itemtype == 'Wip' else 'mod'
         download_url = None
         file_id = None
         file_name = None
@@ -99,9 +101,10 @@ class ModOperationsController:
         if not download_url:
             self.feedback_service.show_message('error', 'errors.no_download_url')
             return
-        canonical_key = f'gb_mod_{mod_id}_{file_id}' if file_id else f'gb_mod_{mod_id}'
+        canonical_key = f'gb_{item_type_lower}_{mod_id}_{file_id}' if file_id else f'gb_{item_type_lower}_{mod_id}'
         metadata = {
             'gb_mod_id': mod_id,
+            'item_type': item_type_lower,
             'gb_file_id': file_id,
             'file_name': file_name,
             'compatibility': compatibility,
@@ -156,8 +159,8 @@ class ModOperationsController:
         mod_id = int(mod_id_str)
         try:
             api = GameBananaAPI()
-            external_url = getattr(mod, 'external_url', None)
-            compat = api.get_supported_files_for_mod(mod_id, external_url=external_url)
+            itemtype = get_gamebanana_item_type(mod)
+            compat = api.get_supported_files_for_mod(mod_id, itemtype=itemtype)
             files = sort_gamebanana_files_by_priority(compat.get('supported_files') or [])
             if files:
                 mod.gamebanana_supported_files = files
@@ -177,8 +180,8 @@ class ModOperationsController:
         mod_id = int(mod_id_str)
         try:
             api = GameBananaAPI()
-            external_url = getattr(mod, 'external_url', None)
-            all_files = api.get_mod_files(mod_id, external_url=external_url)
+            itemtype = get_gamebanana_item_type(mod)
+            all_files = api.get_mod_files(mod_id, itemtype=itemtype)
             if not all_files:
                 return []
             formatted_files = []

@@ -261,6 +261,7 @@ class ModManager(QObject):
         except Exception as e:
             logging.error(f'load_local_mods: Failed to get mods cache: {e}', exc_info=True)
             cache = {}
+        from utils.mod_utils import parse_gamebanana_key
         installed_mods = {}
         try:
             for cache_key, mod_info in cache.items():
@@ -313,6 +314,10 @@ class ModManager(QObject):
                             logging.debug(f'load_local_mods: Skipping mod {key} with empty/invalid files data')
                     except Exception as e:
                         logging.warning(f'load_local_mods: Failed to load files for mod {key}: {e}', exc_info=True)
+                for field in ('name', 'author', 'tagline', 'version', 'game', 'game_version'):
+                    val = config_data.get(field)
+                    if val:
+                        setattr(existing_mod, field, val)
                 _sync_mod_icon(existing_mod, config_data, key)
 
             existing_keys = {k for mod in self.app_state.all_mods if (k := get_mod_key(mod))}
@@ -366,14 +371,14 @@ class ModManager(QObject):
             installed_gb_keys = set(installed_gamebanana_by_key)
             for mod in self.app_state.all_mods:
                 mod_key_attr = get_mod_key(mod)
-                if mod_key_attr and mod_key_attr.startswith('gb_') and mod_key_attr in installed_gb_keys:
-                    if (getattr(mod, 'downloads', 0) or 0) <= 0:
+                if mod_key_attr and mod_key_attr in installed_gb_keys:
+                    gb_type, gb_id = parse_gamebanana_key(mod_key_attr)
+                    if gb_type and gb_id and (getattr(mod, 'downloads', 0) or 0) <= 0:
                         try:
                             from adapters.gamebanana_adapter import GameBananaAPI
                             api = GameBananaAPI()
-                            mod_id = int(mod_key_attr.replace('gb_', '', 1))
-                            external_url = getattr(mod, 'external_url', None)
-                            downloaded_count = api.get_mod_downloads_only(mod_id, external_url=external_url)
+                            itemtype = 'Wip' if gb_type == 'wip' else 'Mod'
+                            downloaded_count = api.get_mod_downloads_only(int(gb_id), itemtype=itemtype)
                             if downloaded_count is not None:
                                 mod.downloads = max(downloaded_count, 0)
                         except Exception as e:
@@ -468,6 +473,7 @@ class ModManager(QObject):
 
     @staticmethod
     def resolve_gamebanana_file(mod_info, api, selected_file=None) -> Optional[Dict]:
+        from utils.mod_utils import parse_gamebanana_key, get_gamebanana_key
         if selected_file:
             return selected_file
         files = sort_gamebanana_files_by_priority(getattr(mod_info, 'gamebanana_supported_files', []) or [])
@@ -475,12 +481,11 @@ class ModManager(QObject):
             mod_info.gamebanana_supported_files = files
             return files[0]
         try:
-            key = get_mod_key(mod_info)
-            mod_id = int(key.replace('gb_', '', 1)) if key and key.startswith('gb_') else None
-            if not mod_id:
+            gb_type, gb_id = parse_gamebanana_key(get_gamebanana_key(mod_info))
+            if not gb_id:
                 return None
-            external_url = getattr(mod_info, 'external_url', None)
-            compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
+            itemtype = 'Wip' if gb_type == 'wip' else 'Mod'
+            compat = api.get_supported_files_for_mod(int(gb_id), itemtype=itemtype)
             files = sort_gamebanana_files_by_priority(compat.get('supported_files') or [])
             if files:
                 mod_info.gamebanana_supported_files = files

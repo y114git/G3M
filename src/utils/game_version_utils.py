@@ -1,4 +1,4 @@
-"""Helpers for the Versions Manager: base game folder, protected exe, safe archive naming."""
+"""Helpers for Game Versions: base game folder, protected exe, safe archive naming."""
 import os
 import re
 from config.constants import CURRENT_PLATFORM
@@ -33,7 +33,7 @@ def get_protected_exe_paths_with_config(base_folder: str, game_path: str, game_d
     protected = set()
     if not base_folder or not os.path.isdir(base_folder):
         return protected
-    main_exe = resolve_game_executable(game_path, game_type=game_def.game_id if game_def else None)
+    main_exe = resolve_game_executable(game_path, executable_type=game_def.game_id if game_def else 'deltarune')
     if main_exe and os.path.isfile(main_exe):
         try:
             rel = os.path.relpath(main_exe, base_folder)

@@ -23,22 +23,21 @@ class CompatibilityCheckThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
+            from utils.mod_utils import parse_gamebanana_key
             key = get_mod_key(self.mod_data)
-            if not key or not key.startswith('gb_'):
-                return
-            mod_id = key.replace('gb_', '', 1)
-            if not mod_id:
+            gb_type, gb_id = parse_gamebanana_key(key)
+            if not gb_id:
                 return
             from adapters.gamebanana_adapter import GameBananaAPI
-            cached = GameBananaAPI._compatibility_cache.get(int(mod_id))
+            cached = GameBananaAPI._compatibility_cache.get(int(gb_id))
             if cached:
                 self.compatibility_checked.emit(self.mod_data, cached)
                 return
             api = GameBananaAPI()
             if self.isInterruptionRequested():
                 return
-            external_url = getattr(self.mod_data, 'external_url', None)
-            compat = api.get_supported_files_for_mod(int(mod_id), external_url=external_url)
+            itemtype = 'Wip' if gb_type == 'wip' else 'Mod'
+            compat = api.get_supported_files_for_mod(int(gb_id), itemtype=itemtype)
             self.compatibility_checked.emit(self.mod_data, compat)
         except Exception as e:
             logging.warning(f'CompatibilityCheckThread: Error checking compatibility: {e}', exc_info=True)
@@ -231,11 +230,14 @@ class ModCardWidget(BaseModWidget):
         key = get_mod_key(self.mod_data)
         if key and key.startswith('gb_'):
             try:
-                from adapters.gamebanana_adapter import GameBananaAPI
-                cached = GameBananaAPI._compatibility_cache.get(int(key[3:]))
-                if cached:
-                    self._on_compatibility_checked(self.mod_data, cached)
-                    return
+                from utils.mod_utils import parse_gamebanana_key
+                _, gb_id = parse_gamebanana_key(key)
+                if gb_id:
+                    from adapters.gamebanana_adapter import GameBananaAPI
+                    cached = GameBananaAPI._compatibility_cache.get(int(gb_id))
+                    if cached:
+                        self._on_compatibility_checked(self.mod_data, cached)
+                        return
             except (ValueError, TypeError):
                 pass
         if self._compatibility_thread:
@@ -333,9 +335,8 @@ class ModCardWidget(BaseModWidget):
         if key and key.startswith('gb_'):
             dm = self._get_downloads_manager()
             if dm:
-                prefix = f'gb_mod_{key.replace("gb_", "", 1)}'
                 for r in dm.records:
-                    if r.canonical_key and r.canonical_key.startswith(prefix) and r.is_active:
+                    if r.canonical_key and r.canonical_key.startswith(key) and r.is_active:
                         self.action_button.setEnabled(False)
                         self.action_button.setToolTip(tr('downloads.already_downloading'))
                         return

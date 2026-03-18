@@ -154,7 +154,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     name='DELTAHUB',
-    icon='../src/assets/icons/icon.ico',
+    icon='assets/icons/icon.ico',
     console=False,
     upx=True,
     upx_exclude=[],
@@ -164,7 +164,7 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
         name='DELTAHUB.app',
-        icon='../src/assets/icons/icon.icns',
+        icon='assets/icons/icon.icns',
         bundle_identifier='com.y114.deltahub',
         info_plist={
             'CFBundleURLTypes': [

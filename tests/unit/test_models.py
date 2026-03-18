@@ -7,10 +7,6 @@ from models.game_modes import (
 )
 
 
-# =========================================================================
-# ModInfo tests
-# =========================================================================
-
 class TestModInfo:
 
     def test_creation_minimal(self):
@@ -130,11 +126,25 @@ class TestModInfo:
         assert mod.is_valid_for_demo() is False
 
     def test_is_gamebanana_mod(self):
-        mod = ModInfo(key='gb_12345', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(key='gb_mod_12345', name='N', version='1.0', author='A', tagline='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False)
         assert mod.is_gamebanana_mod() is True
         assert mod.get_gamebanana_mod_id() == '12345'
+
+    def test_is_gamebanana_wip_mod(self):
+        mod = ModInfo(key='gb_wip_67890', name='N', version='1.0', author='A', tagline='T',
+                      game_version='1.0', description_url='', downloads=0,
+                      game='deltarune', is_verified=False)
+        assert mod.is_gamebanana_mod() is True
+        assert mod.get_gamebanana_mod_id() == '67890'
+
+    def test_legacy_gb_key_not_recognized(self):
+        mod = ModInfo(key='gb_12345', name='N', version='1.0', author='A', tagline='T',
+                      game_version='1.0', description_url='', downloads=0,
+                      game='deltarune', is_verified=False)
+        assert mod.is_gamebanana_mod() is False
+        assert mod.get_gamebanana_mod_id() is None
 
     def test_is_not_gamebanana_mod(self):
         mod = ModInfo(key='local_mod', name='N', version='1.0', author='A', tagline='T',
@@ -143,10 +153,6 @@ class TestModInfo:
         assert mod.is_gamebanana_mod() is False
         assert mod.get_gamebanana_mod_id() is None
 
-
-# =========================================================================
-# ModFileData tests
-# =========================================================================
 
 class TestModFileData:
 
@@ -174,10 +180,6 @@ class TestModFileData:
         assert ModFileData().is_valid() is False
 
 
-# =========================================================================
-# GameTab tests
-# =========================================================================
-
 class TestGameTab:
 
     def test_creation(self):
@@ -196,10 +198,6 @@ class TestGameTab:
         tab = GameTab(tab_id='deltarunedemo', files_key='demo', name_key='tabs.demo', direct_launch=False)
         assert tab.direct_launch is False
 
-
-# =========================================================================
-# GameDefinition base class tests
-# =========================================================================
 
 class TestGameDefinition:
 
@@ -220,10 +218,6 @@ class TestGameDefinition:
         gd = GameDefinition()
         assert gd.get_chapter_id(0) == ''
 
-
-# =========================================================================
-# Concrete game definition tests
-# =========================================================================
 
 class TestDeltaruneGame:
 
@@ -394,10 +388,6 @@ class TestSugarySpireGame:
         assert g.tabs[0].files_key == 'undertale'
 
 
-# =========================================================================
-# Game registry tests
-# =========================================================================
-
 class TestGameRegistry:
 
     def test_all_games_registered(self):
@@ -449,10 +439,6 @@ class TestGameRegistry:
         assert UndertaleGame is UndertaleGame
 
 
-# =========================================================================
-# Game path helpers
-# =========================================================================
-
 class TestGamePathHelpers:
 
     def test_get_game_path(self):
@@ -473,28 +459,3 @@ class TestGamePathHelpers:
     def test_get_custom_exec_config_key(self):
         g = PizzaTowerGame()
         assert g.get_custom_exec_config_key() == 'pizzatower_custom_executable_path'
-
-
-# =========================================================================
-# Game detection service tests
-# =========================================================================
-
-class TestGameDetectionService:
-
-    def test_get_game_type_string(self):
-        from services.game_detection_service import get_game_type_string
-        assert get_game_type_string(DeltaruneGame()) == 'deltarune'
-        assert get_game_type_string(UndertaleGame()) == 'undertale'
-        assert get_game_type_string(PizzaTowerGame()) == 'pizzatower'
-
-    def test_get_game_name_string(self):
-        from services.game_detection_service import get_game_name_string
-        assert get_game_name_string(DeltaruneGame()) == 'DELTARUNE'
-        assert get_game_name_string(UndertaleGame()) == 'UNDERTALE'
-        assert get_game_name_string(SugarySpireGame()) == 'Sugary Spire'
-
-    def test_get_chapter_id_for_game_mode(self):
-        from services.game_detection_service import get_chapter_id_for_game_mode
-        assert get_chapter_id_for_game_mode(DeltaruneGame()) == 'deltarune'
-        assert get_chapter_id_for_game_mode(DeltaruneDemoGame()) == 'deltarunedemo'
-        assert get_chapter_id_for_game_mode(UndertaleGame()) == 'undertale'

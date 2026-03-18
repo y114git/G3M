@@ -1,4 +1,4 @@
-"""Data models for the Versions Manager system."""
+"""Data models for the Game Versions system."""
 import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional
@@ -7,8 +7,8 @@ from utils.time_utils import utc_now_iso
 
 
 @dataclass
-class VersionRecord:
-    """Persistent version record. Serialized to JSON."""
+class GameVersionRecord:
+    """Persistent game version record. Serialized to JSON."""
     archive_path: str = ""
     game: str = ""
     created_at: str = field(default_factory=utc_now_iso)
@@ -24,7 +24,7 @@ class VersionRecord:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'VersionRecord':
+    def from_dict(cls, data: Dict[str, Any]) -> 'GameVersionRecord':
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def touch(self):

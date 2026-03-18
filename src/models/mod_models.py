@@ -85,10 +85,12 @@ class ModInfo:
         return self.game == 'deltarunedemo' and bool((self.files and self.files.get('demo')) or (self.demo_url and self.demo_version))
 
     def is_gamebanana_mod(self) -> bool:
-        return bool(self.key and isinstance(self.key, str) and self.key.startswith('gb_'))
+        return bool(self.key and isinstance(self.key, str) and (self.key.startswith('gb_mod_') or self.key.startswith('gb_wip_')))
 
     def get_gamebanana_mod_id(self) -> Optional[str]:
-        return self.key[3:] if self.is_gamebanana_mod() and self.key else None
+        from utils.mod_utils import parse_gamebanana_key
+        _, mod_id = parse_gamebanana_key(self.key)
+        return mod_id
 
     @classmethod
     def from_dict(cls, data_dict: Dict[str, Any]) -> 'ModInfo':

@@ -1,5 +1,6 @@
 """User presence tracking worker."""
 import json
+import logging
 import requests
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
@@ -33,8 +34,8 @@ class PresenceWorker(QObject):
                     count = max(int((resp.json() or {}).get('online', 0)), 0)
                 except (json.JSONDecodeError, ValueError, TypeError):
                     count = 0
-        except (requests.Timeout, requests.ConnectionError, requests.RequestException):
-            pass
+        except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
+            logging.debug(f'Presence worker network error: {e}')
         finally:
             self._busy = False
             self._safe_emit(self.update_online_count, count)

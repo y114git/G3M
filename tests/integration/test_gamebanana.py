@@ -69,7 +69,7 @@ class TestGameBananaAPI:
         assert isinstance(result['has_deltamod_file'], bool)
 
     @patch('requests.Session')
-    def test_get_supported_files_with_external_url(self, mock_session_class):
+    def test_get_supported_files_with_itemtype(self, mock_session_class):
         from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
@@ -79,8 +79,7 @@ class TestGameBananaAPI:
         mock_session.get.return_value = mock_response
         mock_session_class.return_value = mock_session
         api = GameBananaAPI()
-        external_url = 'https://gamebanana.com/mods/12345'
-        result = api.get_supported_files_for_mod(mod_id=12345, external_url=external_url)
+        result = api.get_supported_files_for_mod(mod_id=12345, itemtype='Wip')
         assert isinstance(result, dict)
         assert 'supported_files' in result
         assert 'has_supported_files' in result
@@ -103,16 +102,3 @@ class TestGameBananaConverter:
             assert converter is not None
         finally:
             os.unlink(archive_path)
-
-
-class TestGameBananaUpdateManager:
-
-    def test_update_service_initialization(self, app_state, feedback_service):
-        try:
-            from services.gamebanana_update_service import GameBananaUpdateManager
-            update_service = GameBananaUpdateManager(mods_dir=app_state.mods_dir)
-            assert update_service is not None
-            assert update_service.mods_dir == app_state.mods_dir
-        except ImportError:
-            import pytest
-            pytest.skip('GameBananaUpdateManager not available in this version')

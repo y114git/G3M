@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QFrame, QProgressBar, QSizePolicy, QMessageBox,
 )
 
-from models.download_models import DownloadRecord
+from models.download_models import DownloadRecord, SourceKind, TargetKind
 from services.localization_service import tr
 from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values, get_dialog_text_color
 from utils.path_utils import colored_icon
@@ -153,6 +153,7 @@ class DownloadsDialog(QDialog):
         self.setMinimumSize(520, 400)
         self.resize(560, 480)
         self.setModal(False)
+        self.setAcceptDrops(True)
         self._build_ui()
         self._apply_theme()
         self._populate()
@@ -310,7 +311,47 @@ class DownloadsDialog(QDialog):
         for w in self._record_widgets.values():
             w.relocalize_ui()
 
+    def dragEnterEvent(self, event):
+        md = event.mimeData()
+        if md.hasUrls() or md.hasText():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        md = event.mimeData()
+        accepted = False
+        if md.hasUrls():
+            for u in md.urls():
+                path = u.toLocalFile()
+                if path and os.path.isfile(path):
+                    if not accepted:
+                        event.acceptProposedAction()
+                        accepted = True
+                    name = os.path.basename(path)
+                    self._manager.enqueue(
+                        display_name=name, source_kind=SourceKind.LOCAL_FILE,
+                        target_kind=TargetKind.MOD, source_file_path=path,
+                    )
+                else:
+                    s = u.toString()
+                    if s.startswith(('http://', 'https://')):
+                        if not accepted:
+                            event.acceptProposedAction()
+                            accepted = True
+                        name = os.path.basename(s.split('?')[0]) or tr('downloads.external_download')
+                        self._manager.enqueue(
+                            display_name=name, source_kind=SourceKind.EXTERNAL_URL,
+                            target_kind=TargetKind.MOD, source_url=s,
+                        )
+        if md.hasText():
+            text = md.text().strip()
+            if text.startswith(('http://', 'https://')):
+                event.acceptProposedAction()
+                name = os.path.basename(text.split('?')[0]) or tr('downloads.external_download')
+                self._manager.enqueue(
+                    display_name=name, source_kind=SourceKind.EXTERNAL_URL,
+                    target_kind=TargetKind.MOD, source_url=text,
+                )
+
     def refresh_theme(self):
-        """Refresh theme/styles."""
         self._apply_theme()
         self._folder_btn.setIcon(colored_icon('folder', get_dialog_text_color(self._app_state)))

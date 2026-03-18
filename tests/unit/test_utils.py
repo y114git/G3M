@@ -185,7 +185,7 @@ class TestImageLoader:
 
     def test_image_loader_exists(self):
         import importlib.util
-        spec = importlib.util.find_spec('utils.image_loader')
+        spec = importlib.util.find_spec('ui.utils.image_loader')
         if spec is None:
             pytest.skip('ImageLoader not available')
         assert spec is not None

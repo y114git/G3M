@@ -66,8 +66,11 @@ class BlocklistManager:
             if pt == self.PREFIX_TYPE_ID:
                 if (mod_id := _getattr_first(mod, 'id', '_id')) and str(mod_id).lower() == val:
                     return True
-                if (key := _getattr_first(mod, 'key', 'mod_key')) and key.startswith('gb_') and key[3:].lower() == val:
-                    return True
+                if (key := _getattr_first(mod, 'key', 'mod_key')) and key.startswith('gb_'):
+                    from utils.mod_utils import parse_gamebanana_key
+                    _, gb_id = parse_gamebanana_key(key)
+                    if gb_id and gb_id.lower() == val:
+                        return True
             elif pt == self.PREFIX_TYPE_NAME and (n := _getattr_first(mod, 'name', 'title')) and val in n.lower():
                 return True
             elif pt == self.PREFIX_TYPE_CATEGORY and (c := _getattr_first(mod, 'category', 'cat_name', 'gamebanana_category')) and c.lower() == val:

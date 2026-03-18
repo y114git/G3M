@@ -254,12 +254,11 @@ class DownloadsManager(QObject):
         record = self._store.find(record_id)
         if not record:
             return
-        worker = self._workers.get(record_id)
+        worker = self._workers.pop(record_id, None)
         if worker and hasattr(worker, 'cancel'):
             worker.cancel()
             worker.requestInterruption()
             worker.finished.connect(worker.deleteLater)
-            QTimer.singleShot(100, lambda w=worker: w.deleteLater() if w.isFinished() else None)
         record.download_status = DownloadStatus.CANCELLED
         record.use_status = UseStatus.CANCELLED
         record.file_exists = False
@@ -350,6 +349,7 @@ class DownloadsManager(QObject):
             return {}
         return {
             'mod_id': m['gb_mod_id'],
+            'item_type': m.get('item_type', 'mod'),
             'name': record.display_name,
             'author': m.get('author'),
             'profile_url': m.get('profile_url'),
