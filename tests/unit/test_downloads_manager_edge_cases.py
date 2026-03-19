@@ -320,6 +320,7 @@ class TestDownloadsManagerEdgeCases:
 
         with patch('workers.download_worker.DownloadWorker') as mock_worker_class:
             mock_worker = Mock()
+            mock_worker.isFinished.return_value = False
             mock_worker_class.return_value = mock_worker
 
             record_id, _ = manager.enqueue(
@@ -332,6 +333,8 @@ class TestDownloadsManagerEdgeCases:
             manager._on_download_finished(record_id, True, '', '')
 
             assert record_id not in manager._workers
+            mock_worker.finished.connect.assert_called_once_with(mock_worker.deleteLater)
+            mock_worker.deleteLater.assert_not_called()
 
         # Clean up manager to prevent QThread issues
         manager.deleteLater()

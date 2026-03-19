@@ -23,6 +23,18 @@ def _safe_filename(name: str) -> str:
     return _SAFE_RE.sub('_', name)[:80] or 'file'
 
 
+def _cleanup_worker(worker):
+    if not worker:
+        return
+    try:
+        if worker.isFinished():
+            worker.deleteLater()
+        else:
+            worker.finished.connect(worker.deleteLater)
+    except Exception:
+        pass
+
+
 class DownloadsManager(QObject):
     """Coordinator for all download/use operations. Created once in AppWindow."""
     record_added = pyqtSignal(object)
@@ -136,8 +148,7 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
-        if worker:
-            worker.deleteLater()
+        _cleanup_worker(worker)
 
         if not success:
             is_cancel = error == 'cancelled'
@@ -203,8 +214,7 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
-        if worker:
-            worker.deleteLater()
+        _cleanup_worker(worker)
 
         if not success and not needs_manual:
             record.use_status = UseStatus.FAILED
