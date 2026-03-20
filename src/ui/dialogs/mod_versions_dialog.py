@@ -67,26 +67,33 @@ def _clear_mod_folder(mod_folder: str):
                 logger.warning('mod_versions: failed to remove %s: %s', path, e)
 
 
+def _resolve_content_path(temp_dir: str) -> str:
+    """Resolve single directory layers and convert deltamod if present."""
+    content_path = temp_dir
+    contents = os.listdir(temp_dir)
+    if len(contents) == 1:
+        single = os.path.join(temp_dir, contents[0])
+        if os.path.isdir(single):
+            content_path = single
+    from utils.file_utils import has_deltamod_info_file
+    files_in_root = os.listdir(content_path)
+    if has_deltamod_info_file(files_in_root):
+        from adapters.deltamod_adapter import DeltamodConverter
+        converter = DeltamodConverter(content_path, temp_dir)
+        result = converter.convert()
+        if result and os.path.isdir(result):
+            content_path = result
+    return content_path
+
+
 def _apply_version_zip(mod_folder: str, zip_path: str):
     """Apply version zip, converting deltamod contents if needed."""
     temp_dir = tempfile.mkdtemp(prefix='mv_apply_')
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
             zf.extractall(temp_dir)
-        content_path = temp_dir
-        contents = os.listdir(temp_dir)
-        if len(contents) == 1:
-            single = os.path.join(temp_dir, contents[0])
-            if os.path.isdir(single):
-                content_path = single
-        from utils.file_utils import has_deltamod_info_file
-        files_in_root = os.listdir(content_path)
-        if has_deltamod_info_file(files_in_root):
-            from adapters.deltamod_adapter import DeltamodConverter
-            converter = DeltamodConverter(content_path, temp_dir)
-            result = converter.convert()
-            if result and os.path.isdir(result):
-                content_path = result
+        content_path = _resolve_content_path(temp_dir)
+
         _clear_mod_folder(mod_folder)
         for item in os.listdir(content_path):
             src = os.path.join(content_path, item)
@@ -101,16 +108,17 @@ def _apply_version_zip(mod_folder: str, zip_path: str):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def _snapshot_current_to_zip(mod_folder: str, version_name: str) -> str:
+def _create_version_zip(source_dir: str, mod_folder: str, version_name: str, ignore_versions_dir: bool = False) -> str:
     versions_dir = _ensure_versions_dir(mod_folder)
     safe_name = _sanitize_version_name(version_name)
     zip_path = os.path.join(versions_dir, f'{safe_name}.zip')
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-        for root, dirs, files in os.walk(mod_folder):
-            dirs[:] = [d for d in dirs if d != MOD_VERSIONS_DIR]
+        for root, dirs, files in os.walk(source_dir):
+            if ignore_versions_dir and MOD_VERSIONS_DIR in dirs:
+                dirs.remove(MOD_VERSIONS_DIR)
             for fname in files:
                 full = os.path.join(root, fname)
-                arcname = os.path.relpath(full, mod_folder)
+                arcname = os.path.relpath(full, source_dir)
                 zf.write(full, arcname)
     return zip_path
 
@@ -136,39 +144,14 @@ def _convert_archive_to_version_zip(archive_path: str, mod_folder: str, version_
             normalize_mod_package(temp_dir, require_manifest=False)
         except Exception as e:
             logger.exception('mod_versions: normalize_mod_package failed for %s with require_manifest=False: %s', temp_dir, e)
-        contents = os.listdir(temp_dir)
-        content_path = temp_dir
-        if len(contents) == 1:
-            single = os.path.join(temp_dir, contents[0])
-            if os.path.isdir(single):
-                content_path = single
-        from utils.file_utils import has_deltamod_info_file
-        files_in_root = os.listdir(content_path)
-        if has_deltamod_info_file(files_in_root):
-            from adapters.deltamod_adapter import DeltamodConverter
-            converter = DeltamodConverter(content_path, temp_dir)
-            result = converter.convert()
-            if result and os.path.isdir(result):
-                content_path = result
-        _zip_dir_to_version(content_path, mod_folder, version_name)
+        content_path = _resolve_content_path(temp_dir)
+        _create_version_zip(content_path, mod_folder, version_name, ignore_versions_dir=False)
         return True
     except Exception as e:
         logger.error('mod_versions: convert failed: %s', e, exc_info=True)
         return False
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-def _zip_dir_to_version(content_path: str, mod_folder: str, version_name: str) -> str:
-    versions_dir = _ensure_versions_dir(mod_folder)
-    safe_name = _sanitize_version_name(version_name)
-    zip_path = os.path.join(versions_dir, f'{safe_name}.zip')
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-        for root, _dirs, files in os.walk(content_path):
-            for fname in files:
-                full = os.path.join(root, fname)
-                zf.write(full, os.path.relpath(full, content_path))
-    return zip_path
 
 
 class _ModVersionWorker(QThread):
@@ -476,7 +459,7 @@ class ModVersionsDialog(QDialog):
 
     def _do_create_snapshot(self, version_name: str):
         try:
-            _snapshot_current_to_zip(self._mod_folder, version_name)
+            _create_version_zip(self._mod_folder, self._mod_folder, version_name, ignore_versions_dir=True)
             self._populate()
         except Exception as e:
             logger.error('mod_versions: snapshot failed: %s', e, exc_info=True)

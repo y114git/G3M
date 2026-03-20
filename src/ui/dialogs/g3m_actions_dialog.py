@@ -50,9 +50,10 @@ class _WorkerThread(QThread):
 class _PathRow(QWidget):
     """Reusable row: label + line-edit + browse button."""
 
-    def __init__(self, label_key: str, file_filter: str, parent=None):
+    def __init__(self, label_key: str, file_filter: str, parent=None, save_mode: bool = False):
         super().__init__(parent)
         self._filter = file_filter
+        self._save_mode = save_mode
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(6)
@@ -69,7 +70,10 @@ class _PathRow(QWidget):
         lay.addWidget(self._btn)
 
     def _browse(self):
-        path, _ = QFileDialog.getOpenFileName(self, tr('ui.select_file'), '', self._filter)
+        if self._save_mode:
+            path, _ = QFileDialog.getSaveFileName(self, tr('ui.save_file'), '', self._filter)
+        else:
+            path, _ = QFileDialog.getOpenFileName(self, tr('ui.select_file'), '', self._filter)
         if path:
             self._edit.setText(path)
 
@@ -78,41 +82,6 @@ class _PathRow(QWidget):
 
     def set_path(self, p: str):
         self._edit.setText(p)
-
-    def relocalize(self):
-        self._label.setText(tr(self._label_key))
-        self._edit.setPlaceholderText(tr('ui.file_path_placeholder'))
-        self._btn.setText(tr('ui.browse_button'))
-
-
-class _SavePathRow(QWidget):
-    """Row for selecting an output / save path."""
-
-    def __init__(self, label_key: str, file_filter: str, parent=None):
-        super().__init__(parent)
-        self._filter = file_filter
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(6)
-        self._label = QLabel(tr(label_key))
-        self._label.setMinimumWidth(80)
-        self._label_key = label_key
-        lay.addWidget(self._label)
-        self._edit = QLineEdit()
-        self._edit.setPlaceholderText(tr('ui.file_path_placeholder'))
-        lay.addWidget(self._edit, 1)
-        self._btn = QPushButton(tr('ui.browse_button'))
-        self._btn.setObjectName('g3m_actions_browse_btn')
-        self._btn.clicked.connect(self._browse)
-        lay.addWidget(self._btn)
-
-    def _browse(self):
-        path, _ = QFileDialog.getSaveFileName(self, tr('ui.save_file'), '', self._filter)
-        if path:
-            self._edit.setText(path)
-
-    def path(self) -> str:
-        return self._edit.text().strip()
 
     def relocalize(self):
         self._label.setText(tr(self._label_key))
@@ -154,7 +123,7 @@ class _PatchTab(QWidget):
         lay.addWidget(self._original_row)
         self._second_row = _PathRow('g3m_actions.modified_file', _DATA_FILTER)
         lay.addWidget(self._second_row)
-        self._output_row = _SavePathRow('g3m_actions.output_file', _ALL_FILTER)
+        self._output_row = _PathRow('g3m_actions.output_file', _ALL_FILTER, save_mode=True)
         lay.addWidget(self._output_row)
 
         lay.addStretch()
@@ -287,7 +256,7 @@ class _MergeTab(QWidget):
         list_btns.addStretch()
         lay.addLayout(list_btns)
 
-        self._output_row = _SavePathRow('g3m_actions.output_file', _ALL_FILTER)
+        self._output_row = _PathRow('g3m_actions.output_file', _ALL_FILTER, save_mode=True)
         lay.addWidget(self._output_row)
 
         run_row = QHBoxLayout()

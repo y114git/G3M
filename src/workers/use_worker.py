@@ -55,14 +55,16 @@ class UseWorker(QThread):
             from utils.file_utils import has_deltamod_info_file
             files_in_root = os.listdir(content_path)
 
+            from workers.install.helpers_install import find_mod_config
+
             if has_deltamod_info_file(files_in_root):
                 success = self._install_via_deltamod(content_path, gb_metadata)
-            elif self._has_mod_config(content_path):
+            elif find_mod_config(content_path):
                 success = self._install_deltahub_mod(content_path, gb_metadata)
             elif gb_metadata:
                 success = self._install_via_gamebanana_converter(gb_metadata)
             else:
-                success = self._install_deltahub_mod(content_path, gb_metadata)
+                success = False
 
             if not success:
                 self.use_finished.emit(self._record_id, False, True, '')
@@ -86,11 +88,6 @@ class UseWorker(QThread):
             if os.path.isdir(single):
                 return single
         return extract_dir
-
-    @staticmethod
-    def _has_mod_config(path: str) -> bool:
-        from config.constants import MOD_CONFIG_FILENAME
-        return os.path.exists(os.path.join(path, MOD_CONFIG_FILENAME))
 
     def _build_gb_metadata(self) -> dict:
         if not self._metadata.get('gb_mod_id'):

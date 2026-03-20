@@ -148,6 +148,23 @@ class TestSearchDisplayController:
         controller.update_pagination.assert_not_called()
         controller.ui_widget_updates_enabled.emit.assert_not_called()
 
+    def test_maybe_load_more_for_short_viewport_skips_when_tag_filter_active(self, app_state, feedback_service):
+        from controllers.search_display_controller import SearchDisplayController
+        scroll = Mock()
+        scroll.viewport.return_value.height.return_value = 1000
+        app_window = Mock(mods_browser_scroll=scroll, mod_list_widget=Mock(), mod_list_layout=Mock())
+        app_window.tag_textedit.isChecked.return_value = True
+        app_window.tag_customization.isChecked.return_value = False
+        app_window.tag_gameplay.isChecked.return_value = False
+        app_window.tag_other.isChecked.return_value = False
+        app_window.mod_list_widget.sizeHint.return_value.height.return_value = 100
+        controller = SearchDisplayController(app_state=app_state, feedback_service=feedback_service, mod_service=Mock(), mod_ops=Mock(), app_window=app_window)
+        controller._load_more_gamebanana_mods_if_needed = Mock()
+
+        controller._maybe_load_more_for_short_viewport()
+
+        controller._load_more_gamebanana_mods_if_needed.assert_not_called()
+
 
 class TestSettingsUiController:
 

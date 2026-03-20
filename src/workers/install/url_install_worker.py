@@ -3,7 +3,6 @@ import os
 import json
 import shutil
 import tempfile
-import threading
 import logging
 from typing import Optional
 from PyQt6.QtCore import pyqtSignal
@@ -17,7 +16,6 @@ from workers.install.helpers_install import find_mod_config, normalize_mod_key, 
 
 
 class UrlInstallThread(BaseInstallWorker):
-    prompt_required = pyqtSignal(str, str)
     manual_install_required = pyqtSignal(str, str, str)
 
     @staticmethod
@@ -37,8 +35,7 @@ class UrlInstallThread(BaseInstallWorker):
         super().__init__(main_window)
         self.main_window = main_window
         self.url = url
-        self.prompt_event = threading.Event()
-        self.prompt_result = False
+        self.url = url
 
     def run(self):
         try:

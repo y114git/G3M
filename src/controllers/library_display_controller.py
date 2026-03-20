@@ -137,6 +137,7 @@ class LibraryDisplayController:
             return
         self.app._updating_chapter_mods = True
         container = getattr(self.app, 'installed_mods_container', None)
+        cards_parent = getattr(self.app, 'installed_mods_widget', None) or getattr(self.app, 'installed_mods_scroll', None)
         if container:
             container.setUpdatesEnabled(False)
         try:
@@ -147,7 +148,7 @@ class LibraryDisplayController:
                 mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                 if mod_data and self.mod_service.mod_has_files_for_chapter(mod_data, selected_chapter_id):
                     added_date = mod_info.get('added_date')
-                    mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
+                    mod_widget = InstalledModWidget(mod_data, parent=cards_parent, installed_date=added_date, parent_app=self.app)
                     mod_widget.clicked.connect(self.on_mod_clicked)
                     mod_widget.details_requested.connect(self.on_mod_details)
                     mod_widget.use_requested.connect(lambda md=mod_data: self._handle_mod_use(md, selected_chapter_id))
@@ -225,6 +226,7 @@ class LibraryDisplayController:
             container = getattr(self.app, 'installed_mods_container', None)
             if container:
                 container.setUpdatesEnabled(False)
+            cards_parent = getattr(self.app, 'installed_mods_widget', None) or getattr(self.app, 'installed_mods_scroll', None)
 
             def _finish_display():
                 if container:
@@ -252,7 +254,7 @@ class LibraryDisplayController:
                         mod_data = self.mod_service.create_mod_object_from_info(mod_info, getattr(self.app_state, 'all_mods', None))
                         if mod_data:
                             added_date = mod_info.get('added_date')
-                            mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
+                            mod_widget = InstalledModWidget(mod_data, parent=cards_parent, installed_date=added_date, parent_app=self.app)
                             mod_widget.clicked.connect(self.on_mod_clicked)
                             mod_widget.details_requested.connect(self.on_mod_details)
                             mod_widget.use_requested.connect(self.on_mod_use)
@@ -387,7 +389,8 @@ class LibraryDisplayController:
                             added_date = mod_info.get('added_date')
                             break
 
-                    mod_widget = InstalledModWidget(mod_data, parent=self.app, installed_date=added_date, parent_app=self.app)
+                    cards_parent = getattr(self.app, 'installed_mods_widget', None) or getattr(self.app, 'installed_mods_scroll', None)
+                    mod_widget = InstalledModWidget(mod_data, parent=cards_parent, installed_date=added_date, parent_app=self.app)
                     mod_widget.clicked.connect(self.on_mod_clicked)
                     mod_widget.details_requested.connect(self.on_mod_details)
                     mod_widget.use_requested.connect(self.on_mod_use)

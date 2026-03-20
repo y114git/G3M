@@ -77,7 +77,8 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size=0, 
             except (TypeError, AttributeError) as e:
                 logging.debug(f'download_file: on_response callback failed: {e}')
             mode = 'ab' if getattr(r, 'status_code', 200) == 206 and 'Range' in headers else 'wb'
-            duplicate_remaining = current_size if mode == 'wb' and current_size > 0 else 0
+            if mode == 'wb':
+                downloaded_ref[0] = 0
             try:
                 this_request_expected = int(r.headers.get('content-length', 0))
             except (ValueError, TypeError):
@@ -92,14 +93,7 @@ def download_file(session, url, tmp_path, progress_callback=None, total_size=0, 
                     f.write(chunk)
                     sz = len(chunk)
                     written_this_request += sz
-                    if duplicate_remaining > 0:
-                        if sz <= duplicate_remaining:
-                            duplicate_remaining -= sz
-                        else:
-                            downloaded_ref[0] += sz - duplicate_remaining
-                            duplicate_remaining = 0
-                    else:
-                        downloaded_ref[0] += sz
+                    downloaded_ref[0] += sz
                     if total_size > 0 and progress_callback:
                         try:
                             progress_callback(int(min(100, max(0, downloaded_ref[0] / total_size * 100))))

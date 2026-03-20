@@ -78,14 +78,18 @@ class SettingsManager(QObject):
                 pass
 
     def write_local_config(self):
-        self.write_json(self.app_state.config_path, self.app_state.local_config)
+        ps = getattr(self, 'profile_service', None)
+        if ps:
+            ps.write_local_config()
+        else:
+            self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def migrate_config_if_needed(self):
         self.app_state.local_config['cache_format_version'] = LAUNCHER_VERSION
         defaults = {
             'game_path': '', 'last_selected': {}, 'use_custom_executable': False, 'demo_game_path': '',
-            'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '', 'direct_launch_chapter': '',
-            'demo_mode_enabled': False, 'chapter_mode_enabled': False, 'custom_background_path': '',
+            'launch_via_steam': False, 'use_portproton': False, 'portproton_path': '',
+            'demo_mode_enabled': False, 'custom_background_path': '',
             'custom_executable_path': '', 'background_disabled': False, 'custom_color_background': '',
             'custom_color_button': '', 'custom_color_border': '', 'custom_color_button_hover': '',
             'custom_color_text': '', 'custom_color_secondary_text': '', 'beta_updates_enabled': False,
@@ -112,7 +116,7 @@ class SettingsManager(QObject):
         if language_code == current_language:
             return
         self.app_state.local_config['language'] = language_code
-        self.write_json(self.app_state.config_path, self.app_state.local_config)
+        self.write_local_config()
         self.language_changed.emit(language_code)
 
     def _toggle_setting(self, key: str, enabled: bool, signal: str = 'settings_changed'):

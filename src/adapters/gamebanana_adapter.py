@@ -133,7 +133,6 @@ class GameBananaAPI:
             'downloads': profile.get('_nDownloadCount'),
             'description': profile.get('_sDescription'),
             'text': profile.get('_sText'),
-            'Category().name': (profile.get('_aCategory') or {}).get('_sName') if isinstance(profile.get('_aCategory'), dict) else None,
         }
         value = field_map.get(field_name)
         if extractor_func and value is not None:
@@ -340,7 +339,7 @@ class GameBananaAPI:
             like_count = None if raw_likes is None else max(int(raw_likes), 0)
         except (ValueError, TypeError):
             like_count = None
-        gbc = gb_data.get('_aCategory') or gb_data.get('Category')
+        gbc = gb_data.get('_aRootCategory') or gb_data.get('_aCategory') or gb_data.get('Category')
         category = None
         if gbc:
             if isinstance(gbc, dict):

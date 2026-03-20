@@ -11,6 +11,9 @@ def _collect_color_issues(customizable_patterns, special_patterns, allow_line):
         pytest.skip('src/ui directory not found')
     issues = []
     for py_file in ui_dir.rglob('*.py'):
+        # Skip mockup files as they are prototypes without access to app config
+        if 'mockup' in py_file.name.lower():
+            continue
         try:
             for line_num, line in enumerate(py_file.read_text(encoding='utf-8').split('\n'), 1):
                 stripped = line.strip()

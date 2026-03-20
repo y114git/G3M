@@ -141,6 +141,10 @@ class AppWindow(QWidget):
         self._init_localization()
         self._splash_was_shown = False
         self.settings_service.migrate_config_if_needed()
+        from services.profile_service import ProfileService
+        self.profile_service = ProfileService(self.app_state, self.settings_service, self)
+        self.profile_service.initialize()
+        self.settings_service.profile_service = self.profile_service
         return not self.app_state.local_config.get('first_launch_splash_shown', False)
 
     def _init_runtime_state(self):
@@ -688,6 +692,7 @@ class AppWindow(QWidget):
             'library_sort_order_btn', 'library_tags_label', 'library_tag_textedit',
             'library_tag_customization', 'library_tag_gameplay', 'library_tag_other',
             'library_tag_gamebanana', 'library_tag_widgets', 'library_search_button',
+            'profile_combo', 'profile_settings_button',
         ), optional=(
             'add_mod_button', 'installed_mods_label', 'priority_button',
             'create_modpack_button', 'library_downloads_button', 'library_game_versions_button',
@@ -724,6 +729,10 @@ class AppWindow(QWidget):
             self.library_game_versions_button.clicked.connect(self._open_game_versions_dialog)
         if hasattr(self, 'library_g3m_actions_button') and self.library_g3m_actions_button:
             self.library_g3m_actions_button.clicked.connect(self._open_g3m_actions_dialog)
+        self._populate_profile_combo()
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_combo_changed)
+        self.profile_settings_button.clicked.connect(self._open_profile_manager)
+        self.profile_service.profile_switched.connect(self._on_profile_switched)
         saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
         saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
         saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
@@ -749,9 +758,14 @@ class AppWindow(QWidget):
         self.app_state.game_mode_changed.connect(self._on_game_mode_updated_by_state)
         self._update_checkbox_visibility()
         self._update_change_path_button_text()
+        self.used_mods_service.load_used_mods_state()
+        self._initialize_mutual_exclusions()
         self._setup_chapter_tabs()
         if self.app_state.current_mode == 'chapter' and hasattr(self, '_show_chapter_mode_instruction'):
-            self._show_chapter_mode_instruction()
+            if self.app_state.selected_chapter_id is None:
+                self._show_chapter_mode_instruction()
+            else:
+                self.library_display.update_for_chapter_mode(self.app_state.selected_chapter_id)
 
             def update_priority_button():
                 if self.app_state.selected_chapter_id is not None:
@@ -1382,14 +1396,10 @@ class AppWindow(QWidget):
 
     def _trigger_initial_mods_refresh(self, saved_chapter_mode=False):
         try:
-            logging.info('AppWindow: Starting mods loading in background before window show')
-
             def update_filtered_mods_callback():
                 try:
-                    logging.info('AppWindow: Building mods list after fetch (from callback)')
                     if hasattr(self, 'search_display'):
                         self.search_display.update_filtered_mods(preserve_page=False)
-                    logging.info('AppWindow: Mods list built successfully (from callback)')
                 except Exception as e:
                     logging.error(f'AppWindow: Error building mods list: {e}', exc_info=True)
             on_fetch_finished_kwargs = {'update_filtered_mods_callback': update_filtered_mods_callback, 'update_installed_mods_callback': lambda: self._update_installed_mods_display(set_library_initialized=not saved_chapter_mode), 'update_action_button_callback': lambda: self.game_launch.update_button_state(), 'mods_loaded_signal': self.mods_loaded_signal}
@@ -1397,13 +1407,9 @@ class AppWindow(QWidget):
             try:
                 if hasattr(self, 'search_display'):
                     if hasattr(self.app_state, 'all_mods') and self.app_state.all_mods:
-                        logging.info(f'AppWindow: Building initial mods list with {len(self.app_state.all_mods)} mods')
                         self.search_display.update_filtered_mods(preserve_page=False)
-                    else:
-                        logging.info('AppWindow: No mods loaded yet, list will be built after fetch completes')
             except Exception as e:
                 logging.error(f'AppWindow: Error building initial mods list: {e}', exc_info=True)
-            logging.info('AppWindow: Mods loading started in background, window can be shown now')
         except Exception as e:
             logging.error(f'AppWindow: Error in _load_mods_and_build_list_synchronously: {e}', exc_info=True)
 
@@ -1656,11 +1662,15 @@ class AppWindow(QWidget):
     def _load_local_data(self):
         protected_first_launch_splash_shown = self.app_state.local_config.get('first_launch_splash_shown')
         protected_disable_splash = self.app_state.local_config.get('disable_splash')
+        active_profile = self.profile_service.active_name if hasattr(self, 'profile_service') else None
         self.app_state.local_config = self.settings_service.read_json(self.app_state.config_path) or {}
         if protected_first_launch_splash_shown is not None:
             self.app_state.local_config['first_launch_splash_shown'] = protected_first_launch_splash_shown
         if protected_disable_splash is not None:
             self.app_state.local_config['disable_splash'] = protected_disable_splash
+        if active_profile:
+            self.app_state.local_config['active_profile'] = active_profile
+            self.profile_service._load_into_config(active_profile)
         try:
             self.mod_service.migrate_metadata_from_local_configs()
         except Exception as e:
@@ -1731,7 +1741,8 @@ class AppWindow(QWidget):
             return
         from ui.common.styling import clear_layout_widgets
         clear_layout_widgets(self.installed_mods_layout, keep_last_n=1)
-        instruction_widget = QLabel(tr('ui.chapter_mode_instruction'))
+        parent = getattr(self, 'installed_mods_widget', None) or getattr(self, 'installed_mods_scroll', None) or self
+        instruction_widget = QLabel(tr('ui.chapter_mode_instruction'), parent)
         instruction_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         secondary_text_color = get_theme_color(self.app_state.local_config, 'secondary_text', '#CCCCCC')
         border_color = get_theme_color(self.app_state.local_config, 'border', '#666666')
@@ -1978,6 +1989,62 @@ class AppWindow(QWidget):
         self._g3m_actions_dialog = G3MActionsDialog(g3m, self.app_state, self)
         self._g3m_actions_dialog.destroyed.connect(lambda: setattr(self, '_g3m_actions_dialog', None))
         self._g3m_actions_dialog.show()
+
+    def _populate_profile_combo(self):
+        combo = self.profile_combo
+        combo.blockSignals(True)
+        combo.clear()
+        for name in self.profile_service.list_profiles():
+            combo.addItem(name, name)
+        active = self.profile_service.active_name
+        idx = combo.findData(active)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _open_profile_manager(self):
+        from ui.dialogs.profile_manager_dialog import ProfileManagerDialog
+        dialog = ProfileManagerDialog(self.profile_service, self.app_state, self)
+        dialog.exec()
+        self._populate_profile_combo()
+
+    def _on_profile_combo_changed(self, index: int):
+        name = self.profile_combo.itemData(index)
+        if not name or name == self.profile_service.active_name:
+            return
+        self.profile_service.switch(name)
+
+    def _on_profile_switched(self, name: str):
+        """Reload full library UI state from the newly active profile."""
+        saved_game_type = self.app_state.local_config.get('selected_game_type', 'deltarune')
+        saved_chapter_mode = self.app_state.local_config.get('chapter_mode_enabled', False)
+        saved_full_install = self.app_state.local_config.get('full_install_enabled', False)
+        from models.game_modes import get_game, DeltaruneGame
+        game_def = get_game(saved_game_type)
+        self.app_state.game_mode = game_def if game_def else DeltaruneGame()
+        idx = self.game_type_combo.findData(saved_game_type)
+        if idx >= 0:
+            self.game_type_combo.blockSignals(True)
+            self.game_type_combo.setCurrentIndex(idx)
+            self.game_type_combo.blockSignals(False)
+        self._set_checkbox_checked_silently(self.chapter_mode_checkbox, saved_chapter_mode)
+        self._set_checkbox_checked_silently(self.full_install_checkbox, saved_full_install)
+        self.game_type_combo.setEnabled(not saved_chapter_mode)
+        self.app_state.current_mode = 'chapter' if saved_chapter_mode else 'normal'
+        self.app_state.is_full_install = saved_full_install
+        self.app_state.selected_chapter_id = None
+        if hasattr(self, 'game_launch'):
+            self.game_launch._full_install_checkbox_is_checked = saved_full_install
+        self._update_checkbox_visibility()
+        self.used_mods_service.load_used_mods_state()
+        if hasattr(self, 'chapter_tabs_widget'):
+            self.chapter_tabs_widget.setVisible(saved_chapter_mode)
+        if self.app_state.current_mode != 'chapter':
+            self.library_display.update_display()
+        self.library_display.update_mod_widgets_active_status()
+        self.library_display._update_priority_button_visibility()
+        if hasattr(self, 'game_launch'):
+            self.game_launch.update_button_state()
 
     def _update_downloads_badge(self, btn, count: int):
         btn.setText(str(count) if count > 0 else '')

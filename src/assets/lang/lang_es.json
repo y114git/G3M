@@ -1364,5 +1364,15 @@
     "diff_viewer_title": "Informe de diferencias",
     "confirm_close": "¿Está seguro? Toda la información se perderá.",
     "export_report": "Exportar informe"
+  },
+  "profiles": {
+    "manager_title": "Gestor de Perfiles",
+    "create": "Crear Perfil",
+    "duplicate": "Duplicar Perfil",
+    "rename": "Renombrar Perfil",
+    "enter_name": "Nombre del perfil:",
+    "delete": "Eliminar Perfil",
+    "already_exists": "Ya existe un perfil con este nombre.",
+    "total_active": "{count} mods activos en total"
   }
 }

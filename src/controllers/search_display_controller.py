@@ -42,7 +42,6 @@ class SearchDisplayController(QObject):
         self._load_more_threads = []
         self._current_details_thread = None
         self._active_search_timers = []
-        self._current_search_text = ''
         self._update_display_in_progress = False
         self._pending_display_update = False
         self._update_filtered_mods_in_progress = False
@@ -190,6 +189,12 @@ class SearchDisplayController(QObject):
         except Exception as e:
             logger.warning(f'SearchDisplayController: Error getting installed mod keys: {e}', exc_info=True)
         return set()
+
+    def _has_active_tag_filters(self) -> bool:
+        for attr_name in ('tag_textedit', 'tag_customization', 'tag_gameplay', 'tag_other'):
+            if hasattr(self.app, attr_name) and getattr(self.app, attr_name).isChecked():
+                return True
+        return False
 
     def _set_search_btn_icon(self, is_searching: bool):
         tc = get_theme_color(self.app_state.local_config, 'text', '#ffffff')
@@ -343,7 +348,6 @@ class SearchDisplayController(QObject):
         msg_box.exec()
         if self.app_state.search_text == search_text:
             self.app_state.search_text = ''
-            self._current_search_text = ''
             self._set_search_btn_icon(False)
             self.load_mods_for_selected_game()
 
@@ -372,7 +376,6 @@ class SearchDisplayController(QObject):
                 if isinstance(thread, SearchGameBananaModsThread):
                     thread.cancel()
             self.app_state.gamebanana_loading = False
-            self._current_search_text = ''
             self.app_state.search_text = ''
             self._set_search_btn_icon(False)
             self.load_mods_for_selected_game()
@@ -631,6 +634,8 @@ class SearchDisplayController(QObject):
 
     def _maybe_load_more_for_short_viewport(self):
         if self.app_state.gamebanana_loading:
+            return
+        if self._has_active_tag_filters():
             return
         scroll = getattr(self.app, 'mods_browser_scroll', None)
         if not scroll or not hasattr(self.app, 'mod_list_widget'):

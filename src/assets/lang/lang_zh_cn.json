@@ -1364,5 +1364,15 @@
     "diff_viewer_title": "差异报告",
     "confirm_close": "确定吗？所有信息将会丢失。",
     "export_report": "导出报告"
+  },
+  "profiles": {
+    "manager_title": "配置管理器",
+    "create": "创建配置",
+    "duplicate": "复制配置",
+    "rename": "重命名配置",
+    "enter_name": "配置名称：",
+    "delete": "删除配置",
+    "already_exists": "此名称的配置已存在。",
+    "total_active": "共 {count} 个活跃模组"
   }
 }

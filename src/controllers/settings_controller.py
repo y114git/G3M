@@ -4,6 +4,9 @@ from core.app_post_init import _restore_ui_state_from_config
 from services.localization_service import tr
 from config.constants import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsUiController:
@@ -121,6 +124,7 @@ class SettingsUiController:
         if not game_type:
             return
         self.used_mods_service.save_used_mods_state()
+        self.used_mods_service.used_mods.clear()
         game_def = get_game(game_type)
         self.app_state.game_mode = game_def if game_def else DeltaruneGame()
         self.app_state.local_config['selected_game_type'] = game_type
@@ -133,10 +137,11 @@ class SettingsUiController:
             return
         self.app._previous_mode = getattr(self.app, 'current_mode', 'normal')
         is_chapter = bool(state)
-        if (self.app_state.current_mode == 'chapter') != is_chapter:
+        mode_changed = (self.app_state.current_mode == 'chapter') != is_chapter
+        if mode_changed:
             self.used_mods_service.save_used_mods_state()
         self.app_state.current_mode = 'chapter' if is_chapter else 'normal'
-        if (self.app._previous_mode == 'normal') != is_chapter:
+        if mode_changed:
             self.used_mods_service.load_used_mods_state()
         self.app.game_type_combo.setEnabled(not is_chapter)
         if hasattr(self.app, 'library_display'):
@@ -150,6 +155,9 @@ class SettingsUiController:
                 self.app.library_display._set_priority_widgets_visible(False)
             self._call_if_exists(self.app, '_show_chapter_mode_instruction')
         elif hasattr(self.app, 'library_display'):
+            if hasattr(self.app, 'installed_mods_layout'):
+                from ui.common.styling import clear_layout_widgets
+                clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.app.library_display.update_display()
         self.app._update_change_path_button_text()
         self.app_state.local_config['chapter_mode_enabled'] = is_chapter

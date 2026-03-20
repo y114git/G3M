@@ -293,7 +293,7 @@ class PluginWidget(QFrame):
         elif version and hasattr(self, 'version_container'):
             version_container_layout = self.version_container.layout()
             if version_container_layout and isinstance(version_container_layout, QHBoxLayout):
-                self.version_label = QLabel(f'({version})')
+                self.version_label = QLabel(f'({version})', self.version_container)
                 self.version_label.setObjectName('versionLabel')
                 self.version_label.setStyleSheet('font-size: 16px;')
                 version_container_layout.insertWidget(0, self.version_label)
@@ -313,13 +313,13 @@ class PluginWidget(QFrame):
                     if item and item.layout():
                         metadata_layout = item.layout()
                         if isinstance(metadata_layout, QHBoxLayout):
-                            self.author_container = QWidget()
+                            self.author_container = QWidget(self)
                             author_container_layout = QHBoxLayout(self.author_container)
                             author_container_layout.setContentsMargins(0, 0, 0, 0)
                             author_container_layout.setSpacing(0)
-                            self.author_label_title = QLabel(tr('ui.author_label'))
+                            self.author_label_title = QLabel(tr('ui.author_label'), self.author_container)
                             self.author_label_title.setObjectName('primaryText')
-                            self.author_label_value = QLabel(f' {author}')
+                            self.author_label_value = QLabel(f' {author}', self.author_container)
                             self.author_label_value.setObjectName('secondaryText')
                             author_container_layout.addWidget(self.author_label_title)
                             author_container_layout.addWidget(self.author_label_value)

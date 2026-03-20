@@ -1364,5 +1364,15 @@
     "diff_viewer_title": "Diff Report",
     "confirm_close": "Are you sure? All information will be lost.",
     "export_report": "Export Report"
+  },
+  "profiles": {
+    "manager_title": "Profile Manager",
+    "create": "Create Profile",
+    "duplicate": "Duplicate Profile",
+    "rename": "Rename Profile",
+    "enter_name": "Profile name:",
+    "delete": "Delete Profile",
+    "already_exists": "A profile with this name already exists.",
+    "total_active": "{count} active mods total"
   }
 }

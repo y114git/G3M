@@ -48,8 +48,6 @@ class ModManager(QObject):
         self._mods_cache_valid = False
         self._scan_thread: Optional[ModScanThread] = None
         self._scan_in_progress = False
-        self._installed_mods_cache: List[dict] = []
-        self._installed_mods_cache_valid: bool = False
         self._key_manager = ModKeyManager(
             app_state=app_state,
             settings_service=settings_service,
@@ -92,7 +90,6 @@ class ModManager(QObject):
         with self._cache_lock:
             self._mods_cache_valid = False
             self._mods_by_name.clear()
-            self._installed_mods_cache_valid = False
 
     def _on_scan_completed(self, cache_dict: Dict):
         with self._cache_lock:
@@ -946,9 +943,6 @@ class ModManager(QObject):
                 metadata_updated = True
         if metadata_updated:
             self._write_metadata(mods_metadata)
-        with self._cache_lock:
-            self._installed_mods_cache = list(installed_mods)
-            self._installed_mods_cache_valid = True
         return installed_mods
 
 

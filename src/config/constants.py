@@ -234,6 +234,7 @@ WIDGET_LOCALIZATIONS = [
     ('library_search_button', 'setToolTip', 'ui.search_placeholder'),
     ('installed_mods_label', 'setText', 'ui.installed_mods_label'),
     ('add_mod_button', 'setToolTip', 'ui.add_mod'),
+    ('profile_settings_button', 'setToolTip', 'profiles.manager_title'),
     ('theme_button', 'setText', 'buttons.import_export_themes'),
     ('do_not_save_theme_checkbox', 'setText', 'ui.do_not_save_theme_after_import'),
     ('hide_mods_browser_tab_checkbox', 'setText', 'ui.hide_mods_browser_tab'),

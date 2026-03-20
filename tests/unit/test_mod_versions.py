@@ -56,8 +56,8 @@ class TestClearModFolder:
 
 class TestSnapshotAndApply:
     def test_snapshot_creates_zip(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _snapshot_current_to_zip
-        zp = _snapshot_current_to_zip(mod_folder, 'snap1')
+        from ui.dialogs.mod_versions_dialog import _create_version_zip
+        zp = _create_version_zip(mod_folder, mod_folder, 'snap1', ignore_versions_dir=True)
         assert os.path.isfile(zp)
         with zipfile.ZipFile(zp, 'r') as zf:
             names = zf.namelist()
@@ -66,8 +66,8 @@ class TestSnapshotAndApply:
         assert not any('mod_versions' in n for n in names)
 
     def test_apply_restores(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _snapshot_current_to_zip, _apply_version_zip
-        zp = _snapshot_current_to_zip(mod_folder, 'snap1')
+        from ui.dialogs.mod_versions_dialog import _create_version_zip, _apply_version_zip
+        zp = _create_version_zip(mod_folder, mod_folder, 'snap1', ignore_versions_dir=True)
         with open(os.path.join(mod_folder, 'data.txt'), 'w') as f:
             f.write('changed')
         _apply_version_zip(mod_folder, zp)
@@ -75,12 +75,12 @@ class TestSnapshotAndApply:
             assert f.read() == 'hello'
 
     def test_apply_preserves_mod_versions_dir(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _snapshot_current_to_zip, _apply_version_zip, _ensure_versions_dir
+        from ui.dialogs.mod_versions_dialog import _create_version_zip, _apply_version_zip, _ensure_versions_dir
         vdir = _ensure_versions_dir(mod_folder)
         marker = os.path.join(vdir, 'user.zip')
         with open(marker, 'w') as f:
             f.write('user version')
-        zp = _snapshot_current_to_zip(mod_folder, 'snap')
+        zp = _create_version_zip(mod_folder, mod_folder, 'snap', ignore_versions_dir=True)
         _apply_version_zip(mod_folder, zp)
         assert os.path.isfile(marker)
 
@@ -133,13 +133,13 @@ class TestConvertArchiveToVersionZip:
 
 class TestZipDirToVersion:
     def test_creates_zip(self, tmp_path):
-        from ui.dialogs.mod_versions_dialog import _zip_dir_to_version
+        from ui.dialogs.mod_versions_dialog import _create_version_zip
         src = tmp_path / 'src'
         src.mkdir()
         (src / 'a.txt').write_text('data')
         mod = tmp_path / 'mod'
         mod.mkdir()
-        zp = _zip_dir_to_version(str(src), str(mod), 'test_ver')
+        zp = _create_version_zip(str(src), str(mod), 'test_ver', ignore_versions_dir=False)
         assert os.path.isfile(zp)
         with zipfile.ZipFile(zp, 'r') as zf:
             assert 'a.txt' in zf.namelist()
