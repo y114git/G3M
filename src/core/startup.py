@@ -407,6 +407,7 @@ def run_app():
                 error_msg = tr('errors.startup_error_message', details=str(e))
                 logging.exception(f'STARTUP ERROR: {error_msg}')
                 QMessageBox.critical(None, tr('errors.startup_error_title'), error_msg)
+                sys.exit(1)
         create_launcher()
     create_launcher_and_show_splash(app, url_arg, show_animated_splash)
     try:
