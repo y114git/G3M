@@ -32,6 +32,18 @@ def get_user_data_root():
     return os.path.join(home, ".local", "share", "DELTAHUB")
 
 
+def safe_profile_name(name: str) -> str:
+    return re.sub(r"[^\w\- ]+", "_", name or "").strip()[:80] or "Default"
+
+
+def get_user_profiles_dir():
+    return os.path.join(get_user_data_root(), "profiles")
+
+
+def get_user_profile_dir(name: str = "Default"):
+    return os.path.join(get_user_profiles_dir(), safe_profile_name(name))
+
+
 def get_user_mods_dir():
     return os.path.join(get_user_data_root(), "mods")
 

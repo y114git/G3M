@@ -4,6 +4,7 @@ from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -51,6 +52,8 @@ class ProfileManagerDialog(QDialog):
             ("dup_btn", "duplicate", "profiles.duplicate", self._on_duplicate),
             ("edit_btn", "edit", "profiles.rename", self._on_rename),
             ("del_btn", "delete", "profiles.delete", self._on_delete),
+            ("export_btn", "export", "buttons.export", self._on_export),
+            ("import_btn", "import", "buttons.import", self._on_import),
         ):
             btn = QPushButton()
             btn.setObjectName(f"profile_{attr}")
@@ -112,6 +115,7 @@ class ProfileManagerDialog(QDialog):
         parts = [
             f"{game_name} ({summary['game_mod_count']})",
             tr("profiles.total_active", count=summary["total_mod_count"]),
+            tr("profiles.total_mods", count=summary["profile_mod_count"]),
         ]
         if summary["chapter_mode"]:
             cm = tr("ui.chapter_mode")
@@ -153,6 +157,7 @@ class ProfileManagerDialog(QDialog):
         is_default = name == DEFAULT_PROFILE
         self.edit_btn.setVisible(bool(name) and not is_default)
         self.del_btn.setVisible(bool(name) and not is_default)
+        self.export_btn.setVisible(bool(name))
         prev = self._selected_row
         cur = self.list_widget.currentRow()
         self._selected_row = cur
@@ -231,6 +236,44 @@ class ProfileManagerDialog(QDialog):
             return
         self._refresh_list()
 
+    def _on_export(self):
+        name = self._selected_name()
+        if not name:
+            return
+        export_path, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("ui.select_export_location"),
+            f"{name}.zip",
+            tr("profiles.archive_files"),
+        )
+        if not export_path:
+            return
+        if self.profile_service.export(name, export_path):
+            QMessageBox.information(
+                self, tr("dialogs.success"), tr("profiles.exported_success")
+            )
+
+    def _on_import(self):
+        import_path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("profiles.select_import_archive"),
+            "",
+            tr("profiles.archive_files"),
+        )
+        if not import_path:
+            return
+        try:
+            name = self.profile_service.import_profile(import_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, tr("errors.error"), tr("profiles.import_failed", error=str(e))
+            )
+            return
+        self._refresh_list()
+        QMessageBox.information(
+            self, tr("dialogs.success"), tr("profiles.imported_success", name=name)
+        )
+
     def _on_rows_moved(self):
         names = []
         for i in range(self.list_widget.count()):
@@ -267,6 +310,8 @@ class ProfileManagerDialog(QDialog):
             ("dup_btn", "duplicate"),
             ("edit_btn", "edit"),
             ("del_btn", "delete"),
+            ("export_btn", "export"),
+            ("import_btn", "import"),
         ):
             btn = getattr(self, attr)
             btn.setIcon(colored_icon(icon_name, icon_color))

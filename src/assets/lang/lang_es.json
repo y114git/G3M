@@ -1389,6 +1389,12 @@
     "delete": "Eliminar Perfil",
     "already_exists": "Ya existe un perfil con este nombre.",
     "total_active": "{count} mods activos en total",
+    "total_mods": "{count} mods en el perfil",
+    "select_import_archive": "Seleccionar archivo del perfil",
+    "archive_files": "Archivos de perfil (*.zip);;Todos los archivos (*)",
+    "exported_success": "Perfil exportado correctamente.",
+    "imported_success": "El perfil '{name}' se importó correctamente.",
+    "import_failed": "No se pudo importar el perfil: {error}",
     "confirm_delete_text": "¿Está seguro de que desea eliminar este perfil? Esta acción no se puede deshacer."
   }
 }

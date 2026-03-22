@@ -61,9 +61,9 @@ def _load_config() -> dict:
 def _find_mod_source_dir(mod_key: str, local_config: dict) -> str | None:
     """Resolve a mod key to its root directory on disk."""
     from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
-    from utils.path_utils import get_user_mods_dir
+    from utils.path_utils import get_user_profile_dir
 
-    mods_dir = get_user_mods_dir()
+    mods_dir = get_user_profile_dir(local_config.get("active_profile", "Default"))
     if not os.path.isdir(mods_dir):
         return None
     for folder_name in os.listdir(mods_dir):

@@ -1389,6 +1389,12 @@
     "delete": "删除配置",
     "already_exists": "此名称的配置已存在。",
     "total_active": "共 {count} 个活跃模组",
+    "total_mods": "配置内共 {count} 个模组",
+    "select_import_archive": "选择配置归档",
+    "archive_files": "配置归档 (*.zip);;所有文件 (*)",
+    "exported_success": "配置导出成功。",
+    "imported_success": "配置“{name}”导入成功。",
+    "import_failed": "导入配置失败：{error}",
     "confirm_delete_text": "您确定要删除此配置吗？此操作无法撤销。"
   }
 }

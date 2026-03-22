@@ -1389,6 +1389,12 @@
     "delete": "Delete Profile",
     "already_exists": "A profile with this name already exists.",
     "total_active": "{count} active mods total",
+    "total_mods": "{count} mods in profile",
+    "select_import_archive": "Select profile archive",
+    "archive_files": "Profile Archives (*.zip);;All Files (*)",
+    "exported_success": "Profile exported successfully.",
+    "imported_success": "Profile '{name}' imported successfully.",
+    "import_failed": "Failed to import profile: {error}",
     "confirm_delete_text": "Are you sure you want to delete this profile? This action cannot be undone."
   }
 }

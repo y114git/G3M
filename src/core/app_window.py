@@ -158,21 +158,13 @@ class AppWindow(QWidget):
         self.server: SingleInstanceServer | None = None
         self.app_state.config_dir = os.path.join(get_user_data_root(), "settings")
         self.launcher_dir = get_launcher_dir()
-        from utils.path_utils import get_user_mods_dir
-
-        self.app_state.mods_dir = get_user_mods_dir()
         self.app_state.plugins_dir = get_user_plugins_dir()
-        self.app_state.mods_metadata_path = os.path.join(
-            self.app_state.mods_dir, "metadata.json"
-        )
+        self.app_state.mods_dir = ""
+        self.app_state.mods_metadata_path = ""
         self.app_state.plugins_metadata_path = os.path.join(
             self.app_state.plugins_dir, "metadata.json"
         )
-        for d in (
-            self.app_state.config_dir,
-            self.app_state.mods_dir,
-            self.app_state.plugins_dir,
-        ):
+        for d in (self.app_state.config_dir, self.app_state.plugins_dir):
             os.makedirs(d, exist_ok=True)
         self.lang_service = localization_service
         self.app_state.config_path = os.path.join(
@@ -2875,14 +2867,16 @@ class AppWindow(QWidget):
         self.app_state.current_mode = "chapter" if saved_chapter_mode else "normal"
         self.app_state.is_full_install = saved_full_install
         self.app_state.selected_chapter_id = None
+        self.downloads_manager.set_app_context(mods_dir=self.app_state.mods_dir)
+        self.mod_service.invalidate_mods_cache()
+        self.mod_service.load_local_mods(_skip_conversion=True)
         if hasattr(self, "game_launch"):
             self.game_launch._full_install_checkbox_is_checked = saved_full_install
         self._update_checkbox_visibility()
         self.used_mods_service.load_used_mods_state()
         if hasattr(self, "chapter_tabs_widget"):
             self.chapter_tabs_widget.setVisible(saved_chapter_mode)
-        if self.app_state.current_mode != "chapter":
-            self.library_display.update_display()
+        self._trigger_initial_mods_refresh(saved_chapter_mode)
         self.library_display.update_mod_widgets_active_status()
         self.library_display._update_priority_button_visibility()
         if hasattr(self, "game_launch"):

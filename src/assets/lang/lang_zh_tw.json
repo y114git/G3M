@@ -1389,6 +1389,12 @@
     "delete": "刪除設定檔",
     "already_exists": "此名稱的設定檔已存在。",
     "total_active": "共 {count} 個活躍模組",
+    "total_mods": "設定檔內共 {count} 個模組",
+    "select_import_archive": "選擇設定檔封存",
+    "archive_files": "設定檔封存 (*.zip);;所有檔案 (*)",
+    "exported_success": "設定檔匯出成功。",
+    "imported_success": "設定檔「{name}」匯入成功。",
+    "import_failed": "匯入設定檔失敗：{error}",
     "confirm_delete_text": "您確定要刪除此設定檔嗎？此操作無法復原。"
   }
 }
