@@ -58,6 +58,7 @@ class GameLaunchController(QObject):
         self.plugin_service = plugin_service
         self.app = app_window
         self._full_install_checkbox_is_checked = False
+        self._window_hidden_for_launch = False
 
     def _is_full_install_enabled(self) -> bool:
         return (
@@ -225,18 +226,21 @@ class GameLaunchController(QObject):
             self.customization_service.stop_background_music()
         self.settings_service.save_window_geometry(self.app)
         self.app_state.game_is_running = True
+        self._window_hidden_for_launch = False
         if self._dont_hide:
             self.update_button_state()
             self.feedback_service.update_status(
                 tr("status.game_launched_waiting_for_exit"), self._launch_status_color()
             )
         else:
+            self._window_hidden_for_launch = True
             self.window_hide_requested.emit()
 
     def restore_window(self):
         self.app_state.game_is_running = False
-        if not self._dont_hide:
+        if self._window_hidden_for_launch:
             self.window_restore_requested.emit()
+        self._window_hidden_for_launch = False
         self.app_state.progress_bar_visible = False
         self.update_button_state()
         self.update_geometry_requested.emit()

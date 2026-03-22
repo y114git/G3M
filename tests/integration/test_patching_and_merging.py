@@ -356,3 +356,50 @@ class TestFileOverrideProgress:
 
         assert result is True
         patcher._request_warning.assert_not_called()
+
+
+class TestG3MPatchProgressText:
+    def test_multi_patch_progress_uses_generic_patching_text(
+        self, monkeypatch, tmp_path
+    ):
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher._temp_dir = str(tmp_path)
+        patcher._continue_without_data_patch = Mock(return_value=False)
+        patcher.report_has_conflicts = Mock(return_value=False)
+        progress_messages = []
+
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.tr",
+            lambda key, **kwargs: f"{key}|{kwargs}",
+        )
+        patcher._emit_chapter_progress = Mock(
+            side_effect=lambda start, end, fraction, message: progress_messages.append(
+                message
+            )
+        )
+        patcher.g3mtool.merge_patches = Mock(
+            side_effect=lambda *args, **kwargs: (
+                kwargs["progress_callback"](50, "merge"),
+                tmp_path.joinpath("out.win").write_text("patched", encoding="utf-8"),
+                (0, "", ""),
+            )[-1]
+        )
+
+        assert patcher._apply_multi_mod(
+            str(tmp_path / "data.win"),
+            [("a.zip", MOD_TYPE_G3MPATCH, "a"), ("b.zip", MOD_TYPE_G3MPATCH, "b")],
+            str(tmp_path / "out.win"),
+            str(tmp_path / "g3mtool.log"),
+            "chapter1",
+            0,
+            100,
+            "Chapter 1",
+        )
+        assert any(
+            "status.patching_chapter" in message for message in progress_messages
+        )
+        assert all(
+            "status.merging_patches" not in message for message in progress_messages
+        )

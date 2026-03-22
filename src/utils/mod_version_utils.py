@@ -34,6 +34,23 @@ def create_version_zip(
     return zip_path
 
 
+def get_unique_version_name(mod_folder: str, version_name: str) -> str:
+    """Return a non-conflicting version name for the mod_versions directory."""
+    versions_dir = ensure_versions_dir(mod_folder)
+    if not os.path.exists(
+        os.path.join(versions_dir, f"{sanitize_version_name(version_name)}.zip")
+    ):
+        return version_name
+    index = 2
+    while os.path.exists(
+        os.path.join(
+            versions_dir, f"{sanitize_version_name(f'{version_name} ({index})')}.zip"
+        )
+    ):
+        index += 1
+    return f"{version_name} ({index})"
+
+
 def sanitize_version_name(name: str) -> str:
     """Sanitize version name for safe filename."""
     return (

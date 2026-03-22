@@ -80,6 +80,10 @@ def get_user_mods_dir():
     return os.path.join(get_user_data_root(), "mods")
 
 
+def get_user_plugins_dir():
+    return os.path.join(get_user_data_root(), "plugins")
+
+
 def get_user_lang_dir():
     return os.path.join(get_user_data_root(), "lang")
 

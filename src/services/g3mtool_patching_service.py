@@ -602,7 +602,7 @@ class G3MToolPatchingService(QObject):
                 chapter_start,
                 chapter_end,
                 0.30,
-                tr("status.merging_patches", display=display_name, current=1, total=1),
+                tr("status.applying_g3mpatch", display=display_name),
             )
             returncode, _stdout, stderr = self.g3mtool.apply_patch(
                 data_win_path,
@@ -613,12 +613,7 @@ class G3MToolPatchingService(QObject):
                     chapter_start,
                     chapter_end,
                     0.30 + (progress / 100 * 0.40),
-                    tr(
-                        "status.merging_patches",
-                        display=display_name,
-                        current=1,
-                        total=1,
-                    ),
+                    tr("status.applying_g3mpatch", display=display_name),
                 ),
             )
             if returncode != 0:
@@ -699,8 +694,8 @@ class G3MToolPatchingService(QObject):
                 chapter_end,
                 0.22 + (progress / 100 * 0.50),
                 tr(
-                    "status.merging_patches",
-                    display=display_name,
+                    "status.patching_chapter",
+                    chapter=display_name,
                     current=max(
                         1,
                         min(

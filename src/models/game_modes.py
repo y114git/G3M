@@ -92,7 +92,11 @@ class GameDefinition:
         return self.default_tab_id or self.game_id
 
     def get_tab(self, tab_id: str) -> GameTab | None:
-        return next((t for t in self.tabs if t.tab_id == tab_id), None)
+        """Find tab by tab_id, falling back to files_key match."""
+        return next(
+            (t for t in self.tabs if t.tab_id == tab_id or t.files_key == tab_id),
+            None,
+        )
 
     def get_tab_display_name(self, tab_id: str) -> str:
         """Human-readable name like 'DELTARUNE Chapter 1' or 'Pizza Tower'."""

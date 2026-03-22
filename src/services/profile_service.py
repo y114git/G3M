@@ -462,7 +462,7 @@ class ProfileService(QObject):
         return str(candidate)
 
     @staticmethod
-    def _merge_json_file(source: Path, target: Path):
+    def _merge_json_file(source: Path, target: Path) -> None:
         try:
             source_data = json.loads(source.read_text("utf-8")) or {}
             target_data = json.loads(target.read_text("utf-8")) or {}
