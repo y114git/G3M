@@ -3,7 +3,8 @@ import os
 import shutil
 import zipfile
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -26,6 +27,19 @@ from utils.file_utils import get_chapter_folder_name, get_unique_mod_dir, save_j
 
 
 class ManualModInstallDialog(QDialog):
+    _OPENABLE_DOC_EXTENSIONS = {
+        ".cfg",
+        ".ini",
+        ".json",
+        ".log",
+        ".markdown",
+        ".md",
+        ".rtf",
+        ".txt",
+        ".yaml",
+        ".yml",
+    }
+
     def __init__(
         self,
         parent,
@@ -249,6 +263,7 @@ class ManualModInstallDialog(QDialog):
             list_widget.item(list_widget.count() - 1).setData(
                 Qt.ItemDataRole.UserRole, file_path
             )
+        list_widget.itemDoubleClicked.connect(self._on_picker_item_double_clicked)
         if list_widget.count() > 0:
             list_widget.setCurrentRow(0)
         layout.addWidget(list_widget)
@@ -263,6 +278,45 @@ class ManualModInstallDialog(QDialog):
             if current_item:
                 return current_item.data(Qt.ItemDataRole.UserRole)
         return None
+
+    def _on_picker_item_double_clicked(self, item):
+        file_path = item.data(Qt.ItemDataRole.UserRole) if item else ""
+        if self._is_openable_doc(file_path):
+            self._open_local_file(file_path)
+
+    @classmethod
+    def _is_openable_doc(cls, file_path: str) -> bool:
+        return os.path.splitext(file_path)[1].lower() in cls._OPENABLE_DOC_EXTENSIONS
+
+    def _create_file_name_widget(self, file_path: str, rel_path: str) -> QWidget:
+        file_name = os.path.basename(file_path)
+        if not self._is_openable_doc(file_path):
+            label = QLabel(file_name)
+            label.setToolTip(rel_path)
+            label.setMinimumWidth(120)
+            label.setMaximumWidth(200)
+            return label
+        button = QPushButton(file_name)
+        button.setFlat(True)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolTip(f"{rel_path}\n{tr('ui.open_instructions')}")
+        button.setMinimumWidth(120)
+        button.setMaximumWidth(200)
+        button.setStyleSheet(
+            "QPushButton { text-align: left; color: #4da3ff; border: none; padding: 0px; }"
+            "QPushButton:hover { text-decoration: underline; }"
+        )
+        button.clicked.connect(lambda _=False, p=file_path: self._open_local_file(p))
+        return button
+
+    def _open_local_file(self, file_path: str):
+        if not file_path or not os.path.exists(file_path):
+            QMessageBox.warning(
+                self, tr("errors.error"), file_path or tr("errors.error")
+            )
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(file_path)):
+            QMessageBox.warning(self, tr("errors.error"), file_path)
 
     def _browse_data_file(self, chapter_id: str):
         extensions = set(DATA_FILE_EXTENSIONS) | {".data", ".ios", ".droid", ".unx"}
@@ -373,11 +427,7 @@ class ManualModInstallDialog(QDialog):
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
-        file_name_label = QLabel(os.path.basename(file_path))
-        file_name_label.setToolTip(rel_path)
-        file_name_label.setMinimumWidth(120)
-        file_name_label.setMaximumWidth(200)
-        layout.addWidget(file_name_label)
+        layout.addWidget(self._create_file_name_widget(file_path, rel_path))
         path_input = QLineEdit()
         path_input.setObjectName(f"xdelta_path_input_{file_path}")
         path_input.setMinimumWidth(200)
@@ -556,11 +606,7 @@ class ManualModInstallDialog(QDialog):
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
-        file_name_label = QLabel(os.path.basename(file_path))
-        file_name_label.setToolTip(rel_path)
-        file_name_label.setMinimumWidth(120)
-        file_name_label.setMaximumWidth(200)
-        layout.addWidget(file_name_label)
+        layout.addWidget(self._create_file_name_widget(file_path, rel_path))
         dir_part = (
             os.path.dirname(rel_path).replace("\\", "/").strip("/") if rel_path else ""
         )

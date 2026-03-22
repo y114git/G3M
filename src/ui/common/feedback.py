@@ -47,7 +47,7 @@ class FeedbackManager(QObject):
             message_type, (QMessageBox.Icon.Information, _t("dialogs.success"))
         )
         message = _t(message_key, **kwargs)
-        msg_box = QMessageBox(None)
+        msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
         if details:
@@ -71,7 +71,7 @@ class FeedbackManager(QObject):
         _t = self._tr
         title = _t(title_key, **kwargs)
         message = _t(message_key, **kwargs)
-        msg_box = QMessageBox(None)
+        msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)
         if details:
@@ -90,6 +90,45 @@ class FeedbackManager(QObject):
             msg_box.setDefaultButton(QMessageBox.StandardButton.No)
         reply = msg_box.exec()
         return reply == QMessageBox.StandardButton.Yes
+
+    def ask_patching_warning(
+        self, message: str, details: str = "", report_path: str | None = None
+    ) -> bool:
+        if not self._should_show_dialog():
+            return False
+        while True:
+            msg_box = QMessageBox(self.parent_widget)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle(self._tr("dialogs.patching_warning.title"))
+            full_message = self._format_html(message)
+            if details:
+                full_message = f"{full_message}<br><br>{self._format_html(details)}"
+            msg_box.setText(full_message)
+            continue_btn = msg_box.addButton(
+                self._tr("dialogs.patching_warning.continue_button"),
+                QMessageBox.ButtonRole.AcceptRole,
+            )
+            cancel_btn = msg_box.addButton(
+                self._tr("dialogs.patching_warning.cancel_button"),
+                QMessageBox.ButtonRole.RejectRole,
+            )
+            open_report_btn = None
+            if report_path:
+                open_report_btn = msg_box.addButton(
+                    self._tr("dialogs.conflicts.open_report"),
+                    QMessageBox.ButtonRole.ActionRole,
+                )
+            msg_box.setDefaultButton(cancel_btn)
+            msg_box.exec()
+            clicked = msg_box.clickedButton()
+            if clicked == continue_btn:
+                return True
+            if clicked == cancel_btn:
+                return False
+            if clicked == open_report_btn and report_path:
+                from ui.dialogs.conflicts_dialog import ConflictsDialog
+
+                ConflictsDialog(report_path, parent=self.parent_widget).exec()
 
     def update_status(self, message: str, color: str = ""):
         self.status_updated.emit(message, color)

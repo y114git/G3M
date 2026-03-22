@@ -5,6 +5,7 @@ import shutil
 import tempfile
 
 from config.constants import ARCHIVE_EXTENSIONS, SKIP_FILES
+from services.localization_service import tr
 from utils.patching import mod_content_utils as mod_content
 
 
@@ -16,7 +17,7 @@ def apply_xdelta_override(
     chapter_id: int | None,
     fallback_target: str | None = None,
     label: str = "",
-) -> bool:
+) -> bool | None:
     """Apply xdelta patch to matching target files. On failure, copies to fallback_target if provided."""
     target_files = mod_content.find_target_files_for_xdelta(target_dir, file_name)
     if not target_files:
@@ -26,7 +27,7 @@ def apply_xdelta_override(
         if fallback_target:
             patcher._backup_or_mark_file(chapter_id, fallback_target)
             shutil.copy2(source_path, fallback_target)
-        return False
+        return None
     patch_applied = False
     for tf in target_files:
         if chapter_id is not None and patcher.backup_service and os.path.exists(tf):
@@ -55,15 +56,32 @@ def apply_xdelta_override(
 
 
 def extract_archive_to_target(
-    patcher, archive_path: str, target_dir: str, chapter_id: int | None = None
+    patcher,
+    archive_path: str,
+    target_dir: str,
+    chapter_id: int | None = None,
+    progress_callback=None,
+    mod_name: str = "",
 ) -> bool:
     try:
         from utils.archive_utils import extract_any_archive
 
         if chapter_id is None:
             chapter_id = mod_content.extract_chapter_id_from_path(target_dir)
+        if progress_callback:
+            progress_callback(
+                0.0,
+                tr("status.applying_file_overrides", mod=mod_name, current=0, total=0),
+            )
         with tempfile.TemporaryDirectory(prefix="mm_extract_") as temp_extract_dir:
             extract_any_archive(archive_path, temp_extract_dir)
+            extracted_files = [
+                os.path.join(root, file)
+                for root, _dirs, files in os.walk(temp_extract_dir)
+                for file in files
+            ]
+            total_files = len(extracted_files)
+            processed_files = 0
             for root, _dirs, files in os.walk(temp_extract_dir):
                 rel_root = os.path.relpath(root, temp_extract_dir)
                 for file in files:
@@ -76,6 +94,17 @@ def extract_archive_to_target(
                     target_dirname = os.path.dirname(target_file)
                     os.makedirs(target_dirname, exist_ok=True)
                     file_lower = file.lower()
+                    processed_files += 1
+                    if progress_callback:
+                        progress_callback(
+                            processed_files / max(total_files, 1),
+                            tr(
+                                "status.applying_file_overrides",
+                                mod=mod_name,
+                                current=processed_files,
+                                total=total_files,
+                            ),
+                        )
                     if file_lower.endswith((".xdelta", ".vcdiff")):
                         apply_xdelta_override(
                             patcher,
@@ -95,7 +124,13 @@ def extract_archive_to_target(
         patcher.patching_logger.error(
             f"Failed to extract archive {archive_path}: {e}", exc_info=True
         )
-        return False
+        return patcher._request_warning(
+            tr(
+                "dialogs.patching_warning.archive_extract_failed",
+                archive=os.path.basename(archive_path),
+                target=target_dir,
+            )
+        )
 
 
 def apply_file_overrides(
@@ -105,6 +140,8 @@ def apply_file_overrides(
     used_archive_names: set,
     is_modpack: bool,
     chapter_id: int | None = None,
+    progress_callback=None,
+    mod_name: str = "",
 ) -> bool:
     if not os.path.isdir(mod_source_dir):
         return True
@@ -118,6 +155,14 @@ def apply_file_overrides(
     skip_files = SKIP_FILES
     if chapter_id is None:
         chapter_id = mod_content.extract_chapter_id_from_path(target_dir)
+    total_files = sum(
+        1
+        for root, _dirs, files in os.walk(mod_source_dir)
+        for file in files
+        if file.lower() not in skip_files
+        and not os.path.join(root, file).lower().endswith(xdelta_extensions)
+    )
+    processed_files = 0
     for root, _dirs, files in os.walk(mod_source_dir):
         rel_path = os.path.relpath(root, mod_source_dir)
         for file in files:
@@ -125,6 +170,17 @@ def apply_file_overrides(
                 continue
             source_path = os.path.join(root, file)
             file_lower = file.lower()
+            processed_files += 1
+            if progress_callback:
+                progress_callback(
+                    processed_files / max(total_files, 1),
+                    tr(
+                        "status.applying_file_overrides",
+                        mod=mod_name,
+                        current=processed_files,
+                        total=total_files,
+                    ),
+                )
             if file_lower.endswith((".xdelta", ".vcdiff")):
                 if not is_modpack:
                     xdelta_chapter_id = (
@@ -132,9 +188,19 @@ def apply_file_overrides(
                         if chapter_id is not None
                         else mod_content.extract_chapter_id_from_path(target_dir)
                     )
-                    apply_xdelta_override(
+                    patch_result = apply_xdelta_override(
                         patcher, file, source_path, target_dir, xdelta_chapter_id
                     )
+                    if (patch_result is False) and (
+                        not patcher._request_warning(
+                            tr(
+                                "dialogs.patching_warning.xdelta_override_skipped",
+                                patch=file,
+                                target=target_dir,
+                            )
+                        )
+                    ):
+                        return False
                 elif patcher.xdelta_modpack:
                     rel_path = os.path.relpath(source_path, mod_source_dir)
                     target_path = os.path.join(target_dir, rel_path)
@@ -196,11 +262,14 @@ def apply_file_overrides(
                         f"Extracting archive contents: {os.path.basename(file)}"
                     )
                     if not extract_archive_to_target(
-                        patcher, source_path, target_dir, chapter_id
+                        patcher,
+                        source_path,
+                        target_dir,
+                        chapter_id,
+                        progress_callback=progress_callback,
+                        mod_name=mod_name,
                     ):
-                        patcher.patching_logger.warning(
-                            f"Failed to extract archive {source_path}, continuing..."
-                        )
+                        return False
                 continue
             rel_path = os.path.relpath(source_path, mod_source_dir)
             target_path = os.path.join(target_dir, rel_path)

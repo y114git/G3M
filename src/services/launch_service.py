@@ -169,8 +169,14 @@ class GameLauncher(QObject):
             self._continue_after_patching(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self):
-        if self.restore_window_callback:
+        if self.restore_window_callback and getattr(
+            self.app_state, "game_is_running", False
+        ):
             self.restore_window_callback()
+        parent = self.parent()
+        controller = getattr(parent, "game_launch", None) if parent else None
+        if controller and hasattr(controller, "update_button_state"):
+            controller.update_button_state()
 
     def _execute_game(self, launch_config: dict[str, Any], vanilla_mode: bool = False):
         target_path = launch_config.get("target")
@@ -486,12 +492,26 @@ class GameLauncher(QObject):
         )
         self._patching_thread.progress_update.connect(self._on_patching_progress)
         self._patching_thread.status_update.connect(self._on_patching_status)
+        self._patching_thread.warning_confirmation_needed.connect(
+            self._on_patching_warning_confirmation_needed
+        )
         self._patching_thread.finished.connect(
             lambda success: self._on_patching_finished(selections, success)
         )
         self.app_state.current_task = self._patching_thread
         self._patching_thread.start()
         return True
+
+    def _on_patching_warning_confirmation_needed(
+        self, message: str, details: str, report_path: str | None
+    ):
+        patching_thread = self._patching_thread
+        if not patching_thread:
+            return
+        should_continue = self.feedback_service.ask_patching_warning(
+            message, details, report_path
+        )
+        patching_thread.confirm_warning(should_continue)
 
     def _on_patching_finished(self, selections: dict[int, Any], success: bool):
         self.app_state.progress_bar_visible = False
@@ -590,18 +610,6 @@ class GameLauncher(QObject):
         self._execute_game(launch_config)
         if self.execute_plugin_hooks:
             self.execute_plugin_hooks("on_after_game_launch")
-
-        if needs_multi_mod and self.mod_patcher:
-            self._show_conflicts_dialog_if_needed(self.mod_patcher)
-
-    def _show_conflicts_dialog_if_needed(self, patcher) -> None:
-        """Show informational conflicts dialog if merge report has conflicts."""
-        report_path = patcher.get_report_path()
-        if report_path and patcher.report_has_conflicts():
-            from ui.dialogs.conflicts_dialog import ConflictsDialog
-
-            dialog = ConflictsDialog(report_path, parent=None)
-            dialog.exec()
 
     def _on_patching_status(self, message: str, status_type: str):
         color = UI_COLORS.get(f"status_{status_type}", UI_COLORS["status_error"])

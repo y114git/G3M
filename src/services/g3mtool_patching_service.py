@@ -8,6 +8,7 @@ import re
 import shutil
 import tempfile
 import time
+from collections.abc import Callable
 from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -103,9 +104,61 @@ class G3MToolPatchingService(QObject):
         self._xdelta_modpack: bool = False
         self._session_manifest_path: str | None = None
         self._override_game_path: str | None = None
+        self.warning_handler: Callable[[str, str, str | None], bool] | None = None
 
         _rotate_patching_files()
         self.patching_logger = _get_patching_logger()
+
+    def _emit_progress(self, progress: int, message: str):
+        self.progress_update.emit(max(0, min(progress, 100)), message)
+
+    def _emit_chapter_progress(
+        self, start: int, end: int, fraction: float, message: str
+    ):
+        bounded_fraction = max(0.0, min(fraction, 1.0))
+        progress = start + int((end - start) * bounded_fraction)
+        self._emit_progress(progress, message)
+
+    def _request_warning(
+        self, message: str, details: str = "", report_path: str | None = None
+    ) -> bool:
+        self.patching_logger.warning(message)
+        if details:
+            self.patching_logger.warning(details)
+        local_config = getattr(self.app_state, "local_config", {}) or {}
+        if local_config.get("skip_patching_warnings", False):
+            return True
+        if self.warning_handler:
+            return bool(self.warning_handler(message, details, report_path))
+        return True
+
+    def _continue_without_data_patch(
+        self,
+        warning_message: str,
+        data_win_path: str,
+        output_path: str,
+        log_error: str,
+    ) -> bool:
+        self.patching_logger.error(log_error)
+        if not self._request_warning(warning_message):
+            return False
+        try:
+            shutil.copy2(data_win_path, output_path)
+            self.patching_logger.warning(
+                f"Continuing without data patch, copied original file to {output_path}"
+            )
+            return True
+        except Exception as e:
+            self.patching_logger.error(
+                f"Failed to preserve original data file at {output_path}: {e}",
+                exc_info=True,
+            )
+            self.status_update.emit(tr("errors.patching_failed", error=str(e)), "error")
+            return False
+
+    @staticmethod
+    def _missing_output_error(output_path: str) -> str:
+        return f"Patched output file was not created: {output_path}"
 
     def set_override_game_path(self, path: str | None) -> None:
         """Set override game path for patching operations."""
@@ -121,8 +174,7 @@ class G3MToolPatchingService(QObject):
         self._last_report_path = None
 
         if not self.g3mtool.is_available():
-            self.status_update.emit(
-                tr("errors.g3mtool_not_available"), "error")
+            self.status_update.emit(tr("errors.g3mtool_not_available"), "error")
             self.patching_logger.error("G3MTool not available")
             return False
 
@@ -132,13 +184,15 @@ class G3MToolPatchingService(QObject):
             if is_modpack:
                 backup_dir = os.path.join(self._temp_dir, "backups")
             else:
-                backup_dir = os.path.join(
-                    get_user_data_root(), "patching_backups")
+                backup_dir = os.path.join(get_user_data_root(), "patching_backups")
             self.backup_service = BackupManager(
                 backup_dir, patching_logger=self.patching_logger
             )
 
             total_chapters = len([c for c in chapter_mods.values() if c])
+            if total_chapters == 0:
+                self._emit_progress(100, tr("status.patching_completed"))
+                return True
             chapter_index = 0
 
             for chapter_id, mods_list in sorted(chapter_mods.items()):
@@ -149,18 +203,30 @@ class G3MToolPatchingService(QObject):
                     continue
 
                 chapter_index += 1
-                progress_pct = min(
+                display_name = self._get_chapter_display_name(chapter_id)
+                chapter_start = min(
                     int((chapter_index - 1) / max(total_chapters, 1) * 90) + 5, 95
                 )
-                display_name = self._get_chapter_display_name(chapter_id)
-                self.progress_update.emit(
-                    progress_pct,
-                    tr("status.processing_chapter", display=display_name,
-                    current=chapter_index, total=total_chapters),
+                chapter_end = min(
+                    int(chapter_index / max(total_chapters, 1) * 90) + 5, 95
+                )
+                self._emit_chapter_progress(
+                    chapter_start,
+                    chapter_end,
+                    0.0,
+                    tr("status.preparing_chapter", display=display_name),
                 )
 
                 success = self._patch_chapter(
-                    chapter_id, mods_list, is_modpack, modpack_dir
+                    chapter_id,
+                    mods_list,
+                    is_modpack,
+                    modpack_dir,
+                    chapter_start,
+                    chapter_end,
+                    display_name,
+                    chapter_index,
+                    total_chapters,
                 )
                 if not success:
                     if not is_modpack:
@@ -170,17 +236,13 @@ class G3MToolPatchingService(QObject):
                 if not is_modpack:
                     self._write_session_manifest()
 
-            self.progress_update.emit(
-                100,
-                tr("status.patching_completed")
-                if not is_modpack
-                else "Modpack created",
+            self._emit_progress(
+                96 if is_modpack else 100, tr("status.patching_completed")
             )
             return True
         except Exception as e:
             self.patching_logger.error(f"Patching failed: {e}", exc_info=True)
-            self.status_update.emit(
-                tr("errors.patching_failed", error=str(e)), "error")
+            self.status_update.emit(tr("errors.patching_failed", error=str(e)), "error")
             if not is_modpack:
                 self._restore_all(chapter_mods)
             return False
@@ -208,7 +270,23 @@ class G3MToolPatchingService(QObject):
         mods_list: list[Any],
         is_modpack: bool,
         modpack_dir: str | None,
+        chapter_start: int,
+        chapter_end: int,
+        display_name: str,
+        chapter_index: int,
+        total_chapters: int,
     ) -> bool:
+        self._emit_chapter_progress(
+            chapter_start,
+            chapter_end,
+            0.03,
+            tr(
+                "status.processing_chapter",
+                display=display_name,
+                current=chapter_index,
+                total=total_chapters,
+            ),
+        )
         if self._override_game_path:
             from utils.path_utils import find_chapter_resource_dir
 
@@ -223,10 +301,15 @@ class G3MToolPatchingService(QObject):
             )
         if not target_dir:
             self.status_update.emit(
-                tr("errors.target_directory_not_found",
-                   chapter=chapter_id), "error"
+                tr("errors.target_directory_not_found", chapter=chapter_id), "error"
             )
             return False
+        self._emit_chapter_progress(
+            chapter_start,
+            chapter_end,
+            0.08,
+            tr("status.preparing_chapter", display=display_name),
+        )
 
         if not ensure_writable(target_dir):
             self.status_update.emit(
@@ -236,10 +319,36 @@ class G3MToolPatchingService(QObject):
 
         data_win_path = mod_content.find_data_win(target_dir)
         if not data_win_path:
-            self.patching_logger.warning(
-                f"data.win not found for chapter {chapter_id}, applying file overrides only"
+            if not self._request_warning(
+                tr(
+                    "dialogs.patching_warning.data_win_not_found",
+                    search_path=target_dir,
+                )
+            ):
+                return False
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.12,
+                tr("status.preparing_chapter", display=display_name),
             )
-            return self._apply_file_overrides_only(mods_list, target_dir, chapter_id)
+            success = self._apply_file_overrides_only(
+                mods_list,
+                target_dir,
+                chapter_id,
+                chapter_start,
+                chapter_end,
+                0.12,
+                0.98,
+            )
+            if success:
+                self._emit_chapter_progress(
+                    chapter_start,
+                    chapter_end,
+                    1.0,
+                    tr("status.chapter_patched", chapter=display_name),
+                )
+            return success
 
         mod_infos = self._collect_mod_infos(mods_list, chapter_id)
         data_mod_infos = [
@@ -250,7 +359,23 @@ class G3MToolPatchingService(QObject):
             self.patching_logger.info(
                 f"No data-modifying patches for chapter {chapter_id}, applying file overrides only"
             )
-            return self._apply_file_overrides_only(mods_list, target_dir, chapter_id)
+            success = self._apply_file_overrides_only(
+                mods_list,
+                target_dir,
+                chapter_id,
+                chapter_start,
+                chapter_end,
+                0.18,
+                0.98,
+            )
+            if success:
+                self._emit_chapter_progress(
+                    chapter_start,
+                    chapter_end,
+                    1.0,
+                    tr("status.chapter_patched", chapter=display_name),
+                )
+            return success
 
         if (
             not is_modpack
@@ -264,14 +389,19 @@ class G3MToolPatchingService(QObject):
                 tr("errors.backup_failed", path=data_win_path), "error"
             )
             return False
+        if not is_modpack:
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.18,
+                tr("status.backing_up_original_files", display=display_name),
+            )
 
         final_output_path = data_win_path
         if is_modpack and modpack_dir:
             game = self._resolve_mod_game(mods_list[0]) if mods_list else None
-            chapter_folder_name = get_chapter_folder_name(
-                chapter_id, game=game)
-            chapter_modpack_dir = os.path.join(
-                modpack_dir, chapter_folder_name)
+            chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
+            chapter_modpack_dir = os.path.join(modpack_dir, chapter_folder_name)
             os.makedirs(chapter_modpack_dir, exist_ok=True)
             final_output_path = os.path.join(
                 chapter_modpack_dir, os.path.basename(data_win_path)
@@ -288,20 +418,38 @@ class G3MToolPatchingService(QObject):
         success = False
         if len(data_mod_infos) == 1:
             success = self._apply_single_mod(
-                data_win_path, data_mod_infos[0], temp_output, log_path
+                data_win_path,
+                data_mod_infos[0],
+                temp_output,
+                log_path,
+                chapter_start,
+                chapter_end,
+                display_name,
             )
         else:
             success = self._apply_multi_mod(
-                data_win_path, data_mod_infos, temp_output, log_path, chapter_id
+                data_win_path,
+                data_mod_infos,
+                temp_output,
+                log_path,
+                chapter_id,
+                chapter_start,
+                chapter_end,
+                display_name,
             )
 
         if not success:
             return False
 
+        self._emit_chapter_progress(
+            chapter_start,
+            chapter_end,
+            0.76,
+            tr("status.finalizing_chapter", display=display_name),
+        )
         try:
             shutil.move(temp_output, final_output_path)
-            self.patching_logger.info(
-                f"Patched data.win placed at {final_output_path}")
+            self.patching_logger.info(f"Patched data.win placed at {final_output_path}")
         except Exception as e:
             self.patching_logger.error(
                 f"Failed to move patched file to {final_output_path}: {e}",
@@ -310,41 +458,137 @@ class G3MToolPatchingService(QObject):
             return False
 
         override_target = (
-            target_dir if not is_modpack else os.path.dirname(
-                final_output_path)
+            target_dir if not is_modpack else os.path.dirname(final_output_path)
         )
-        for mod_data in mods_list:
-            mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
-            if mod_source_dir:
-                self._apply_file_overrides(
-                    mod_source_dir, override_target, chapter_id, is_modpack
-                )
+        override_mods = [
+            (mod_data, self._get_mod_source_dir(mod_data, chapter_id))
+            for mod_data in mods_list
+        ]
+        override_mods = [(mod_data, path) for mod_data, path in override_mods if path]
+        total_override_mods = len(override_mods)
+        for idx, (mod_data, mod_source_dir) in enumerate(override_mods, start=1):
+            mod_start = 0.78 + ((idx - 1) / max(total_override_mods, 1) * 0.20)
+            mod_end = 0.78 + (idx / max(total_override_mods, 1) * 0.20)
+            mod_name = (
+                getattr(mod_data, "name", None)
+                or getattr(mod_data, "mod_name", None)
+                or os.path.basename(mod_source_dir)
+            )
+            if not self._apply_file_overrides(
+                mod_source_dir,
+                override_target,
+                chapter_id,
+                is_modpack,
+                chapter_start,
+                chapter_end,
+                mod_start,
+                mod_end,
+                mod_name,
+            ):
+                return False
+
+        self._emit_chapter_progress(
+            chapter_start,
+            chapter_end,
+            1.0,
+            tr("status.chapter_patched", chapter=display_name),
+        )
 
         return True
 
     def _apply_single_mod(
-        self, data_win_path: str, mod_info: tuple, output_path: str, log_path: str
+        self,
+        data_win_path: str,
+        mod_info: tuple,
+        output_path: str,
+        log_path: str,
+        chapter_start: int,
+        chapter_end: int,
+        display_name: str,
     ) -> bool:
         patch_file, mod_type, _mod_source_dir = mod_info
 
         if mod_type == MOD_TYPE_XDELTA:
             self.patching_logger.info(f"Applying xdelta patch: {patch_file}")
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.30,
+                tr(
+                    "status.applying_xdelta",
+                    mod=os.path.basename(patch_file),
+                    current=1,
+                    total=1,
+                ),
+            )
             returncode, _stdout, stderr = self.g3mtool.xpatch_apply(
-                data_win_path, patch_file, output_path
+                data_win_path,
+                patch_file,
+                output_path,
+                progress_callback=lambda progress, _label: self._emit_chapter_progress(
+                    chapter_start,
+                    chapter_end,
+                    0.30 + (progress / 100 * 0.40),
+                    tr(
+                        "status.applying_xdelta",
+                        mod=os.path.basename(patch_file),
+                        current=1,
+                        total=1,
+                    ),
+                ),
             )
             if returncode != 0:
-                self.patching_logger.error(
-                    f"xpatch apply failed: {stderr[:500]}")
-                self.status_update.emit(
-                    f"xdelta patch failed: {stderr[:200]}", "error")
-                return False
+                error_text = stderr[:200] or "Unknown error"
+                return self._continue_without_data_patch(
+                    tr(
+                        "dialogs.patching_warning.xdelta_patch_failed",
+                        patch_name=os.path.basename(patch_file),
+                        patch_path=patch_file,
+                        data_win_path=data_win_path,
+                        error=error_text,
+                    ),
+                    data_win_path,
+                    output_path,
+                    f"xpatch apply failed: {stderr[:500]}",
+                )
+            if not os.path.exists(output_path):
+                error_text = self._missing_output_error(output_path)
+                return self._continue_without_data_patch(
+                    tr(
+                        "dialogs.patching_warning.xdelta_patch_failed",
+                        patch_name=os.path.basename(patch_file),
+                        patch_path=patch_file,
+                        data_win_path=data_win_path,
+                        error=error_text,
+                    ),
+                    data_win_path,
+                    output_path,
+                    error_text,
+                )
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.70,
+                tr("status.finalizing_chapter", display=display_name),
+            )
             return True
 
         if mod_type == MOD_TYPE_DATAFILE:
-            self.patching_logger.info(
-                f"Copying replacement data.win: {patch_file}")
+            self.patching_logger.info(f"Copying replacement data.win: {patch_file}")
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.35,
+                tr("status.patching_chapter", chapter=display_name, current=1, total=1),
+            )
             try:
                 shutil.copy2(patch_file, output_path)
+                self._emit_chapter_progress(
+                    chapter_start,
+                    chapter_end,
+                    0.70,
+                    tr("status.finalizing_chapter", display=display_name),
+                )
                 return True
             except Exception as e:
                 self.patching_logger.error(
@@ -354,19 +598,63 @@ class G3MToolPatchingService(QObject):
 
         if mod_type == MOD_TYPE_G3MPATCH:
             self.patching_logger.info(f"Applying g3mpatch: {patch_file}")
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.30,
+                tr("status.merging_patches", display=display_name, current=1, total=1),
+            )
             returncode, _stdout, stderr = self.g3mtool.apply_patch(
                 data_win_path,
                 patch_file,
                 output_path,
                 log_path=log_path,
+                progress_callback=lambda progress, _label: self._emit_chapter_progress(
+                    chapter_start,
+                    chapter_end,
+                    0.30 + (progress / 100 * 0.40),
+                    tr(
+                        "status.merging_patches",
+                        display=display_name,
+                        current=1,
+                        total=1,
+                    ),
+                ),
             )
             if returncode != 0:
-                self.patching_logger.error(
-                    f"patch apply failed: {stderr[:500]}")
-                self.status_update.emit(
-                    f"G3MTool patch apply failed: {stderr[:200]}", "error"
+                error_text = stderr[:200] or "Unknown error"
+                return self._continue_without_data_patch(
+                    tr(
+                        "dialogs.patching_warning.data_patch_failed",
+                        patch_name=os.path.basename(patch_file),
+                        patch_path=patch_file,
+                        data_win_path=data_win_path,
+                        error=error_text,
+                    ),
+                    data_win_path,
+                    output_path,
+                    f"patch apply failed: {stderr[:500]}",
                 )
-                return False
+            if not os.path.exists(output_path):
+                error_text = self._missing_output_error(output_path)
+                return self._continue_without_data_patch(
+                    tr(
+                        "dialogs.patching_warning.data_patch_failed",
+                        patch_name=os.path.basename(patch_file),
+                        patch_path=patch_file,
+                        data_win_path=data_win_path,
+                        error=error_text,
+                    ),
+                    data_win_path,
+                    output_path,
+                    error_text,
+                )
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.70,
+                tr("status.finalizing_chapter", display=display_name),
+            )
             return True
 
         self.patching_logger.error(f"Unknown mod_type: {mod_type}")
@@ -379,6 +667,9 @@ class G3MToolPatchingService(QObject):
         output_path: str,
         log_path: str,
         chapter_id: str,
+        chapter_start: int,
+        chapter_end: int,
+        display_name: str,
     ) -> bool:
 
         patch_files = [pf for pf, mt, sd in mod_infos]
@@ -393,8 +684,7 @@ class G3MToolPatchingService(QObject):
         )
 
         merge_code = self.app_state.local_config.get("merge_code", False)
-        merge_properties = self.app_state.local_config.get(
-            "merge_properties", False)
+        merge_properties = self.app_state.local_config.get("merge_properties", False)
 
         returncode, _stdout, stderr = self.g3mtool.merge_patches(
             data_win_path,
@@ -404,16 +694,53 @@ class G3MToolPatchingService(QObject):
             log_path=log_path,
             merge_code=merge_code,
             merge_properties=merge_properties,
+            progress_callback=lambda progress, _label: self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.22 + (progress / 100 * 0.50),
+                tr(
+                    "status.merging_patches",
+                    display=display_name,
+                    current=max(
+                        1,
+                        min(
+                            len(patch_files),
+                            progress * len(patch_files) // 100 + 1,
+                        ),
+                    ),
+                    total=len(patch_files),
+                ),
+            ),
         )
 
         if returncode != 0:
-            error_msg = stderr[:200] if stderr else "Unknown error"
-            self.status_update.emit(
-                f"G3MTool merge failed: {error_msg}", "error")
-            self.patching_logger.error(
-                f"G3MTool merge failed for chapter {chapter_id}: {stderr[:500]}"
+            error_text = stderr[:200] or "Unknown error"
+            return self._continue_without_data_patch(
+                tr(
+                    "dialogs.patching_warning.data_patch_failed",
+                    patch_name=f"{len(patch_files)} patches",
+                    patch_path="\n".join(patch_files),
+                    data_win_path=data_win_path,
+                    error=error_text,
+                ),
+                data_win_path,
+                output_path,
+                f"G3MTool merge failed for chapter {chapter_id}: {stderr[:500]}",
             )
-            return False
+        if not os.path.exists(output_path):
+            error_text = self._missing_output_error(output_path)
+            return self._continue_without_data_patch(
+                tr(
+                    "dialogs.patching_warning.data_patch_failed",
+                    patch_name=f"{len(patch_files)} patches",
+                    patch_path="\n".join(patch_files),
+                    data_win_path=data_win_path,
+                    error=error_text,
+                ),
+                data_win_path,
+                output_path,
+                error_text,
+            )
 
         if report_path and os.path.exists(report_path):
             self._last_report_path = report_path
@@ -421,6 +748,20 @@ class G3MToolPatchingService(QObject):
             self._saved_report_path = self._save_report_to_archive(
                 report_path, chapter_id
             )
+            if self.report_has_conflicts():
+                total_conflicts, _auto_resolved = self.get_report_stats()
+                if not self._request_warning(
+                    tr(
+                        "dialogs.patching_warning.conflicts_detected",
+                        chapter=display_name,
+                        count=total_conflicts,
+                    ),
+                    details=tr(
+                        "dialogs.conflicts.total_conflicts", count=total_conflicts
+                    ),
+                    report_path=self._saved_report_path or report_path,
+                ):
+                    return False
 
         return True
 
@@ -429,15 +770,13 @@ class G3MToolPatchingService(QObject):
         try:
             archive_dir = _get_patching_logs_dir()
             ts = time.strftime("%Y%m%d_%H%M%S")
-            dest = os.path.join(
-                archive_dir, f"merge_report_{chapter_id}_{ts}.md")
+            dest = os.path.join(archive_dir, f"merge_report_{chapter_id}_{ts}.md")
             shutil.copy2(report_path, dest)
             _enforce_archive_limit(archive_dir)
             self.patching_logger.info(f"Merge report saved to {dest}")
             return dest
         except Exception as e:
-            self.patching_logger.warning(
-                f"Failed to save merge report to archive: {e}")
+            self.patching_logger.warning(f"Failed to save merge report to archive: {e}")
             return report_path
 
     def _collect_mod_infos(
@@ -474,23 +813,74 @@ class G3MToolPatchingService(QObject):
         return (None, MOD_TYPE_OVERRIDES_ONLY)
 
     def _apply_file_overrides_only(
-        self, mods_list: list[Any], target_dir: str, chapter_id: str
+        self,
+        mods_list: list[Any],
+        target_dir: str,
+        chapter_id: str,
+        chapter_start: int,
+        chapter_end: int,
+        progress_start: float,
+        progress_end: float,
     ) -> bool:
-        for mod_data in mods_list:
-            mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
-            if mod_source_dir:
-                self._apply_file_overrides(
-                    mod_source_dir, target_dir, chapter_id, False
-                )
+        override_mods = [
+            (mod_data, self._get_mod_source_dir(mod_data, chapter_id))
+            for mod_data in mods_list
+        ]
+        override_mods = [(mod_data, path) for mod_data, path in override_mods if path]
+        for idx, (mod_data, mod_source_dir) in enumerate(override_mods, start=1):
+            mod_name = (
+                getattr(mod_data, "name", None)
+                or getattr(mod_data, "mod_name", None)
+                or os.path.basename(mod_source_dir)
+            )
+            mod_start = progress_start + (
+                (idx - 1) / max(len(override_mods), 1) * (progress_end - progress_start)
+            )
+            mod_end = progress_start + (
+                idx / max(len(override_mods), 1) * (progress_end - progress_start)
+            )
+            if not self._apply_file_overrides(
+                mod_source_dir,
+                target_dir,
+                chapter_id,
+                False,
+                chapter_start,
+                chapter_end,
+                mod_start,
+                mod_end,
+                mod_name,
+            ):
+                return False
         return True
 
     def _apply_file_overrides(
-        self, mod_source_dir: str, target_dir: str, chapter_id: str, is_modpack: bool
+        self,
+        mod_source_dir: str,
+        target_dir: str,
+        chapter_id: str,
+        is_modpack: bool,
+        chapter_start: int,
+        chapter_end: int,
+        progress_start: float,
+        progress_end: float,
+        mod_name: str,
     ) -> bool:
         from utils.patching.file_override_utils import apply_file_overrides
 
         return apply_file_overrides(
-            self, mod_source_dir, target_dir, set(), is_modpack, chapter_id
+            self,
+            mod_source_dir,
+            target_dir,
+            set(),
+            is_modpack,
+            chapter_id,
+            progress_callback=lambda fraction, message: self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                progress_start + ((progress_end - progress_start) * fraction),
+                message,
+            ),
+            mod_name=mod_name,
         )
 
     def _backup_or_mark_file(self, chapter_id, target_file: str) -> None:
@@ -609,8 +999,7 @@ class G3MToolPatchingService(QObject):
         """Remove persistent backups and session manifest (call after successful game close)."""
         if self.backup_service:
             self.backup_service.clear_backup_dir()
-            self.patching_logger.info(
-                "Session cleared: backups and manifest removed")
+            self.patching_logger.info("Session cleared: backups and manifest removed")
 
     def cleanup_processes_and_temp_files(self) -> None:
         """Called from app_cleanup.py on close."""

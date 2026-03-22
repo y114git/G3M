@@ -3,13 +3,18 @@
 import logging
 import os
 import platform
+import re
 import subprocess
+import threading
+from collections.abc import Callable
 
 from utils.path_utils import resource_path
 
 
 class G3MToolManager:
     """Manages G3MTool CLI execution for patching operations."""
+
+    _PROGRESS_RE = re.compile(r"^(?P<label>.+?):\s*(?P<percent>\d+)%")
 
     def __init__(self) -> None:
         self.platform = {"Windows": "windows", "Darwin": "macos"}.get(
@@ -47,6 +52,7 @@ class G3MToolManager:
         log_path: str | None = None,
         merge_code: bool = False,
         merge_properties: bool = False,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch merge <original> <patch1> <patch2> ... --apply <output> [--report <path>] [--log <path>]"""
         cmd = [self.g3mtool_path, "patch", "merge", original_data_win, *mod_patches]
@@ -61,7 +67,7 @@ class G3MToolManager:
             cmd.extend(["--report", report_path])
         if log_path:
             cmd.extend(["--log", log_path])
-        return self._run(cmd)
+        return self._run(cmd, progress_callback=progress_callback)
 
     def apply_patch(
         self,
@@ -69,6 +75,7 @@ class G3MToolManager:
         patch_path: str,
         output_path: str,
         log_path: str | None = None,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch apply <original> <patch> <output> [--log <path>]"""
         cmd = [
@@ -81,13 +88,14 @@ class G3MToolManager:
         ]
         if log_path:
             cmd.extend(["--log", log_path])
-        return self._run(cmd)
+        return self._run(cmd, progress_callback=progress_callback)
 
     def xpatch_apply(
         self,
         original_file: str,
         patch_path: str,
         output_path: str,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool xpatch apply <original> <patch> <output> for xdelta/vcdiff patches."""
         cmd = [
@@ -98,13 +106,14 @@ class G3MToolManager:
             patch_path,
             output_path,
         ]
-        return self._run(cmd)
+        return self._run(cmd, progress_callback=progress_callback)
 
     def xpatch_create(
         self,
         original_file: str,
         modified_file: str,
         output_path: str,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool xpatch create <original> <modified> <output>."""
         cmd = [
@@ -115,7 +124,7 @@ class G3MToolManager:
             modified_file,
             output_path,
         ]
-        return self._run(cmd)
+        return self._run(cmd, progress_callback=progress_callback)
 
     def patch_create(
         self,
@@ -176,7 +185,44 @@ class G3MToolManager:
                 )
         self._active_processes.clear()
 
-    def _run(self, cmd: list[str], timeout: int = 600) -> tuple[int, str, str]:
+    @classmethod
+    def _parse_progress(cls, text: str) -> tuple[int, str] | None:
+        match = cls._PROGRESS_RE.match(text.strip())
+        if not match:
+            return None
+        return int(match.group("percent")), match.group("label")
+
+    def _stream_output(
+        self,
+        stream,
+        chunks: list[str],
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> None:
+        progress_buffer = ""
+        while True:
+            char = stream.read(1)
+            if not char:
+                break
+            chunks.append(char)
+            if not progress_callback:
+                continue
+            if char in "\r\n":
+                progress = self._parse_progress(progress_buffer)
+                if progress:
+                    progress_callback(*progress)
+                progress_buffer = ""
+            else:
+                progress_buffer += char
+        progress = self._parse_progress(progress_buffer)
+        if progress:
+            progress_callback(*progress)
+
+    def _run(
+        self,
+        cmd: list[str],
+        timeout: int = 600,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
         cmd = [str(c) for c in cmd if c is not None]
         logging.info(f"G3MTool command: {' '.join(cmd)}")
         startupinfo = None
@@ -194,20 +240,38 @@ class G3MToolManager:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                bufsize=1,
                 stdin=subprocess.DEVNULL,
                 startupinfo=startupinfo,
                 creationflags=creationflags,
             )
             self._active_processes.append(process)
+            stdout_chunks: list[str] = []
+            stderr_chunks: list[str] = []
+            stdout_thread = threading.Thread(
+                target=self._stream_output,
+                args=(process.stdout, stdout_chunks, progress_callback),
+                daemon=True,
+            )
+            stderr_thread = threading.Thread(
+                target=self._stream_output,
+                args=(process.stderr, stderr_chunks),
+                daemon=True,
+            )
+            stdout_thread.start()
+            stderr_thread.start()
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
+                process.wait(timeout=timeout)
                 returncode = process.returncode
             except subprocess.TimeoutExpired:
                 process.kill()
-                stdout, stderr = process.communicate()
                 returncode = -1
                 logging.warning(f"G3MTool command timed out after {timeout}s")
             finally:
+                stdout_thread.join()
+                stderr_thread.join()
+                stdout = "".join(stdout_chunks)
+                stderr = "".join(stderr_chunks)
                 if process in self._active_processes:
                     self._active_processes.remove(process)
             logging.info(f"G3MTool completed with return code {returncode}")

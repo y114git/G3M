@@ -6,6 +6,7 @@ import logging
 import os
 import platform
 import shutil
+import threading
 import time
 import uuid
 from typing import Any
@@ -21,6 +22,7 @@ from utils.file_utils import chapter_id_to_file_key, get_chapter_folder_name
 class CreateModpackThread(QThread):
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
+    warning_confirmation_needed = pyqtSignal(str, str, object)
     finished = pyqtSignal(bool)
 
     def __init__(
@@ -42,13 +44,33 @@ class CreateModpackThread(QThread):
         self.xdelta_modpack = xdelta_modpack
         self.patcher = None
         self._cancelled = False
+        self._warning_event = threading.Event()
+        self._warning_result = True
 
     def cancel(self):
         self._cancelled = True
         self.requestInterruption()
+        self._warning_event.set()
         if self.patcher:
             self.patcher._cancelled = True
         self.status_update.emit("Operation cancelled", "error")
+
+    def confirm_warning(self, accepted: bool):
+        self._warning_result = accepted
+        self._warning_event.set()
+
+    def _request_warning_confirmation(
+        self, message: str, details: str = "", report_path: str | None = None
+    ) -> bool:
+        self._warning_result = True
+        self._warning_event.clear()
+        self.warning_confirmation_needed.emit(message, details, report_path)
+        while not self._warning_event.wait(0.1):
+            if self.isInterruptionRequested() or self._cancelled:
+                return False
+        return self._warning_result and not (
+            self.isInterruptionRequested() or self._cancelled
+        )
 
     def _get_mod_game(self, mods_list: list[Any]):
         game = None
@@ -74,6 +96,7 @@ class CreateModpackThread(QThread):
             self.patcher.xdelta_modpack = self.xdelta_modpack
             self.patcher.progress_update.connect(self.progress_update.emit)
             self.patcher.status_update.connect(self.status_update.emit)
+            self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
                 return
             success = self.patcher.process_mod_patch(
@@ -96,6 +119,7 @@ class CreateModpackThread(QThread):
                 if self.xdelta_modpack:
                     self._create_xdelta_patches()
                 self._create_config_json()
+                self.progress_update.emit(100, tr("status.patching_completed"))
         except Exception as e:
             logging.error(f"CreateModpackThread failed: {e}", exc_info=True)
             self.status_update.emit(f"Modpack creation failed: {e!s}", "error")
@@ -103,8 +127,6 @@ class CreateModpackThread(QThread):
         finally:
             if self.patcher:
                 try:
-                    self._report_path = self.patcher.get_report_path()
-                    self._has_conflicts = self.patcher.report_has_conflicts()
                     for sig in (
                         self.patcher.progress_update,
                         self.patcher.status_update,
@@ -120,12 +142,6 @@ class CreateModpackThread(QThread):
                     self.patcher = None
             self.finished.emit(success)
 
-    def get_report_path(self) -> str:
-        return getattr(self, "_report_path", None)
-
-    def has_conflicts(self) -> bool:
-        return getattr(self, "_has_conflicts", False)
-
     def _create_xdelta_patches(self):
         try:
             g3mtool = G3MToolManager()
@@ -133,7 +149,10 @@ class CreateModpackThread(QThread):
                 logging.error("G3MTool not found, cannot create xdelta patches")
                 self.status_update.emit(tr("errors.g3mtool_not_available"), "error")
                 return
-            for chapter_id, mods_list in self.chapter_mods.items():
+            total_chapters = max(len(self.chapter_mods), 1)
+            for index, (chapter_id, mods_list) in enumerate(
+                self.chapter_mods.items(), start=1
+            ):
                 if self.isInterruptionRequested() or self._cancelled:
                     return
                 game = self._get_mod_game(mods_list)
@@ -161,8 +180,18 @@ class CreateModpackThread(QThread):
                 self.status_update.emit(
                     tr("status.creating_xdelta_patch", chapter=chapter_id), "info"
                 )
+                range_start = 96 + int((index - 1) / total_chapters * 3)
+                range_end = 96 + int(index / total_chapters * 3)
                 returncode, _stdout, stderr = g3mtool.xpatch_create(
-                    original_data_file, modified_data_file, patch_path
+                    original_data_file,
+                    modified_data_file,
+                    patch_path,
+                    progress_callback=lambda progress, chapter=chapter_id, start=range_start, end=range_end: (
+                        self.progress_update.emit(
+                            start + int((end - start) * progress / 100),
+                            tr("status.creating_xdelta_patch", chapter=chapter),
+                        )
+                    ),
                 )
                 if returncode != 0:
                     logging.error(
@@ -285,6 +314,9 @@ class CreateModpackThread(QThread):
                 "created_date": time.strftime("%d.%m.%y %H:%M"),
             }
             config_path = os.path.join(self.modpack_dir, "mod_config.json")
+            self.progress_update.emit(
+                99, tr("status.finalizing_chapter", display=self.modpack_name)
+            )
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config_data, f, indent=4, ensure_ascii=False)
             logging.info(f"Created mod_config.json for modpack: {self.modpack_name}")

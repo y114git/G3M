@@ -933,6 +933,9 @@ class LibraryDisplayController:
             )
             thread.progress_update.connect(self._on_modpack_progress)
             thread.status_update.connect(self._on_modpack_status)
+            thread.warning_confirmation_needed.connect(
+                self._on_modpack_warning_confirmation_needed
+            )
             thread.finished.connect(
                 lambda success: self._on_modpack_finished(success, modpack_dir)
             )
@@ -962,12 +965,18 @@ class LibraryDisplayController:
         color = UI_COLORS.get(f"status_{status_type}", UI_COLORS["status_error"])
         self.feedback_service.update_status(message, color)
 
-    def _safe_update_after_modpack_creation(
-        self,
-        modpack_dir: str,
-        report_path: str | None = None,
-        has_conflicts: bool = False,
+    def _on_modpack_warning_confirmation_needed(
+        self, message: str, details: str, report_path: str | None
     ):
+        thread = getattr(self, "_modpack_thread", None)
+        if not thread:
+            return
+        should_continue = self.feedback_service.ask_patching_warning(
+            message, details, report_path
+        )
+        thread.confirm_warning(should_continue)
+
+    def _safe_update_after_modpack_creation(self, modpack_dir: str):
         try:
             self._refresh_mod_list_targeted()
             if hasattr(self.app, "search_display"):
@@ -978,12 +987,6 @@ class LibraryDisplayController:
                 "dialogs.modpack_created_title",
                 tr("dialogs.modpack_created_message", modpack_dir=modpack_dir),
             )
-
-            if has_conflicts and report_path:
-                from ui.dialogs.conflicts_dialog import ConflictsDialog
-
-                dialog = ConflictsDialog(report_path, parent=self.app)
-                dialog.exec()
         except Exception as e:
             logging.error(
                 f"Error updating UI after modpack creation: {e}", exc_info=True
@@ -1004,21 +1007,12 @@ class LibraryDisplayController:
         self.app_state.action_button_enabled = True
         self.app_state.clear_current_task()
 
-        report_path = None
-        has_conflicts = False
-        modpack_thread = getattr(self, "_modpack_thread", None)
-        if modpack_thread:
-            report_path = modpack_thread.get_report_path()
-            has_conflicts = modpack_thread.has_conflicts()
         if success:
             self.mod_service.invalidate_mods_cache()
             self.mod_service.load_local_mods()
             self.mod_service.mod_list_updated.emit()
             QTimer.singleShot(
-                100,
-                lambda: self._safe_update_after_modpack_creation(
-                    modpack_dir, report_path, has_conflicts
-                ),
+                100, lambda: self._safe_update_after_modpack_creation(modpack_dir)
             )
         else:
             if os.path.exists(modpack_dir):

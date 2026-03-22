@@ -2,6 +2,7 @@
 
 import contextlib
 import logging
+import threading
 from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -14,6 +15,7 @@ class ModPatchingThread(QThread):
 
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
+    warning_confirmation_needed = pyqtSignal(str, str, object)
     finished = pyqtSignal(bool)
 
     def __init__(
@@ -31,14 +33,34 @@ class ModPatchingThread(QThread):
         self.session_manifest_path = session_manifest_path
         self.patcher: G3MToolPatchingService | None = None
         self._cancelled = False
+        self._warning_event = threading.Event()
+        self._warning_result = True
 
     def cancel(self):
         self._cancelled = True
         self.requestInterruption()
+        self._warning_event.set()
         if self.patcher:
             self.patcher.cancel()
         with contextlib.suppress(RuntimeError):
             self.status_update.emit("Operation cancelled", "error")
+
+    def confirm_warning(self, accepted: bool):
+        self._warning_result = accepted
+        self._warning_event.set()
+
+    def _request_warning_confirmation(
+        self, message: str, details: str = "", report_path: str | None = None
+    ) -> bool:
+        self._warning_result = True
+        self._warning_event.clear()
+        self.warning_confirmation_needed.emit(message, details, report_path)
+        while not self._warning_event.wait(0.1):
+            if self.isInterruptionRequested() or self._cancelled:
+                return False
+        return self._warning_result and not (
+            self.isInterruptionRequested() or self._cancelled
+        )
 
     def _restore_backups(self):
         """Restore all backups and clear persistent backup dir + manifest."""
@@ -66,6 +88,7 @@ class ModPatchingThread(QThread):
             except RuntimeError:
                 pass
             self.patcher._session_manifest_path = self.session_manifest_path
+            self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
                 self.finished.emit(False)
                 return
