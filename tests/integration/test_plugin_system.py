@@ -1,5 +1,5 @@
-import os
 import json
+import os
 
 
 class TestPluginManager:
@@ -23,8 +23,9 @@ class TestPluginManager:
 class TestPluginAPI:
 
     def test_plugin_api_initialization(self, app_state, feedback_service):
-        from models.plugin_api import PluginAPI
         from unittest.mock import Mock
+
+        from models.plugin_api import PluginAPI
         mock_app_window = Mock()
         plugin_api = PluginAPI(app_state, mock_app_window, plugin_id='test_plugin')
         assert plugin_api is not None

@@ -6,7 +6,9 @@ import zipfile
 from models.game_version_models import GameVersionRecord
 from services.game_versions_store import GameVersionsStore
 from utils.game_version_utils import (
-    get_base_game_folder, safe_archive_name, unique_archive_path,
+    get_base_game_folder,
+    safe_archive_name,
+    unique_archive_path,
 )
 
 
@@ -23,9 +25,9 @@ class TestGameVersionRecord:
         assert r.imported is False
 
     def test_to_dict_round_trip(self):
-        r = GameVersionRecord(archive_path='/tmp/test.zip', game='deltarune', size_bytes=1024, file_count=10)
+        r = GameVersionRecord(archive_path='/test-data/test.zip', game='deltarune', size_bytes=1024, file_count=10)
         d = r.to_dict()
-        assert d['archive_path'] == '/tmp/test.zip'
+        assert d['archive_path'] == '/test-data/test.zip'
         assert d['game'] == 'deltarune'
         r2 = GameVersionRecord.from_dict(d)
         assert r2.archive_path == r.archive_path
@@ -69,19 +71,19 @@ class TestGameVersionsStore:
     def test_add_and_find(self, temp_dir):
         store = GameVersionsStore(temp_dir)
         store.load()
-        r = GameVersionRecord(archive_path='/tmp/v1.zip', game='deltarune')
+        r = GameVersionRecord(archive_path='/archives/v1.zip', game='deltarune')
         store.add(r)
-        found = store.find('/tmp/v1.zip')
+        found = store.find('/archives/v1.zip')
         assert found is not None
         assert found.game == 'deltarune'
 
     def test_remove(self, temp_dir):
         store = GameVersionsStore(temp_dir)
         store.load()
-        r = GameVersionRecord(archive_path='/tmp/v1.zip', game='deltarune')
+        r = GameVersionRecord(archive_path='/archives/v1.zip', game='deltarune')
         store.add(r)
-        store.remove('/tmp/v1.zip')
-        assert store.find('/tmp/v1.zip') is None
+        store.remove('/archives/v1.zip')
+        assert store.find('/archives/v1.zip') is None
 
     def test_records_for_game(self, temp_dir):
         store = GameVersionsStore(temp_dir)
@@ -95,18 +97,18 @@ class TestGameVersionsStore:
     def test_persistence(self, temp_dir):
         store1 = GameVersionsStore(temp_dir)
         store1.load()
-        store1.add(GameVersionRecord(archive_path='/tmp/persist.zip', game='deltarune'))
+        store1.add(GameVersionRecord(archive_path='/archives/persist.zip', game='deltarune'))
         store2 = GameVersionsStore(temp_dir)
         store2.load()
-        assert store2.find('/tmp/persist.zip') is not None
+        assert store2.find('/archives/persist.zip') is not None
 
     def test_atomic_write_creates_file(self, temp_dir):
         store = GameVersionsStore(temp_dir)
         store.load()
-        store.add(GameVersionRecord(archive_path='/tmp/test.zip', game='deltarune'))
+        store.add(GameVersionRecord(archive_path='/archives/test.zip', game='deltarune'))
         data_path = os.path.join(temp_dir, 'game_versions', 'game_versions_data.json')
         assert os.path.exists(data_path)
-        with open(data_path, 'r', encoding='utf-8') as f:
+        with open(data_path, encoding='utf-8') as f:
             data = json.load(f)
         assert len(data) == 1
 
@@ -226,7 +228,7 @@ class TestCreateVersionWorker:
         worker.run()
 
         assert len(results) == 1
-        success, error, size, count = results[0]
+        success, error, _size, count = results[0]
         assert success is True
         assert error == ''
         assert count == 1  # only data.win, not game.exe
@@ -246,7 +248,7 @@ class TestCreateVersionWorker:
         worker.finished.connect(lambda *args: results.append(args))
         worker.run()
         assert len(results) == 1
-        success, error, size, count = results[0]
+        success, _error, _size, count = results[0]
         assert success is True
         assert count == 0
 

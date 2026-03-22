@@ -1,12 +1,12 @@
-from unittest.mock import Mock, patch
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 class TestModOperationsController:
 
     def test_mod_operations_controller_initialization(self, app_state, feedback_service):
-        from services.mod_service import ModManager
         from controllers.mod_operations_controller import ModOperationsController
+        from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         app_window = Mock()
         controller = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=app_window)
@@ -19,10 +19,10 @@ class TestLibraryDisplayController:
 
     def test_library_display_controller_initialization(self, app_state, feedback_service):
         from controllers.library_display_controller import LibraryDisplayController
-        from services.mod_service import ModManager
-        from services.used_mods_service import UsedModsManager
-        from services.settings_service import SettingsManager
         from services.localization_service import localization_service
+        from services.mod_service import ModManager
+        from services.settings_service import SettingsManager
+        from services.used_mods_service import UsedModsManager
         mod_service = ModManager(app_state, feedback_service)
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=None)
         used_mods_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
@@ -111,9 +111,9 @@ class TestLibraryDisplayController:
 class TestSearchDisplayController:
 
     def test_search_display_controller_initialization(self, app_state, feedback_service):
+        from controllers.mod_operations_controller import ModOperationsController
         from controllers.search_display_controller import SearchDisplayController
         from services.mod_service import ModManager
-        from controllers.mod_operations_controller import ModOperationsController
         mod_service = ModManager(app_state, feedback_service)
         mod_ops = ModOperationsController(app_state=app_state, feedback_service=feedback_service, mod_service=mod_service, app_window=Mock())
         app_window = Mock()
@@ -169,13 +169,13 @@ class TestSearchDisplayController:
 class TestSettingsUiController:
 
     def test_settings_ui_controller_initialization(self, app_state, feedback_service, qapp):
-        from services.settings_service import SettingsManager
-        from services.localization_service import localization_service
         from controllers.settings_controller import SettingsUiController
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
-        from services.used_mods_service import UsedModsManager
         from services.customization_service import CustomizationManager
         from services.mod_service import ModManager
+        from services.used_mods_service import UsedModsManager
         mod_service = ModManager(app_state, feedback_service)
         used_mods_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
         customization_service = CustomizationManager(app_state)
@@ -189,9 +189,9 @@ class TestThemeController:
 
     def test_theme_controller_initialization(self, app_state, feedback_service, qapp):
         from controllers.theme_controller import ThemeController
-        from services.settings_service import SettingsManager
-        from services.localization_service import localization_service
         from services.customization_service import CustomizationManager
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
         customization_service = CustomizationManager(app_state)
         app_window = Mock()
@@ -200,8 +200,9 @@ class TestThemeController:
         assert controller.app_state == app_state
 
     def test_apply_theme_skips_cache_invalidation_when_params_unchanged(self, app_state, feedback_service):
-        from controllers.theme_controller import ThemeController
         from PyQt6.QtWidgets import QApplication as RealQApplication
+
+        from controllers.theme_controller import ThemeController
         app_state.local_config = {'custom_color_text': '#FF0000'}
         settings_service = Mock()
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
@@ -236,8 +237,9 @@ class TestThemeController:
         invalidate_theme_color_cache_mock.assert_not_called()
 
     def test_apply_theme_resets_tooltip_size_cache_key(self, app_state, feedback_service):
-        from controllers.theme_controller import ThemeController
         from PyQt6.QtWidgets import QApplication as RealQApplication
+
+        from controllers.theme_controller import ThemeController
         settings_service = Mock()
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith('#'))
         customization_service = Mock()
@@ -272,13 +274,13 @@ class TestGameLaunchController:
 
     def test_game_launch_controller_initialization(self, app_state, feedback_service, qapp):
         from controllers.game_launch_controller import GameLaunchController
-        from services.mod_service import ModManager
-        from services.used_mods_service import UsedModsManager
-        from services.settings_service import SettingsManager
-        from services.localization_service import localization_service
-        from services.launch_service import GameLauncher
         from services.customization_service import CustomizationManager
+        from services.launch_service import GameLauncher
+        from services.localization_service import localization_service
+        from services.mod_service import ModManager
         from services.plugin_service import PluginManager
+        from services.settings_service import SettingsManager
+        from services.used_mods_service import UsedModsManager
         mod_service = ModManager(app_state, feedback_service)
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
         used_mods_service = UsedModsManager(app_state, mod_service, feedback_service, settings_service, None)
@@ -336,8 +338,9 @@ class TestGameLaunchController:
 class TestAppWindowRestore:
 
     def test_on_window_restore_requested_uses_show_maximized_for_saved_maximized_state(self):
-        from core.app_window import AppWindow
         from PyQt6.QtCore import Qt
+
+        from core.app_window import AppWindow
 
         window = Mock()
         window.settings_service.was_window_maximized.return_value = True

@@ -14,8 +14,8 @@ def profiles_dir(temp_dir):
 
 @pytest.fixture
 def profile_service(app_state, feedback_service, temp_dir, profiles_dir, monkeypatch):
-    from services.settings_service import SettingsManager
     from services.profile_service import ProfileService
+    from services.settings_service import SettingsManager
 
     monkeypatch.setattr('services.profile_service.get_user_data_root', lambda: temp_dir)
     settings_service = SettingsManager(app_state, feedback_service, None, parent=None)
@@ -47,7 +47,8 @@ class TestProfileMigration:
     def test_migrate_removes_profile_keys_from_settings_json(self, profile_service, app_state):
         profile_service.initialize()
         profile_service.save_settings_only()
-        settings = json.loads(open(app_state.config_path, encoding='utf-8').read())
+        with open(app_state.config_path, encoding='utf-8') as f:
+            settings = json.loads(f.read())
         assert 'selected_game_type' not in settings
         assert 'used_mods_deltarune' not in settings
         assert settings['some_other_setting'] == 'keep_me'
@@ -55,9 +56,11 @@ class TestProfileMigration:
     def test_migrate_is_idempotent(self, profile_service, profiles_dir):
         profile_service.initialize()
         default_path = os.path.join(profiles_dir, 'Default.json')
-        data_before = open(default_path, encoding='utf-8').read()
+        with open(default_path, encoding='utf-8') as f:
+            data_before = f.read()
         profile_service._migrate_from_settings()
-        data_after = open(default_path, encoding='utf-8').read()
+        with open(default_path, encoding='utf-8') as f:
+            data_after = f.read()
         assert data_before == data_after
 
 
@@ -78,7 +81,8 @@ class TestProfileCRUD:
         assert profile_service.duplicate('Default', 'copy_of_default')
         copy_path = os.path.join(profiles_dir, 'copy_of_default.json')
         assert os.path.exists(copy_path)
-        data = json.loads(open(copy_path, encoding='utf-8').read())
+        with open(copy_path, encoding='utf-8') as f:
+            data = json.loads(f.read())
         assert data.get('selected_game_type') == 'deltarune'
 
     def test_rename_profile(self, profile_service, profiles_dir):
@@ -129,7 +133,8 @@ class TestProfileSwitching:
         profile_service.create('alt')
         app_state.local_config['selected_game_type'] = 'pizzatower'
         profile_service.switch('alt')
-        default_data = json.loads(open(os.path.join(profiles_dir, 'Default.json'), encoding='utf-8').read())
+        with open(os.path.join(profiles_dir, 'Default.json'), encoding='utf-8') as f:
+            default_data = json.loads(f.read())
         assert default_data['selected_game_type'] == 'pizzatower'
 
     def test_switch_preserves_non_profile_settings(self, profile_service, app_state):
@@ -177,7 +182,8 @@ class TestSaveActiveMerge:
         for k in [k for k in app_state.local_config if k.startswith('used_mods_undertale')]:
             del app_state.local_config[k]
         profile_service.save_active()
-        data = json.loads(open(os.path.join(profiles_dir, 'Default.json'), encoding='utf-8').read())
+        with open(os.path.join(profiles_dir, 'Default.json'), encoding='utf-8') as f:
+            data = json.loads(f.read())
         assert data['used_mods_undertale'] == {'ut': 'mod_b'}
 
 
@@ -188,10 +194,12 @@ class TestWriteLocalConfig:
         app_state.local_config['selected_game_type'] = 'undertale'
         app_state.local_config['some_other_setting'] = 'hello'
         profile_service.write_local_config()
-        settings = json.loads(open(app_state.config_path, encoding='utf-8').read())
+        with open(app_state.config_path, encoding='utf-8') as f:
+            settings = json.loads(f.read())
         assert 'selected_game_type' not in settings
         assert settings['some_other_setting'] == 'hello'
-        default_data = json.loads(open(os.path.join(profiles_dir, 'Default.json'), encoding='utf-8').read())
+        with open(os.path.join(profiles_dir, 'Default.json'), encoding='utf-8') as f:
+            default_data = json.loads(f.read())
         assert default_data['selected_game_type'] == 'undertale'
 
 

@@ -319,7 +319,13 @@
     "add_mod": "添加模组",
     "open_mod_folder": "打开模组文件夹",
     "external_url": "外部链接",
-    "show_reset_buttons": "显示重置按钮"
+    "show_reset_buttons": "显示重置按钮",
+    "no_data_files": "无数据文件",
+    "extra_files_label": "额外文件：",
+    "changed_data_files_label": "已更改的DATA文件：",
+    "size_label": "大小：",
+    "error": "错误",
+    "select": "选择"
   },
   "files": {
     "archive_link": "压缩文件链接",
@@ -440,7 +446,9 @@
     "search": "按名称、描述等搜索",
     "merge_properties": "合并配置更改（如 JSON），确保保留各 Mod 的设置，避免功能丢失",
     "merge_code": "智能合并游戏逻辑，使不同 Mod 能够无缝修改同个功能而不冲突",
-    "dont_hide_window_on_launch": "游戏运行时保持启动器窗口可见。"
+    "dont_hide_window_on_launch": "游戏运行时保持启动器窗口可见。",
+    "open_external_site": "打开外部网站",
+    "open_mod_folder": "打开模组文件夹"
   },
   "dropdowns": {
     "all_mods": "所有模组",
@@ -661,7 +669,7 @@
     "import_theme_title": "导入主题",
     "select_mod": "选择模组",
     "delete_confirmation": "确认删除",
-    "delete_mod_confirmation": "该模组将被永久删除。是否继续？",
+    "delete_mod_confirmation": "这将永久删除模组及其所有版本。是否继续？",
     "create_modpack_title": "创建模组包",
     "create_modpack_info": "这将根据当前优先级顺序合并所选模组，并创建一个包含合并后的data.win文件的新本地模组。合并后的模组包可以立即启动，无需再次等待合并。",
     "modpack_name_label": "模组包名称：",
@@ -936,7 +944,8 @@
     "gamebanana_install_failed": "从GameBanana安装模组失败：{error}",
     "mod_uninstall_failed": "卸载模组失败：{error}",
     "cannot_delete_builtin_theme": "无法删除内置主题。",
-    "uninstall_failed": "卸载模组失败"
+    "uninstall_failed": "卸载模组失败",
+    "game_running": "游戏已在运行。请先关闭游戏。"
   },
   "status": {
     "vanilla": "原版",
@@ -1025,6 +1034,7 @@
     "deltamod_redirect_found": "在DELTAMOD中发现重定向。",
     "preparing_mod_patching": "准备合并 {mods} 个模组用于 {chapters} 章...",
     "patching_mods": "合并模组... {progress}%",
+    "processing_chapter": "处理 {display} ({current}/{total})...",
     "patching_chapter": "合并第 {chapter} 章 ({current}/{total})...",
     "patching_assets": "合并来自 {mod} 的资源 ({current}/{total})...",
     "chapter_patched": "第 {chapter} 章合并成功",
@@ -1059,7 +1069,8 @@
     "update_cancelled": "更新已被用户取消。",
     "local": "本地",
     "unpacking_mod": "正在解压模组：{mod_name}...",
-    "game_closed": "游戏已关闭"
+    "game_closed": "游戏已关闭",
+    "mod_merged_as_version": "模组 \"{mod_name}\" 已存在。已作为版本 \"{version_name}\" 导入到模组版本中。"
   },
   "startup": {
     "steam_deck_setup_error": "设置Steam Deck兼容性时出错：{error}",
@@ -1283,7 +1294,11 @@
     "archive_files": "游戏版本档案",
     "settings_full_replace": "应用时完全替换文件",
     "settings_full_replace_tooltip": "应用游戏版本时，删除档案中不存在的所有文件（游戏原始/自定义可执行文件永远不会被删除）。",
-    "file_count": "{count} 个文件"
+    "file_count": "{count} 个文件",
+    "apply_profile": "应用配置：",
+    "profile_label": "配置：{name}",
+    "without_profile": "无",
+    "patching_error": "补丁错误"
   },
   "mod_versions": {
     "title": "模组版本",
@@ -1373,6 +1388,7 @@
     "enter_name": "配置名称：",
     "delete": "删除配置",
     "already_exists": "此名称的配置已存在。",
-    "total_active": "共 {count} 个活跃模组"
+    "total_active": "共 {count} 个活跃模组",
+    "confirm_delete_text": "您确定要删除此配置吗？此操作无法撤销。"
   }
 }

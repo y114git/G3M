@@ -1,15 +1,13 @@
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtWidgets import QComboBox, QWidget, QLabel
+from PyQt6.QtWidgets import QComboBox, QLabel, QWidget
 
 
 class NoScrollComboBox(QComboBox):
-
     def wheelEvent(self, event):
         event.ignore()
 
 
 class _ZeroHintWidget(QWidget):
-
     def sizeHint(self) -> QSize:
         return QSize(0, 0)
 
@@ -20,12 +18,12 @@ class _ZeroHintWidget(QWidget):
 class AnimatedToolTip(QLabel):
     """Custom tooltip widget with animation support."""
 
-    def __init__(self, text: str, parent=None):
+    def __init__(self, text: str, parent=None) -> None:
         super().__init__(text, parent)
         self.setWindowFlags(
-            Qt.WindowType.ToolTip |
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowTransparentForInput
+            Qt.WindowType.ToolTip
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowTransparentForInput
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
@@ -36,8 +34,9 @@ class AnimatedToolTip(QLabel):
         self.setMaximumWidth(400)
 
     def paintEvent(self, event):
-        from PyQt6.QtWidgets import QStyle, QStyleOption
         from PyQt6.QtGui import QPainter
+        from PyQt6.QtWidgets import QStyle, QStyleOption
+
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         opt = QStyleOption()

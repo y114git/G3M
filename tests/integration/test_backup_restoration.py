@@ -1,5 +1,6 @@
-import os
 import logging
+import os
+
 from services.backup_service import BackupManager
 from services.g3mtool_patching_service import G3MToolPatchingService
 
@@ -52,7 +53,7 @@ class TestBackupRestoration:
         assert os.path.exists(test_file)
         restored_size = os.path.getsize(test_file)
         assert restored_size == original_size
-        with open(test_file, 'r') as f:
+        with open(test_file) as f:
             restored_content = f.read()
             assert restored_content == original_content
 
@@ -74,7 +75,7 @@ class TestBackupRestoration:
                 f.write('modified')
         backup_service.restore_backups(chapter_id)
         for i, file_path in enumerate(files):
-            with open(file_path, 'r') as f:
+            with open(file_path) as f:
                 content = f.read()
                 assert content == f'original{i}', f'File {file_path} not restored correctly'
 

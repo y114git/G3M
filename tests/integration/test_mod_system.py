@@ -1,7 +1,8 @@
-import os
 import json
-import pytest
+import os
 from pathlib import Path
+
+import pytest
 
 
 class TestModStructure:
@@ -10,7 +11,7 @@ class TestModStructure:
         config_path = Path(full_mod_structure_dir) / 'mod_config.json'
         if not config_path.exists():
             pytest.skip('mod_config.json not found. Please create test mod structure.')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         assert 'key' in config or 'mod_key' in config
         assert 'name' in config
@@ -23,19 +24,18 @@ class TestModStructure:
         config_path = mod_path / 'mod_config.json'
         if not config_path.exists():
             pytest.skip('mod_config.json not found.')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         files = config.get('files', {})
-        for chapter_key in files.keys():
+        for chapter_key in files:
             if chapter_key == '0':
                 chapter_dir = mod_path / 'chapter_0'
             elif chapter_key == 'demo':
                 chapter_dir = mod_path / 'demo'
             else:
                 chapter_dir = mod_path / f'chapter_{chapter_key}'
-            if files[chapter_key].get('data_file_url'):
-                if chapter_dir.exists():
-                    assert chapter_dir.is_dir()
+            if files[chapter_key].get('data_file_url') and chapter_dir.exists():
+                assert chapter_dir.is_dir()
 
     def test_mod_file_discovery(self, full_mod_structure_dir):
         mod_path = Path(full_mod_structure_dir)
@@ -59,12 +59,13 @@ class TestModManagerIntegration:
         assert isinstance(cache, dict)
 
     def test_mod_scanning_all_types(self, app_state, feedback_service, all_test_mods_dirs):
-        from services.mod_service import ModManager
-        import tempfile
         import shutil
+        import tempfile
+
+        from services.mod_service import ModManager
         temp_mods_dir = tempfile.mkdtemp()
         try:
-            for mod_name, mod_path in all_test_mods_dirs.items():
+            for _mod_name, mod_path in all_test_mods_dirs.items():
                 if os.path.exists(mod_path):
                     config_path = os.path.join(mod_path, 'mod_config.json')
                     if os.path.exists(config_path):
@@ -78,9 +79,10 @@ class TestModManagerIntegration:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
     def test_mod_loading(self, app_state, feedback_service, full_mod_structure_dir):
-        from services.mod_service import ModManager
         import shutil
         import tempfile
+
+        from services.mod_service import ModManager
         temp_mods_dir = tempfile.mkdtemp()
         mod_name = Path(full_mod_structure_dir).name
         target_mod_dir = os.path.join(temp_mods_dir, mod_name)
@@ -92,11 +94,11 @@ class TestModManagerIntegration:
                 cache = mod_service._get_mods_cache(use_async=False)
                 config_path = os.path.join(target_mod_dir, 'mod_config.json')
                 if os.path.exists(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
+                    with open(config_path, encoding='utf-8') as f:
                         config = json.load(f)
                     key = config.get('key') or config.get('mod_key')
                     if key:
-                        assert key in cache or any((info.key == key for info in cache.values()))
+                        assert key in cache or any(info.key == key for info in cache.values())
         finally:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
@@ -109,7 +111,7 @@ class TestModInstallation:
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
         if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, encoding='utf-8') as f:
                 config = json.load(f)
             assert 'files' in config
             assert isinstance(config['files'], dict)
@@ -122,7 +124,7 @@ class TestModProcessing:
         config_path = mod_path / 'mod_config.json'
         if not config_path.exists():
             pytest.skip('mod_config.json not found.')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         files = config.get('files', {})
         for chapter_key, chapter_data in files.items():
@@ -143,11 +145,11 @@ class TestModProcessing:
         config_path = mod_path / 'mod_config.json'
         if not config_path.exists():
             pytest.skip('mod_config.json not found.')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         files = config.get('files', {})
         chapter_map = {'0': 'chapter_0', '1': 'chapter_1', '2': 'chapter_2', '3': 'chapter_3', '4': 'chapter_4', 'demo': 'demo'}
-        for chapter_key in files.keys():
+        for chapter_key in files:
             expected_dir_name = chapter_map.get(chapter_key)
             if expected_dir_name:
                 expected_dir = mod_path / expected_dir_name
@@ -158,8 +160,9 @@ class TestModProcessing:
 class TestModMergingWithStructure:
 
     def test_multiple_mods_merging(self, app_state, feedback_service, mods_dir):
-        from services.g3mtool_patching_service import G3MToolPatchingService
         from unittest.mock import Mock
+
+        from services.g3mtool_patching_service import G3MToolPatchingService
         mod_service = Mock()
         patcher = G3MToolPatchingService(app_state, mod_service)
         assert patcher is not None
@@ -168,8 +171,9 @@ class TestModMergingWithStructure:
         assert patcher.patching_logger.name == 'patching'
 
     def test_mod_priority_with_structure(self, app_state, feedback_service):
-        from services.g3mtool_patching_service import G3MToolPatchingService
         from unittest.mock import Mock
+
+        from services.g3mtool_patching_service import G3MToolPatchingService
         mod_service = Mock()
         patcher = G3MToolPatchingService(app_state, mod_service)
         assert patcher is not None
@@ -179,8 +183,9 @@ class TestModMergingWithStructure:
 class TestModMetadata:
 
     def test_metadata_read_write(self, app_state, feedback_service):
-        from services.mod_service import ModManager
         import time
+
+        from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         metadata = mod_service._read_metadata()
         assert isinstance(metadata, dict), "_read_metadata should return a dict, even if file doesn't exist"
@@ -199,9 +204,10 @@ class TestModMetadata:
         mod_service._write_metadata({})
 
     def test_metadata_file_creation(self, app_state, feedback_service):
-        from services.mod_service import ModManager
-        import os
         import json
+        import os
+
+        from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         if os.path.exists(app_state.mods_metadata_path):
             os.remove(app_state.mods_metadata_path)
@@ -209,7 +215,7 @@ class TestModMetadata:
         test_metadata = {'test_mod': {'added_date': '2024-01-01 00:00:00'}}
         mod_service._write_metadata(test_metadata)
         assert os.path.exists(app_state.mods_metadata_path), 'Metadata file should be created after write'
-        with open(app_state.mods_metadata_path, 'r', encoding='utf-8') as f:
+        with open(app_state.mods_metadata_path, encoding='utf-8') as f:
             file_content = json.load(f)
         assert isinstance(file_content, dict), 'Metadata file should contain valid JSON dict'
         assert 'test_mod' in file_content, 'Written mod should be in file'
@@ -218,10 +224,11 @@ class TestModMetadata:
             os.remove(app_state.mods_metadata_path)
 
     def test_metadata_with_installed_mods(self, app_state, feedback_service, full_mod_structure_dir):
-        from services.mod_service import ModManager
+        import json
         import shutil
         import tempfile
-        import json
+
+        from services.mod_service import ModManager
         temp_mods_dir = tempfile.mkdtemp()
         mod_name = Path(full_mod_structure_dir).name
         target_mod_dir = os.path.join(temp_mods_dir, mod_name)
@@ -235,7 +242,7 @@ class TestModMetadata:
                 assert isinstance(installed_mods, list)
                 config_path = os.path.join(target_mod_dir, 'mod_config.json')
                 if os.path.exists(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
+                    with open(config_path, encoding='utf-8') as f:
                         config = json.load(f)
                     key = config.get('key') or config.get('mod_key')
                     if key:

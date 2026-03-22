@@ -1,11 +1,29 @@
-import sys
+import contextlib
 import subprocess
-from pathlib import Path
-from typing import Dict, List, Optional
+import sys
 from datetime import datetime
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QTabWidget, QLabel, QProgressBar, QTreeWidget, QTreeWidgetItem, QSplitter, QMessageBox, QFileDialog, QDialog
+from pathlib import Path
+
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class PytestRunnerThread(QThread):
@@ -13,12 +31,12 @@ class PytestRunnerThread(QThread):
     test_finished = pyqtSignal(int, int, int)
     test_started = pyqtSignal(str)
 
-    def __init__(self, test_path: str, test_args: Optional[List[str]] = None):
+    def __init__(self, test_path: str, test_args: list[str] | None = None) -> None:
         super().__init__()
         self.test_path = test_path
         self.test_args = test_args if test_args is not None else []
         self._cancelled = False
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
 
     def cancel(self):
         self._cancelled = True
@@ -27,10 +45,8 @@ class PytestRunnerThread(QThread):
                 self._process.terminate()
                 self._process.wait(timeout=5)
             except Exception:
-                try:
+                with contextlib.suppress(Exception):
                     self._process.kill()
-                except Exception:
-                    pass
 
     def run(self):
         try:
@@ -56,7 +72,7 @@ class PytestRunnerThread(QThread):
             else:
                 self.test_finished.emit(0, 1, 0)
         except Exception as e:
-            self.test_output.emit(f'ERROR: {str(e)}')
+            self.test_output.emit(f'ERROR: {e!s}')
             self.test_finished.emit(0, 1, 0)
         finally:
             self._process = None
@@ -64,12 +80,12 @@ class PytestRunnerThread(QThread):
 
 class CategoryTabWidget(QWidget):
 
-    def __init__(self, category_name: str, test_files: List[Dict[str, str]], parent=None):
+    def __init__(self, category_name: str, test_files: list[dict[str, str]], parent=None) -> None:
         super().__init__(parent)
         self.category_name = category_name
         self.test_files = test_files
         self.category_key = None
-        self.current_thread: Optional[PytestRunnerThread] = None
+        self.current_thread: PytestRunnerThread | None = None
         self.init_ui()
 
     def init_ui(self):
@@ -210,7 +226,7 @@ class CategoryTabWidget(QWidget):
 
 class GUIWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle('DELTAHUB Test Suite')
         self.setGeometry(100, 100, 1200, 800)
@@ -351,7 +367,7 @@ class GUIWindow(QMainWindow):
                             f.write('\n')
                 QMessageBox.information(self, 'Export', f'Results exported to:\n{file_path}')
             except Exception as e:
-                QMessageBox.critical(self, 'Export Error', f'Failed to export results:\n{str(e)}')
+                QMessageBox.critical(self, 'Export Error', f'Failed to export results:\n{e!s}')
 
 
 def main():

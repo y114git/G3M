@@ -1,17 +1,33 @@
+import contextlib
 import logging
 import time
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QScrollArea, QWidget, QFrame, QSpinBox
+
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import (
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
 from config.constants import CHAT_MESSAGE_BACKGROUND_COLOR
-from services.localization_service import tr
 from services.chat_service import ChatManager
-from ui.common.dialog_theme import build_dialog_theme_stylesheet, get_dialog_theme_values
+from services.localization_service import tr
+from ui.common.dialog_theme import (
+    build_dialog_theme_stylesheet,
+    get_dialog_theme_values,
+)
 from ui.common.styling import clamp_border_radius
 
 
 class ChatWindow(QDialog):
-
-    def __init__(self, app_state, parent=None):
+    def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
         self.app_state = app_state
         self.chat_service = ChatManager()
@@ -24,24 +40,35 @@ class ChatWindow(QDialog):
         self._last_message_ids = set()
         self._message_widgets = {}
         self._closed = False
-        self.max_messages_limit = self.app_state.local_config.get('chat_message_limit', 50)
-        if not isinstance(self.max_messages_limit, int) or self.max_messages_limit < 1 or self.max_messages_limit > 100:
+        self.max_messages_limit = self.app_state.local_config.get(
+            "chat_message_limit", 50
+        )
+        if (
+            not isinstance(self.max_messages_limit, int)
+            or self.max_messages_limit < 1
+            or self.max_messages_limit > 100
+        ):
             self.max_messages_limit = 50
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self._refresh_messages_async)
         self.update_timer.setInterval(5000)
         from workers.chat_request_worker import ChatRequestThread
+
         self.chat_request_thread = ChatRequestThread(self)
         self.chat_request_thread.messages_received.connect(self._on_messages_received)
         self.chat_request_thread.message_sent.connect(self._on_message_sent)
         self.chat_request_thread.error_occurred.connect(self._on_chat_error)
-        self._settings_service = parent.settings_service if parent and hasattr(parent, 'settings_service') else None
-        self.setWindowTitle(tr('chat.window_title'))
+        self._settings_service = (
+            parent.settings_service
+            if parent and hasattr(parent, "settings_service")
+            else None
+        )
+        self.setWindowTitle(tr("chat.window_title"))
         self.setMinimumSize(600, 500)
         self.resize(800, 600)
         self.setup_ui()
         self._apply_theme()
-        saved_channel = self.app_state.local_config.get('last_chat_channel')
+        saved_channel = self.app_state.local_config.get("last_chat_channel")
         if saved_channel and saved_channel in self.channel_buttons:
             self._switch_channel(saved_channel)
 
@@ -54,7 +81,13 @@ class ChatWindow(QDialog):
         channels_layout.addStretch()
         self.channel_buttons = {}
         self._updating_channel_buttons = False
-        channels = [('en', 'chat.channel_english'), ('ru', 'chat.channel_russian'), ('es', 'chat.channel_spanish'), ('zh', 'chat.channel_chinese'), ('int', 'chat.channel_international')]
+        channels = [
+            ("en", "chat.channel_english"),
+            ("ru", "chat.channel_russian"),
+            ("es", "chat.channel_spanish"),
+            ("zh", "chat.channel_chinese"),
+            ("int", "chat.channel_international"),
+        ]
         for channel_code, channel_key in channels:
             btn = QPushButton(tr(channel_key))
             btn.setCheckable(True)
@@ -68,7 +101,9 @@ class ChatWindow(QDialog):
                         return
                     if checked:
                         self._switch_channel(ch)
+
                 return handler
+
             btn.clicked.connect(make_switch_handler(channel_code))
             channels_layout.addWidget(btn)
             self.channel_buttons[channel_code] = btn
@@ -77,13 +112,15 @@ class ChatWindow(QDialog):
         self.messages_area = QScrollArea()
         self.messages_area.setWidgetResizable(True)
         self.messages_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.messages_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.messages_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
         self.messages_widget = QWidget()
         self.messages_layout = QVBoxLayout(self.messages_widget)
         self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.messages_layout.setSpacing(5)
         self.messages_layout.setContentsMargins(10, 10, 10, 10)
-        self.select_channel_label = QLabel(tr('chat.select_channel_first'))
+        self.select_channel_label = QLabel(tr("chat.select_channel_first"))
         self.select_channel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.select_channel_label.hide()
         self.messages_layout.addWidget(self.select_channel_label)
@@ -92,20 +129,20 @@ class ChatWindow(QDialog):
         input_layout = QHBoxLayout()
         input_layout.setSpacing(10)
         self.message_input = QLineEdit()
-        self.message_input.setPlaceholderText(tr('chat.message_input_placeholder'))
+        self.message_input.setPlaceholderText(tr("chat.message_input_placeholder"))
         self.message_input.setMaxLength(ChatManager.MESSAGE_MAX_LENGTH)
         self.message_input.returnPressed.connect(self._send_message)
         self.message_input.textChanged.connect(self._on_input_changed)
         self.message_input.setEnabled(False)
         input_layout.addWidget(self.message_input)
-        self.send_button = QPushButton(tr('chat.send_button'))
+        self.send_button = QPushButton(tr("chat.send_button"))
         self.send_button.clicked.connect(self._send_message)
         self.send_button.setEnabled(False)
         input_layout.addWidget(self.send_button)
         layout.addLayout(input_layout)
         limit_layout = QHBoxLayout()
         limit_layout.addStretch()
-        self.limit_label = QLabel(tr('chat.message_limit_label'))
+        self.limit_label = QLabel(tr("chat.message_limit_label"))
         limit_layout.addWidget(self.limit_label)
         self.message_limit_spinbox = QSpinBox()
         self.message_limit_spinbox.setMinimum(1)
@@ -143,8 +180,8 @@ class ChatWindow(QDialog):
             self._updating_channel_buttons = False
 
     def _switch_channel(self, channel: str):
-        if not getattr(self.app_state, 'has_internet', False):
-            self.status_label.setText(tr('chat.no_internet'))
+        if not getattr(self.app_state, "has_internet", False):
+            self.status_label.setText(tr("chat.no_internet"))
             return
         if self.current_channel == channel:
             return
@@ -157,7 +194,7 @@ class ChatWindow(QDialog):
         self._last_message_ids = set()
         self._message_widgets.clear()
         self.current_channel = channel
-        self.app_state.local_config['last_chat_channel'] = channel
+        self.app_state.local_config["last_chat_channel"] = channel
         if self._settings_service:
             self._settings_service.write_local_config()
         self.select_channel_label.hide()
@@ -169,7 +206,7 @@ class ChatWindow(QDialog):
         if not self.current_channel or self._loading_messages:
             return
         self._loading_messages = True
-        self.status_label.setText(tr('chat.loading_messages'))
+        self.status_label.setText(tr("chat.loading_messages"))
         self.message_input.setEnabled(False)
         self.send_button.setEnabled(False)
         if self.chat_request_thread.isRunning():
@@ -189,26 +226,32 @@ class ChatWindow(QDialog):
                 self.messages = []
                 self._last_message_ids = set()
                 self._clear_messages_display()
-                limited_messages = new_messages[-self.max_messages_limit:] if len(new_messages) > self.max_messages_limit else new_messages
+                limited_messages = (
+                    new_messages[-self.max_messages_limit :]
+                    if len(new_messages) > self.max_messages_limit
+                    else new_messages
+                )
                 self.messages = limited_messages
-                self._last_message_ids = {msg['id'] for msg in limited_messages}
+                self._last_message_ids = {msg["id"] for msg in limited_messages}
                 if not self._closed:
                     self._update_messages_display()
                     self._sync_channel_buttons()
-                    self.status_label.setText('')
+                    self.status_label.setText("")
                     self.message_input.setEnabled(True)
                     self._on_input_changed(self.message_input.text())
             except (RuntimeError, AttributeError) as e:
                 self._closed = True
-                logging.debug(f'ChatWindow: Widget deleted while processing messages: {e}')
+                logging.debug(
+                    f"ChatWindow: Widget deleted while processing messages: {e}"
+                )
                 return
             except Exception as e:
-                logging.warning(f'ChatWindow: Failed to process messages: {e}')
+                logging.warning(f"ChatWindow: Failed to process messages: {e}")
                 if not self._closed:
                     try:
-                        self.status_label.setText(tr('chat.error_loading'))
+                        self.status_label.setText(tr("chat.error_loading"))
                         self.message_input.setEnabled(True)
-                    except (RuntimeError, AttributeError):
+                    except RuntimeError, AttributeError:
                         self._closed = True
             finally:
                 self._loading_messages = False
@@ -223,7 +266,7 @@ class ChatWindow(QDialog):
         self._request_refresh_messages()
 
     def _request_refresh_messages(self):
-        if not getattr(self.app_state, 'has_internet', False):
+        if not getattr(self.app_state, "has_internet", False):
             return
         self._refreshing_messages = True
         if self.chat_request_thread.isRunning():
@@ -232,7 +275,11 @@ class ChatWindow(QDialog):
         self.chat_request_thread.request_messages(self.current_channel)
 
     def _refresh_messages_async(self):
-        if not self.current_channel or self._loading_messages or self._refreshing_messages:
+        if (
+            not self.current_channel
+            or self._loading_messages
+            or self._refreshing_messages
+        ):
             return
         self._request_refresh_messages()
 
@@ -244,8 +291,12 @@ class ChatWindow(QDialog):
             self._refreshing_messages = False
             return
         try:
-            limited_messages = new_messages[-self.max_messages_limit:] if len(new_messages) > self.max_messages_limit else new_messages
-            new_message_ids = {msg['id'] for msg in limited_messages}
+            limited_messages = (
+                new_messages[-self.max_messages_limit :]
+                if len(new_messages) > self.max_messages_limit
+                else new_messages
+            )
+            new_message_ids = {msg["id"] for msg in limited_messages}
             if new_message_ids != self._last_message_ids:
                 self.messages = limited_messages
                 self._last_message_ids = new_message_ids
@@ -253,9 +304,9 @@ class ChatWindow(QDialog):
                     self._update_messages_display_incremental(new_message_ids)
         except (RuntimeError, AttributeError) as e:
             self._closed = True
-            logging.debug(f'ChatWindow: Widget deleted while refreshing messages: {e}')
+            logging.debug(f"ChatWindow: Widget deleted while refreshing messages: {e}")
         except Exception as e:
-            logging.debug(f'ChatWindow: Failed to refresh messages: {e}')
+            logging.debug(f"ChatWindow: Failed to refresh messages: {e}")
         finally:
             self._refreshing_messages = False
 
@@ -271,9 +322,13 @@ class ChatWindow(QDialog):
                 yield widget
 
     @staticmethod
-    def _style_message_widget(msg_widget, border_radius: int, text_color: str):
-        msg_radius = clamp_border_radius(border_radius, height=max(1, msg_widget.sizeHint().height()))
-        msg_widget.setStyleSheet(f'padding: 5px; background-color: {CHAT_MESSAGE_BACKGROUND_COLOR}; border-radius: {msg_radius}px; color: {text_color};')
+    def _style_message_widget(msg_widget, border_radius: int, text_color: str) -> None:
+        msg_radius = clamp_border_radius(
+            border_radius, height=max(1, msg_widget.sizeHint().height())
+        )
+        msg_widget.setStyleSheet(
+            f"padding: 5px; background-color: {CHAT_MESSAGE_BACKGROUND_COLOR}; border-radius: {msg_radius}px; color: {text_color};"
+        )
 
     def _update_messages_display(self):
         self._clear_messages_display()
@@ -292,15 +347,19 @@ class ChatWindow(QDialog):
                 widget.deleteLater()
         added_count = 0
         for msg in self.messages:
-            msg_id = msg['id']
+            msg_id = msg["id"]
             if msg_id in self._message_widgets:
                 widget = self._message_widgets[msg_id]
                 widget.setText(f"{msg['timestamp']}: {msg['message']}")
             else:
                 msg_widget = QLabel(f"{msg['timestamp']}: {msg['message']}")
                 msg_widget.setWordWrap(True)
-                msg_widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                self._style_message_widget(msg_widget, theme['border_radius'], theme['text'])
+                msg_widget.setTextInteractionFlags(
+                    Qt.TextInteractionFlag.TextSelectableByMouse
+                )
+                self._style_message_widget(
+                    msg_widget, theme["border_radius"], theme["text"]
+                )
                 self.messages_layout.addWidget(msg_widget)
                 self._message_widgets[msg_id] = msg_widget
                 added_count += 1
@@ -324,11 +383,11 @@ class ChatWindow(QDialog):
 
     def _on_limit_changed(self, value: int):
         self.max_messages_limit = value
-        self.app_state.local_config['chat_message_limit'] = value
+        self.app_state.local_config["chat_message_limit"] = value
         parent = self.parent()
-        if parent and hasattr(parent, 'settings_service'):
-            settings_mgr = getattr(parent, 'settings_service', None)
-            if settings_mgr and hasattr(settings_mgr, 'write_local_config'):
+        if parent and hasattr(parent, "settings_service"):
+            settings_mgr = getattr(parent, "settings_service", None)
+            if settings_mgr and hasattr(settings_mgr, "write_local_config"):
                 settings_mgr.write_local_config()
         if self.current_channel:
             self._reload_messages_with_limit()
@@ -349,11 +408,11 @@ class ChatWindow(QDialog):
         return time_since_last_send >= self.send_cooldown
 
     def _send_message(self):
-        if not getattr(self.app_state, 'has_internet', False):
-            self.status_label.setText(tr('chat.no_internet'))
+        if not getattr(self.app_state, "has_internet", False):
+            self.status_label.setText(tr("chat.no_internet"))
             return
         if not self.current_channel:
-            self.status_label.setText(tr('chat.select_channel_first'))
+            self.status_label.setText(tr("chat.select_channel_first"))
             return
         if self._loading_messages:
             return
@@ -363,14 +422,14 @@ class ChatWindow(QDialog):
         if not self._can_send():
             return
         if len(message) > ChatManager.MESSAGE_MAX_LENGTH:
-            self.status_label.setText(tr('chat.message_too_long'))
+            self.status_label.setText(tr("chat.message_too_long"))
             return
         if self.chat_service._contains_url(message):
-            self.status_label.setText(tr('chat.contains_url'))
+            self.status_label.setText(tr("chat.contains_url"))
             return
         saved_channel = self.current_channel
         if not saved_channel:
-            logging.error('ChatWindow: No channel selected, cannot send message')
+            logging.error("ChatWindow: No channel selected, cannot send message")
             return
         self._updating_channel_buttons = True
         self.message_input.setEnabled(False)
@@ -379,7 +438,7 @@ class ChatWindow(QDialog):
 
     def _send_message_async(self, channel: str, message: str):
         if self.chat_request_thread.isRunning():
-            self.status_label.setText(tr('chat.error_sending'))
+            self.status_label.setText(tr("chat.error_sending"))
             return
         self.chat_request_thread.request_send_message(channel, message)
 
@@ -390,8 +449,8 @@ class ChatWindow(QDialog):
             if self.current_channel != channel:
                 if not self._closed:
                     try:
-                        self.status_label.setText(tr('chat.error_sending'))
-                    except (RuntimeError, AttributeError):
+                        self.status_label.setText(tr("chat.error_sending"))
+                    except RuntimeError, AttributeError:
                         self._closed = True
                 return
             if success:
@@ -404,27 +463,35 @@ class ChatWindow(QDialog):
                         self.message_input.clear()
                         self.last_send_time = time.time()
                         self._start_cooldown()
-                        self.status_label.setText('')
+                        self.status_label.setText("")
                         self._sync_channel_buttons()
                         if not self._closed:
                             self._refresh_messages_immediate(channel)
-                    except (RuntimeError, AttributeError):
+                    except RuntimeError, AttributeError:
                         self._closed = True
             elif not self._closed:
                 try:
-                    error_keys = {'message_too_long': 'chat.message_too_long', 'contains_url': 'chat.contains_url', 'no_internet': 'chat.no_internet', 'config_error': 'chat.config_error', 'channel_error': 'chat.channel_error'}
-                    self.status_label.setText(tr(error_keys.get(error, 'chat.error_sending')))
-                except (RuntimeError, AttributeError):
+                    error_keys = {
+                        "message_too_long": "chat.message_too_long",
+                        "contains_url": "chat.contains_url",
+                        "no_internet": "chat.no_internet",
+                        "config_error": "chat.config_error",
+                        "channel_error": "chat.channel_error",
+                    }
+                    self.status_label.setText(
+                        tr(error_keys.get(error, "chat.error_sending"))
+                    )
+                except RuntimeError, AttributeError:
                     self._closed = True
         except (RuntimeError, AttributeError) as e:
             self._closed = True
-            logging.debug(f'ChatWindow: Widget deleted while handling send result: {e}')
+            logging.debug(f"ChatWindow: Widget deleted while handling send result: {e}")
         except Exception as e:
-            logging.warning(f'ChatWindow: Failed to handle send result: {e}')
+            logging.warning(f"ChatWindow: Failed to handle send result: {e}")
             if not self._closed:
                 try:
-                    self.status_label.setText(tr('chat.error_sending'))
-                except (RuntimeError, AttributeError):
+                    self.status_label.setText(tr("chat.error_sending"))
+                except RuntimeError, AttributeError:
                     self._closed = True
         finally:
             if not self._closed:
@@ -436,7 +503,7 @@ class ChatWindow(QDialog):
                         self._on_input_changed(self.message_input.text())
                     elif channel in self.channel_buttons:
                         self._switch_channel(channel)
-                except (RuntimeError, AttributeError):
+                except RuntimeError, AttributeError:
                     self._closed = True
 
     def _on_chat_error(self, channel: str, error_message: str):
@@ -445,14 +512,16 @@ class ChatWindow(QDialog):
         if self._loading_messages:
             if not self._closed:
                 try:
-                    self.status_label.setText(tr('chat.error_loading'))
+                    self.status_label.setText(tr("chat.error_loading"))
                     self.message_input.setEnabled(True)
-                except (RuntimeError, AttributeError):
+                except RuntimeError, AttributeError:
                     self._closed = True
             self._loading_messages = False
         elif self._refreshing_messages:
             self._refreshing_messages = False
-        logging.warning(f'ChatWindow: Chat request error for channel {channel}: {error_message}')
+        logging.warning(
+            f"ChatWindow: Chat request error for channel {channel}: {error_message}"
+        )
 
     def _start_cooldown(self):
         self.last_send_time = time.time()
@@ -465,23 +534,40 @@ class ChatWindow(QDialog):
         time_since_last_send = current_time - self.last_send_time
         remaining = max(0, self.send_cooldown - time_since_last_send)
         if remaining > 0:
-            self.cooldown_label.setText(tr('chat.wait_before_send', seconds=int(remaining)))
+            self.cooldown_label.setText(
+                tr("chat.wait_before_send", seconds=int(remaining))
+            )
             self.send_button.setEnabled(False)
         else:
             self.cooldown_label.hide()
             self.cooldown_timer.stop()
-            if self.current_channel and self.message_input.text().strip() and (not self._loading_messages):
+            if (
+                self.current_channel
+                and self.message_input.text().strip()
+                and (not self._loading_messages)
+            ):
                 self.send_button.setEnabled(True)
 
     def _apply_theme(self):
         theme = get_dialog_theme_values(self.app_state)
-        self.setStyleSheet(build_dialog_theme_stylesheet(self.app_state) + f'''\n            QPushButton:checked {{\n                background-color: {theme['button_hover']};\n                border: 2px solid {theme['button_hover']};\n            }}\n            QPushButton:disabled {{\n                background-color: #555;\n                color: #999;\n            }}\n            QSpinBox {{\n                background-color: {theme['background']};\n                border: 2px solid {theme['border']};\n                color: {theme['secondary_text']};\n                padding: 2px;\n                font-size: 12px;\n                min-width: 60px;\n                max-width: 80px;\n            }}\n            QSpinBox:focus {{\n                border: 2px solid {theme['button_hover']};\n            }}\n            QScrollArea {{\n                background-color: {theme['background']};\n                border: 2px solid {theme['border']};\n            }}\n        ''')
-        self.select_channel_label.setStyleSheet(f'color: {theme["secondary_text"]}; font-size: 16px; padding: 50px;')
-        self.cooldown_label.setStyleSheet('color: orange; font-size: 11px;')
-        self.status_label.setStyleSheet(f'color: {theme["secondary_text"]}; font-size: 10px;')
-        self.limit_label.setStyleSheet(f'color: {theme["secondary_text"]}; font-size: 12px;')
+        self.setStyleSheet(
+            build_dialog_theme_stylesheet(self.app_state)
+            + f"""\n            QPushButton:checked {{\n                background-color: {theme["button_hover"]};\n                border: 2px solid {theme["button_hover"]};\n            }}\n            QPushButton:disabled {{\n                background-color: #555;\n                color: #999;\n            }}\n            QSpinBox {{\n                background-color: {theme["background"]};\n                border: 2px solid {theme["border"]};\n                color: {theme["secondary_text"]};\n                padding: 2px;\n                font-size: 12px;\n                min-width: 60px;\n                max-width: 80px;\n            }}\n            QSpinBox:focus {{\n                border: 2px solid {theme["button_hover"]};\n            }}\n            QScrollArea {{\n                background-color: {theme["background"]};\n                border: 2px solid {theme["border"]};\n            }}\n        """
+        )
+        self.select_channel_label.setStyleSheet(
+            f"color: {theme['secondary_text']}; font-size: 16px; padding: 50px;"
+        )
+        self.cooldown_label.setStyleSheet("color: orange; font-size: 11px;")
+        self.status_label.setStyleSheet(
+            f"color: {theme['secondary_text']}; font-size: 10px;"
+        )
+        self.limit_label.setStyleSheet(
+            f"color: {theme['secondary_text']}; font-size: 12px;"
+        )
         for msg_widget in self._iter_message_widgets():
-            self._style_message_widget(msg_widget, theme['border_radius'], theme['text'])
+            self._style_message_widget(
+                msg_widget, theme["border_radius"], theme["text"]
+            )
 
     def closeEvent(self, event):
         self._closed = True
@@ -491,13 +577,15 @@ class ChatWindow(QDialog):
             self.chat_request_thread.cancel()
             try:
                 self.chat_request_thread.blockSignals(True)
-                for sig in (self.chat_request_thread.messages_received, self.chat_request_thread.message_sent, self.chat_request_thread.error_occurred):
-                    try:
+                for sig in (
+                    self.chat_request_thread.messages_received,
+                    self.chat_request_thread.message_sent,
+                    self.chat_request_thread.error_occurred,
+                ):
+                    with contextlib.suppress(TypeError, RuntimeError):
                         sig.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
                 self.chat_request_thread.blockSignals(False)
-            except (TypeError, RuntimeError, AttributeError):
+            except TypeError, RuntimeError, AttributeError:
                 pass
         self.messages = []
         self._message_widgets.clear()

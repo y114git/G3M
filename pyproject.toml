@@ -31,6 +31,7 @@ test = [
     "pytest-qt==4.5.0",
     "responses==0.26.0",
 ]
+dev = ["ruff==0.15.7"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -73,8 +74,80 @@ target-version = "py314"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F"]
-ignore = ["E501"]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "T10", # flake8-debugger
+    "T20", # flake8-print
+    "SIM", # flake8-simplify
+    "I",   # isort
+    "N",   # pep8-naming
+    "S",   # flake8-bandit (security)
+    "A",   # flake8-builtins
+    "RUF", # Ruff-specific rules
+    "ANN", # flake8-annotations (type hints)
+    "PT",  # pytest style
+]
+ignore = [
+    "E501",   # line too long
+    "ANN001", # missing type annotation for function argument
+    "ANN002", # missing type annotation for *args
+    "ANN003", # missing type annotation for **kwargs
+    "ANN201", # missing return type annotation for public function
+    "ANN202", # missing return type annotation for private function
+    "ANN401", # dynamically typed expressions (Any, Type) are disallowed
+    "S603",   # subprocess call: check for execution of untrusted input
+    "S607",   # starting a process with a shell: possible security issue
+    "PT001",  # use @pytest.fixture without parentheses
+    "PT011",  # pytest.raises() should be called outside of the with block
+    "PT012",  # pytest.raises() should not be used as a context manager
+    "PT018",  # assertion should be broken down into multiple parts
+    "SIM108", # use ternary operator instead of if-else-block
+    "RUF012", # mutable class attributes should be annotated with `typing.ClassVar`
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["B011"]
+"tests/**/*.py" = [
+    "B011",
+    "S101",   # use of assert detected
+    "S301",   # suspicious pickle usage
+    "S311",   # standard pseudo-random generators are not suitable for cryptographic purposes
+    "ANN201", # missing return type annotation for public function
+    "ANN202", # missing return type annotation for private function
+]
+"src/ui/**/*.py" = [
+    "ANN201", # missing return type annotation for public function
+    "ANN202", # missing return type annotation for private function
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint.pep8-naming]
+ignore-names = [
+    "changeEvent",
+    "closeEvent",
+    "dragEnterEvent",
+    "dragMoveEvent",
+    "dropEvent",
+    "eventFilter",
+    "focusOutEvent",
+    "keyPressEvent",
+    "leaveEvent",
+    "minimumSizeHint",
+    "mouseDoubleClickEvent",
+    "mouseMoveEvent",
+    "mousePressEvent",
+    "moveEvent",
+    "paintEvent",
+    "resizeEvent",
+    "sizeHint",
+    "visit_AsyncFunctionDef",
+    "wheelEvent",
+]

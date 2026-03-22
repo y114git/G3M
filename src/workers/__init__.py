@@ -8,5 +8,5 @@ class WorkerSignals(QObject):
     progress = pyqtSignal(int)
     update_label = pyqtSignal(object, object, str, bool)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)

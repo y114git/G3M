@@ -4,6 +4,7 @@ Uses G3MToolManager and BackupManager directly (plain classes) so no
 QApplication is needed.  Supports multi-chapter mod selections via the
 ``chapter_mods`` dict embedded in the shortcut config.
 """
+
 import json
 import logging
 import os
@@ -14,7 +15,6 @@ import sys
 import tempfile
 import time
 import webbrowser
-from typing import Dict, Optional
 
 from models.game_modes import get_game
 from services.game_detection_service import (
@@ -27,16 +27,18 @@ from utils.path_utils import (
     resolve_game_executable,
 )
 
-logger = logging.getLogger('shortcut_runner')
+logger = logging.getLogger("shortcut_runner")
 
 
 def _configure_logging():
-    logs_dir = os.path.join(get_user_data_root(), 'logs')
+    logs_dir = os.path.join(get_user_data_root(), "logs")
     os.makedirs(logs_dir, exist_ok=True)
-    fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    fh = logging.FileHandler(os.path.join(logs_dir, 'shortcut.log'), mode='w', encoding='utf-8')
+    fh = logging.FileHandler(
+        os.path.join(logs_dir, "shortcut.log"), mode="w", encoding="utf-8"
+    )
     fh.setFormatter(fmt)
     root.addHandler(fh)
     ch = logging.StreamHandler()
@@ -47,19 +49,20 @@ def _configure_logging():
 
 def _load_config() -> dict:
     user_root = get_user_data_root()
-    for name in ('settings.json', 'config.json'):
-        path = os.path.join(user_root, 'settings', name)
+    for name in ("settings.json", "config.json"):
+        path = os.path.join(user_root, "settings", name)
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding="utf-8") as f:
                 cfg = json.load(f)
             return cfg if isinstance(cfg, dict) else {}
     return {}
 
 
-def _find_mod_source_dir(mod_key: str, local_config: dict) -> Optional[str]:
+def _find_mod_source_dir(mod_key: str, local_config: dict) -> str | None:
     """Resolve a mod key to its root directory on disk."""
+    from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
     from utils.path_utils import get_user_mods_dir
-    from config.constants import MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME
+
     mods_dir = get_user_mods_dir()
     if not os.path.isdir(mods_dir):
         return None
@@ -71,12 +74,18 @@ def _find_mod_source_dir(mod_key: str, local_config: dict) -> Optional[str]:
             config_path = os.path.join(folder_path, config_name)
             if os.path.isfile(config_path):
                 try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
+                    with open(config_path, encoding="utf-8") as f:
                         cfg = json.load(f)
-                    if isinstance(cfg, dict) and (cfg.get('key') or cfg.get('mod_key')) == mod_key:
+                    if (
+                        isinstance(cfg, dict)
+                        and (cfg.get("key") or cfg.get("mod_key")) == mod_key
+                    ):
                         return folder_path
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        f"_find_mod_source_dir: failed to inspect {config_path}: {e}",
+                        exc_info=True,
+                    )
                 break
 
     for d in os.listdir(mods_dir):
@@ -87,12 +96,13 @@ def _find_mod_source_dir(mod_key: str, local_config: dict) -> Optional[str]:
     return None
 
 
-def _resolve_chapter_source_dir(mod_source_dir: str, chapter_id: str) -> Optional[str]:
+def _resolve_chapter_source_dir(mod_source_dir: str, chapter_id: str) -> str | None:
     """Given a mod's root directory, find the subfolder for a specific chapter."""
     if not mod_source_dir or not os.path.isdir(mod_source_dir):
         return None
     from utils.file_utils import get_chapter_folder_name
-    for subdir in (get_chapter_folder_name(chapter_id), 'universal'):
+
+    for subdir in (get_chapter_folder_name(chapter_id), "universal"):
         candidate = os.path.join(mod_source_dir, subdir)
         if os.path.isdir(candidate):
             return candidate
@@ -102,24 +112,28 @@ def _resolve_chapter_source_dir(mod_source_dir: str, chapter_id: str) -> Optiona
 def _classify_mod(mod_source_dir: str):
     """Classify a mod chapter dir and return (patch_file, mod_type)."""
     from utils.patching import mod_content_utils as mod_content
+
     if not os.path.isdir(mod_source_dir):
-        return (None, 'overrides_only')
+        return (None, "overrides_only")
     g3m_patches = mod_content.find_g3m_patches(mod_source_dir)
     if g3m_patches:
-        return (g3m_patches[0], 'g3mpatch')
+        return (g3m_patches[0], "g3mpatch")
     for f in os.listdir(mod_source_dir):
         fl = f.lower()
-        if fl.endswith(('.xdelta', '.vcdiff')):
-            return (os.path.join(mod_source_dir, f), 'xdelta')
+        if fl.endswith((".xdelta", ".vcdiff")):
+            return (os.path.join(mod_source_dir, f), "xdelta")
     ready_files = mod_content.find_ready_data_win_files(mod_source_dir)
     if ready_files:
-        return (ready_files[0], 'datafile')
-    return (None, 'overrides_only')
+        return (ready_files[0], "datafile")
+    return (None, "overrides_only")
 
 
-def _apply_file_overrides(mod_source_dir: str, target_dir: str, backup_mgr, chapter_id: str, g3mtool):
+def _apply_file_overrides(
+    mod_source_dir: str, target_dir: str, backup_mgr, chapter_id: str, g3mtool
+):
     """Copy non-patch files from mod source into game target, with backup."""
-    from config.constants import SKIP_FILES, ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS
+    from config.constants import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
+
     if not os.path.isdir(mod_source_dir):
         return
     for root, _dirs, files in os.walk(mod_source_dir):
@@ -128,18 +142,20 @@ def _apply_file_overrides(mod_source_dir: str, target_dir: str, backup_mgr, chap
                 continue
             source_path = os.path.join(root, file)
             file_lower = file.lower()
-            if file_lower.endswith(('.xdelta', '.vcdiff')):
-
+            if file_lower.endswith((".xdelta", ".vcdiff")):
                 from utils.patching import mod_content_utils as mod_content
-                target_files = mod_content.find_target_files_for_xdelta(target_dir, file)
+
+                target_files = mod_content.find_target_files_for_xdelta(
+                    target_dir, file
+                )
                 for tf in target_files:
                     if os.path.exists(tf):
                         backup_mgr.backup_file(chapter_id, tf)
-                    temp_out = tf + '.tmp'
+                    temp_out = tf + ".tmp"
                     rc, _, _ = g3mtool.xpatch_apply(tf, source_path, temp_out)
                     if rc == 0 and os.path.exists(temp_out):
                         shutil.move(temp_out, tf)
-                        logger.info(f'Applied xdelta override {file} -> {tf}')
+                        logger.info(f"Applied xdelta override {file} -> {tf}")
                     elif os.path.exists(temp_out):
                         os.remove(temp_out)
                 continue
@@ -155,7 +171,9 @@ def _apply_file_overrides(mod_source_dir: str, target_dir: str, backup_mgr, chap
             try:
                 shutil.copy2(source_path, target_path)
             except Exception as e:
-                logger.error(f'Failed to copy override {source_path} -> {target_path}: {e}')
+                logger.error(
+                    f"Failed to copy override {source_path} -> {target_path}: {e}"
+                )
 
 
 def _patch_chapter(
@@ -172,59 +190,69 @@ def _patch_chapter(
 
     target_dir = find_chapter_resource_dir(game_path, chapter_id)
     if not target_dir or not os.path.isdir(target_dir):
-        logger.error(f'Target directory not found for chapter {chapter_id}')
+        logger.error(f"Target directory not found for chapter {chapter_id}")
         return False
 
     data_win_path = mod_content.find_data_win(target_dir)
     patch_file, mod_type = _classify_mod(mod_source_dir)
 
-    if mod_type == 'overrides_only' or not data_win_path:
+    if mod_type == "overrides_only" or not data_win_path:
         if data_win_path and not patch_file:
-            logger.info(f'Chapter {chapter_id}: overrides only (no patch file)')
+            logger.info(f"Chapter {chapter_id}: overrides only (no patch file)")
         elif not data_win_path:
-            logger.warning(f'Chapter {chapter_id}: no data.win found, applying overrides only')
-        _apply_file_overrides(mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool)
+            logger.warning(
+                f"Chapter {chapter_id}: no data.win found, applying overrides only"
+            )
+        _apply_file_overrides(
+            mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
+        )
         return True
 
     if not backup_mgr.backup_file(chapter_id, data_win_path):
-        logger.error(f'CRITICAL: Failed to backup {data_win_path}')
+        logger.error(f"CRITICAL: Failed to backup {data_win_path}")
         return False
 
-    logs_dir = os.path.join(get_user_data_root(), 'logs')
+    logs_dir = os.path.join(get_user_data_root(), "logs")
     os.makedirs(logs_dir, exist_ok=True)
-    log_path = os.path.join(logs_dir, 'g3mtool.log')
-    temp_output = os.path.join(temp_dir, f'output_{chapter_id}_{os.path.basename(data_win_path)}')
+    log_path = os.path.join(logs_dir, "g3mtool.log")
+    temp_output = os.path.join(
+        temp_dir, f"output_{chapter_id}_{os.path.basename(data_win_path)}"
+    )
 
     success = False
-    if mod_type == 'g3mpatch':
-        logger.info(f'Applying g3mpatch: {patch_file}')
-        rc, stdout, stderr = g3mtool.apply_patch(data_win_path, patch_file, temp_output, log_path=log_path)
+    if mod_type == "g3mpatch":
+        logger.info(f"Applying g3mpatch: {patch_file}")
+        rc, _stdout, stderr = g3mtool.apply_patch(
+            data_win_path, patch_file, temp_output, log_path=log_path
+        )
         if rc != 0:
-            logger.error(f'G3MTool patch apply failed: {stderr[:500]}')
+            logger.error(f"G3MTool patch apply failed: {stderr[:500]}")
             return False
         success = True
-    elif mod_type == 'xdelta':
-        logger.info(f'Applying xdelta patch: {patch_file}')
-        rc, stdout, stderr = g3mtool.xpatch_apply(data_win_path, patch_file, temp_output)
+    elif mod_type == "xdelta":
+        logger.info(f"Applying xdelta patch: {patch_file}")
+        rc, _stdout, stderr = g3mtool.xpatch_apply(
+            data_win_path, patch_file, temp_output
+        )
         if rc != 0:
-            logger.error(f'xpatch apply failed: {stderr[:500]}')
+            logger.error(f"xpatch apply failed: {stderr[:500]}")
             return False
         success = True
-    elif mod_type == 'datafile':
-        logger.info(f'Copying replacement data file: {patch_file}')
+    elif mod_type == "datafile":
+        logger.info(f"Copying replacement data file: {patch_file}")
         try:
             shutil.copy2(patch_file, temp_output)
             success = True
         except Exception as e:
-            logger.error(f'Failed to copy data file: {e}')
+            logger.error(f"Failed to copy data file: {e}")
             return False
 
     if success:
         try:
             shutil.move(temp_output, data_win_path)
-            logger.info(f'Patched data.win placed at {data_win_path}')
+            logger.info(f"Patched data.win placed at {data_win_path}")
         except Exception as e:
-            logger.error(f'Failed to move patched file: {e}')
+            logger.error(f"Failed to move patched file: {e}")
             return False
 
     _apply_file_overrides(mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool)
@@ -232,11 +260,11 @@ def _patch_chapter(
 
 
 def _patch_all_chapters(
-    chapter_mods: Dict[str, str],
+    chapter_mods: dict[str, str],
     game_path: str,
     game_mode,
     local_config: dict,
-) -> Optional[object]:
+) -> object | None:
     """Patch all chapters and return the BackupManager for later restore.
 
     ``chapter_mods`` maps chapter_id -> mod_key.
@@ -247,14 +275,13 @@ def _patch_all_chapters(
 
     g3mtool = G3MToolManager()
     if not g3mtool.is_available():
-        logger.error('G3MTool not available')
-        print('Error: G3MTool is not available. Cannot apply mods.', file=sys.stderr)
+        logger.error("G3MTool not available")
         return None
 
-    backup_dir = os.path.join(get_user_data_root(), 'patching_backups')
+    backup_dir = os.path.join(get_user_data_root(), "patching_backups")
     backup_mgr = BackupManager(backup_dir, patching_logger=logger)
-    manifest_path = os.path.join(get_user_data_root(), 'settings', 'session.lock')
-    temp_dir = tempfile.mkdtemp(prefix='deltahub_shortcut_patch_')
+    manifest_path = os.path.join(get_user_data_root(), "settings", "session.lock")
+    temp_dir = tempfile.mkdtemp(prefix="deltahub_shortcut_patch_")
 
     try:
         for chapter_id, mod_key in sorted(chapter_mods.items()):
@@ -264,24 +291,30 @@ def _patch_all_chapters(
             mod_source_dir = _find_mod_source_dir(mod_key, local_config)
             if not mod_source_dir:
                 logger.error(f'Mod "{mod_key}" not found on disk')
-                print(f'Error: Mod "{mod_key}" not found on disk', file=sys.stderr)
                 _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
                 return None
 
             chapter_source_dir = _resolve_chapter_source_dir(mod_source_dir, chapter_id)
             if not chapter_source_dir:
-                logger.error(f'No chapter data for {chapter_id} in {mod_source_dir}')
-                print(f'Error: Mod "{mod_key}" has no data for chapter {chapter_id}', file=sys.stderr)
+                logger.error(f"No chapter data for {chapter_id} in {mod_source_dir}")
                 _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
                 return None
 
-            logger.info(f'Patching chapter {chapter_id} with mod "{mod_key}" from {chapter_source_dir}')
-            print(f'  Patching chapter {chapter_id}...')
+            logger.info(
+                f'Patching chapter {chapter_id} with mod "{mod_key}" from {chapter_source_dir}'
+            )
 
-            ok = _patch_chapter(chapter_id, chapter_source_dir, game_path, game_mode, g3mtool, backup_mgr, temp_dir)
+            ok = _patch_chapter(
+                chapter_id,
+                chapter_source_dir,
+                game_path,
+                game_mode,
+                g3mtool,
+                backup_mgr,
+                temp_dir,
+            )
             if not ok:
-                logger.error(f'Patching failed for chapter {chapter_id}')
-                print(f'Error: Patching failed for chapter {chapter_id}', file=sys.stderr)
+                logger.error(f"Patching failed for chapter {chapter_id}")
                 _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
                 return None
 
@@ -289,8 +322,7 @@ def _patch_all_chapters(
 
         return backup_mgr
     except Exception as e:
-        logger.error(f'Patching failed: {e}', exc_info=True)
-        print(f'Error: Patching failed: {e}', file=sys.stderr)
+        logger.error(f"Patching failed: {e}", exc_info=True)
         _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
         return None
     finally:
@@ -304,13 +336,13 @@ def _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path):
         backup_mgr.restore_all_backups()
         backup_mgr.clear_backup_dir()
     except Exception as e:
-        logger.error(f'Failed to restore backups: {e}', exc_info=True)
+        logger.error(f"Failed to restore backups: {e}", exc_info=True)
     if os.path.isdir(temp_dir):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def _get_executable_path(game_mode, local_config: dict, game_path: str) -> Optional[str]:
-    custom_path = local_config.get(game_mode.get_custom_exec_config_key(), '')
+def _get_executable_path(game_mode, local_config: dict, game_path: str) -> str | None:
+    custom_path = local_config.get(game_mode.get_custom_exec_config_key(), "")
     if custom_path and os.path.isfile(custom_path):
         return custom_path
     if not game_path or not os.path.isdir(game_path):
@@ -318,15 +350,17 @@ def _get_executable_path(game_mode, local_config: dict, game_path: str) -> Optio
     return resolve_game_executable(game_path, game_mode.executable_type)
 
 
-def _wait_for_game_exit(process: Optional[subprocess.Popen] = None, wait_for_start: bool = False):
+def _wait_for_game_exit(
+    process: subprocess.Popen | None = None, wait_for_start: bool = False
+):
     """Wait for the game process to finish."""
     if process:
         process.wait()
     if wait_for_start:
-        logger.info('Waiting for game process to appear...')
+        logger.info("Waiting for game process to appear...")
         for _ in range(30):
             if is_game_running():
-                logger.info('Game process detected')
+                logger.info("Game process detected")
                 break
             time.sleep(2)
     for _ in range(300):
@@ -335,34 +369,36 @@ def _wait_for_game_exit(process: Optional[subprocess.Popen] = None, wait_for_sta
         time.sleep(2)
 
 
-def _launch_game(shortcut_config: dict, game_mode, local_config: dict, game_path: str) -> Optional[subprocess.Popen]:
-    use_steam = shortcut_config.get('launch_via_steam', False)
-    direct_launch_chapter = shortcut_config.get('direct_launch_chapter', '')
-    is_chapter_mode = shortcut_config.get('chapter_mode', False)
+def _launch_game(
+    shortcut_config: dict, game_mode, local_config: dict, game_path: str
+) -> subprocess.Popen | None:
+    use_steam = shortcut_config.get("launch_via_steam", False)
+    direct_launch_chapter = shortcut_config.get("direct_launch_chapter", "")
+    is_chapter_mode = shortcut_config.get("chapter_mode", False)
 
     if use_steam and game_mode.steam_app_id:
-        steam_url = f'steam://rungameid/{game_mode.steam_app_id}'
+        steam_url = f"steam://rungameid/{game_mode.steam_app_id}"
         system = platform.system()
-        if system == 'Linux':
+        if system == "Linux":
             try:
-                subprocess.Popen(['steam', steam_url])
+                subprocess.Popen(["steam", steam_url])
             except FileNotFoundError:
-                subprocess.Popen(['xdg-open', steam_url])
-        elif system == 'Darwin':
-            subprocess.Popen(['open', steam_url])
+                subprocess.Popen(["xdg-open", steam_url])
+        elif system == "Darwin":
+            subprocess.Popen(["open", steam_url])
         else:
             webbrowser.open(steam_url)
-        logger.info(f'Launched via Steam: {steam_url}')
+        logger.info(f"Launched via Steam: {steam_url}")
         _wait_for_game_exit(wait_for_start=True)
         return None
 
     is_direct = (
         bool(direct_launch_chapter)
-        and '_' in direct_launch_chapter
-        and not direct_launch_chapter.endswith('_0')
+        and "_" in direct_launch_chapter
+        and not direct_launch_chapter.endswith("_0")
         and is_chapter_mode
         and game_mode.direct_launch_allowed
-        and platform.system() != 'Darwin'
+        and platform.system() != "Darwin"
     )
 
     launch_target = None
@@ -373,52 +409,59 @@ def _launch_game(shortcut_config: dict, game_mode, local_config: dict, game_path
         chapter_folder = find_chapter_resource_dir(game_path, direct_launch_chapter)
         source_exe = _get_executable_path(game_mode, local_config, game_path)
         if chapter_folder and source_exe:
-            exe_name = get_executable_name_for_game(game_mode.executable_type) or 'DELTARUNE.exe'
+            exe_name = (
+                get_executable_name_for_game(game_mode.executable_type)
+                or "DELTARUNE.exe"
+            )
             target_exe = os.path.join(chapter_folder, exe_name)
             shutil.copy2(source_exe, target_exe)
             launch_target = target_exe
             working_dir = chapter_folder
-            cleanup_info = {'target_exe': target_exe}
-            logger.info(f'Direct launch: copied {source_exe} -> {target_exe}')
+            cleanup_info = {"target_exe": target_exe}
+            logger.info(f"Direct launch: copied {source_exe} -> {target_exe}")
     else:
         launch_target = _get_executable_path(game_mode, local_config, game_path)
 
     if not launch_target:
-        logger.error('No executable found for game launch')
+        logger.error("No executable found for game launch")
         return None
 
     system = platform.system()
     command = [launch_target]
     creationflags = 0
 
-    if system == 'Darwin':
-        process = subprocess.Popen(['open', '-W', launch_target])
+    if system == "Darwin":
+        process = subprocess.Popen(["open", "-W", launch_target])
     else:
-        if system == 'Linux' and launch_target.lower().endswith('.exe'):
-            use_portproton = shortcut_config.get('use_portproton', False)
+        if system == "Linux" and launch_target.lower().endswith(".exe"):
+            use_portproton = shortcut_config.get("use_portproton", False)
             if use_portproton:
-                portproton_path = local_config.get('portproton_path', '')
+                portproton_path = local_config.get("portproton_path", "")
                 if portproton_path:
-                    command = [portproton_path, 'run', launch_target]
+                    command = [portproton_path, "run", launch_target]
                 else:
-                    command = ['portproton', 'run', launch_target]
+                    command = ["portproton", "run", launch_target]
             else:
-                command.insert(0, 'wine')
-        if system == 'Windows':
+                command.insert(0, "wine")
+        if system == "Windows":
             creationflags = subprocess.DETACHED_PROCESS
-        process = subprocess.Popen(command, cwd=working_dir, creationflags=creationflags)
+        process = subprocess.Popen(
+            command, cwd=working_dir, creationflags=creationflags
+        )
 
-    logger.info(f'Game launched: {launch_target} (pid={process.pid if process else "?"})')
+    logger.info(
+        f"Game launched: {launch_target} (pid={process.pid if process else '?'})"
+    )
 
     _wait_for_game_exit(process)
     if cleanup_info:
-        target_exe = cleanup_info['target_exe']
+        target_exe = cleanup_info["target_exe"]
         if os.path.exists(target_exe):
             try:
                 os.remove(target_exe)
-                logger.info(f'Cleaned up direct launch exe: {target_exe}')
+                logger.info(f"Cleaned up direct launch exe: {target_exe}")
             except Exception as e:
-                logger.warning(f'Failed to clean direct launch exe: {e}')
+                logger.warning(f"Failed to clean direct launch exe: {e}")
 
     return process
 
@@ -426,15 +469,19 @@ def _launch_game(shortcut_config: dict, game_mode, local_config: dict, game_path
 def _parse_shortcut_arg(shortcut_arg: str) -> dict:
     """Parse the shortcut argument: base64 string, JSON file path, or inline JSON."""
     import base64
+
     try:
-        decoded = base64.b64decode(shortcut_arg, validate=True).decode('utf-8')
-        logger.info('Parsed config from base64')
+        decoded = base64.b64decode(shortcut_arg, validate=True).decode("utf-8")
+        logger.info("Parsed config from base64")
         return json.loads(decoded)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(
+            f"_parse_shortcut_arg: base64 decode path failed for input {shortcut_arg!r}: {e}",
+            exc_info=True,
+        )
     if os.path.isfile(shortcut_arg):
-        logger.info(f'Loading config from file: {shortcut_arg}')
-        with open(shortcut_arg, 'r', encoding='utf-8') as f:
+        logger.info(f"Loading config from file: {shortcut_arg}")
+        with open(shortcut_arg, encoding="utf-8") as f:
             return json.load(f)
     return json.loads(shortcut_arg)
 
@@ -454,68 +501,64 @@ def run_shortcut(shortcut_arg: str):
     Chapters with null/empty values are vanilla (no patching).
     """
     _configure_logging()
-    logger.info('=== DELTAHUB Shortcut Runner ===')
+    logger.info("=== DELTAHUB Shortcut Runner ===")
 
     try:
         shortcut_config = _parse_shortcut_arg(shortcut_arg)
     except Exception as e:
-        logger.error(f'Invalid shortcut config: {e}')
-        print(f'Error: Invalid shortcut configuration: {e}', file=sys.stderr)
+        logger.error(f"Invalid shortcut config: {e}")
         sys.exit(1)
 
-    game_id = shortcut_config.get('game_id', 'deltarune')
-    chapter_mods_raw = shortcut_config.get('chapter_mods', {})
-    is_chapter_mode = shortcut_config.get('chapter_mode', False)
+    game_id = shortcut_config.get("game_id", "deltarune")
+    chapter_mods_raw = shortcut_config.get("chapter_mods", {})
+    is_chapter_mode = shortcut_config.get("chapter_mode", False)
 
-    if not chapter_mods_raw and shortcut_config.get('mod_key'):
-        chapter_id = shortcut_config.get('chapter_id', '')
-        chapter_mods_raw = {chapter_id: shortcut_config['mod_key']} if chapter_id else {}
+    if not chapter_mods_raw and shortcut_config.get("mod_key"):
+        chapter_id = shortcut_config.get("chapter_id", "")
+        chapter_mods_raw = (
+            {chapter_id: shortcut_config["mod_key"]} if chapter_id else {}
+        )
 
     chapter_mods = {cid: mk for cid, mk in chapter_mods_raw.items() if mk}
 
-    logger.info(f'Config: game={game_id}, chapter_mode={is_chapter_mode}, chapter_mods={chapter_mods or "vanilla"}')
+    logger.info(
+        f"Config: game={game_id}, chapter_mode={is_chapter_mode}, chapter_mods={chapter_mods or 'vanilla'}"
+    )
 
     game_mode = get_game(game_id)
     if not game_mode:
-        logger.error(f'Unknown game_id: {game_id}')
-        print(f'Error: Unknown game: {game_id}', file=sys.stderr)
+        logger.error(f"Unknown game_id: {game_id}")
         sys.exit(1)
 
     local_config = _load_config()
     game_path = game_mode.get_game_path(local_config)
     if not game_path or not os.path.isdir(game_path):
-        logger.error(f'Game path not found: {game_path}')
-        print(f'Error: Game path not configured or missing for {game_mode.display_name}', file=sys.stderr)
+        logger.error(f"Game path not found: {game_path}")
         sys.exit(1)
 
     backup_mgr = None
     if chapter_mods:
-        print(f'Patching {game_mode.display_name} ({len(chapter_mods)} chapter(s))...')
-        backup_mgr = _patch_all_chapters(chapter_mods, game_path, game_mode, local_config)
+        backup_mgr = _patch_all_chapters(
+            chapter_mods, game_path, game_mode, local_config
+        )
         if backup_mgr is None:
-            print('Error: Patching failed. Check logs for details.', file=sys.stderr)
             sys.exit(1)
-        logger.info('All chapters patched successfully')
-        print('Patching complete. Launching game...')
+        logger.info("All chapters patched successfully")
     else:
-        print(f'Launching {game_mode.display_name} (vanilla)...')
+        pass
 
-    logger.info('Launching game...')
+    logger.info("Launching game...")
     _launch_game(shortcut_config, game_mode, local_config, game_path)
 
-    logger.info('Game exited')
-    print('Game closed.')
+    logger.info("Game exited")
 
     if backup_mgr:
-        logger.info('Restoring backups...')
-        print('Restoring original game files...')
+        logger.info("Restoring backups...")
         try:
             backup_mgr.restore_all_backups()
             backup_mgr.clear_backup_dir()
-            logger.info('Backups restored successfully')
-            print('Done. Original files restored.')
+            logger.info("Backups restored successfully")
         except Exception as e:
-            logger.error(f'Failed to restore backups: {e}', exc_info=True)
-            print(f'Warning: Failed to restore some files: {e}', file=sys.stderr)
+            logger.error(f"Failed to restore backups: {e}", exc_info=True)
 
-    logger.info('=== Shortcut Runner finished ===')
+    logger.info("=== Shortcut Runner finished ===")

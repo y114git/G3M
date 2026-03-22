@@ -3,8 +3,8 @@ import base64
 import json
 import os
 import platform
-import tempfile
 import shutil
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +17,11 @@ from controllers.shortcut_controller import (
     _validate_shortcut_prerequisites,
     _write_shortcut_file,
 )
-from services.game_runner import _parse_shortcut_arg, _find_mod_source_dir, _resolve_chapter_source_dir
+from services.game_runner import (
+    _find_mod_source_dir,
+    _parse_shortcut_arg,
+    _resolve_chapter_source_dir,
+)
 
 
 @pytest.fixture
@@ -109,7 +113,7 @@ class TestParseShortcutArg:
         assert result == cfg
 
     def test_parse_invalid_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, TypeError, json.JSONDecodeError)):
             _parse_shortcut_arg('not_valid_anything_!!!')
 
     def test_base64_roundtrip_unicode(self):
@@ -210,7 +214,7 @@ class TestCollectChapterData:
     def test_chapter_mode_single_mod_per_chapter(self, mock_used_mods_service, mock_app_state):
         result = _collect_chapter_data(mock_used_mods_service, mock_app_state)
         assert result is not None
-        chapter_mods, chapter_objs = result
+        chapter_mods, _chapter_objs = result
         for v in chapter_mods.values():
             assert v == 'test_mod_001'
 
@@ -224,7 +228,7 @@ class TestCollectChapterData:
         mock_app_state.current_mode = 'full'
         result = _collect_chapter_data(mock_used_mods_service_empty, mock_app_state)
         assert result is not None
-        chapter_mods, chapter_objs = result
+        chapter_mods, _chapter_objs = result
         assert all(v is None for v in chapter_mods.values())
         assert len(chapter_mods) == len(mock_app_state.game_mode.tabs)
 
@@ -283,14 +287,14 @@ class TestValidatePrerequisites:
         assert error is not None
 
     def test_mod_with_g3mtool_available(self, mock_app_state):
-        with patch('adapters.g3mtool_adapter.G3MToolManager') as MockG3M:
-            MockG3M.return_value.is_available.return_value = True
+        with patch('adapters.g3mtool_adapter.G3MToolManager') as mock_g3m:
+            mock_g3m.return_value.is_available.return_value = True
             error = _validate_shortcut_prerequisites(mock_app_state, True)
             assert error is None
 
     def test_mod_with_g3mtool_unavailable(self, mock_app_state):
-        with patch('adapters.g3mtool_adapter.G3MToolManager') as MockG3M:
-            MockG3M.return_value.is_available.return_value = False
+        with patch('adapters.g3mtool_adapter.G3MToolManager') as mock_g3m:
+            mock_g3m.return_value.is_available.return_value = False
             error = _validate_shortcut_prerequisites(mock_app_state, True)
             assert error is not None
             assert 'g3mtool' in error.lower()
@@ -335,7 +339,7 @@ class TestWriteShortcutFile:
         cfg = {'game_id': 'deltarune', 'chapter_mods': {'deltarune_2': 'test_mod'}}
         filepath = os.path.join(shortcut_temp_dir, f'test{_get_platform_extension()}')
         _write_shortcut_file(filepath, cfg)
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             content = f.read()
         expected_b64 = base64.b64encode(json.dumps(cfg, ensure_ascii=False).encode('utf-8')).decode('ascii')
         assert expected_b64 in content
@@ -343,14 +347,14 @@ class TestWriteShortcutFile:
     def test_write_contains_shortcut_flag(self, shortcut_temp_dir):
         filepath = os.path.join(shortcut_temp_dir, f'test{_get_platform_extension()}')
         _write_shortcut_file(filepath, {'game_id': 'deltarune'})
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             assert '--shortcut' in f.read()
 
     @pytest.mark.skipif(platform.system() != 'Windows', reason='VBS specific')
     def test_windows_vbs_no_console(self, shortcut_temp_dir):
         filepath = os.path.join(shortcut_temp_dir, 'test.vbs')
         _write_shortcut_file(filepath, {'game_id': 'deltarune'})
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             content = f.read()
         assert 'WScript.Shell' in content and ', 0, False' in content
 
@@ -365,7 +369,7 @@ class TestWriteShortcutFile:
                'chapter_mode': True, 'launch_via_steam': True}
         filepath = os.path.join(shortcut_temp_dir, f'test{_get_platform_extension()}')
         _write_shortcut_file(filepath, cfg)
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             content = f.read()
         b64 = base64.b64encode(json.dumps(cfg, ensure_ascii=False).encode('utf-8')).decode('ascii')
         assert b64 in content

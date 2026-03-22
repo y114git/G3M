@@ -1,17 +1,18 @@
 from PyQt6.QtCore import QThread
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextBrowser, QPushButton
+from PyQt6.QtWidgets import QDialog, QPushButton, QTextBrowser, QVBoxLayout
+
 from config.constants import NETWORK_TIMEOUT_MEDIUM
 from services.localization_service import tr
 from workers.changelog_worker import FetchChangelogWorker
 
 
 class ChangelogDialog(QDialog):
-    def __init__(self, parent=None, source: str = ''):
+    def __init__(self, parent=None, source: str = "") -> None:
         super().__init__(parent)
         self._thread = None
         self._worker = None
-        self._source = (source or '').strip()
-        self.setWindowTitle(tr('buttons.changelog'))
+        self._source = (source or "").strip()
+        self.setWindowTitle(tr("buttons.changelog"))
         self.resize(820, 620)
         self._init_ui()
         self._load_changelog()
@@ -22,13 +23,13 @@ class ChangelogDialog(QDialog):
         self.text_browser.setOpenExternalLinks(True)
         self.text_browser.setMarkdown(f"<i>{tr('status.loading')}</i>")
         layout.addWidget(self.text_browser)
-        self.close_button = QPushButton(tr('buttons.close'), self)
+        self.close_button = QPushButton(tr("buttons.close"), self)
         self.close_button.clicked.connect(self.accept)
         layout.addWidget(self.close_button)
 
     def _load_changelog(self):
         if not self._source:
-            self.text_browser.setMarkdown(tr('status.changelog_load_failed'))
+            self.text_browser.setMarkdown(tr("status.changelog_load_failed"))
             return
         self._thread = QThread(self)
         self._worker = FetchChangelogWorker(self._source)

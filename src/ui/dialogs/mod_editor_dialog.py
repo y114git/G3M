@@ -1,37 +1,61 @@
 """Dialog for creating and editing local mods."""
-import os
+
 import logging
+import os
 import shutil
 import time
 import uuid
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QFrame, QCheckBox, QComboBox, QMessageBox, QFileDialog, QInputDialog,
-    QWidget, QTabWidget, QScrollArea,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
+
 from services.localization_service import tr
-from utils.file_utils import get_file_filter, get_unique_mod_dir, get_chapter_folder_name
+from ui.common.styling import (
+    clamp_border_radius,
+    get_border_radius,
+    get_theme_color,
+    round_pixmap,
+)
+from utils.file_utils import (
+    get_chapter_folder_name,
+    get_file_filter,
+    get_unique_mod_dir,
+)
 from utils.path_utils import resource_path
-from ui.common.styling import get_theme_color, clamp_border_radius, round_pixmap, get_border_radius
 
 
 class ModEditorDialog(QDialog):
     """Native dialog for creating/editing local mods."""
 
-    def __init__(self, parent, is_creating=True, mod_data=None):
+    def __init__(self, parent, is_creating=True, mod_data=None) -> None:
         super().__init__(parent)
         self.parent_app = parent
         self.is_creating = is_creating
         self.mod_data = mod_data or {}
-        self.key = mod_data.get('key') or mod_data.get('mod_key') if mod_data else None
-        self._last_browse_dir = os.path.expanduser('~')
-        self._cfg = getattr(getattr(parent, 'app_state', None), 'local_config', None)
-        self.setWindowTitle(tr('ui.create_mod') if is_creating else tr('ui.edit_mod'))
+        self.key = mod_data.get("key") or mod_data.get("mod_key") if mod_data else None
+        self._last_browse_dir = os.path.expanduser("~")
+        self._cfg = getattr(getattr(parent, "app_state", None), "local_config", None)
+        self.setWindowTitle(tr("ui.create_mod") if is_creating else tr("ui.edit_mod"))
         self.setModal(True)
-        scale = self._cfg.get('ui_scale', 1.0) if self._cfg else 1.0
-        self.resize(round(1000 * scale), round(700 * scale))
+        scale = self._cfg.get("ui_scale", 1.0) if self._cfg else 1.0
+        self.resize(round(1110 * scale), round(700 * scale))
         self.setMinimumSize(round(700 * scale), round(500 * scale))
         self._init_ui()
         if not is_creating and mod_data:
@@ -60,11 +84,16 @@ class ModEditorDialog(QDialog):
 
         game_row = QHBoxLayout()
         game_row.addStretch()
-        game_row.addWidget(QLabel(tr('ui.mod_type_label')))
+        game_row.addWidget(QLabel(tr("ui.mod_type_label")))
         self.game_combo = QComboBox()
-        for label, data in [('DELTARUNE', 'deltarune'), ('DELTARUNE DEMO', 'deltarunedemo'),
-                            ('UNDERTALE', 'undertale'), ('UNDERTALE Yellow', 'undertaleyellow'),
-                            ('Pizza Tower', 'pizzatower'), ('Sugary Spire', 'sugaryspire')]:
+        for label, data in [
+            ("DELTARUNE", "deltarune"),
+            ("DELTARUNE DEMO", "deltarunedemo"),
+            ("UNDERTALE", "undertale"),
+            ("UNDERTALE Yellow", "undertaleyellow"),
+            ("Pizza Tower", "pizzatower"),
+            ("Sugary Spire", "sugaryspire"),
+        ]:
             self.game_combo.addItem(label, data)
         self.game_combo.currentIndexChanged.connect(self._update_file_tabs)
         game_row.addWidget(self.game_combo)
@@ -82,85 +111,94 @@ class ModEditorDialog(QDialog):
         self._build_action_buttons(main_layout)
 
     def _build_form(self, parent):
-        parent.addWidget(QLabel(tr('ui.mod_name_label')))
+        parent.addWidget(QLabel(tr("ui.mod_name_label")))
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText(tr('ui.enter_mod_name'))
+        self.name_edit.setPlaceholderText(tr("ui.enter_mod_name"))
         parent.addWidget(self.name_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr('ui.mod_author')))
+        parent.addWidget(QLabel(tr("ui.mod_author")))
         self.author_edit = QLineEdit()
-        self.author_edit.setPlaceholderText(tr('ui.enter_author_name'))
+        self.author_edit.setPlaceholderText(tr("ui.enter_author_name"))
         if not self.is_creating:
             self.author_edit.setReadOnly(True)
         parent.addWidget(self.author_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr('ui.short_description')))
+        parent.addWidget(QLabel(tr("ui.short_description")))
         self.tagline_edit = QLineEdit()
         self.tagline_edit.setMaxLength(200)
-        self.tagline_edit.setPlaceholderText(tr('ui.short_description_placeholder'))
+        self.tagline_edit.setPlaceholderText(tr("ui.short_description_placeholder"))
         parent.addWidget(self.tagline_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr('ui.external_url')))
+        parent.addWidget(QLabel(tr("ui.external_url")))
         self.external_url_edit = QLineEdit()
-        self.external_url_edit.setPlaceholderText('https://example.com/mod-page')
+        self.external_url_edit.setPlaceholderText("https://example.com/mod-page")
         parent.addWidget(self.external_url_edit)
 
-        parent.addWidget(QLabel(tr('files.icon_label')))
+        parent.addWidget(QLabel(tr("files.icon_label")))
         icon_row = QHBoxLayout()
-        self.icon_browse_btn = QPushButton(tr('ui.browse_button'))
+        self.icon_browse_btn = QPushButton(tr("ui.browse_button"))
         self.icon_browse_btn.clicked.connect(self._browse_icon)
         icon_row.addWidget(self.icon_browse_btn)
         self.icon_edit = QLineEdit()
-        self.icon_edit.setPlaceholderText(tr('ui.icon_file_path_placeholder'))
+        self.icon_edit.setPlaceholderText(tr("ui.icon_file_path_placeholder"))
         self.icon_edit.textChanged.connect(self._on_icon_text_changed)
         icon_row.addWidget(self.icon_edit)
         self.icon_preview = QLabel()
         self.icon_preview.setFixedSize(64, 64)
-        bc = self._color('border', '#039d5b')
+        bc = self._color("border", "#039d5b")
         pr = self._br(64, 64)
-        self.icon_preview.setStyleSheet(f'border: 2px solid {bc}; border-radius: {pr}px;')
+        self.icon_preview.setStyleSheet(
+            f"border: 2px solid {bc}; border-radius: {pr}px;"
+        )
         self.icon_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.icon_preview.setText(tr('ui.icon_preview'))
+        self.icon_preview.setText(tr("ui.icon_preview"))
         icon_row.addWidget(self.icon_preview)
         parent.addLayout(icon_row)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr('ui.mod_tags_label')))
+        parent.addWidget(QLabel(tr("ui.mod_tags_label")))
         tags_row = QHBoxLayout()
-        self.tag_textedit = QCheckBox(tr('tags.textedit_text'))
-        self.tag_customization = QCheckBox(tr('tags.customization'))
-        self.tag_gameplay = QCheckBox(tr('tags.gameplay'))
-        self.tag_other = QCheckBox(tr('tags.other'))
-        for t in [self.tag_textedit, self.tag_customization, self.tag_gameplay, self.tag_other]:
+        self.tag_textedit = QCheckBox(tr("tags.textedit_text"))
+        self.tag_customization = QCheckBox(tr("tags.customization"))
+        self.tag_gameplay = QCheckBox(tr("tags.gameplay"))
+        self.tag_other = QCheckBox(tr("tags.other"))
+        for t in [
+            self.tag_textedit,
+            self.tag_customization,
+            self.tag_gameplay,
+            self.tag_other,
+        ]:
             tags_row.addWidget(t)
         parent.addLayout(tags_row)
         if self.is_creating:
             self.tag_other.setChecked(True)
 
         parent.addSpacing(6)
-        parent.addWidget(QLabel(tr('ui.overall_mod_version')))
+        parent.addWidget(QLabel(tr("ui.overall_mod_version")))
         self.version_edit = QLineEdit()
-        self.version_edit.setPlaceholderText('1.0.0')
+        self.version_edit.setPlaceholderText("1.0.0")
         parent.addWidget(self.version_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr('ui.game_version_label')))
+        parent.addWidget(QLabel(tr("ui.game_version_label")))
         self.game_version_edit = QLineEdit()
-        self.game_version_edit.setPlaceholderText('1.04')
+        self.game_version_edit.setPlaceholderText("1.04")
         parent.addWidget(self.game_version_edit)
 
     def _build_file_section(self, parent):
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box)
         fl = QVBoxLayout(frame)
-        lbl = QLabel(tr('ui.files_management'))
-        lbl.setStyleSheet('font-weight: bold; font-size: 18px;')
+        lbl = QLabel(tr("ui.files_management"))
+        lbl.setStyleSheet("font-weight: bold; font-size: 18px;")
         fl.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.file_tabs = QTabWidget()
-        self.file_tabs.setStyleSheet('QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }')
+        self.file_tabs.setStyleSheet(
+            "QTabWidget::tab-bar { alignment: center; } QTabBar::tab { padding: 4px 8px; }"
+        )
         fl.addWidget(self.file_tabs)
         parent.addWidget(frame)
         self._update_file_tabs()
@@ -170,21 +208,22 @@ class ModEditorDialog(QDialog):
             self.file_tabs.removeTab(0)
         game = self.game_combo.currentData()
         from models.game_modes import get_game
+
         game_def = get_game(game)
         if game_def:
             for tab in game_def.tabs:
                 self._add_file_tab(tr(tab.name_key))
         else:
-            self._add_file_tab(game or 'Unknown')
+            self._add_file_tab(game or "Unknown")
 
     def _add_file_tab(self, name):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         btn_row = QHBoxLayout()
-        data_btn = QPushButton(tr('ui.add_data_file'))
-        data_btn.setProperty('is_data_button', True)
+        data_btn = QPushButton(tr("ui.add_data_file"))
+        data_btn.setProperty("is_data_button", True)
         data_btn.clicked.connect(lambda: self._on_add_data(tab, layout))
-        extra_btn = QPushButton(tr('ui.add_extra_files'))
+        extra_btn = QPushButton(tr("ui.add_extra_files"))
         extra_btn.clicked.connect(lambda: self._on_add_extra(layout))
         btn_row.addWidget(data_btn)
         btn_row.addWidget(extra_btn)
@@ -194,57 +233,78 @@ class ModEditorDialog(QDialog):
 
     def _on_add_data(self, tab, layout):
         for i in range(layout.count()):
-            w = (layout.itemAt(i).widget() if layout.itemAt(i) else None)
-            if w and hasattr(w, 'layout') and w.layout():
+            w = layout.itemAt(i).widget() if layout.itemAt(i) else None
+            if w and hasattr(w, "layout") and w.layout():
                 fl = w.layout()
                 if fl.count() > 0:
                     title = fl.itemAt(0).widget()
-                    if isinstance(title, QLabel) and title.property('file_type') == 'data':
+                    if (
+                        isinstance(title, QLabel)
+                        and title.property("file_type") == "data"
+                    ):
                         return
-        self._create_file_frame(layout, 'data')
+        self._create_file_frame(layout, "data")
 
     def _on_add_extra(self, layout):
-        self._create_file_frame(layout, 'extra')
+        self._create_file_frame(layout, "extra")
 
     def _create_file_frame(self, tab_layout, file_type, key_name=None):
-        if file_type == 'extra' and key_name is None:
-            key_name, ok = QInputDialog.getText(self, tr('dialogs.file_group_name'), tr('dialogs.enter_file_group_key'))
+        if file_type == "extra" and key_name is None:
+            key_name, ok = QInputDialog.getText(
+                self, tr("dialogs.file_group_name"), tr("dialogs.enter_file_group_key")
+            )
             if not ok or not key_name.strip():
                 return
-        if file_type == 'data':
+        if file_type == "data":
             self._toggle_data_button(tab_layout, False)
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box)
         fl = QVBoxLayout(frame)
-        if file_type == 'data':
-            title_text, file_filter = tr('files.data_file'), get_file_filter('data_files')
-            browse_title = tr('ui.select_data_file', file_type='data')
+        if file_type == "data":
+            title_text, file_filter = (
+                tr("files.data_file"),
+                get_file_filter("data_files"),
+            )
+            browse_title = tr("ui.select_data_file", file_type="data")
         else:
-            title_text = tr('files.extra_files_title', key_name=key_name)
-            file_filter = get_file_filter('archive_files')
-            browse_title = tr('ui.select_archive')
+            title_text = tr("files.extra_files_title", key_name=key_name)
+            file_filter = get_file_filter("archive_files")
+            browse_title = tr("ui.select_archive")
         title_lbl = QLabel(title_text)
-        title_lbl.setStyleSheet('font-weight: bold;')
-        title_lbl.setProperty('file_type', file_type)
-        if file_type == 'extra' and key_name:
-            title_lbl.setProperty('clean_key', key_name)
+        title_lbl.setStyleSheet("font-weight: bold;")
+        title_lbl.setProperty("file_type", file_type)
+        if file_type == "extra" and key_name:
+            title_lbl.setProperty("clean_key", key_name)
         fl.addWidget(title_lbl)
         path_edit = QLineEdit()
         path_edit.setReadOnly(True)
-        path_edit.setPlaceholderText(tr('ui.select_file'))
-        path_edit.setProperty('is_local_path' if file_type == 'data' else 'is_local_extra_path', True)
-        if file_type == 'extra':
-            path_edit.setProperty('extra_key', key_name)
+        path_edit.setPlaceholderText(tr("ui.select_file"))
+        path_edit.setProperty(
+            "is_local_path" if file_type == "data" else "is_local_extra_path", True
+        )
+        if file_type == "extra":
+            path_edit.setProperty("extra_key", key_name)
         fl.addWidget(path_edit)
-        browse_btn = QPushButton(tr('ui.browse_button'))
-        browse_btn.clicked.connect(lambda: self._browse_file(path_edit, browse_title, file_filter, file_type))
+        browse_btn = QPushButton(tr("ui.browse_button"))
+        browse_btn.clicked.connect(
+            lambda: self._browse_file(path_edit, browse_title, file_filter, file_type)
+        )
         fl.addWidget(browse_btn)
-        fl.addWidget(QLabel(tr('files.version_label', file_type='DATA' if file_type == 'data' else key_name or '')))
+        fl.addWidget(
+            QLabel(
+                tr(
+                    "files.version_label",
+                    file_type="DATA" if file_type == "data" else key_name or "",
+                )
+            )
+        )
         ver_edit = QLineEdit()
-        ver_edit.setPlaceholderText('1.0.0')
+        ver_edit.setPlaceholderText("1.0.0")
         fl.addWidget(ver_edit)
-        del_btn = QPushButton(tr('buttons.delete'))
-        del_btn.clicked.connect(lambda: self._remove_file_frame(tab_layout, frame, file_type))
+        del_btn = QPushButton(tr("buttons.delete"))
+        del_btn.clicked.connect(
+            lambda: self._remove_file_frame(tab_layout, frame, file_type)
+        )
         fl.addWidget(del_btn)
         tab_layout.insertWidget(tab_layout.count() - 1, frame)
 
@@ -254,7 +314,12 @@ class ModEditorDialog(QDialog):
             if item and item.layout():
                 for j in range(item.layout().count()):
                     btn_item = item.layout().itemAt(j)
-                    if btn_item and btn_item.widget() and isinstance(btn_item.widget(), QPushButton) and btn_item.widget().property('is_data_button'):
+                    if (
+                        btn_item
+                        and btn_item.widget()
+                        and isinstance(btn_item.widget(), QPushButton)
+                        and btn_item.widget().property("is_data_button")
+                    ):
                         btn_item.widget().setVisible(visible)
                         return
 
@@ -262,37 +327,52 @@ class ModEditorDialog(QDialog):
         frame.hide()
         layout.removeWidget(frame)
         frame.deleteLater()
-        if file_type == 'data':
+        if file_type == "data":
             self._toggle_data_button(layout, True)
 
     def _browse_file(self, line_edit, title, file_filter, file_type):
-        if file_type == 'data':
-            path, _ = QFileDialog.getOpenFileName(self, title, self._last_browse_dir, file_filter)
+        if file_type == "data":
+            path, _ = QFileDialog.getOpenFileName(
+                self, title, self._last_browse_dir, file_filter
+            )
             if path:
                 self._last_browse_dir = os.path.dirname(path)
                 line_edit.setText(path)
         else:
             msg = QMessageBox(self)
-            msg.setWindowTitle(tr('ui.select'))
-            msg.setText(tr('ui.select_file_or_folder'))
-            archive_btn = msg.addButton(tr('file_descriptions.archives'), QMessageBox.ButtonRole.AcceptRole)
-            folder_btn = msg.addButton(tr('ui.folder'), QMessageBox.ButtonRole.ActionRole)
+            msg.setWindowTitle(tr("ui.select"))
+            msg.setText(tr("ui.select_file_or_folder"))
+            archive_btn = msg.addButton(
+                tr("file_descriptions.archives"), QMessageBox.ButtonRole.AcceptRole
+            )
+            folder_btn = msg.addButton(
+                tr("ui.folder"), QMessageBox.ButtonRole.ActionRole
+            )
             msg.addButton(QMessageBox.StandardButton.Cancel)
             msg.exec()
             clicked = msg.clickedButton()
             if clicked == archive_btn:
-                path, _ = QFileDialog.getOpenFileName(self, title, self._last_browse_dir, file_filter)
+                path, _ = QFileDialog.getOpenFileName(
+                    self, title, self._last_browse_dir, file_filter
+                )
                 if path:
                     self._last_browse_dir = os.path.dirname(path)
                     line_edit.setText(path)
             elif clicked == folder_btn:
-                path = QFileDialog.getExistingDirectory(self, title, self._last_browse_dir)
+                path = QFileDialog.getExistingDirectory(
+                    self, title, self._last_browse_dir
+                )
                 if path:
                     self._last_browse_dir = path
                     line_edit.setText(path)
 
     def _browse_icon(self):
-        path, _ = QFileDialog.getOpenFileName(self, tr('ui.select_icon_file'), self._last_browse_dir, get_file_filter('image_files'))
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("ui.select_icon_file"),
+            self._last_browse_dir,
+            get_file_filter("image_files"),
+        )
         if path:
             self._last_browse_dir = os.path.dirname(path)
             self.icon_edit.setText(path)
@@ -301,43 +381,53 @@ class ModEditorDialog(QDialog):
         text = text.strip()
         if not text:
             self._load_default_icon()
-        elif text.startswith(('http://', 'https://')):
+        elif text.startswith(("http://", "https://")):
             self._load_icon_from_url(text)
         else:
             self._load_icon_preview(text)
 
     def _load_default_icon(self):
         try:
-            logo = resource_path('assets/icons/icon.ico')
+            logo = resource_path("assets/icons/icon.ico")
             if os.path.exists(logo):
                 px = QPixmap(logo)
                 if not px.isNull():
                     pr = self._br(64, 64)
-                    scaled = px.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    self.icon_preview.setPixmap(round_pixmap(scaled, pr) if pr > 0 else scaled)
+                    scaled = px.scaled(
+                        64,
+                        64,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    self.icon_preview.setPixmap(
+                        round_pixmap(scaled, pr) if pr > 0 else scaled
+                    )
                     return
         except Exception as e:
-            logging.warning(f'Load default icon failed: {e}')
-        self.icon_preview.setText(tr('ui.icon_preview'))
+            logging.warning(f"Load default icon failed: {e}")
+        self.icon_preview.setText(tr("ui.icon_preview"))
 
     def _load_icon_from_url(self, url):
-        from PyQt6.QtCore import QRunnable, QThreadPool, QObject, pyqtSignal
+        from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
         from PyQt6.QtGui import QImage
-        self.icon_preview.setText(tr('ui.loading_placeholder'))
+
+        self.icon_preview.setText(tr("ui.loading_placeholder"))
 
         class _Signals(QObject):
             loaded = pyqtSignal(QImage)
+
         signals = _Signals(self)
         signals.loaded.connect(self._apply_url_icon)
 
         class _IconFetch(QRunnable):
-            def __init__(self, url, signals):
+            def __init__(self, url, signals) -> None:
                 super().__init__()
                 self._url, self._signals = url, signals
 
             def run(self):
                 try:
                     from utils.network_utils import get_session
+
                     resp = get_session().get(self._url, timeout=10)
                     resp.raise_for_status()
                     img = QImage()
@@ -347,22 +437,30 @@ class ModEditorDialog(QDialog):
                         self._signals.loaded.emit(QImage())
                 except Exception:
                     self._signals.loaded.emit(QImage())
+
         QThreadPool.globalInstance().start(_IconFetch(url, signals))
 
     def _set_icon_pixmap(self, px):
         """Crop to square center, scale to 64x64, apply border radius."""
         if px.isNull():
-            self.icon_preview.setText(tr('status.loading_error'))
+            self.icon_preview.setText(tr("status.loading_error"))
             return
         size = min(px.width(), px.height())
-        cropped = px.copy((px.width() - size) // 2, (px.height() - size) // 2, size, size)
+        cropped = px.copy(
+            (px.width() - size) // 2, (px.height() - size) // 2, size, size
+        )
         pr = self._br(64, 64)
-        scaled = cropped.scaled(64, 64, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        scaled = cropped.scaled(
+            64,
+            64,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
         self.icon_preview.setPixmap(round_pixmap(scaled, pr) if pr > 0 else scaled)
 
     def _apply_url_icon(self, image):
         if image.isNull():
-            self.icon_preview.setText(tr('status.loading_error'))
+            self.icon_preview.setText(tr("status.loading_error"))
         else:
             self._set_icon_pixmap(QPixmap.fromImage(image))
 
@@ -377,68 +475,110 @@ class ModEditorDialog(QDialog):
                         resolved = candidate
             self._set_icon_pixmap(QPixmap(resolved))
         except Exception:
-            self.icon_preview.setText(tr('status.loading_error'))
+            self.icon_preview.setText(tr("status.loading_error"))
 
     def _build_action_buttons(self, parent):
         row = QHBoxLayout()
         if not self.is_creating:
-            del_btn = QPushButton(tr('ui.delete_mod'))
+            del_btn = QPushButton(tr("ui.delete_mod"))
             dr = self._br(h=max(1, del_btn.sizeHint().height()))
-            tc = self._color('text', '#e8e9eb')
-            del_btn.setStyleSheet(f'background-color: darkred; color: {tc}; border-radius: {dr}px;')
+            tc = self._color("text", "#e8e9eb")
+            del_btn.setStyleSheet(
+                f"background-color: darkred; color: {tc}; border-radius: {dr}px;"
+            )
             del_btn.clicked.connect(self._delete_mod)
             row.addWidget(del_btn)
             row.addSpacing(10)
-            export_btn = QPushButton(tr('ui.export_mod'))
+            export_btn = QPushButton(tr("ui.export_mod"))
             export_btn.clicked.connect(self._export_mod)
             row.addWidget(export_btn)
             row.addSpacing(10)
-            open_folder_btn = QPushButton(tr('ui.open_mod_folder'))
+            open_folder_btn = QPushButton(tr("ui.open_mod_folder"))
             open_folder_btn.clicked.connect(self._open_mod_folder)
             row.addWidget(open_folder_btn)
             row.addSpacing(10)
-            switch_version_btn = QPushButton(tr('mod_versions.switch_version_button'))
+            switch_version_btn = QPushButton(tr("mod_versions.switch_version_button"))
             switch_version_btn.clicked.connect(self._open_mod_versions)
             row.addWidget(switch_version_btn)
         row.addStretch()
-        cancel_btn = QPushButton(tr('ui.cancel_button'))
+        cancel_btn = QPushButton(tr("ui.cancel_button"))
         cancel_btn.clicked.connect(self._on_cancel)
         row.addWidget(cancel_btn)
         row.addSpacing(10)
-        save_btn = QPushButton(tr('ui.finish_creation') if self.is_creating else tr('ui.save_changes'))
+        save_btn = QPushButton(
+            tr("ui.finish_creation") if self.is_creating else tr("ui.save_changes")
+        )
         save_btn.clicked.connect(self._save_mod)
         row.addWidget(save_btn)
         parent.addLayout(row)
 
     def _on_cancel(self):
-        if QMessageBox.question(self, tr('dialogs.cancel_changes'), tr('dialogs.unsaved_changes_lost')) == QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self, tr("dialogs.cancel_changes"), tr("dialogs.unsaved_changes_lost")
+            )
+            == QMessageBox.StandardButton.Yes
+        ):
             self.reject()
 
     def _validate(self):
         if not self.name_edit.text().strip():
-            QMessageBox.warning(self, tr('errors.error'), tr('dialogs.mod_name_empty'))
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_name_empty"))
             return False
         url = self.external_url_edit.text().strip()
         if url:
             from urllib.parse import urlparse
+
             try:
                 r = urlparse(url)
-                if not all([r.scheme in ['http', 'https'], r.netloc]):
+                if not all([r.scheme in ["http", "https"], r.netloc]):
                     raise ValueError
                 p = r.path.lower()
-                if any(p.endswith(ext) for ext in ['.zip', '.rar', '.7z', '.exe', '.xdelta', '.win', '.ios', '.data', '.patch', '.tar', '.gz']):
-                    QMessageBox.warning(self, tr('errors.error'), tr('dialogs.invalid_external_url_direct_download'))
+                if any(
+                    p.endswith(ext)
+                    for ext in [
+                        ".zip",
+                        ".rar",
+                        ".7z",
+                        ".exe",
+                        ".xdelta",
+                        ".win",
+                        ".ios",
+                        ".data",
+                        ".patch",
+                        ".tar",
+                        ".gz",
+                    ]
+                ):
+                    QMessageBox.warning(
+                        self,
+                        tr("errors.error"),
+                        tr("dialogs.invalid_external_url_direct_download"),
+                    )
                     return False
             except Exception:
-                QMessageBox.warning(self, tr('errors.error'), tr('dialogs.invalid_external_url'))
+                QMessageBox.warning(
+                    self, tr("errors.error"), tr("dialogs.invalid_external_url")
+                )
                 return False
         if len(self.version_edit.text().strip()) > 10:
-            QMessageBox.warning(self, tr('errors.error'), tr('dialogs.mod_version_too_long'))
+            QMessageBox.warning(
+                self, tr("errors.error"), tr("dialogs.mod_version_too_long")
+            )
             return False
-        if not any([self.tag_textedit.isChecked(), self.tag_customization.isChecked(), self.tag_gameplay.isChecked(), self.tag_other.isChecked()]):
+        if not any(
+            [
+                self.tag_textedit.isChecked(),
+                self.tag_customization.isChecked(),
+                self.tag_gameplay.isChecked(),
+                self.tag_other.isChecked(),
+            ]
+        ):
             self.tag_other.setChecked(True)
         if self.is_creating and not self._has_any_mod_files():
-            QMessageBox.warning(self, tr('errors.error'), tr('dialogs.mod_needs_at_least_one_file'))
+            QMessageBox.warning(
+                self, tr("errors.error"), tr("dialogs.mod_needs_at_least_one_file")
+            )
             return False
         return self._validate_local_files()
 
@@ -469,47 +609,75 @@ class ModEditorDialog(QDialog):
             for j in range(layout.count()):
                 item = layout.itemAt(j)
                 w = item.widget() if item else None
-                if not w or not hasattr(w, 'layout') or not (fl := w.layout()):
+                if not w or not hasattr(w, "layout") or not (fl := w.layout()):
                     continue
                 data = self._extract_frame_data(fl)
                 if data:
                     yield i, self.file_tabs.tabText(i), data
 
     def _has_any_mod_files(self):
-        return any(d.get('path') or d.get('paths') for _, _, d in self._iter_tab_frames())
+        return any(
+            d.get("path") or d.get("paths") for _, _, d in self._iter_tab_frames()
+        )
 
     def _validate_local_files(self):
         for _, tab_name, data in self._iter_tab_frames():
-            if (p := data.get('path')) and not os.path.exists(self._resolve_file_path(p)):
-                QMessageBox.warning(self, tr('dialogs.validation_error'), tr('dialogs.tab_file_not_found', tab_name=tab_name, path=p))
+            if (p := data.get("path")) and not os.path.exists(
+                self._resolve_file_path(p)
+            ):
+                QMessageBox.warning(
+                    self,
+                    tr("dialogs.validation_error"),
+                    tr("dialogs.tab_file_not_found", tab_name=tab_name, path=p),
+                )
                 return False
-            for p in data.get('paths', []):
+            for p in data.get("paths", []):
                 if not os.path.exists(self._resolve_file_path(p)):
-                    QMessageBox.warning(self, tr('dialogs.validation_error'), tr('dialogs.tab_extra_file_not_found', tab_name=tab_name, path=p))
+                    QMessageBox.warning(
+                        self,
+                        tr("dialogs.validation_error"),
+                        tr(
+                            "dialogs.tab_extra_file_not_found",
+                            tab_name=tab_name,
+                            path=p,
+                        ),
+                    )
                     return False
         return True
 
     def _collect_mod_data(self):
-        tag_map = [('textedit', self.tag_textedit), ('customization', self.tag_customization), ('gameplay', self.tag_gameplay), ('other', self.tag_other)]
+        tag_map = [
+            ("textedit", self.tag_textedit),
+            ("customization", self.tag_customization),
+            ("gameplay", self.tag_gameplay),
+            ("other", self.tag_other),
+        ]
         tags = [name for name, cb in tag_map if cb.isChecked()]
-        author = self.author_edit.text().strip() or tr('defaults.local_author')
+        author = self.author_edit.text().strip() or tr("defaults.local_author")
         return {
-            'name': self.name_edit.text().strip(),
-            'version': self.version_edit.text().strip() or '1.0.0',
-            'author': author,
-            'tagline': self.tagline_edit.text().strip() or tr('defaults.no_short_description'),
-            'external_url': self.external_url_edit.text().strip(),
-            'icon_url': self.icon_edit.text().strip(),
-            'tags': tags,
-            'game': self.game_combo.currentData() or 'deltarune',
-            'game_version': self.game_version_edit.text().strip() or '1.04',
-            'files': self._collect_files(),
+            "name": self.name_edit.text().strip(),
+            "version": self.version_edit.text().strip() or "1.0.0",
+            "author": author,
+            "tagline": self.tagline_edit.text().strip()
+            or tr("defaults.no_short_description"),
+            "external_url": self.external_url_edit.text().strip(),
+            "icon_url": self.icon_edit.text().strip(),
+            "tags": tags,
+            "game": self.game_combo.currentData() or "deltarune",
+            "game_version": self.game_version_edit.text().strip() or "1.04",
+            "files": self._collect_files(),
         }
 
     def _collect_files(self):
         files = {}
         game = self.game_combo.currentData()
-        tab_keys = {'deltarunedemo': ['demo'], 'undertale': ['undertale'], 'undertaleyellow': ['undertale'], 'pizzatower': ['pizzatower'], 'sugaryspire': ['sugaryspire']}.get(game, ['0', '1', '2', '3', '4'])
+        tab_keys = {
+            "deltarunedemo": ["demo"],
+            "undertale": ["undertale"],
+            "undertaleyellow": ["undertale"],
+            "pizzatower": ["pizzatower"],
+            "sugaryspire": ["sugaryspire"],
+        }.get(game, ["0", "1", "2", "3", "4"])
         for idx in range(self.file_tabs.count()):
             if idx >= len(tab_keys):
                 break
@@ -520,22 +688,24 @@ class ModEditorDialog(QDialog):
             for i in range(layout.count()):
                 item = layout.itemAt(i)
                 w = item.widget() if item else None
-                if not w or not hasattr(w, 'layout') or not (fl := w.layout()):
+                if not w or not hasattr(w, "layout") or not (fl := w.layout()):
                     continue
                 data = self._extract_frame_data(fl)
                 if not data:
                     continue
-                if data['type'] == 'data' and data.get('path'):
-                    tab_files['data_file_url'] = data['path']
-                    tab_files['data_file_version'] = data.get('version', '1.0.0')
-                elif data['type'] == 'extra' and data.get('paths'):
-                    extra_files = tab_files.setdefault('extra_files', {})
-                    if data['key'] in extra_files:
-                        existing_paths = set(extra_files[data['key']])
-                        new_paths = [p for p in data['paths'] if p not in existing_paths]
-                        extra_files[data['key']].extend(new_paths)
+                if data["type"] == "data" and data.get("path"):
+                    tab_files["data_file_url"] = data["path"]
+                    tab_files["data_file_version"] = data.get("version", "1.0.0")
+                elif data["type"] == "extra" and data.get("paths"):
+                    extra_files = tab_files.setdefault("extra_files", {})
+                    if data["key"] in extra_files:
+                        existing_paths = set(extra_files[data["key"]])
+                        new_paths = [
+                            p for p in data["paths"] if p not in existing_paths
+                        ]
+                        extra_files[data["key"]].extend(new_paths)
                     else:
-                        extra_files[data['key']] = data['paths']
+                        extra_files[data["key"]] = data["paths"]
             if tab_files:
                 files[tab_keys[idx]] = tab_files
         return files
@@ -546,29 +716,37 @@ class ModEditorDialog(QDialog):
         title_w = fl.itemAt(0).widget() if fl.itemAt(0) else None
         if not isinstance(title_w, QLabel):
             return None
-        ftype = title_w.property('file_type')
-        if ftype == 'data':
+        ftype = title_w.property("file_type")
+        if ftype == "data":
             path_edit = ver_edit = None
             for i in range(fl.count()):
                 w = fl.itemAt(i).widget() if fl.itemAt(i) else None
                 if isinstance(w, QLineEdit):
-                    if w.property('is_local_path'):
+                    if w.property("is_local_path"):
                         path_edit = w
                     elif not w.isReadOnly():
                         ver_edit = w
             if path_edit and path_edit.text():
-                return {'type': 'data', 'path': path_edit.text(), 'version': ver_edit.text() if ver_edit else '1.0.0'}
-        elif ftype == 'extra':
+                return {
+                    "type": "data",
+                    "path": path_edit.text(),
+                    "version": ver_edit.text() if ver_edit else "1.0.0",
+                }
+        elif ftype == "extra":
             paths = []
             extra_key = None
             for i in range(fl.count()):
                 w = fl.itemAt(i).widget() if fl.itemAt(i) else None
-                if isinstance(w, QLineEdit) and w.property('is_local_extra_path') and w.text():
+                if (
+                    isinstance(w, QLineEdit)
+                    and w.property("is_local_extra_path")
+                    and w.text()
+                ):
                     if not extra_key:
-                        extra_key = w.property('extra_key') or 'extra_files'
+                        extra_key = w.property("extra_key") or "extra_files"
                     paths.append(w.text())
             if paths and extra_key:
-                return {'type': 'extra', 'key': extra_key, 'paths': paths}
+                return {"type": "extra", "key": extra_key, "paths": paths}
         return None
 
     def _save_mod(self):
@@ -583,7 +761,7 @@ class ModEditorDialog(QDialog):
         icon_path = self.icon_edit.text().strip()
         if not icon_path:
             return None
-        if icon_path.startswith(('http://', 'https://')):
+        if icon_path.startswith(("http://", "https://")):
             return icon_path
         resolved = self._resolve_file_path(icon_path)
         if os.path.exists(resolved):
@@ -594,11 +772,11 @@ class ModEditorDialog(QDialog):
         return None
 
     def _get_file_folder(self, base_dir, file_key, game):
-        if file_key in ('demo', 'undertale', 'pizzatower', 'sugaryspire'):
+        if file_key in ("demo", "undertale", "pizzatower", "sugaryspire"):
             return os.path.join(base_dir, file_key)
-        if file_key == '0':
+        if file_key == "0":
             return os.path.join(base_dir, get_chapter_folder_name(0, game=game))
-        return os.path.join(base_dir, f'chapter_{file_key}')
+        return os.path.join(base_dir, f"chapter_{file_key}")
 
     def _copy_files_to_mod_dir(self, mod_dir, files_data, game):
         processed = {}
@@ -606,7 +784,7 @@ class ModEditorDialog(QDialog):
             file_folder = self._get_file_folder(mod_dir, file_key, game)
             os.makedirs(file_folder, exist_ok=True)
             new_fd = {}
-            data_path = fd.get('data_file_url')
+            data_path = fd.get("data_file_url")
             if data_path:
                 resolved = self._resolve_file_path(data_path)
                 if os.path.exists(resolved):
@@ -616,12 +794,12 @@ class ModEditorDialog(QDialog):
                             shutil.copytree(resolved, dest)
                         else:
                             shutil.copy2(resolved, dest)
-                    new_fd['data_file_url'] = os.path.basename(resolved)
-                    new_fd['data_file_version'] = fd.get('data_file_version', '1.0.0')
-            for group_key, paths in fd.get('extra_files', {}).items():
+                    new_fd["data_file_url"] = os.path.basename(resolved)
+                    new_fd["data_file_version"] = fd.get("data_file_version", "1.0.0")
+            for group_key, paths in fd.get("extra_files", {}).items():
                 if not (group_key and paths):
                     continue
-                new_fd.setdefault('extra_files', {})[group_key] = []
+                new_fd.setdefault("extra_files", {})[group_key] = []
                 for path in paths:
                     resolved = self._resolve_file_path(path)
                     if os.path.exists(resolved):
@@ -631,7 +809,9 @@ class ModEditorDialog(QDialog):
                                 shutil.copytree(resolved, dest)
                             else:
                                 shutil.copy2(resolved, dest)
-                        new_fd['extra_files'][group_key].append(os.path.basename(resolved))
+                        new_fd["extra_files"][group_key].append(
+                            os.path.basename(resolved)
+                        )
             if new_fd:
                 processed[file_key] = new_fd
         return processed
@@ -640,45 +820,67 @@ class ModEditorDialog(QDialog):
         self.parent_app.mod_service.invalidate_mods_cache()
         self.parent_app.mod_service.load_local_mods()
         self.parent_app.mod_service.mod_list_updated.emit()
-        if hasattr(self.parent_app, 'library_display'):
+        if hasattr(self.parent_app, "library_display"):
             self.parent_app.library_display.update_display()
 
     def _create_local_mod(self):
         data = self._collect_mod_data()
-        key = f'local_{uuid.uuid4().hex[:12]}'
-        folder = get_unique_mod_dir(self.parent_app.app_state.mods_dir, data['name'])
+        key = f"local_{uuid.uuid4().hex[:12]}"
+        folder = get_unique_mod_dir(self.parent_app.app_state.mods_dir, data["name"])
         mod_dir = os.path.join(self.parent_app.app_state.mods_dir, folder)
         try:
             os.makedirs(mod_dir)
             icon_val = self._process_icon(mod_dir)
-            processed_files = self._copy_files_to_mod_dir(mod_dir, data.get('files', {}), data['game'])
+            processed_files = self._copy_files_to_mod_dir(
+                mod_dir, data.get("files", {}), data["game"]
+            )
             config = {
-                'key': key, 'created_date': time.strftime('%d.%m.%y %H:%M'),
-                'name': data['name'], 'version': data['version'], 'author': data['author'],
-                'tagline': data['tagline'], 'external_url': data['external_url'],
-                'game_version': data['game_version'], 'game': data['game'],
-                'files': processed_files, 'tags': data['tags'],
+                "key": key,
+                "created_date": time.strftime("%d.%m.%y %H:%M"),
+                "name": data["name"],
+                "version": data["version"],
+                "author": data["author"],
+                "tagline": data["tagline"],
+                "external_url": data["external_url"],
+                "game_version": data["game_version"],
+                "game": data["game"],
+                "files": processed_files,
+                "tags": data["tags"],
             }
             if icon_val:
-                config['icon'] = icon_val
-            self.parent_app.settings_service.write_json(os.path.join(mod_dir, 'mod_config.json'), config)
+                config["icon"] = icon_val
+            self.parent_app.settings_service.write_json(
+                os.path.join(mod_dir, "mod_config.json"), config
+            )
             self._refresh_after_save()
-            QMessageBox.information(self, tr('dialogs.local_mod_created_title'), tr('dialogs.local_mod_created_message', mod_name=data['name']))
+            QMessageBox.information(
+                self,
+                tr("dialogs.local_mod_created_title"),
+                tr("dialogs.local_mod_created_message", mod_name=data["name"]),
+            )
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, tr('errors.mod_creation_error'), tr('errors.mod_creation_failed', error=str(e)))
+            QMessageBox.critical(
+                self,
+                tr("errors.mod_creation_error"),
+                tr("errors.mod_creation_failed", error=str(e)),
+            )
             if os.path.exists(mod_dir):
                 shutil.rmtree(mod_dir)
 
     def _find_mod_folder(self):
-        if 'folder_path' in self.mod_data and os.path.exists(self.mod_data['folder_path']):
-            return self.mod_data['folder_path']
-        if self.key and hasattr(self.parent_app, 'mod_service'):
+        if "folder_path" in self.mod_data and os.path.exists(
+            self.mod_data["folder_path"]
+        ):
+            return self.mod_data["folder_path"]
+        if self.key and hasattr(self.parent_app, "mod_service"):
             p = self.parent_app.mod_service.get_mod_folder_path(self.key)
             if p and os.path.exists(p):
                 return p
-        if 'folder_name' in self.mod_data:
-            p = os.path.join(self.parent_app.app_state.mods_dir, self.mod_data['folder_name'])
+        if "folder_name" in self.mod_data:
+            p = os.path.join(
+                self.parent_app.app_state.mods_dir, self.mod_data["folder_name"]
+            )
             if os.path.exists(p):
                 return p
         return None
@@ -686,143 +888,214 @@ class ModEditorDialog(QDialog):
     def _update_local_mod(self):
         data = self._collect_mod_data()
         if not self.key:
-            QMessageBox.critical(self, tr('errors.error'), tr('errors.key_not_found_update'))
+            QMessageBox.critical(
+                self, tr("errors.error"), tr("errors.key_not_found_update")
+            )
             return
         mod_folder = self._find_mod_folder()
         if not mod_folder:
-            QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_folder_not_found_update'))
+            QMessageBox.critical(
+                self, tr("errors.error"), tr("errors.mod_folder_not_found_update")
+            )
             return
         try:
-            config_path = os.path.join(mod_folder, 'mod_config.json')
+            config_path = os.path.join(mod_folder, "mod_config.json")
             config = self.parent_app.settings_service.read_json(config_path)
             icon_val = self._process_icon(mod_folder)
-            processed_files = self._copy_files_to_mod_dir(mod_folder, data.get('files', {}), data['game'])
-            config.update({
-                'name': data['name'], 'version': data['version'], 'author': data['author'],
-                'tagline': data['tagline'], 'external_url': data['external_url'],
-                'game_version': data['game_version'], 'game': data['game'],
-                'files': processed_files, 'tags': data['tags'], 'key': self.key,
-            })
+            processed_files = self._copy_files_to_mod_dir(
+                mod_folder, data.get("files", {}), data["game"]
+            )
+            config.update(
+                {
+                    "name": data["name"],
+                    "version": data["version"],
+                    "author": data["author"],
+                    "tagline": data["tagline"],
+                    "external_url": data["external_url"],
+                    "game_version": data["game_version"],
+                    "game": data["game"],
+                    "files": processed_files,
+                    "tags": data["tags"],
+                    "key": self.key,
+                }
+            )
             if icon_val:
-                config['icon'] = icon_val
-            config.pop('mod_key', None)
-            config.pop('modgame', None)
+                config["icon"] = icon_val
+            config.pop("mod_key", None)
+            config.pop("modgame", None)
             self.parent_app.settings_service.write_json(config_path, config)
             self._refresh_after_save()
-            QMessageBox.information(self, tr('dialogs.local_mod_updated_title'), tr('dialogs.local_mod_updated_message', mod_name=data['name']))
+            QMessageBox.information(
+                self,
+                tr("dialogs.local_mod_updated_title"),
+                tr("dialogs.local_mod_updated_message", mod_name=data["name"]),
+            )
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, tr('errors.update_error'), tr('errors.local_mod_update_failed', error=str(e)))
+            QMessageBox.critical(
+                self,
+                tr("errors.update_error"),
+                tr("errors.local_mod_update_failed", error=str(e)),
+            )
 
     def _delete_mod(self):
-        if QMessageBox.question(self, tr('dialogs.are_you_sure'), tr('dialogs.local_mod_deletion_confirmation')) != QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self,
+                tr("dialogs.are_you_sure"),
+                tr("dialogs.local_mod_deletion_confirmation"),
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
             return
         if not self.key:
-            QMessageBox.critical(self, tr('errors.error'), tr('errors.key_not_found_for_deletion'))
+            QMessageBox.critical(
+                self, tr("errors.error"), tr("errors.key_not_found_for_deletion")
+            )
             return
         mod_folder = self._find_mod_folder()
         if not mod_folder:
-            QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_folder_not_found_for_deletion'))
+            QMessageBox.critical(
+                self, tr("errors.error"), tr("errors.mod_folder_not_found_for_deletion")
+            )
             return
         try:
             shutil.rmtree(mod_folder)
             self._refresh_after_save()
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, tr('errors.deletion_error'), tr('errors.local_mod_deletion_failed', error=str(e)))
+            QMessageBox.critical(
+                self,
+                tr("errors.deletion_error"),
+                tr("errors.local_mod_deletion_failed", error=str(e)),
+            )
 
     def _export_mod(self):
         if not self.key:
             return
         mod_folder = self._find_mod_folder()
         if not mod_folder or not os.path.exists(mod_folder):
-            QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_folder or ''))
+            QMessageBox.critical(
+                self,
+                tr("errors.error"),
+                tr("errors.mod_folder_not_found_simple", path=mod_folder or ""),
+            )
             return
-        mod_name = self.name_edit.text().strip() or 'mod'
-        export_path, _ = QFileDialog.getSaveFileName(self, tr('ui.select_export_location'), f'{mod_name}.zip', 'ZIP Archives (*.zip);;All Files (*)')
+        mod_name = self.name_edit.text().strip() or "mod"
+        export_path, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("ui.select_export_location"),
+            f"{mod_name}.zip",
+            "ZIP Archives (*.zip);;All Files (*)",
+        )
         if not export_path:
             return
         try:
             import zipfile
-            with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for root, dirs, files in os.walk(mod_folder):
+
+            with zipfile.ZipFile(export_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, _dirs, files in os.walk(mod_folder):
                     for f in files:
                         fp = os.path.join(root, f)
                         zf.write(fp, os.path.relpath(fp, mod_folder))
-            QMessageBox.information(self, tr('dialogs.success'), tr('status.mod_exported_success'))
+            QMessageBox.information(
+                self, tr("dialogs.success"), tr("status.mod_exported_success")
+            )
         except Exception as e:
-            QMessageBox.critical(self, tr('errors.error'), tr('errors.mod_export_failed', error=str(e)))
+            QMessageBox.critical(
+                self, tr("errors.error"), tr("errors.mod_export_failed", error=str(e))
+            )
 
     def _open_mod_folder(self):
         mod_folder = self._find_mod_folder()
         if mod_folder and os.path.exists(mod_folder):
-            from PyQt6.QtGui import QDesktopServices
             from PyQt6.QtCore import QUrl
+            from PyQt6.QtGui import QDesktopServices
+
             QDesktopServices.openUrl(QUrl.fromLocalFile(mod_folder))
         else:
-            QMessageBox.warning(self, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_folder or ''))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                tr("errors.mod_folder_not_found_simple", path=mod_folder or ""),
+            )
 
     def _open_mod_versions(self):
         mod_folder = self._find_mod_folder()
         if not mod_folder or not os.path.exists(mod_folder):
-            QMessageBox.warning(self, tr('errors.error'), tr('errors.mod_folder_not_found_simple', path=mod_folder or ''))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                tr("errors.mod_folder_not_found_simple", path=mod_folder or ""),
+            )
             return
         from ui.dialogs.mod_versions_dialog import ModVersionsDialog
-        app_state = getattr(self.parent_app, 'app_state', None)
+
+        app_state = getattr(self.parent_app, "app_state", None)
         if not app_state:
-            logging.warning('ModEditorDialog: Cannot open mod versions - app_state not available')
+            logging.warning(
+                "ModEditorDialog: Cannot open mod versions - app_state not available"
+            )
             return
         dialog = ModVersionsDialog(mod_folder, self.mod_data, app_state, self)
         dialog.exec()
 
     def _populate_fields(self):
         d = self.mod_data
-        if 'mod_data' in d:
-            d = d['mod_data']
-        self.name_edit.setText(d.get('name', ''))
-        self.author_edit.setText(d.get('author', ''))
-        self.tagline_edit.setText(d.get('tagline', ''))
-        self.external_url_edit.setText(d.get('external_url', ''))
-        icon_val = d.get('icon_url', '')
+        if "mod_data" in d:
+            d = d["mod_data"]
+        self.name_edit.setText(d.get("name", ""))
+        self.author_edit.setText(d.get("author", ""))
+        self.tagline_edit.setText(d.get("tagline", ""))
+        self.external_url_edit.setText(d.get("external_url", ""))
+        icon_val = d.get("icon_url", "")
         mod_folder = self._find_mod_folder()
-        if not (icon_val and icon_val.startswith(('http://', 'https://'))) and mod_folder:
-            config_icon = d.get('icon')
+        if (
+            not (icon_val and icon_val.startswith(("http://", "https://")))
+            and mod_folder
+        ):
+            config_icon = d.get("icon")
             if config_icon and isinstance(config_icon, str) and config_icon.strip():
                 config_icon = config_icon.strip()
-                if config_icon.startswith(('http://', 'https://')):
+                if config_icon.startswith(("http://", "https://")):
                     icon_val = config_icon
                 else:
                     ip = os.path.normpath(os.path.join(mod_folder, config_icon))
                     if os.path.isfile(ip):
                         icon_val = ip
             if not icon_val:
-                for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico']:
-                    ip = os.path.join(mod_folder, f'_icon{ext}')
+                for ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico"]:
+                    ip = os.path.join(mod_folder, f"_icon{ext}")
                     if os.path.exists(ip):
                         icon_val = ip
                         break
         self.icon_edit.setText(icon_val)
-        version = d.get('version', '')
-        if isinstance(version, str) and '|' in version:
-            version = version.split('|')[0]
+        version = d.get("version", "")
+        if isinstance(version, str) and "|" in version:
+            version = version.split("|")[0]
         self.version_edit.setText(version)
-        game = d.get('game') or d.get('modgame', 'deltarune')
+        game = d.get("game") or d.get("modgame", "deltarune")
         for i in range(self.game_combo.count()):
             if self.game_combo.itemData(i) == game:
                 self.game_combo.setCurrentIndex(i)
                 break
-        tags = d.get('tags', [])
-        self.tag_textedit.setChecked('textedit' in tags or 'translation' in tags)
-        self.tag_customization.setChecked('customization' in tags)
-        self.tag_gameplay.setChecked('gameplay' in tags)
-        self.tag_other.setChecked('other' in tags)
-        self.game_version_edit.setText(d.get('game_version', ''))
-        files_data = d.get('files', {}) or d.get('chapters', {})
+        tags = d.get("tags", [])
+        self.tag_textedit.setChecked("textedit" in tags or "translation" in tags)
+        self.tag_customization.setChecked("customization" in tags)
+        self.tag_gameplay.setChecked("gameplay" in tags)
+        self.tag_other.setChecked("other" in tags)
+        self.game_version_edit.setText(d.get("game_version", ""))
+        files_data = d.get("files", {}) or d.get("chapters", {})
         if files_data:
             self._populate_file_tabs(files_data, game)
 
     def _populate_file_tabs(self, files_data, game):
-        key_map = {'deltarunedemo': {'demo': 0}, 'undertale': {'undertale': 0}, 'pizzatower': {'pizzatower': 0}, 'sugaryspire': {'sugaryspire': 0}}.get(game, {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4})
+        key_map = {
+            "deltarunedemo": {"demo": 0},
+            "undertale": {"undertale": 0},
+            "pizzatower": {"pizzatower": 0},
+            "sugaryspire": {"sugaryspire": 0},
+        }.get(game, {"0": 0, "1": 1, "2": 2, "3": 3, "4": 4})
         for fk, ti in key_map.items():
             if fk in files_data and ti < self.file_tabs.count():
                 fi = files_data[fk]
@@ -830,14 +1103,20 @@ class ModEditorDialog(QDialog):
                 if not tab or not (layout := tab.layout()):
                     continue
                 mod_folder = self._find_mod_folder()
-                if fi.get('data_file_url'):
-                    self._create_file_frame(layout, 'data')
-                    full_path = self._resolve_path(fi['data_file_url'], ti, mod_folder, game)
-                    self._fill_data_in_tab(layout, full_path, fi.get('data_file_version'))
-                for ek, fnames in fi.get('extra_files', {}).items():
+                if fi.get("data_file_url"):
+                    self._create_file_frame(layout, "data")
+                    full_path = self._resolve_path(
+                        fi["data_file_url"], ti, mod_folder, game
+                    )
+                    self._fill_data_in_tab(
+                        layout, full_path, fi.get("data_file_version")
+                    )
+                for ek, fnames in fi.get("extra_files", {}).items():
                     if fnames:
-                        self._create_file_frame(layout, 'extra', ek)
-                        self._fill_extra_in_tab(layout, ek, fnames, ti, mod_folder, game)
+                        self._create_file_frame(layout, "extra", ek)
+                        self._fill_extra_in_tab(
+                            layout, ek, fnames, ti, mod_folder, game
+                        )
 
     def _resolve_path(self, file_path, tab_idx, mod_folder, game=None):
         if not file_path:
@@ -847,17 +1126,20 @@ class ModEditorDialog(QDialog):
         if not mod_folder:
             return file_path
         game = game or self.game_combo.currentData()
-        if game == 'deltarunedemo':
-            cf = 'demo'
-        elif game == 'undertale':
-            cf = 'undertale'
-        elif game == 'pizzatower':
-            cf = 'pizzatower'
-        elif game == 'sugaryspire':
-            cf = 'sugaryspire'
+        if game == "deltarunedemo":
+            cf = "demo"
+        elif game == "undertale":
+            cf = "undertale"
+        elif game == "pizzatower":
+            cf = "pizzatower"
+        elif game == "sugaryspire":
+            cf = "sugaryspire"
         else:
-            cf = f'chapter_{tab_idx}'
-        for candidate in [os.path.join(mod_folder, cf, file_path), os.path.join(mod_folder, file_path)]:
+            cf = f"chapter_{tab_idx}"
+        for candidate in [
+            os.path.join(mod_folder, cf, file_path),
+            os.path.join(mod_folder, file_path),
+        ]:
             if os.path.exists(candidate):
                 return candidate
         return file_path
@@ -865,41 +1147,45 @@ class ModEditorDialog(QDialog):
     def _fill_data_in_tab(self, layout, path, version):
         for i in range(layout.count() - 1, -1, -1):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
-            if not w or not hasattr(w, 'layout') or not (fl := w.layout()):
+            if not w or not hasattr(w, "layout") or not (fl := w.layout()):
                 continue
             title = fl.itemAt(0).widget() if fl.count() > 0 and fl.itemAt(0) else None
-            if not isinstance(title, QLabel) or title.property('file_type') != 'data':
+            if not isinstance(title, QLabel) or title.property("file_type") != "data":
                 continue
             for j in range(fl.count()):
                 sub = fl.itemAt(j).widget() if fl.itemAt(j) else None
                 if isinstance(sub, QLineEdit):
-                    if sub.property('is_local_path'):
+                    if sub.property("is_local_path"):
                         sub.setText(path)
                     elif not sub.isReadOnly():
-                        sub.setText(version or '1.0.0')
+                        sub.setText(version or "1.0.0")
             return
 
-    def _fill_extra_in_tab(self, layout, key_name, filenames, tab_idx, mod_folder, game):
+    def _fill_extra_in_tab(
+        self, layout, key_name, filenames, tab_idx, mod_folder, game
+    ):
         for i in range(layout.count() - 1, -1, -1):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
-            if not w or not hasattr(w, 'layout') or not (fl := w.layout()):
+            if not w or not hasattr(w, "layout") or not (fl := w.layout()):
                 continue
             title = fl.itemAt(0).widget() if fl.count() > 0 and fl.itemAt(0) else None
-            if not isinstance(title, QLabel) or title.property('clean_key') != key_name:
+            if not isinstance(title, QLabel) or title.property("clean_key") != key_name:
                 continue
             for fn in filenames:
                 full_path = self._resolve_path(fn, tab_idx, mod_folder, game)
-                file_lbl = QLabel(f'  {os.path.basename(full_path)}')
-                sc = self._color('secondary_text', '#888888')
-                file_lbl.setStyleSheet(f'color: {sc}; font-size: 10px;')
+                file_lbl = QLabel(f"  {os.path.basename(full_path)}")
+                sc = self._color("secondary_text", "#888888")
+                file_lbl.setStyleSheet(f"color: {sc}; font-size: 10px;")
                 fl.addWidget(file_lbl)
                 hidden_edit = QLineEdit()
                 hidden_edit.setText(full_path)
                 hidden_edit.hide()
-                hidden_edit.setProperty('is_local_extra_path', True)
-                hidden_edit.setProperty('extra_key', key_name)
+                hidden_edit.setProperty("is_local_extra_path", True)
+                hidden_edit.setProperty("extra_key", key_name)
                 fl.addWidget(hidden_edit)
             return
 
     def relocalize_ui(self):
-        self.setWindowTitle(tr('ui.create_mod') if self.is_creating else tr('ui.edit_mod'))
+        self.setWindowTitle(
+            tr("ui.create_mod") if self.is_creating else tr("ui.edit_mod")
+        )

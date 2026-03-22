@@ -319,7 +319,13 @@
     "settings_section_graphics": "Gráficos",
     "open_mod_folder": "Abrir Carpeta del Mod",
     "external_url": "URL externa",
-    "show_reset_buttons": "Mostrar botones de restablecimiento"
+    "show_reset_buttons": "Mostrar botones de restablecimiento",
+    "no_data_files": "Sin archivos de datos",
+    "extra_files_label": "Archivos extra:",
+    "changed_data_files_label": "Archivos DATA modificados:",
+    "size_label": "Tamaño:",
+    "error": "Error",
+    "select": "Seleccionar"
   },
   "files": {
     "archive_link": "Enlace de archivo",
@@ -440,7 +446,9 @@
     "search": "Buscar por nombre, descripción, etc.",
     "merge_properties": "Combina configuraciones (como JSON) conservando los cambios de los mods para no perder ajustes funcionales.",
     "merge_code": "Combina inteligentemente el código del juego, permitiendo que varios mods funcionen juntos sin sobrescribir la lógica.",
-    "dont_hide_window_on_launch": "Mantener la ventana del lanzador visible mientras el juego está abierto."
+    "dont_hide_window_on_launch": "Mantener la ventana del lanzador visible mientras el juego está abierto.",
+    "open_external_site": "Abrir sitio externo",
+    "open_mod_folder": "Abrir carpeta del mod"
   },
   "dropdowns": {
     "all_mods": "Todos los mods",
@@ -661,7 +669,7 @@
     "import_theme_title": "Importar Tema",
     "select_mod": "Seleccionar mod",
     "delete_confirmation": "Confirmar eliminación",
-    "delete_mod_confirmation": "Esto eliminará permanentemente el mod. ¿Continuar?",
+    "delete_mod_confirmation": "Esto eliminará permanentemente el mod y todas sus versiones. ¿Continuar?",
     "create_modpack_title": "Crear Modpack",
     "create_modpack_info": "Esto fusionará los mods seleccionados según su orden de prioridad actual y creará un nuevo mod local que contiene el archivo data.win fusionado. El modpack fusionado puede iniciarse inmediatamente sin esperar a fusionar nuevamente.",
     "modpack_name_label": "Nombre del modpack:",
@@ -936,7 +944,8 @@
     "gamebanana_install_failed": "Error al instalar el mod desde GameBanana: {error}",
     "mod_uninstall_failed": "Error al desinstalar mod: {error}",
     "cannot_delete_builtin_theme": "No se puede eliminar un tema integrado.",
-    "uninstall_failed": "Error al desinstalar mod"
+    "uninstall_failed": "Error al desinstalar mod",
+    "game_running": "El juego ya está ejecutándose. Por favor ciérrelo primero."
   },
   "status": {
     "vanilla": "Vanilla",
@@ -1023,6 +1032,7 @@
     "deltamod_redirect_found": "Redirección encontrada en DELTAMOD.",
     "preparing_mod_patching": "Preparando para fusionar {mods} mod(s) para {chapters} capítulo(s)...",
     "patching_mods": "Fusionando mods... {progress}%",
+    "processing_chapter": "Procesando {display} ({current}/{total})...",
     "patching_chapter": "Fusionando capítulo {chapter} ({current}/{total})...",
     "patching_assets": "Fusionando recursos de {mod} ({current}/{total})...",
     "chapter_patched": "Capítulo {chapter} fusionado exitosamente",
@@ -1059,7 +1069,8 @@
     "deltamod_archive_detected_url": "Archivo DELTAMOD detectado desde URL.",
     "deltamod_archive_detected": "Archivo DELTAMOD detectado.",
     "unpacking_mod": "Descomprimiendo mod: {mod_name}...",
-    "game_closed": "Juego cerrado"
+    "game_closed": "Juego cerrado",
+    "mod_merged_as_version": "El mod \"{mod_name}\" ya existe. Importado como versión \"{version_name}\" en las versiones del mod."
   },
   "startup": {
     "steam_deck_setup_error": "Error al configurar compatibilidad de Steam Deck: {error}",
@@ -1283,7 +1294,11 @@
     "archive_files": "Archivos de versiones de juego",
     "settings_full_replace": "Reemplazo completo de archivos al aplicar",
     "settings_full_replace_tooltip": "Al aplicar una versión de juego, eliminar todos los archivos no presentes en el archivo (el ejecutable original/personalizado del juego nunca se elimina).",
-    "file_count": "{count} archivos"
+    "file_count": "{count} archivos",
+    "apply_profile": "Aplicar perfil:",
+    "profile_label": "Perfil: {name}",
+    "without_profile": "Ninguno",
+    "patching_error": "Error de parcheo"
   },
   "mod_versions": {
     "title": "Versiones del mod",
@@ -1373,6 +1388,7 @@
     "enter_name": "Nombre del perfil:",
     "delete": "Eliminar Perfil",
     "already_exists": "Ya existe un perfil con este nombre.",
-    "total_active": "{count} mods activos en total"
+    "total_active": "{count} mods activos en total",
+    "confirm_delete_text": "¿Está seguro de que desea eliminar este perfil? Esta acción no se puede deshacer."
   }
 }

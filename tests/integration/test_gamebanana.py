@@ -1,5 +1,5 @@
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 
 class TestGameBananaAPI:
@@ -89,9 +89,10 @@ class TestGameBananaAPI:
 class TestGameBananaConverter:
 
     def test_convert_gamebanana_mod(self, temp_mods_dir):
-        from adapters.gamebanana_converter import GameBananaConverter
         import tempfile
         import zipfile
+
+        from adapters.gamebanana_converter import GameBananaConverter
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_archive:
             archive_path = tmp_archive.name
             with zipfile.ZipFile(archive_path, 'w') as zf:

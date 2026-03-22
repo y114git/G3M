@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import tempfile
 import zipfile
 
@@ -74,18 +74,20 @@ class TestModMerge:
 class TestModImportExport:
 
     def test_export_mod(self, app_state, feedback_service, sample_mod_folder):
+        from unittest.mock import Mock
+
         from controllers.mod_import_export_controller import ModImportExportController
         from services.mod_service import ModManager
-        from unittest.mock import Mock
         mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
         controller = ModImportExportController(app_state=app_state, mod_service=mod_service, app_window=mock_app_window)
         assert controller is not None
 
     def test_import_mod_from_url(self, app_state, feedback_service):
+        from unittest.mock import Mock
+
         from controllers.mod_import_export_controller import ModImportExportController
         from services.mod_service import ModManager
-        from unittest.mock import Mock
         mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
         controller = ModImportExportController(app_state=app_state, mod_service=mod_service, app_window=mock_app_window)
@@ -96,6 +98,7 @@ class TestManualInstall:
 
     def test_chapter_display_name(self, tmp_path):
         from unittest.mock import MagicMock, patch
+
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
         with patch.object(ManualModInstallDialog, '__init__', lambda self, *a, **kw: None):
             dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)

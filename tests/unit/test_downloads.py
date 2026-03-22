@@ -4,11 +4,13 @@ import os
 import pytest
 
 from models.download_models import (
-    DownloadRecord, DownloadStatus, UseStatus, SourceKind,
+    DownloadRecord,
+    DownloadStatus,
+    SourceKind,
+    UseStatus,
 )
-from services.downloads_store import DownloadsStore
 from services.downloads_manager import DownloadsManager, _safe_filename
-
+from services.downloads_store import DownloadsStore
 
 # =========================================================================
 # DownloadRecord tests

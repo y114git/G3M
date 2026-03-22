@@ -319,7 +319,13 @@
     "add_mod": "新增模組",
     "open_mod_folder": "開啟模組資料夾",
     "external_url": "外部連結",
-    "show_reset_buttons": "顯示重置按鈕"
+    "show_reset_buttons": "顯示重置按鈕",
+    "no_data_files": "無資料檔案",
+    "extra_files_label": "額外檔案：",
+    "changed_data_files_label": "已更改的DATA檔案：",
+    "size_label": "大小：",
+    "error": "錯誤",
+    "select": "選擇"
   },
   "files": {
     "archive_link": "壓縮檔案連結",
@@ -440,7 +446,9 @@
     "beta_updates": "搶先體驗實驗性更新與功能。",
     "skip_patching_warnings": "啟用後，當發生非關鍵問題時\n（如xdelta校驗和不匹配），補丁將自動繼續\n而不請求確認。警告仍會記錄在日誌中。",
     "fullscreen_tooltip": "切換全螢幕模式。",
-    "hide_library_filters": "隱藏庫中的過濾選項以節省空間。"
+    "hide_library_filters": "隱藏庫中的過濾選項以節省空間。",
+    "open_external_site": "開啟外部網站",
+    "open_mod_folder": "開啟模組資料夾"
   },
   "dropdowns": {
     "all_mods": "所有模組",
@@ -661,7 +669,7 @@
     "import_theme_title": "導入主題",
     "select_mod": "選擇模組",
     "delete_confirmation": "確認刪除",
-    "delete_mod_confirmation": "此模組將被永久刪除。是否繼續？",
+    "delete_mod_confirmation": "這將永久刪除模組及其所有版本。是否繼續？",
     "create_modpack_title": "建立模組包",
     "create_modpack_info": "這將根據當前優先級順序合併所選模組，並建立一個包含合併後的data.win檔案的新本地模組。合併後的模組包可以立即啟動，無需再次等待合併。",
     "modpack_name_label": "模組包名稱：",
@@ -936,7 +944,8 @@
     "gamebanana_install_failed": "從GameBanana安裝模組失敗：{error}",
     "mod_uninstall_failed": "卸載模組失敗：{error}",
     "cannot_delete_builtin_theme": "無法刪除內建主題。",
-    "uninstall_failed": "卸載模組失敗"
+    "uninstall_failed": "卸載模組失敗",
+    "game_running": "遊戲已在運行。請先關閉遊戲。"
   },
   "status": {
     "vanilla": "原版",
@@ -1025,6 +1034,7 @@
     "deltamod_redirect_found": "在DELTAMOD中發現重定向。",
     "preparing_mod_patching": "準備合併 {mods} 個模組用於 {chapters} 章...",
     "patching_mods": "合併模組... {progress}%",
+    "processing_chapter": "處理 {display} ({current}/{total})...",
     "patching_chapter": "合併第 {chapter} 章 ({current}/{total})...",
     "patching_assets": "合併來自 {mod} 的資源 ({current}/{total})...",
     "chapter_patched": "第 {chapter} 章合併成功",
@@ -1059,7 +1069,8 @@
     "update_cancelled": "更新已被用戶取消。",
     "local": "本地",
     "unpacking_mod": "正在解壓模組：{mod_name}...",
-    "moving_mods_folder": "正在移動模組資料夾..."
+    "moving_mods_folder": "正在移動模組資料夾...",
+    "mod_merged_as_version": "模組 \"{mod_name}\" 已存在。已作為版本 \"{version_name}\" 匯入到模組版本中。"
   },
   "startup": {
     "steam_deck_setup_error": "設置Steam Deck相容性時出錯：{error}",
@@ -1283,7 +1294,11 @@
     "archive_files": "遊戲版本存檔",
     "settings_full_replace": "套用時完全替換檔案",
     "settings_full_replace_tooltip": "套用遊戲版本時，刪除存檔中不存在的所有檔案（遊戲原始/自訂可執行檔永遠不會被刪除）。",
-    "file_count": "{count} 個檔案"
+    "file_count": "{count} 個檔案",
+    "apply_profile": "套用設定檔：",
+    "profile_label": "設定檔：{name}",
+    "without_profile": "無",
+    "patching_error": "補丁錯誤"
   },
   "mod_versions": {
     "title": "模組版本",
@@ -1373,6 +1388,7 @@
     "enter_name": "設定檔名稱：",
     "delete": "刪除設定檔",
     "already_exists": "此名稱的設定檔已存在。",
-    "total_active": "共 {count} 個活躍模組"
+    "total_active": "共 {count} 個活躍模組",
+    "confirm_delete_text": "您確定要刪除此設定檔嗎？此操作無法復原。"
   }
 }

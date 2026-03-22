@@ -319,7 +319,13 @@
     "settings_tab_mods_browser": "Mods Browser",
     "open_mod_folder": "Open Mod Folder",
     "external_url": "External URL",
-    "show_reset_buttons": "Show Reset Buttons"
+    "show_reset_buttons": "Show Reset Buttons",
+    "error": "Error",
+    "select": "Select",
+    "no_data_files": "No data files",
+    "size_label": "Size:",
+    "changed_data_files_label": "Changed DATA files:",
+    "extra_files_label": "Extra files:"
   },
   "files": {
     "archive_link": "Archive link",
@@ -440,7 +446,9 @@
     "search": "Search by name, description etc.",
     "merge_properties": "Combines settings (like JSON files) so that changes from different mods are preserved, preventing lost configurations.",
     "merge_code": "Logically merges game logic code, enabling multiple mods to change the same behaviors without overwriting each other.",
-    "dont_hide_window_on_launch": "Keep the launcher window visible when the game is running."
+    "dont_hide_window_on_launch": "Keep the launcher window visible when the game is running.",
+    "open_external_site": "Open external site",
+    "open_mod_folder": "Open mod folder"
   },
   "dropdowns": {
     "all_mods": "All mods",
@@ -661,7 +669,7 @@
     "import_theme_title": "Import Theme",
     "select_mod": "Select mod",
     "delete_confirmation": "Delete confirmation",
-    "delete_mod_confirmation": "This will permanently delete the mod. Continue?",
+    "delete_mod_confirmation": "This will permanently delete the mod and all its versions. Continue?",
     "create_modpack_title": "Create Modpack",
     "create_modpack_info": "This will combine the selected mods according to their current priority order and create a new local mod containing the patched data.win file. The modpack can be launched immediately without waiting for patching again.",
     "modpack_name_label": "Modpack name:",
@@ -936,7 +944,8 @@
     "gamebanana_install_failed": "Failed to install mod from GameBanana: {error}",
     "mod_uninstall_failed": "Failed to uninstall mod: {error}",
     "cannot_delete_builtin_theme": "Cannot delete a built-in theme.",
-    "uninstall_failed": "Failed to uninstall mod"
+    "uninstall_failed": "Failed to uninstall mod",
+    "game_running": "The game is already running. Please close it first."
   },
   "status": {
     "vanilla": "Vanilla",
@@ -1025,6 +1034,7 @@
     "deltamod_redirect_found": "Redirect found in DELTAMOD.",
     "preparing_mod_patching": "Preparing to patch {mods} mod(s) for {chapters} chapter(s)...",
     "patching_mods": "Patching mods... {progress}%",
+    "processing_chapter": "Processing {display} ({current}/{total})...",
     "patching_chapter": "Patching chapter {chapter} ({current}/{total})...",
     "patching_assets": "Applying assets from {mod} ({current}/{total})...",
     "chapter_patched": "Chapter {chapter} patched successfully",
@@ -1034,6 +1044,7 @@
     "exporting_assets": "Exporting assets from {mod} ({current}/{total})...",
     "importing_assets": "Importing assets from {mod} ({current}/{total})...",
     "mod_imported_success": "Mod successfully imported!",
+    "mod_merged_as_version": "Mod \"{mod_name}\" already exists. Imported as version \"{version_name}\" into mod versions.",
     "extracting_mod": "Extracting mod...",
     "mod_exported_success": "Mod successfully exported!",
     "downloading_update": "Downloading update...",
@@ -1283,7 +1294,11 @@
     "archive_files": "Game version archives",
     "settings_full_replace": "Full file replacement on apply",
     "settings_full_replace_tooltip": "When applying a game version, delete all files not present in the archive (Game Original/Custom Executable is never deleted).",
-    "file_count": "{count} files"
+    "file_count": "{count} files",
+    "apply_profile": "Apply profile:",
+    "without_profile": "None",
+    "patching_error": "Patching error",
+    "profile_label": "Profile: {name}"
   },
   "mod_versions": {
     "title": "Mod Versions",
@@ -1373,6 +1388,7 @@
     "enter_name": "Profile name:",
     "delete": "Delete Profile",
     "already_exists": "A profile with this name already exists.",
-    "total_active": "{count} active mods total"
+    "total_active": "{count} active mods total",
+    "confirm_delete_text": "Are you sure you want to delete this profile? This action cannot be undone."
   }
 }

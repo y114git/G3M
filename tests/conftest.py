@@ -1,12 +1,16 @@
+import contextlib
+import logging
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
 import pytest
 from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QApplication
+
 from models.app_state import AppState
 from ui.common.feedback import FeedbackManager
 
@@ -18,7 +22,9 @@ def qapp():
         app = QApplication(sys.argv)
     yield app
     import time
-    from PyQt6.QtCore import QThreadPool, QThread
+
+    from PyQt6.QtCore import QThread, QThreadPool
+
     from ui.utils.ui_utils import safe_stop_thread
     app.processEvents()
     time.sleep(0.2)
@@ -34,8 +40,8 @@ def qapp():
                 thread = getattr(widget, attr_name, None)
                 if thread and isinstance(thread, QThread):
                     safe_stop_thread(thread, timeout=500, blocking=False)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug(f'teardown_qt_threads: failed to stop thread attribute {attr_name}: {e}', exc_info=True)
     app.processEvents()
     time.sleep(0.1)
 
@@ -44,7 +50,8 @@ def qapp():
 def cleanup_threads(qapp):
     yield
     import time
-    from PyQt6.QtCore import QThreadPool, QThread
+
+    from PyQt6.QtCore import QThread, QThreadPool
     for _ in range(3):
         qapp.processEvents()
         time.sleep(0.05)
@@ -59,12 +66,10 @@ def cleanup_threads(qapp):
                         if not thread.wait(500):
                             thread.terminate()
                             thread.wait(200)
-                    try:
+                    with contextlib.suppress(Exception):
                         thread.deleteLater()
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug(f'cleanup_threads: failed during thread cleanup sweep: {e}', exc_info=True)
     for _ in range(3):
         qapp.processEvents()
         time.sleep(0.05)

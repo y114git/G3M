@@ -1,8 +1,14 @@
 import os
 import platform
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from services.game_detection_service import is_game_running, get_game_type_string, get_game_name_string
+
+from services.game_detection_service import (
+    get_game_name_string,
+    get_game_type_string,
+    is_game_running,
+)
 from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 
 
@@ -15,7 +21,7 @@ class TestGameLaunchSimulation:
         system = platform.system()
         if system == 'Darwin':
             app_bundles = {'DELTARUNE.app': 'deltarune', 'UNDERTALE.app': 'undertale', 'PizzaTower.app': 'pizzatower', 'SugarySpire_ExhibitionNight.app': 'sugaryspire'}
-            for app_name, game_type in app_bundles.items():
+            for app_name, _game_type in app_bundles.items():
                 app_path = os.path.join(game_dir, app_name)
                 os.makedirs(app_path, exist_ok=True)
                 contents_path = os.path.join(app_path, 'Contents')
@@ -23,12 +29,12 @@ class TestGameLaunchSimulation:
                 os.makedirs(resources_path, exist_ok=True)
         else:
             executables = {'DELTARUNE.exe': 'deltarune', 'UNDERTALE.exe': 'undertale', 'Undertale Yellow.exe': 'undertale_yellow', 'PizzaTower.exe': 'pizzatower', 'SugarySpire_ExhibitionNight.exe': 'sugaryspire'}
-            for exe_name, game_type in executables.items():
+            for exe_name, _game_type in executables.items():
                 exe_path = os.path.join(game_dir, exe_name)
                 with open(exe_path, 'w') as f:
                     f.write('mock executable')
                 if system != 'Windows':
-                    os.chmod(exe_path, 493)
+                    os.chmod(exe_path, 0o700)
         return game_dir
 
     def test_resolve_game_executable_deltarune(self, mock_game_executable):
@@ -77,7 +83,12 @@ class TestGameLaunchSimulation:
         mock_process_iter.return_value = [mock_process]
 
     def test_get_game_type_string(self):
-        from models.game_modes import UndertaleGame, UndertaleYellowGame, PizzaTowerGame, SugarySpireGame
+        from models.game_modes import (
+            PizzaTowerGame,
+            SugarySpireGame,
+            UndertaleGame,
+            UndertaleYellowGame,
+        )
         game_mode = UndertaleGame()
         game_type = get_game_type_string(game_mode)
         assert game_type in ['undertale', 'deltarune', 'undertaleyellow']
@@ -92,7 +103,12 @@ class TestGameLaunchSimulation:
         assert game_type == 'sugaryspire'
 
     def test_get_game_name_string(self):
-        from models.game_modes import UndertaleGame, UndertaleYellowGame, PizzaTowerGame, SugarySpireGame
+        from models.game_modes import (
+            PizzaTowerGame,
+            SugarySpireGame,
+            UndertaleGame,
+            UndertaleYellowGame,
+        )
         game_mode = UndertaleGame()
         game_name = get_game_name_string(game_mode)
         assert isinstance(game_name, str)
@@ -239,7 +255,7 @@ class TestGameExecutableSimulation:
             exe_path = os.path.join(macos_path, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
             data_path = os.path.join(resources_path, 'game.ios')
             with open(data_path, 'w') as f:
                 f.write('mock')
@@ -251,7 +267,7 @@ class TestGameExecutableSimulation:
             exe_path = os.path.join(game_dir, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
         assert is_valid is True
 
@@ -271,7 +287,7 @@ class TestGameExecutableSimulation:
             exe_path = os.path.join(macos_path, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
             data_path = os.path.join(resources_path, 'game.ios')
             with open(data_path, 'w') as f:
                 f.write('mock')
@@ -283,7 +299,7 @@ class TestGameExecutableSimulation:
             main_exe = os.path.join(game_dir, 'PizzaTower')
             with open(main_exe, 'w') as f:
                 f.write('mock')
-            os.chmod(main_exe, 493)
+            os.chmod(main_exe, 0o700)
         is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
         assert is_valid is True
 
@@ -303,7 +319,7 @@ class TestGameExecutableSimulation:
             exe_path = os.path.join(macos_path, 'SugarySpire_ExhibitionNight')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
             data_path = os.path.join(resources_path, 'game.ios')
             with open(data_path, 'w') as f:
                 f.write('mock')
@@ -315,6 +331,6 @@ class TestGameExecutableSimulation:
             exe_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='sugaryspire')
         assert is_valid is True

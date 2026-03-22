@@ -1,21 +1,25 @@
 """Custom splash screen with GIF animation support."""
-from PyQt6.QtWidgets import QSplashScreen, QLabel, QApplication
+
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QMovie
+from PyQt6.QtGui import QMovie, QPixmap
+from PyQt6.QtWidgets import QApplication, QLabel, QSplashScreen
+
 from utils.path_utils import resource_path
 
 
 class CustomSplashScreen(QSplashScreen):
     """Splash screen with support for animated GIF backgrounds."""
 
-    def __init__(self, pixmap=None, gif_path=None):
+    def __init__(self, pixmap=None, gif_path=None) -> None:
         if pixmap:
             super().__init__(pixmap)
         else:
             empty_pixmap = QPixmap(550, 309)
             empty_pixmap.fill(Qt.GlobalColor.transparent)
             super().__init__(empty_pixmap)
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         if gif_path:
             self.setup_gif_animation(gif_path)
@@ -44,13 +48,16 @@ class CustomSplashScreen(QSplashScreen):
             self.gif_label.setFixedSize(target_width, target_height)
             self.gif_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.gif_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            self.gif_label.setStyleSheet('background: transparent;')
+            self.gif_label.setStyleSheet("background: transparent;")
             self.gif_label.hide()
             self.gif_label.setMovie(self.movie)
             self.setFixedSize(target_width, target_height)
-            self.setStyleSheet('background: transparent;')
+            self.setStyleSheet("background: transparent;")
             if screen:
-                self.move((screen_geom.width() - target_width) // 2, (screen_geom.height() - target_height) // 2)
+                self.move(
+                    (screen_geom.width() - target_width) // 2,
+                    (screen_geom.height() - target_height) // 2,
+                )
             else:
                 self.move(100, 100)
             self.movie.finished.connect(self.on_gif_finished)
@@ -62,8 +69,8 @@ class CustomSplashScreen(QSplashScreen):
             return False
 
     def start_gif_animation(self, sound_start_callback=None):
-        if hasattr(self, 'movie') and self.movie.isValid():
-            if hasattr(self, 'gif_label'):
+        if hasattr(self, "movie") and self.movie.isValid():
+            if hasattr(self, "gif_label"):
                 self.gif_label.show()
             self._sound_start_callback = sound_start_callback
             self._first_frame_rendered = False
@@ -76,11 +83,11 @@ class CustomSplashScreen(QSplashScreen):
                 self._sound_start_callback()
 
     def stop_gif_animation(self):
-        if hasattr(self, 'movie'):
+        if hasattr(self, "movie"):
             self.movie.stop()
 
     def on_gif_finished(self):
-        if hasattr(self, 'movie'):
+        if hasattr(self, "movie"):
             self.movie.stop()
 
     def mousePressEvent(self, event):
@@ -90,23 +97,31 @@ class CustomSplashScreen(QSplashScreen):
         pass
 
 
-def create_png_splash(config_dir: str = None):
+def create_png_splash(config_dir: str | None = None):
     pixmap = QPixmap()
     splash_path = None
     if config_dir:
         import os
-        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-            logo_path = os.path.join(config_dir, f'custom_logo{ext}')
+
+        for ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
+            logo_path = os.path.join(config_dir, f"custom_logo{ext}")
             if os.path.exists(logo_path):
                 splash_path = logo_path
                 break
     if not splash_path:
-        splash_path = resource_path('assets/images/logo.png')
+        splash_path = resource_path("assets/images/logo.png")
     if not pixmap.load(splash_path):
         pixmap = QPixmap(600, 600)
         pixmap.fill(Qt.GlobalColor.transparent)
-    scaled_pixmap = pixmap.scaled(600, 600, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    scaled_pixmap = pixmap.scaled(
+        600,
+        600,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
     splash = CustomSplashScreen(scaled_pixmap)
     splash.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-    splash.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+    splash.setWindowFlags(
+        Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+    )
     return splash

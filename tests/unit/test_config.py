@@ -4,7 +4,13 @@ from unittest.mock import patch
 class TestConstants:
 
     def test_constants_import(self):
-        from config.constants import LAUNCHER_VERSION, APP_ID, UI_COLORS, SOCIAL_LINKS, GAMEBANANA_API_BASE
+        from config.constants import (
+            APP_ID,
+            GAMEBANANA_API_BASE,
+            LAUNCHER_VERSION,
+            SOCIAL_LINKS,
+            UI_COLORS,
+        )
         assert LAUNCHER_VERSION is not None
         assert APP_ID is not None
         assert isinstance(UI_COLORS, dict)
@@ -19,7 +25,11 @@ class TestConstants:
         assert 'status_info' in UI_COLORS
 
     def test_gamebanana_constants(self):
-        from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_TOOL_ID_DELTAHUB, GAMEBANANA_TOOL_ID_DELTAMOD
+        from config.constants import (
+            GAMEBANANA_GAME_IDS,
+            GAMEBANANA_TOOL_ID_DELTAHUB,
+            GAMEBANANA_TOOL_ID_DELTAMOD,
+        )
         assert isinstance(GAMEBANANA_GAME_IDS, dict)
         assert 'deltarune' in GAMEBANANA_GAME_IDS
         assert 'undertale' in GAMEBANANA_GAME_IDS
@@ -33,7 +43,7 @@ class TestConstants:
 class TestConfigLoader:
 
     def test_config_loader_import(self):
-        from config.config_loader import get_config_value, ConfigLoader
+        from config.config_loader import ConfigLoader, get_config_value
         assert callable(get_config_value)
         assert ConfigLoader is not None
 

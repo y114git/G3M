@@ -1,5 +1,5 @@
-import os
 import json
+import os
 from unittest.mock import Mock, patch
 
 
@@ -74,15 +74,15 @@ class TestModManager:
 class TestSettingsManager:
 
     def test_settings_service_initialization(self, app_state, feedback_service, qapp):
-        from services.settings_service import SettingsManager
         from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
         assert settings_service is not None
         assert settings_service.app_state == app_state
 
     def test_settings_service_load_settings(self, app_state, feedback_service, temp_config_dir, qapp):
-        from services.settings_service import SettingsManager
         from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
         settings_path = os.path.join(temp_config_dir, 'settings.json')
         settings_data = {'test_setting': 'test_value', 'another_setting': 123}
         with open(settings_path, 'w', encoding='utf-8') as f:
@@ -94,8 +94,8 @@ class TestSettingsManager:
         assert app_state.local_config.get('test_setting') == 'test_value'
 
     def test_settings_service_can_restore_normal_geometry_without_applying_maximized_state(self, app_state, feedback_service, qapp):
-        from services.settings_service import SettingsManager
         from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
         manager = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
         app_state.local_config['window_geometry_state'] = {
             'x': 120,
@@ -125,9 +125,9 @@ class TestSettingsManager:
 class TestPluginManager:
 
     def test_plugin_service_initialization(self, app_state, feedback_service, qapp):
+        from services.localization_service import localization_service
         from services.plugin_service import PluginManager
         from services.settings_service import SettingsManager
-        from services.localization_service import localization_service
         settings_service = SettingsManager(app_state=app_state, feedback_service=feedback_service, localization_service=localization_service, parent=qapp)
         plugin_service = PluginManager(app_state=app_state, settings_service=settings_service)
         assert plugin_service is not None
@@ -239,8 +239,9 @@ class TestCustomizationManager:
 class TestBackupManager:
 
     def test_backup_restoration_order(self, temp_dir):
-        from services.backup_service import BackupManager
         import logging
+
+        from services.backup_service import BackupManager
         backup_dir = os.path.join(temp_dir, 'backups')
         backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 1
@@ -265,13 +266,14 @@ class TestBackupManager:
         backup_service.restore_backups(chapter_id)
         # Verify files are restored
         for f in [file1, file2, file3]:
-            with open(f, 'r') as fh:
+            with open(f) as fh:
                 content = fh.read()
                 assert content == 'original', f'File {f} was not restored correctly'
 
     def test_backup_restoration_validation(self, temp_dir):
-        from services.backup_service import BackupManager
         import logging
+
+        from services.backup_service import BackupManager
         backup_dir = os.path.join(temp_dir, 'backups')
         backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 1
@@ -291,7 +293,7 @@ class TestBackupManager:
         backup_service.restore_backups(chapter_id)
         # Verify file integrity (size and content)
         assert os.path.exists(test_file)
-        with open(test_file, 'r') as f:
+        with open(test_file) as f:
             restored_content = f.read()
             assert restored_content == original_content
         backup_size = os.path.getsize(os.path.join(backup_dir, 'chapter_1_test.txt'))
@@ -299,8 +301,9 @@ class TestBackupManager:
         assert backup_size == restored_size
 
     def test_sound_file_backup_restoration(self, temp_dir):
-        from services.backup_service import BackupManager
         import logging
+
+        from services.backup_service import BackupManager
         backup_dir = os.path.join(temp_dir, 'backups')
         backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 1
@@ -350,8 +353,8 @@ class TestExpandedFormats:
         assert manager.get_custom_logo_path() == path
 
     def test_settings_manager_audio_paths(self, app_state, feedback_service, qapp):
-        from services.settings_service import SettingsManager
         from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
         manager = SettingsManager(app_state, feedback_service, localization_service, parent=qapp)
 
         paths = manager._get_audio_paths('background_music')

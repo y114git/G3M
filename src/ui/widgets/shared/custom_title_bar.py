@@ -1,9 +1,19 @@
-from PyQt6.QtCore import QEvent, QPoint, Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QSizePolicy, QToolButton, QWidget
 import logging
+
+from PyQt6.QtCore import QEvent, QPoint, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QMenu,
+    QPushButton,
+    QSizePolicy,
+    QToolButton,
+    QWidget,
+)
+
 from ui.common.styling import get_theme_color
 from utils.path_utils import colored_icon
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,14 +24,14 @@ class CustomTitleBar(QWidget):
     maximize_restore_requested = pyqtSignal()
     close_requested = pyqtSignal()
 
-    def __init__(self, parent=None, app_state=None):
+    def __init__(self, parent=None, app_state=None) -> None:
         super().__init__(parent)
-        self.setObjectName('customTitleBar')
+        self.setObjectName("customTitleBar")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.app_state = app_state
 
-        self._maximize_tooltip = ''
-        self._restore_tooltip = ''
+        self._maximize_tooltip = ""
+        self._restore_tooltip = ""
         self._menu_popup_gap = 6
 
         layout = QHBoxLayout(self)
@@ -29,7 +39,7 @@ class CustomTitleBar(QWidget):
         layout.setSpacing(6)
 
         self.left_widget = QWidget(self)
-        self.left_widget.setObjectName('titleBarLeftWidget')
+        self.left_widget.setObjectName("titleBarLeftWidget")
         left_layout = QHBoxLayout(self.left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
@@ -45,22 +55,22 @@ class CustomTitleBar(QWidget):
         left_layout.addStretch(1)
 
         self.right_widget = QWidget(self)
-        self.right_widget.setObjectName('titleBarRightWidget')
+        self.right_widget.setObjectName("titleBarRightWidget")
         right_layout = QHBoxLayout(self.right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
         self._right_layout = right_layout
 
         self.minimize_button = QPushButton(self.right_widget)
-        self.minimize_button.setObjectName('titleBarMinimizeButton')
+        self.minimize_button.setObjectName("titleBarMinimizeButton")
         self.minimize_button.clicked.connect(self.minimize_requested.emit)
 
         self.maximize_button = QPushButton(self.right_widget)
-        self.maximize_button.setObjectName('titleBarMaximizeButton')
+        self.maximize_button.setObjectName("titleBarMaximizeButton")
         self.maximize_button.clicked.connect(self.maximize_restore_requested.emit)
 
         self.close_button = QPushButton(self.right_widget)
-        self.close_button.setObjectName('titleBarCloseButton')
+        self.close_button.setObjectName("titleBarCloseButton")
         self.close_button.clicked.connect(self.close_requested.emit)
 
         self._update_window_icons()
@@ -79,14 +89,16 @@ class CustomTitleBar(QWidget):
 
         self.apply_metrics()
 
-    def add_menu_button(self, text: str = ''):
+    def add_menu_button(self, text: str = ""):
         button = QToolButton(self.left_widget)
-        button.setObjectName('titleBarMenuButton')
+        button.setObjectName("titleBarMenuButton")
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         button.setText(text)
         menu = QMenu(button)
-        menu.setObjectName('titleBarPopupMenu')
-        button.clicked.connect(lambda _checked=False, b=button, m=menu: self._show_menu_popup(b, m))
+        menu.setObjectName("titleBarPopupMenu")
+        button.clicked.connect(
+            lambda _checked=False, b=button, m=menu: self._show_menu_popup(b, m)
+        )
         menu.aboutToHide.connect(lambda b=button: self._reset_menu_button_state(b))
         self._left_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
         button.installEventFilter(self)
@@ -100,10 +112,12 @@ class CustomTitleBar(QWidget):
             return
         button.setDown(True)
         button.update()
-        menu.popup(button.mapToGlobal(QPoint(0, button.height() + self._menu_popup_gap)))
+        menu.popup(
+            button.mapToGlobal(QPoint(0, button.height() + self._menu_popup_gap))
+        )
 
     @staticmethod
-    def _reset_menu_button_state(button: QToolButton):
+    def _reset_menu_button_state(button: QToolButton) -> None:
         if not button:
             return
         button.setDown(False)
@@ -132,12 +146,19 @@ class CustomTitleBar(QWidget):
         self.sync_window_state(self.window().isMaximized())
 
     def _tc(self):
-        return get_theme_color(self.app_state.local_config, 'text', '#ffffff') if self.app_state else '#ffffff'
+        return (
+            get_theme_color(self.app_state.local_config, "text", "#ffffff")
+            if self.app_state
+            else "#ffffff"
+        )
 
     def _update_window_icons(self):
         """Update window control buttons with colored icons."""
         tc = self._tc()
-        for btn, name in ((self.minimize_button, 'minimize'), (self.close_button, 'cross')):
+        for btn, name in (
+            (self.minimize_button, "minimize"),
+            (self.close_button, "cross"),
+        ):
             btn.setIcon(colored_icon(name, tc))
             btn.setIconSize(QSize(12, 12))
         self.sync_window_state(self.window().isMaximized() if self.window() else False)
@@ -145,15 +166,20 @@ class CustomTitleBar(QWidget):
     def sync_window_state(self, is_maximized: bool):
         """Sync window state and update maximize/restore icon."""
         tc = self._tc()
-        self.maximize_button.setIcon(colored_icon('restore' if is_maximized else 'maximize', tc))
+        self.maximize_button.setIcon(
+            colored_icon("restore" if is_maximized else "maximize", tc)
+        )
         self.maximize_button.setIconSize(QSize(12, 12))
-        self.maximize_button.setToolTip(self._restore_tooltip if is_maximized else self._maximize_tooltip)
+        self.maximize_button.setToolTip(
+            self._restore_tooltip if is_maximized else self._maximize_tooltip
+        )
 
     def apply_metrics(self, scale: float = 1.0):
         scale_value = max(1, round(scale * 100)) / 100.0
 
         def scaled(value: int) -> int:
             return max(1, round(value * scale_value))
+
         self.layout().setContentsMargins(scaled(8), scaled(4), scaled(8), scaled(4))
         self.layout().setSpacing(scaled(6))
         self._right_layout.setSpacing(scaled(4))
@@ -180,30 +206,50 @@ class CustomTitleBar(QWidget):
         try:
             return bool(handle.startSystemMove())
         except Exception as e:
-            logger.debug('startSystemMove failed: %s', e)
+            logger.debug("startSystemMove failed: %s", e)
             return False
 
     def eventFilter(self, watched, event):
         if watched in (self.left_widget, self.right_widget):
-            pos = watched.mapTo(self, event.position().toPoint()) if hasattr(event, 'position') else None
-            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton and pos is not None and self._can_start_window_action(pos):
-                if self._start_system_move():
-                    event.accept()
-                    return True
-            if event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton and pos is not None and self._can_start_window_action(pos):
+            pos = (
+                watched.mapTo(self, event.position().toPoint())
+                if hasattr(event, "position")
+                else None
+            )
+            if (
+                event.type() == QEvent.Type.MouseButtonPress
+                and event.button() == Qt.MouseButton.LeftButton
+                and pos is not None
+                and self._can_start_window_action(pos)
+                and self._start_system_move()
+            ):
+                event.accept()
+                return True
+            if (
+                event.type() == QEvent.Type.MouseButtonDblClick
+                and event.button() == Qt.MouseButton.LeftButton
+                and pos is not None
+                and self._can_start_window_action(pos)
+            ):
                 self.maximize_restore_requested.emit()
                 event.accept()
                 return True
         return super().eventFilter(watched, event)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._can_start_window_action(event.position().toPoint()):
-            if self._start_system_move():
-                event.accept()
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._can_start_window_action(event.position().toPoint())
+            and self._start_system_move()
+        ):
+            event.accept()
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._can_start_window_action(event.position().toPoint()):
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._can_start_window_action(event.position().toPoint())
+        ):
             self.maximize_restore_requested.emit()
             event.accept()
             return

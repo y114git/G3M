@@ -3,16 +3,24 @@ import os
 import sys
 import time
 from unittest.mock import patch
+
 import pytest
 
-from utils.path_utils import (
-    get_launcher_dir, get_user_data_root, get_user_mods_dir,
-    get_user_lang_dir, get_user_plugins_dir, get_user_themes_dir,
-    resource_path, resolve_game_executable, find_chapter_resource_dir,
-    _match_steam_path, autodetect_path
-)
-from utils.file_utils import _safe_join
 from utils.archive_utils import _is_safe_path
+from utils.file_utils import _safe_join
+from utils.path_utils import (
+    _match_steam_path,
+    autodetect_path,
+    find_chapter_resource_dir,
+    get_launcher_dir,
+    get_user_data_root,
+    get_user_lang_dir,
+    get_user_mods_dir,
+    get_user_plugins_dir,
+    get_user_themes_dir,
+    resolve_game_executable,
+    resource_path,
+)
 
 
 class TestPathUtilsEdgeCases:
@@ -229,10 +237,11 @@ class TestPathUtilsEdgeCases:
 
     def test_resource_path_pyinstaller_edge_cases(self):
         """Test resource_path with PyInstaller edge cases."""
+        bundle_root = '/bundle-root/meipass'
         with patch.object(sys, 'frozen', False, create=True), \
-                patch.object(sys, '_MEIPASS', '/tmp/meipass', create=True):
+                patch.object(sys, '_MEIPASS', bundle_root, create=True):
             result = resource_path('test.txt')
-            assert '/tmp/meipass' not in result
+            assert bundle_root not in result
 
         with patch.object(sys, 'frozen', True, create=True), \
                 patch.object(sys, '_MEIPASS', None, create=True):
@@ -241,9 +250,8 @@ class TestPathUtilsEdgeCases:
 
     def test_get_user_data_root_permission_handling(self):
         """Test get_user_data_root when home directory is not accessible."""
-        with patch('os.path.expanduser', side_effect=PermissionError('Cannot access home')):
-            with pytest.raises(PermissionError):
-                get_user_data_root()
+        with patch('os.path.expanduser', side_effect=PermissionError('Cannot access home')), pytest.raises(PermissionError):
+            get_user_data_root()
 
     def test_resolve_game_executable_permission_handling(self):
         """Test resolve_game_executable with permission issues."""

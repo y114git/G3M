@@ -1,14 +1,17 @@
 import os
-import pytest
 from unittest.mock import Mock, patch
-from utils.mod_utils import get_mod_key, get_mod_name, get_unique_mod_key
-from utils.file_utils import sanitize_filename, has_deltamod_info_file
+
+import pytest
+
+from utils.file_utils import has_deltamod_info_file, sanitize_filename
+from utils.mod_utils import get_mod_key, get_mod_name
 
 
 class TestUiUtils:
 
     def test_stop_existing_fade_clears_animation_reference_and_deletes_anim(self, qapp):
         from PyQt6.QtWidgets import QWidget
+
         from ui.utils.ui_utils import UIAnimator
         widget = QWidget()
         anim = Mock()
@@ -22,12 +25,6 @@ class TestUiUtils:
 
 class TestModUtils:
 
-    def test_get_unique_mod_key(self):
-        existing = {'mod1', 'mod2', 'mod2_1'}
-        assert get_unique_mod_key('mod3', existing) == 'mod3'
-        assert get_unique_mod_key('mod1', existing) == 'mod1_1'
-        assert get_unique_mod_key('mod2', existing) == 'mod2_2'
-
     def test_get_mod_key_from_dict(self):
         mod_data = {'key': 'test_key_001'}
         assert get_mod_key(mod_data) == 'test_key_001'
@@ -40,14 +37,14 @@ class TestModUtils:
 
         class ModObject:
 
-            def __init__(self):
+            def __init__(self) -> None:
                 self.key = 'test_key_004'
         mod_obj = ModObject()
         assert get_mod_key(mod_obj) == 'test_key_004'
 
         class ModObject2:
 
-            def __init__(self):
+            def __init__(self) -> None:
                 self.key = 'test_key_005'
         mod_obj2 = ModObject2()
         assert get_mod_key(mod_obj2) == 'test_key_005'
@@ -66,7 +63,7 @@ class TestModUtils:
 
         class ModObject:
 
-            def __init__(self):
+            def __init__(self) -> None:
                 self.name = 'Test Mod Object'
         mod_obj = ModObject()
         assert get_mod_name(mod_obj) == 'Test Mod Object'
@@ -195,8 +192,9 @@ class TestCache:
 
     def test_cache_basic_operations(self, qapp):
         try:
-            from utils.cache_utils import add_to_cache, get_from_cache
             from PyQt6.QtGui import QImage
+
+            from utils.cache_utils import add_to_cache, get_from_cache
             test_image = QImage(10, 10, QImage.Format.Format_RGB32)
             test_image.fill(16711680)
             add_to_cache('test_key', test_image)

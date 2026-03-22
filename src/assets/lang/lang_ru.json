@@ -319,7 +319,13 @@
     "patch_apply_failed_details": "Ошибка применения патча, ошибка:\\n{error}",
     "open_mod_folder": "Открыть папку мода",
     "external_url": "Внешняя ссылка",
-    "show_reset_buttons": "Показывать кнопки сброса"
+    "show_reset_buttons": "Показывать кнопки сброса",
+    "no_data_files": "Нет файлов данных",
+    "extra_files_label": "Дополнительные файлы:",
+    "changed_data_files_label": "Изменённые DATA файлы:",
+    "size_label": "Размер:",
+    "error": "Ошибка",
+    "select": "Выбрать"
   },
   "files": {
     "archive_link": "Ссылка на архив",
@@ -440,7 +446,9 @@
     "search": "Поиск по названию, описанию и т.д.",
     "merge_properties": "Объединяет настройки (например JSON), сохраняя изменения от обоих модов, чтобы избежать сброса конфигураций.",
     "merge_code": "Интеллектуально объединяет игровой код, позволяя разным модам изменять один и тот же файл без удаления чужих изменений.",
-    "dont_hide_window_on_launch": "Оставить окно лаунчера видимым во время игры."
+    "dont_hide_window_on_launch": "Оставить окно лаунчера видимым во время игры.",
+    "open_external_site": "Открыть внешний сайт",
+    "open_mod_folder": "Открыть папку мода"
   },
   "dropdowns": {
     "all_mods": "Все моды",
@@ -661,7 +669,7 @@
     "import_theme_title": "Импорт темы",
     "select_mod": "Выберите мод",
     "delete_confirmation": "Подтвердите удаление",
-    "delete_mod_confirmation": "Мод будет полностью удалён. Это действие нельзя отменить.",
+    "delete_mod_confirmation": "Это навсегда удалит мод и все его версии. Продолжить?",
     "create_modpack_title": "Создать модпак",
     "create_modpack_info": "Это объединит выбранные моды согласно их текущему порядку приоритета и создаст новый локальный мод с пропатченным файлом data.win. Модпак можно запустить сразу без ожидания повторного патчинга.",
     "modpack_name_label": "Название модпака:",
@@ -936,7 +944,8 @@
     "gamebanana_install_failed": "Не удалось установить мод с GameBanana: {error}",
     "mod_uninstall_failed": "Не удалось удалить мод: {error}",
     "cannot_delete_builtin_theme": "Нельзя удалить встроенную тему.",
-    "uninstall_failed": "Не удалось удалить мод"
+    "uninstall_failed": "Не удалось удалить мод",
+    "game_running": "Игра уже запущена. Пожалуйста закройте её сначала."
   },
   "status": {
     "vanilla": "Без изменений",
@@ -1025,6 +1034,7 @@
     "deltamod_redirect_found": "В DELTAMOD найдено перенаправление.",
     "preparing_mod_patching": "Подготовка к патчингу {mods} мод(ов) для {chapters} глав(ы)...",
     "patching_mods": "Патчинг модов... {progress}%",
+    "processing_chapter": "Обработка {display} ({current}/{total})...",
     "patching_chapter": "Патчинг главы {chapter} ({current}/{total})...",
     "patching_assets": "Применение ассетов из {mod} ({current}/{total})...",
     "chapter_patched": "Глава {chapter} успешно пропатчена",
@@ -1059,7 +1069,8 @@
     "update_cancelled": "Обновление отменено пользователем.",
     "local": "Локальный",
     "unpacking_mod": "Распаковка мода: {mod_name}...",
-    "game_closed": "Игра закрыта"
+    "game_closed": "Игра закрыта",
+    "mod_merged_as_version": "Мод \"{mod_name}\" уже существует. Импортирован как версия \"{version_name}\" в версии мода."
   },
   "startup": {
     "steam_deck_setup_error": "Ошибка при настройке совместимости со Steam Deck: {error}",
@@ -1283,7 +1294,11 @@
     "archive_files": "Архивы версий игры",
     "settings_full_replace": "Полная замена файлов при применении",
     "settings_full_replace_tooltip": "При применении версии игры удалить все файлы, отсутствующие в архиве (оригинальный/пользовательский исполняемый файл игры никогда не удаляется).",
-    "file_count": "{count} файлов"
+    "file_count": "{count} файлов",
+    "apply_profile": "Применить профиль:",
+    "profile_label": "Профиль: {name}",
+    "without_profile": "Нет",
+    "patching_error": "Ошибка патчинга"
   },
   "mod_versions": {
     "title": "Версии мода",
@@ -1373,6 +1388,7 @@
     "enter_name": "Имя профиля:",
     "delete": "Удалить профиль",
     "already_exists": "Профиль с таким именем уже существует.",
-    "total_active": "{count} активных модов всего"
+    "total_active": "{count} активных модов всего",
+    "confirm_delete_text": "Вы уверены, что хотите удалить этот профиль? Это действие нельзя отменить."
   }
 }

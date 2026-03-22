@@ -1,15 +1,19 @@
 """Application state management with reactive properties."""
-from typing import Dict, Any, List, Optional
-import threading
+
 import logging
+import threading
+from typing import Any
+
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
+
+from models.game_modes import DeltaruneGame, GameDefinition
 from models.mod_models import ModInfo
-from models.game_modes import GameDefinition, DeltaruneGame
 from utils.mod_utils import get_mod_key
 
 
 class AppState(QObject):
     """Central application state manager with reactive properties and signals."""
+
     is_installing_changed = pyqtSignal(bool)
     is_patching_changed = pyqtSignal(bool)
     game_mode_changed = pyqtSignal(object)
@@ -27,57 +31,73 @@ class AppState(QObject):
     progress_bar_value_changed = pyqtSignal(int)
     all_mods_updated = pyqtSignal(list)
     gb_rate_limit_error = pyqtSignal()
-    _reactive_attrs = {'_is_installing': 'is_installing_changed', '_is_patching': 'is_patching_changed', '_game_mode': 'game_mode_changed', '_current_mode': 'current_mode_changed', '_selected_chapter_id': 'selected_chapter_changed', '_operation_cancelled': 'operation_cancelled_changed', '_filtered_mods': 'filtered_mods_changed', '_current_page': 'current_page_changed', '_search_text': 'search_text_changed', '_library_search_text': 'library_search_text_changed', '_current_task': 'current_task_changed', '_action_button_text': 'action_button_text_changed', '_action_button_enabled': 'action_button_enabled_changed', '_progress_bar_visible': 'progress_bar_visible_changed', '_progress_bar_value': 'progress_bar_value_changed'}
+    _reactive_attrs = {
+        "_is_installing": "is_installing_changed",
+        "_is_patching": "is_patching_changed",
+        "_game_mode": "game_mode_changed",
+        "_current_mode": "current_mode_changed",
+        "_selected_chapter_id": "selected_chapter_changed",
+        "_operation_cancelled": "operation_cancelled_changed",
+        "_filtered_mods": "filtered_mods_changed",
+        "_current_page": "current_page_changed",
+        "_search_text": "search_text_changed",
+        "_library_search_text": "library_search_text_changed",
+        "_current_task": "current_task_changed",
+        "_action_button_text": "action_button_text_changed",
+        "_action_button_enabled": "action_button_enabled_changed",
+        "_progress_bar_visible": "progress_bar_visible_changed",
+        "_progress_bar_value": "progress_bar_value_changed",
+    }
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._mods_metadata_lock = threading.RLock()
-        self.local_config: Dict[str, Any] = {}
-        self.game_path: str = ''
-        self.demo_game_path: str = ''
-        self.undertale_game_path: str = ''
-        self.config_dir: str = ''
-        self.mods_dir: str = ''
-        self.plugins_dir: str = ''
-        self.mods_metadata_path: str = ''
-        self.plugins_metadata_path: str = ''
-        self.config_path: str = ''
-        self._all_mods: List[ModInfo] = []
+        self.local_config: dict[str, Any] = {}
+        self.game_path: str = ""
+        self.demo_game_path: str = ""
+        self.undertale_game_path: str = ""
+        self.config_dir: str = ""
+        self.mods_dir: str = ""
+        self.plugins_dir: str = ""
+        self.mods_metadata_path: str = ""
+        self.plugins_metadata_path: str = ""
+        self.config_path: str = ""
+        self._all_mods: list[ModInfo] = []
         self.mods_loaded: bool = False
         self.library_initialized: bool = False
         self.is_settings_view: bool = False
-        self._current_mode: str = 'normal'
-        self._selected_chapter_id: Optional[int] = None
+        self._current_mode: str = "normal"
+        self._selected_chapter_id: int | None = None
         self._is_installing: bool = False
         self._is_patching: bool = False
         self.update_in_progress: bool = False
         self.initialization_completed: bool = False
         self.is_shown_to_user: bool = False
         self._game_mode: GameDefinition = DeltaruneGame()
-        self.global_settings: Dict[str, Any] = {}
-        self.plugins: List[Dict[str, Any]] = []
+        self.global_settings: dict[str, Any] = {}
+        self.plugins: list[dict[str, Any]] = []
         self.is_full_install: bool = False
         self.game_is_running: bool = False
-        self.pending_dialogs: List[Any] = []
+        self.pending_dialogs: list[Any] = []
         self._operation_cancelled: bool = False
-        self._filtered_mods: List[ModInfo] = []
+        self._filtered_mods: list[ModInfo] = []
         self._current_page: int = 1
-        self._search_text: str = ''
-        self._library_search_text: str = ''
-        self._current_task: Optional[QThread] = None
-        self._action_button_text: str = ''
+        self._search_text: str = ""
+        self._library_search_text: str = ""
+        self._current_task: QThread | None = None
+        self._action_button_text: str = ""
         self._action_button_enabled: bool = True
         self._progress_bar_visible: bool = False
         self._progress_bar_value: int = 0
-        self.gamebanana_loaded_pages: Dict[int, int] = {}
-        self.gamebanana_search_loaded_pages: Dict[str, Dict[int, int]] = {}
+        self.gamebanana_loaded_pages: dict[int, int] = {}
+        self.gamebanana_search_loaded_pages: dict[str, dict[int, int]] = {}
         self.gamebanana_loading: bool = False
         self.has_internet: bool = True
         self.pending_announce_check: bool = False
-        self.network_session: Optional[Any] = None
+        self.network_session: Any | None = None
 
     def __setattr__(self, name: str, value: Any) -> None:
-        reactive_attrs = getattr(type(self), '_reactive_attrs', None)
+        reactive_attrs = getattr(type(self), "_reactive_attrs", None)
         if reactive_attrs and name in reactive_attrs:
             old_value = getattr(self, name, None) if hasattr(self, name) else None
             super().__setattr__(name, value)
@@ -89,11 +109,11 @@ class AppState(QObject):
         else:
             super().__setattr__(name, value)
 
-    def get_all_mods(self) -> List[ModInfo]:
+    def get_all_mods(self) -> list[ModInfo]:
         with self._mods_metadata_lock:
             return list(self._all_mods)
 
-    def set_all_mods(self, mods: List[ModInfo]) -> None:
+    def set_all_mods(self, mods: list[ModInfo]) -> None:
         with self._mods_metadata_lock:
             self._all_mods = list(mods) if mods else []
 
@@ -102,7 +122,7 @@ class AppState(QObject):
             if mod not in self._all_mods:
                 self._all_mods.append(mod)
 
-    def extend_all_mods(self, mods: List[ModInfo]) -> None:
+    def extend_all_mods(self, mods: list[ModInfo]) -> None:
         with self._mods_metadata_lock:
             existing_keys = {get_mod_key(m) for m in self._all_mods}
             for mod in mods:
@@ -112,11 +132,11 @@ class AppState(QObject):
                     existing_keys.add(key)
 
     @property
-    def all_mods(self) -> List[ModInfo]:
+    def all_mods(self) -> list[ModInfo]:
         return self.get_all_mods()
 
     @all_mods.setter
-    def all_mods(self, value: List[ModInfo]) -> None:
+    def all_mods(self, value: list[ModInfo]) -> None:
         self.set_all_mods(value)
 
     @property
@@ -152,11 +172,11 @@ class AppState(QObject):
         self._current_mode = mode
 
     @property
-    def selected_chapter_id(self) -> Optional[int]:
+    def selected_chapter_id(self) -> int | None:
         return self._selected_chapter_id
 
     @selected_chapter_id.setter
-    def selected_chapter_id(self, chapter_id: Optional[int]) -> None:
+    def selected_chapter_id(self, chapter_id: int | None) -> None:
         self._selected_chapter_id = chapter_id
 
     @property
@@ -168,11 +188,11 @@ class AppState(QObject):
         self._operation_cancelled = value
 
     @property
-    def filtered_mods(self) -> List[ModInfo]:
+    def filtered_mods(self) -> list[ModInfo]:
         return self._filtered_mods
 
     @filtered_mods.setter
-    def filtered_mods(self, value: List[ModInfo]) -> None:
+    def filtered_mods(self, value: list[ModInfo]) -> None:
         self._filtered_mods = value
 
     @property
@@ -200,11 +220,11 @@ class AppState(QObject):
         self._library_search_text = value
 
     @property
-    def current_task(self) -> Optional[QThread]:
+    def current_task(self) -> QThread | None:
         return self._current_task
 
     @current_task.setter
-    def current_task(self, task: Optional[QThread]) -> None:
+    def current_task(self, task: QThread | None) -> None:
         self._current_task = task
 
     @property
@@ -250,15 +270,23 @@ class AppState(QObject):
 
     def cancel_current_operation(self):
         self._operation_cancelled = True
-        logging.info('AppState: Cancel button clicked')
+        logging.info("AppState: Cancel button clicked")
         if not self._current_task:
-            logging.warning('AppState: No current_task to cancel')
+            logging.warning("AppState: No current_task to cancel")
             return
-        if hasattr(self._current_task, 'cancel') and callable(self._current_task.cancel):
-            logging.info(f'AppState: Calling cancel() on current_task: {type(self._current_task).__name__}')
+        if hasattr(self._current_task, "cancel") and callable(
+            self._current_task.cancel
+        ):
+            logging.info(
+                f"AppState: Calling cancel() on current_task: {type(self._current_task).__name__}"
+            )
             try:
                 self._current_task.cancel()
             except Exception as e:
-                logging.error(f'AppState: Error calling cancel() on task: {e}', exc_info=True)
+                logging.error(
+                    f"AppState: Error calling cancel() on task: {e}", exc_info=True
+                )
         else:
-            logging.warning(f'AppState: current_task {type(self._current_task).__name__} does not have cancel() method')
+            logging.warning(
+                f"AppState: current_task {type(self._current_task).__name__} does not have cancel() method"
+            )

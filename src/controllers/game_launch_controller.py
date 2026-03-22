@@ -1,18 +1,30 @@
 """Controller for game launch operations and installation management."""
-import os
+
+import contextlib
 import logging
+import os
 from typing import Any, cast
+
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout, QFileDialog, QWidget
-from services.localization_service import tr
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+)
+
 from config.constants import UI_COLORS
+from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
-from workers.install.full_install_worker import FullInstallThread
 from utils.mod_utils import get_mod_key
+from workers.install.full_install_worker import FullInstallThread
 
 
 class GameLaunchController(QObject):
     """Manages game launch operations, installations, and related UI state."""
+
     window_hide_requested = pyqtSignal()
     window_restore_requested = pyqtSignal()
     full_install_checkbox_state_checked = pyqtSignal()
@@ -23,7 +35,18 @@ class GameLaunchController(QObject):
     show_pending_dialogs_requested = pyqtSignal()
     pending_updates_changed = pyqtSignal(list)
 
-    def __init__(self, app_state, feedback_service, mod_service, used_mods_service, settings_service, game_launcher, customization_service, plugin_service, app_window):
+    def __init__(
+        self,
+        app_state,
+        feedback_service,
+        mod_service,
+        used_mods_service,
+        settings_service,
+        game_launcher,
+        customization_service,
+        plugin_service,
+        app_window,
+    ) -> None:
         super().__init__()
         self.app_state = app_state
         self.feedback_service = feedback_service
@@ -37,25 +60,36 @@ class GameLaunchController(QObject):
         self._full_install_checkbox_is_checked = False
 
     def _is_full_install_enabled(self) -> bool:
-        return self.app_state.game_mode.supports_full_install and self._full_install_checkbox_is_checked
+        return (
+            self.app_state.game_mode.supports_full_install
+            and self._full_install_checkbox_is_checked
+        )
 
     def _launch_status_color(self) -> str:
-        return get_launch_status_color(getattr(self.app_state, 'local_config', None))
+        return get_launch_status_color(getattr(self.app_state, "local_config", None))
 
     def update_button_state(self):
-        if getattr(self.app_state, 'game_is_running', False):
-            self.app_state.action_button_text = tr('ui.close_game')
+        if getattr(self.app_state, "game_is_running", False):
+            self.app_state.action_button_text = tr("ui.close_game")
             self.app_state.action_button_enabled = True
             return
-        if self.app_state.is_installing and (not self.app_state.operation_cancelled) or self.app_state.is_patching:
-            self.app_state.action_button_text = tr('ui.cancel_button')
+        if (
+            self.app_state.is_installing and (not self.app_state.operation_cancelled)
+        ) or self.app_state.is_patching:
+            self.app_state.action_button_text = tr("ui.cancel_button")
             self.app_state.action_button_enabled = True
             return
         if not self.app_state.initialization_completed:
-            self.app_state.action_button_text = tr('status.please_wait')
+            self.app_state.action_button_text = tr("status.please_wait")
             self.app_state.action_button_enabled = False
             return
-        action_text = tr('buttons.install') if self._is_full_install_enabled() else tr('ui.update_button') if self.used_mods_service.check_used_mods_need_updates() else tr('ui.launch_button')
+        action_text = (
+            tr("buttons.install")
+            if self._is_full_install_enabled()
+            else tr("ui.update_button")
+            if self.used_mods_service.check_used_mods_need_updates()
+            else tr("ui.launch_button")
+        )
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
 
@@ -63,48 +97,68 @@ class GameLaunchController(QObject):
         try:
             self.app_state.progress_bar_value = 0
             self.app_state.progress_bar_visible = False
-        except (AttributeError, RuntimeError):
+        except AttributeError, RuntimeError:
             pass
 
     def _cancel_patching_operation(self):
-        library_display = getattr(self.app, 'library_display', None)
-        is_modpack_creation = library_display and hasattr(library_display, '_modpack_thread') and (library_display._modpack_thread == self.app_state.current_task)
-        modpack_dir = getattr(library_display, '_modpack_dir', None) if is_modpack_creation else None
-        patching_thread = getattr(self.game_launcher, '_patching_thread', None)
+        library_display = getattr(self.app, "library_display", None)
+        is_modpack_creation = (
+            library_display
+            and hasattr(library_display, "_modpack_thread")
+            and (library_display._modpack_thread == self.app_state.current_task)
+        )
+        modpack_dir = (
+            getattr(library_display, "_modpack_dir", None)
+            if is_modpack_creation
+            else None
+        )
+        patching_thread = getattr(self.game_launcher, "_patching_thread", None)
         if patching_thread:
             try:
                 patching_thread.progress_update.disconnect()
                 patching_thread.status_update.disconnect()
                 patching_thread.finished.disconnect()
-                if hasattr(patching_thread, 'warning_confirmation_needed'):
+                if hasattr(patching_thread, "warning_confirmation_needed"):
                     patching_thread.warning_confirmation_needed.disconnect()
-            except (TypeError, RuntimeError):
+            except TypeError, RuntimeError:
                 pass
             patching_thread.cancel()
             if patching_thread.isRunning():
-                if hasattr(patching_thread, '_warning_event'):
+                if hasattr(patching_thread, "_warning_event"):
                     patching_thread._warning_event.set()
                 patching_thread.wait(5000)
             try:
                 if patching_thread.patcher:
-                    if patching_thread.patcher.backup_service and patching_thread.chapter_mods:
-                        for chapter_id in patching_thread.chapter_mods.keys():
-                            patching_thread.patcher.backup_service.restore_backups(chapter_id)
-                            logging.info(f'[CANCEL] Restored backups for chapter {chapter_id}')
+                    if (
+                        patching_thread.patcher.backup_service
+                        and patching_thread.chapter_mods
+                    ):
+                        for chapter_id in patching_thread.chapter_mods:
+                            patching_thread.patcher.backup_service.restore_backups(
+                                chapter_id
+                            )
+                            logging.info(
+                                f"[CANCEL] Restored backups for chapter {chapter_id}"
+                            )
                     patching_thread.patcher.cleanup(force=True)
                 if not patching_thread.isRunning():
                     patching_thread.deleteLater()
             except Exception as e:
-                logging.error(f'Error cleaning up cancelled patching thread: {e}', exc_info=True)
+                logging.error(
+                    f"Error cleaning up cancelled patching thread: {e}", exc_info=True
+                )
             finally:
                 self.game_launcher._patching_thread = None
         if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
             try:
                 import shutil
+
                 shutil.rmtree(modpack_dir, ignore_errors=True)
-                logging.info(f'Cancelled modpack creation, removed directory: {modpack_dir}')
+                logging.info(
+                    f"Cancelled modpack creation, removed directory: {modpack_dir}"
+                )
             except Exception as e:
-                logging.error(f'Failed to remove cancelled modpack directory: {e}')
+                logging.error(f"Failed to remove cancelled modpack directory: {e}")
             if library_display:
                 library_display._modpack_thread = None
                 library_display._modpack_dir = None
@@ -114,26 +168,32 @@ class GameLaunchController(QObject):
         self.app_state.action_button_text = None
 
     def _cancel_operation(self, operation_type: str):
-        if operation_type == 'install':
-            logging.info('GameLaunchController: Cancel button clicked during installation')
+        if operation_type == "install":
+            logging.info(
+                "GameLaunchController: Cancel button clicked during installation"
+            )
             self.app_state.cancel_current_operation()
-        elif operation_type == 'patching':
+        elif operation_type == "patching":
             self._cancel_patching_operation()
-        self.feedback_service.update_status(tr('status.operation_cancelled'), UI_COLORS['status_info'])
+        self.feedback_service.update_status(
+            tr("status.operation_cancelled"), UI_COLORS["status_info"]
+        )
         self._reset_progress_bar()
         self.update_button_state()
 
     def on_action_button_click(self):
-        if getattr(self.app_state, 'game_is_running', False):
-            if hasattr(self.game_launcher, 'close_game'):
+        if getattr(self.app_state, "game_is_running", False):
+            if hasattr(self.game_launcher, "close_game"):
                 self.game_launcher.close_game()
             return
         if self.app_state.is_installing:
-            self._cancel_operation('install')
+            self._cancel_operation("install")
             return
-        patching_thread = getattr(self.game_launcher, '_patching_thread', None)
-        if self.app_state.is_patching or (patching_thread and patching_thread.isRunning()):
-            self._cancel_operation('patching')
+        patching_thread = getattr(self.game_launcher, "_patching_thread", None)
+        if self.app_state.is_patching or (
+            patching_thread and patching_thread.isRunning()
+        ):
+            self._cancel_operation("patching")
             return
         if self._is_full_install_enabled():
             self.perform_full_install()
@@ -149,22 +209,27 @@ class GameLaunchController(QObject):
         self.launch_game()
 
     def launch_game(self):
-        self.game_launcher.launch_game_with_all_mods(execute_plugin_hooks=lambda hook_name: self.plugin_service.execute_hooks(hook_name, self.app), restore_window_callback=self.app.restore_window_signal.emit)
+        self.game_launcher.launch_game_with_all_mods(
+            execute_plugin_hooks=lambda hook_name: self.plugin_service.execute_hooks(
+                hook_name, self.app
+            ),
+            restore_window_callback=self.app.restore_window_signal.emit,
+        )
 
     @property
     def _dont_hide(self):
-        return self.app_state.local_config.get('dont_hide_window_on_launch', False)
+        return self.app_state.local_config.get("dont_hide_window_on_launch", False)
 
     def hide_window(self):
-        try:
+        with contextlib.suppress(Exception):
             self.customization_service.stop_background_music()
-        except Exception:
-            pass
         self.settings_service.save_window_geometry(self.app)
         self.app_state.game_is_running = True
         if self._dont_hide:
             self.update_button_state()
-            self.feedback_service.update_status(tr('status.game_launched_waiting_for_exit'), self._launch_status_color())
+            self.feedback_service.update_status(
+                tr("status.game_launched_waiting_for_exit"), self._launch_status_color()
+            )
         else:
             self.window_hide_requested.emit()
 
@@ -179,35 +244,51 @@ class GameLaunchController(QObject):
         self.search_display_update_requested.emit()
         self.customization_service.maybe_start_background_music()
         self.show_pending_dialogs_requested.emit()
-        self.plugin_service.execute_hooks('on_after_game_exit', self.app)
+        self.plugin_service.execute_hooks("on_after_game_exit", self.app)
 
     def perform_full_install(self):
-        if self.app_state.is_installing or (self.app_state.current_task and self.app_state.current_task.isRunning()):
+        if self.app_state.is_installing or (
+            self.app_state.current_task and self.app_state.current_task.isRunning()
+        ):
             return
         self.app_state.action_button_enabled = False
-        is_yellow = self.app_state.game_mode.game_id == 'undertaleyellow'
-        is_spire = self.app_state.game_mode.game_id == 'sugaryspire'
+        is_yellow = self.app_state.game_mode.game_id == "undertaleyellow"
+        is_spire = self.app_state.game_mode.game_id == "sugaryspire"
         dlg = QDialog(cast(QWidget, self.app))
         if is_spire:
-            dlg.setWindowTitle(tr('dialogs.full_spire_install'))
-            install_location_key = 'dialogs.install_spire_location'
-            folder_name = 'Sugary Spire'
+            dlg.setWindowTitle(tr("dialogs.full_spire_install"))
+            install_location_key = "dialogs.install_spire_location"
+            folder_name = "Sugary Spire"
         else:
-            dlg.setWindowTitle(tr('dialogs.full_yellow_install' if is_yellow else 'dialogs.full_demo_install'))
-            install_location_key = 'dialogs.install_yellow_location' if is_yellow else 'dialogs.install_demo_location'
-            folder_name = 'UNDERTALE Yellow' if is_yellow else 'DELTARUNEdemo'
+            dlg.setWindowTitle(
+                tr(
+                    "dialogs.full_yellow_install"
+                    if is_yellow
+                    else "dialogs.full_demo_install"
+                )
+            )
+            install_location_key = (
+                "dialogs.install_yellow_location"
+                if is_yellow
+                else "dialogs.install_demo_location"
+            )
+            folder_name = "UNDERTALE Yellow" if is_yellow else "DELTARUNEdemo"
         v = QVBoxLayout(dlg)
         lbl = QLabel(self.app._full_install_tooltip())
         lbl.setWordWrap(True)
         v.addWidget(lbl)
-        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bb = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         v.addWidget(bb)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             self.app_state.action_button_enabled = True
             return
-        base_dir = QFileDialog.getExistingDirectory(cast(QWidget, self.app), tr(install_location_key))
+        base_dir = QFileDialog.getExistingDirectory(
+            cast(QWidget, self.app), tr(install_location_key)
+        )
         if not base_dir:
             self.app_state.action_button_enabled = True
             return
@@ -215,13 +296,19 @@ class GameLaunchController(QObject):
         try:
             os.makedirs(target_dir, exist_ok=True)
         except (OSError, PermissionError) as e:
-            self.feedback_service.show_message('error', 'errors.error', tr('errors.folder_creation_failed', error=str(e)))
+            self.feedback_service.show_message(
+                "error",
+                "errors.error",
+                tr("errors.folder_creation_failed", error=str(e)),
+            )
             self.app_state.action_button_enabled = True
             return
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         full_install_thread = FullInstallThread(cast(Any, self.app), target_dir)
-        full_install_thread.progress.connect(lambda v: setattr(self.app_state, 'progress_bar_value', v))
+        full_install_thread.progress.connect(
+            lambda v: setattr(self.app_state, "progress_bar_value", v)
+        )
         full_install_thread.status.connect(self.app.update_status_signal)
         full_install_thread.finished.connect(self.on_full_install_finished)
         self.app_state.current_task = full_install_thread
@@ -234,22 +321,34 @@ class GameLaunchController(QObject):
         self._full_install_checkbox_is_checked = False
         self.app_state.is_full_install = False
         if success:
-            if self.app_state.game_mode.game_id == 'deltarunedemo':
-                self.app_state.demo_game_path = self.app_state.local_config['demo_game_path'] = target_dir
+            if self.app_state.game_mode.game_id == "deltarunedemo":
+                self.app_state.demo_game_path = self.app_state.local_config[
+                    "demo_game_path"
+                ] = target_dir
             elif self.app_state.game_mode.supports_full_install:
-                self.app_state.game_mode.set_game_path(self.app_state.local_config, target_dir)
+                self.app_state.game_mode.set_game_path(
+                    self.app_state.local_config, target_dir
+                )
             else:
-                self.app_state.game_path = self.app_state.local_config['game_path'] = target_dir
-            self.feedback_service.update_status(tr('status.game_files_install_complete'), UI_COLORS['status_success'])
+                self.app_state.game_path = self.app_state.local_config["game_path"] = (
+                    target_dir
+                )
+            self.feedback_service.update_status(
+                tr("status.game_files_install_complete"), UI_COLORS["status_success"]
+            )
         else:
-            self.feedback_service.update_status(tr('status.game_files_install_failed'), UI_COLORS['status_error'])
+            self.feedback_service.update_status(
+                tr("status.game_files_install_failed"), UI_COLORS["status_error"]
+            )
         self.settings_service.write_local_config()
         self.update_button_state()
 
     def update_mods_in_use(self):
         mods_to_update = self.used_mods_service.collect_mods_needing_update()
         if mods_to_update:
-            self.pending_updates_changed.emit(mods_to_update[1:] if len(mods_to_update) > 1 else [])
+            self.pending_updates_changed.emit(
+                mods_to_update[1:] if len(mods_to_update) > 1 else []
+            )
             self.app_state.operation_cancelled = False
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
@@ -264,10 +363,15 @@ class GameLaunchController(QObject):
             key = get_mod_key(mod_data)
             if not key:
                 continue
-            updated_mod = next((mod for mod in self.app_state.all_mods if get_mod_key(mod) == key), None)
+            updated_mod = next(
+                (mod for mod in self.app_state.all_mods if get_mod_key(mod) == key),
+                None,
+            )
             if not updated_mod:
                 mod_config = self.mod_service.get_mod_config(key)
                 if mod_config:
-                    updated_mod = self.mod_service.create_mod_object_from_info(mod_config, self.app_state.all_mods)
+                    updated_mod = self.mod_service.create_mod_object_from_info(
+                        mod_config, self.app_state.all_mods
+                    )
             if updated_mod:
                 self.used_mods_service.used_mods[chapter_id] = updated_mod

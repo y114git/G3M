@@ -1,6 +1,11 @@
 """Tests for protocol handler functionality."""
 from unittest.mock import Mock, patch
-from core.protocol_handler import _parse_deltahub_url, handle_one_click_install, _enqueue_deltahub_url
+
+from core.protocol_handler import (
+    _enqueue_deltahub_url,
+    _parse_deltahub_url,
+    handle_one_click_install,
+)
 
 
 class TestProtocolHandler:

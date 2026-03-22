@@ -1,10 +1,19 @@
 import pytest
-from models.mod_models import ModInfo, ModFileData, ModExtraFile
+
 from models.game_modes import (
-    GameDefinition, GameTab, DeltaruneGame, DeltaruneDemoGame,
-    UndertaleGame, UndertaleYellowGame, PizzaTowerGame, SugarySpireGame,
-    GAME_REGISTRY, get_game, get_all_games,
+    GAME_REGISTRY,
+    DeltaruneDemoGame,
+    DeltaruneGame,
+    GameDefinition,
+    GameTab,
+    PizzaTowerGame,
+    SugarySpireGame,
+    UndertaleGame,
+    UndertaleYellowGame,
+    get_all_games,
+    get_game,
 )
+from models.mod_models import ModExtraFile, ModFileData, ModInfo
 
 
 class TestModInfo:
@@ -433,7 +442,7 @@ class TestGameRegistry:
 
     def test_backward_compat_aliases(self):
         """Old class names still work as aliases."""
-        from models.game_modes import DeltaruneGame, DeltaruneDemoGame, UndertaleGame
+        from models.game_modes import DeltaruneDemoGame, DeltaruneGame, UndertaleGame
         assert DeltaruneGame is DeltaruneGame
         assert DeltaruneDemoGame is DeltaruneDemoGame
         assert UndertaleGame is UndertaleGame

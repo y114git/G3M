@@ -1,7 +1,8 @@
 """Tests for mod_versions_dialog utility functions."""
+import contextlib
 import os
-import zipfile
 import tempfile
+import zipfile
 
 import pytest
 
@@ -21,7 +22,10 @@ class TestListLocalVersions:
         assert _list_local_versions(mod_folder) == []
 
     def test_returns_zips(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _list_local_versions, _ensure_versions_dir
+        from ui.dialogs.mod_versions_dialog import (
+            _ensure_versions_dir,
+            _list_local_versions,
+        )
         vdir = _ensure_versions_dir(mod_folder)
         zp = os.path.join(vdir, 'v1.zip')
         with zipfile.ZipFile(zp, 'w') as zf:
@@ -33,7 +37,10 @@ class TestListLocalVersions:
         assert result[0]['size'] > 0
 
     def test_ignores_non_zip(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _list_local_versions, _ensure_versions_dir
+        from ui.dialogs.mod_versions_dialog import (
+            _ensure_versions_dir,
+            _list_local_versions,
+        )
         vdir = _ensure_versions_dir(mod_folder)
         with open(os.path.join(vdir, 'readme.txt'), 'w') as f:
             f.write('not a zip')
@@ -42,7 +49,10 @@ class TestListLocalVersions:
 
 class TestClearModFolder:
     def test_preserves_mod_versions(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _clear_mod_folder, _ensure_versions_dir
+        from ui.dialogs.mod_versions_dialog import (
+            _clear_mod_folder,
+            _ensure_versions_dir,
+        )
         vdir = _ensure_versions_dir(mod_folder)
         marker = os.path.join(vdir, 'keep.zip')
         with open(marker, 'w') as f:
@@ -66,7 +76,10 @@ class TestSnapshotAndApply:
         assert not any('mod_versions' in n for n in names)
 
     def test_apply_restores(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _create_version_zip, _apply_version_zip
+        from ui.dialogs.mod_versions_dialog import (
+            _apply_version_zip,
+            _create_version_zip,
+        )
         zp = _create_version_zip(mod_folder, mod_folder, 'snap1', ignore_versions_dir=True)
         with open(os.path.join(mod_folder, 'data.txt'), 'w') as f:
             f.write('changed')
@@ -75,7 +88,11 @@ class TestSnapshotAndApply:
             assert f.read() == 'hello'
 
     def test_apply_preserves_mod_versions_dir(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _create_version_zip, _apply_version_zip, _ensure_versions_dir
+        from ui.dialogs.mod_versions_dialog import (
+            _apply_version_zip,
+            _create_version_zip,
+            _ensure_versions_dir,
+        )
         vdir = _ensure_versions_dir(mod_folder)
         marker = os.path.join(vdir, 'user.zip')
         with open(marker, 'w') as f:
@@ -103,32 +120,33 @@ class TestSanitizeVersionName:
 
 class TestConvertArchiveToVersionZip:
     def test_plain_zip(self, mod_folder):
-        from ui.dialogs.mod_versions_dialog import _convert_archive_to_version_zip, _list_local_versions
-        src = tempfile.NamedTemporaryFile(delete=False, suffix='.zip', prefix='mv_test_')
+        from ui.dialogs.mod_versions_dialog import (
+            _convert_archive_to_version_zip,
+            _list_local_versions,
+        )
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip', prefix='mv_test_') as src:
+            src_name = src.name
         try:
-            with zipfile.ZipFile(src.name, 'w') as zf:
+            with zipfile.ZipFile(src_name, 'w') as zf:
                 zf.writestr('file.txt', 'content')
-            src.close()
-            ok = _convert_archive_to_version_zip(src.name, mod_folder, 'imported')
+            ok = _convert_archive_to_version_zip(src_name, mod_folder, 'imported')
             assert ok
             versions = _list_local_versions(mod_folder)
             assert any(v['name'] == 'imported' for v in versions)
         finally:
-            try:
-                os.unlink(src.name)
-            except OSError:
-                pass
+            with contextlib.suppress(OSError):
+                os.unlink(src_name)
 
     def test_invalid_archive_no_crash(self, mod_folder):
         from ui.dialogs.mod_versions_dialog import _convert_archive_to_version_zip
-        bad = tempfile.NamedTemporaryFile(delete=False, suffix='.zip', prefix='mv_bad_')
-        bad.write(b'not a real archive')
-        bad.close()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip', prefix='mv_bad_') as bad:
+            bad.write(b'not a real archive')
+            bad_name = bad.name
         try:
-            result = _convert_archive_to_version_zip(bad.name, mod_folder, 'bad')
+            result = _convert_archive_to_version_zip(bad_name, mod_folder, 'bad')
             assert not result
         finally:
-            os.unlink(bad.name)
+            os.unlink(bad_name)
 
 
 class TestZipDirToVersion:

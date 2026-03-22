@@ -9,8 +9,9 @@ import os
 import pathlib
 import subprocess
 import sys
-import zipfile
 import tempfile
+import zipfile
+
 import pytest
 
 
@@ -73,9 +74,6 @@ def test_local_startup():
 
         output = (result.stdout or '') + (result.stderr or '')
 
-        print("STDOUT:", result.stdout)
-        print("STDERR:", result.stderr)
-        print("Return code:", result.returncode)
 
         assert "STARTUP ERROR" not in output, "Application startup failed with STARTUP ERROR"
         assert "CRITICAL ERROR" not in output, "Application startup failed with CRITICAL ERROR"
@@ -97,7 +95,6 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
 
             target = extract_path / startup_target
             if not target.exists():
-                print(f'ERROR: {target} not found in archive', file=sys.stderr)
                 return False
 
             target.chmod(target.stat().st_mode | 0o111)
@@ -116,25 +113,18 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                                         timeout=10,
                                         cwd=cwd)
             output = (result.stdout or '') + (result.stderr or '')
-            print(output)
 
-            if 'STARTUP ERROR' in output:
-                return False
-
-            return True
+            return 'STARTUP ERROR' not in output
 
     except subprocess.TimeoutExpired:
-        print('ERROR: Startup test timed out', file=sys.stderr)
         return False
-    except Exception as e:
-        print(f'ERROR: Unexpected error: {e}', file=sys.stderr)
+    except Exception:
         return False
 
 
 def main():
     """Main function for standalone script usage."""
     if 'ARCHIVE_PATH' not in os.environ or 'STARTUP_TARGET' not in os.environ:
-        print('ERROR: ARCHIVE_PATH and STARTUP_TARGET environment variables must be set', file=sys.stderr)
         raise SystemExit(1)
 
     archive_path = pathlib.Path(os.environ['ARCHIVE_PATH'])

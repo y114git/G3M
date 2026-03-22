@@ -1,7 +1,9 @@
 import re
-import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
+
 from ui.common.styling import get_theme_color, rgba_from_color
 
 
@@ -107,8 +109,9 @@ class TestColorHexDisplayConversion:
 class TestColorValidation:
 
     def test_settings_service_accepts_argb_hex_color(self, app_state):
-        from services.settings_service import SettingsManager
         from unittest.mock import Mock
+
+        from services.settings_service import SettingsManager
         manager = SettingsManager(app_state, Mock(), Mock())
         assert manager.is_valid_hex_color('#80FF0000')
         assert manager.is_valid_hex_color('#FF0000')
@@ -116,8 +119,9 @@ class TestColorValidation:
         assert not manager.is_valid_hex_color('#GG0000')
 
     def test_settings_service_saves_display_hex_as_qt_hex(self, app_state):
-        from services.settings_service import SettingsManager
         from unittest.mock import Mock
+
+        from services.settings_service import SettingsManager
         manager = SettingsManager(app_state, Mock(), Mock())
         color_widget = Mock()
         color_widget.text.return_value = '#00FF0080'
@@ -128,8 +132,9 @@ class TestColorValidation:
 class TestColorWidgetLoading:
 
     def test_customization_service_loads_qt_hex_as_display_hex(self, app_state):
-        from services.customization_service import CustomizationManager
         from unittest.mock import Mock
+
+        from services.customization_service import CustomizationManager
         manager = CustomizationManager(app_state)
         app_state.local_config['custom_color_background'] = '#8000FF00'
         widget = Mock()
@@ -137,8 +142,9 @@ class TestColorWidgetLoading:
         widget.setText.assert_called_once_with('#00FF0080')
 
     def test_background_default_is_loaded_into_text(self, app_state):
-        from services.customization_service import CustomizationManager
         from unittest.mock import Mock
+
+        from services.customization_service import CustomizationManager
         manager = CustomizationManager(app_state)
         widget = Mock()
         manager.load_custom_style_settings({'background': widget})
@@ -148,8 +154,9 @@ class TestColorWidgetLoading:
 class TestColorDialogBlackHandling:
 
     def test_black_color_picker_seed_preserves_alpha(self):
-        from core.app_window import _get_black_color_picker_seed
         from PyQt6.QtGui import QColor
+
+        from core.app_window import _get_black_color_picker_seed
         seeded = _get_black_color_picker_seed(QColor(0, 0, 0, 128))
         assert seeded.red() == 255
         assert seeded.green() == 255
@@ -157,10 +164,11 @@ class TestColorDialogBlackHandling:
         assert seeded.alpha() == 128
 
     def test_black_color_picker_filter_promotes_black_before_picker_click(self, qapp):
-        from core.app_window import _BlackColorPickerEventFilter
         from PyQt6.QtCore import QEvent
         from PyQt6.QtGui import QColor
         from PyQt6.QtWidgets import QColorDialog
+
+        from core.app_window import _BlackColorPickerEventFilter
         dialog = QColorDialog()
         dialog.setCurrentColor(QColor(0, 0, 0, 255))
         event_filter = _BlackColorPickerEventFilter(dialog)
@@ -238,8 +246,9 @@ class TestBorderRadius:
         assert clamp_border_radius(12, width=18, height=18, border_width=2) == 11
 
     def test_settings_migration_persists_default_border_radius(self, app_state):
-        from services.settings_service import SettingsManager
         from unittest.mock import Mock
+
+        from services.settings_service import SettingsManager
         manager = SettingsManager(app_state, Mock(), Mock())
         manager.migrate_config_if_needed()
         assert app_state.local_config['custom_border_radius'] == 7
@@ -289,7 +298,8 @@ class TestBorderRadius:
         assert 'height: 0px;' in sheet
 
     def test_apply_scroll_area_chrome_only_reserves_extent_for_visible_vertical_scrollbar(self, qapp):
-        from PyQt6.QtWidgets import QWidget, QScrollArea, QVBoxLayout
+        from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+
         from ui.common.styling import apply_scroll_area_chrome
         container = QWidget()
         container.resize(240, 240)
@@ -322,8 +332,9 @@ class TestBorderRadius:
         assert app_state.local_config.get('custom_border_radius', 0) == 0
 
     def test_border_radius_translucent_backgrounds(self, app_state):
-        from services.customization_service import CustomizationManager
         from unittest.mock import Mock
+
+        from services.customization_service import CustomizationManager
         cs = CustomizationManager(app_state)
         container = Mock()
         container.objectName.return_value = 'mods_browser_background'
@@ -333,8 +344,9 @@ class TestBorderRadius:
         assert 'border-radius: 15px' in call_args
 
     def test_translucent_backgrounds_clamp_to_widget_geometry(self, app_state, qapp):
-        from services.customization_service import CustomizationManager
         from PyQt6.QtWidgets import QWidget
+
+        from services.customization_service import CustomizationManager
         cs = CustomizationManager(app_state)
         container = QWidget()
         container.setObjectName('search_mods_background')
@@ -344,8 +356,9 @@ class TestBorderRadius:
         assert 'border-radius: 10px' in container.styleSheet()
 
     def test_translucent_backgrounds_preserve_custom_alpha(self, app_state):
-        from services.customization_service import CustomizationManager
         from unittest.mock import Mock
+
+        from services.customization_service import CustomizationManager
         cs = CustomizationManager(app_state)
         container = Mock()
         container.objectName.return_value = 'mods_browser_background'

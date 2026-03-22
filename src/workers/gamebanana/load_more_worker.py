@@ -1,43 +1,79 @@
 """Load more GameBanana mods worker."""
+
 import logging
+
 from PyQt6.QtCore import QThread, pyqtSignal
+
+from adapters.gamebanana_adapter import GameBananaAPI
 from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, UI_COLORS
 from services.localization_service import tr
-from adapters.gamebanana_adapter import GameBananaAPI
+
 logger = logging.getLogger(__name__)
 
 
 class LoadMoreGameBananaModsThread(QThread):
     result, status = pyqtSignal(list), pyqtSignal(str, str)
 
-    def __init__(self, game_id: int, start_page: int, num_pages: int = 2, sort: str = 'relevant', parent=None):
+    def __init__(
+        self,
+        game_id: int,
+        start_page: int,
+        num_pages: int = 2,
+        sort: str = "relevant",
+        parent=None,
+    ) -> None:
         super().__init__(parent)
-        self.game_id, self.start_page, self.num_pages, self.sort = game_id, start_page, num_pages, sort
+        self.game_id, self.start_page, self.num_pages, self.sort = (
+            game_id,
+            start_page,
+            num_pages,
+            sort,
+        )
         self.api = GameBananaAPI()
         self._cancelled = False
 
-    def cancel(self): self._cancelled = True
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
         new_mods = []
         try:
-            game_name = next((name for name, id_val in GAMEBANANA_GAME_IDS.items() if id_val == self.game_id), None)
+            game_name = next(
+                (
+                    name
+                    for name, id_val in GAMEBANANA_GAME_IDS.items()
+                    if id_val == self.game_id
+                ),
+                None,
+            )
             if not game_name:
-                logger.error(f'Unknown game_id: {self.game_id}')
+                logger.error(f"Unknown game_id: {self.game_id}")
                 self.result.emit([])
                 return
 
             for page in range(self.start_page, self.start_page + self.num_pages):
                 if self._cancelled or self.isInterruptionRequested():
                     break
-                mods_data, _ = self.api.get_game_mods(self.game_id, page=page, per_page=GAMEBANANA_PER_PAGE, sort=self.sort)
+                mods_data, _ = self.api.get_game_mods(
+                    self.game_id,
+                    page=page,
+                    per_page=GAMEBANANA_PER_PAGE,
+                    sort=self.sort,
+                )
                 if not mods_data:
                     break
-                new_mods.extend(m for m in mods_data if m and not (self._cancelled or self.isInterruptionRequested()))
+                new_mods.extend(
+                    m
+                    for m in mods_data
+                    if m and not (self._cancelled or self.isInterruptionRequested())
+                )
                 if len(mods_data) < GAMEBANANA_PER_PAGE:
                     break
             self.result.emit(new_mods)
         except Exception as e:
-            logger.error(f'Error loading more GameBanana mods: {e}', exc_info=True)
-            self.status.emit(tr('errors.gamebanana_fetch_failed', error=str(e)), UI_COLORS['status_error'])
+            logger.error(f"Error loading more GameBanana mods: {e}", exc_info=True)
+            self.status.emit(
+                tr("errors.gamebanana_fetch_failed", error=str(e)),
+                UI_COLORS["status_error"],
+            )
             self.result.emit([])

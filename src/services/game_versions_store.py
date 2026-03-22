@@ -1,6 +1,6 @@
 """Persistent storage for game versions. No business logic."""
+
 import os
-from typing import List, Optional
 
 from models.game_version_models import GameVersionRecord
 from services.base_json_store import BaseJsonStore
@@ -9,8 +9,10 @@ from services.base_json_store import BaseJsonStore
 class GameVersionsStore(BaseJsonStore):
     """Thin persistence layer: game_versions_data.json, atomic writes, startup recovery."""
 
-    def __init__(self, base_dir: str):
-        super().__init__(base_dir, 'game_versions', 'game_versions_data.json', GameVersionRecord)
+    def __init__(self, base_dir: str) -> None:
+        super().__init__(
+            base_dir, "game_versions", "game_versions_data.json", GameVersionRecord
+        )
 
     @property
     def versions_dir(self) -> str:
@@ -20,10 +22,10 @@ class GameVersionsStore(BaseJsonStore):
         self._records = [r for r in self._records if r.archive_path != archive_path]
         self.save()
 
-    def find(self, archive_path: str) -> Optional[GameVersionRecord]:
+    def find(self, archive_path: str) -> GameVersionRecord | None:
         return next((r for r in self._records if r.archive_path == archive_path), None)
 
-    def records_for_game(self, game: str) -> List[GameVersionRecord]:
+    def records_for_game(self, game: str) -> list[GameVersionRecord]:
         return [r for r in self._records if r.game == game]
 
     def startup_recovery(self):

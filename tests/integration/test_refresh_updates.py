@@ -41,8 +41,9 @@ class TestRefreshModList:
 class TestRefreshLanguageCombo:
 
     def test_refresh_updates_language_combo(self, app_state):
-        from controllers.refresh_controller import RefreshController
         from PyQt6.QtWidgets import QComboBox
+
+        from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
         used_mods_service = Mock()

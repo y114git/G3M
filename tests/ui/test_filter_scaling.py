@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QEvent
-from PyQt6.QtWidgets import QApplication, QWIDGETSIZE_MAX
+from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 
 
 class TestFilterScaling:
@@ -11,7 +11,7 @@ class TestFilterScaling:
     The event filters then correctly re-set maximumHeight based on the new sizeHint.
     """
 
-    def test_library_maximumHeight_reset_allows_shrink(self, qapp, app_state, feedback_service):
+    def test_library_maximum_height_reset_allows_shrink(self, qapp, app_state, feedback_service):
         """Resetting maximumHeight to unconstrained allows sizeHint to return smaller values."""
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
@@ -35,7 +35,7 @@ class TestFilterScaling:
         widget.deleteLater()
         QApplication.processEvents()
 
-    def test_search_maximumHeight_reset_allows_shrink(self, qapp, app_state, feedback_service):
+    def test_search_maximum_height_reset_allows_shrink(self, qapp, app_state, feedback_service):
         """Resetting maximumHeight to unconstrained allows sizeHint to return smaller values."""
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
 

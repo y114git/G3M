@@ -17,7 +17,7 @@ SRC_DIR = Path(__file__).resolve().parent.parent.parent / 'src'
 class _ScopeTracker(ast.NodeVisitor):
     """AST visitor that detects imports trapped inside conditional blocks."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.issues: list[str] = []
         self.unparseable_files: list[str] = []
         self._filepath = ""
@@ -25,7 +25,7 @@ class _ScopeTracker(ast.NodeVisitor):
     def check_file(self, filepath: str) -> None:
         self._filepath = filepath
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, encoding='utf-8') as f:
                 source = f.read()
             tree = ast.parse(source, filepath)
             self.visit(tree)
@@ -114,12 +114,7 @@ class _ScopeTracker(ast.NodeVisitor):
                 self._scan_body(stmt.finalbody, cond_imports, fallback_names,
                                 uncond_imports, depth + 1)
 
-            elif isinstance(stmt, (ast.For, ast.While)):
-                self._collect_imports_from(stmt.body, cond_imports, stmt)
-                self._scan_body(stmt.body, cond_imports, fallback_names,
-                                uncond_imports, depth + 1)
-
-            elif isinstance(stmt, ast.With):
+            elif isinstance(stmt, (ast.For, ast.While, ast.With)):
                 self._collect_imports_from(stmt.body, cond_imports, stmt)
                 self._scan_body(stmt.body, cond_imports, fallback_names,
                                 uncond_imports, depth + 1)
@@ -150,10 +145,7 @@ class _ScopeTracker(ast.NodeVisitor):
 
     @staticmethod
     def _node_contains(parent, target) -> bool:
-        for node in ast.walk(parent):
-            if node is target:
-                return True
-        return False
+        return any(node is target for node in ast.walk(parent))
 
 
 def _collect_all_python_files():

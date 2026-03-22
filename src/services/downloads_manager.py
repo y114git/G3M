@@ -1,26 +1,31 @@
 """Downloads system coordinator."""
+
+import contextlib
 import logging
 import os
 import re
 import shutil
 import uuid
-from typing import Optional, Tuple
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from models.download_models import (
-    DownloadRecord, DownloadStatus, UseStatus, SourceKind, TargetKind,
+    DownloadRecord,
+    DownloadStatus,
+    SourceKind,
+    TargetKind,
+    UseStatus,
 )
 from services.downloads_store import DownloadsStore
 from utils.time_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
 
-_SAFE_RE = re.compile(r'[^\w\-. ]+')
+_SAFE_RE = re.compile(r"[^\w\-. ]+")
 
 
 def _safe_filename(name: str) -> str:
-    return _SAFE_RE.sub('_', name)[:80] or 'file'
+    return _SAFE_RE.sub("_", name)[:80] or "file"
 
 
 def _cleanup_worker(worker):
@@ -31,24 +36,28 @@ def _cleanup_worker(worker):
             worker.deleteLater()
         else:
             worker.finished.connect(worker.deleteLater)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(
+            f"_cleanup_worker: failed to clean up worker {type(worker).__name__}: {e}",
+            exc_info=True,
+        )
 
 
 class DownloadsManager(QObject):
     """Coordinator for all download/use operations. Created once in AppWindow."""
+
     record_added = pyqtSignal(object)
     record_updated = pyqtSignal(object)
     record_removed = pyqtSignal(str)
-    badge_changed = pyqtSignal(int, bool)  # (active_count, needs_attention)
-    use_completed = pyqtSignal()  # emitted after a successful install so UI can refresh
+    badge_changed = pyqtSignal(int, bool)
+    use_completed = pyqtSignal()
 
-    def __init__(self, base_dir: str, settings_getter, parent=None):
+    def __init__(self, base_dir: str, settings_getter, parent=None) -> None:
         super().__init__(parent)
         self._store = DownloadsStore(base_dir)
         self._settings = settings_getter
-        self._workers = {}  # record_id -> worker thread
-        self._mods_dir: Optional[str] = None
+        self._workers = {}
+        self._mods_dir: str | None = None
 
     def set_app_context(self, *, mods_dir: str):
         self._mods_dir = mods_dir
@@ -71,11 +80,11 @@ class DownloadsManager(QObject):
         display_name: str,
         source_kind: str = SourceKind.EXTERNAL_URL,
         target_kind: str = TargetKind.MOD,
-        source_url: Optional[str] = None,
-        source_file_path: Optional[str] = None,
-        canonical_key: Optional[str] = None,
-        metadata: Optional[dict] = None,
-    ) -> Tuple[str, bool]:
+        source_url: str | None = None,
+        source_file_path: str | None = None,
+        canonical_key: str | None = None,
+        metadata: dict | None = None,
+    ) -> tuple[str, bool]:
         if canonical_key:
             existing = self._store.find_by_canonical_key(canonical_key)
             if existing:
@@ -90,8 +99,8 @@ class DownloadsManager(QObject):
             source_url=source_url,
             source_file_path=source_file_path,
             canonical_key=canonical_key,
-            auto_use=not settings.get('downloads_no_auto_use', False),
-            delete_after_use=settings.get('downloads_delete_after_use', False),
+            auto_use=not settings.get("downloads_no_auto_use", False),
+            delete_after_use=settings.get("downloads_delete_after_use", False),
             metadata=metadata or {},
         )
         self._store.add(record)
@@ -106,35 +115,47 @@ class DownloadsManager(QObject):
         self.record_updated.emit(record)
 
         safe_name = _safe_filename(record.display_name)
-        ext = ''
-        for src in (record.metadata.get('file_name', ''), record.source_url or '', record.source_file_path or ''):
-            base = src.split('?')[0].split('#')[0]
+        ext = ""
+        for src in (
+            record.metadata.get("file_name", ""),
+            record.source_url or "",
+            record.source_file_path or "",
+        ):
+            base = src.split("?")[0].split("#")[0]
             _, e = os.path.splitext(base)
             if e:
                 ext = e
                 break
-        target_path = os.path.join(self._store.downloads_dir, f'{record.id}__{safe_name}{ext}')
+        target_path = os.path.join(
+            self._store.downloads_dir, f"{record.id}__{safe_name}{ext}"
+        )
 
         if record.source_file_path and os.path.exists(record.source_file_path):
             from workers.download_worker import LocalFileCopyWorker
-            worker = LocalFileCopyWorker(record.id, record.source_file_path, target_path, parent=self)
+
+            worker = LocalFileCopyWorker(
+                record.id, record.source_file_path, target_path, parent=self
+            )
             worker.download_finished.connect(self._on_download_finished)
             self._workers[record.id] = worker
             worker.start()
             return
 
         if not record.source_url:
-            self._on_download_finished(record.id, False, 'No download URL', '')
+            self._on_download_finished(record.id, False, "No download URL", "")
             return
 
         from workers.download_worker import DownloadWorker
+
         worker = DownloadWorker(record.id, record.source_url, target_path, parent=self)
         worker.progress_updated.connect(self._on_download_progress)
         worker.download_finished.connect(self._on_download_finished)
         self._workers[record.id] = worker
         worker.start()
 
-    def _on_download_progress(self, record_id: str, pct: int, bytes_recv: int, bytes_total: int):
+    def _on_download_progress(
+        self, record_id: str, pct: int, bytes_recv: int, bytes_total: int
+    ):
         record = self._store.find(record_id)
         if not record:
             return
@@ -143,7 +164,9 @@ class DownloadsManager(QObject):
         record.bytes_total = bytes_total
         self.record_updated.emit(record)
 
-    def _on_download_finished(self, record_id: str, success: bool, error: str, saved_path: str):
+    def _on_download_finished(
+        self, record_id: str, success: bool, error: str, saved_path: str
+    ):
         record = self._store.find(record_id)
         if not record:
             return
@@ -151,8 +174,10 @@ class DownloadsManager(QObject):
         _cleanup_worker(worker)
 
         if not success:
-            is_cancel = error == 'cancelled'
-            record.download_status = DownloadStatus.CANCELLED if is_cancel else DownloadStatus.FAILED
+            is_cancel = error == "cancelled"
+            record.download_status = (
+                DownloadStatus.CANCELLED if is_cancel else DownloadStatus.FAILED
+            )
             record.use_status = UseStatus.CANCELLED if is_cancel else UseStatus.FAILED
             record.error_message = None if is_cancel else error
             record.finished_at = utc_now_iso()
@@ -184,9 +209,9 @@ class DownloadsManager(QObject):
         if not record or not record.file_exists or not record.file_path:
             return
         if not self._mods_dir:
-            logger.warning('DownloadsManager: mods_dir not set, cannot run Use')
+            logger.warning("DownloadsManager: mods_dir not set, cannot run Use")
             record.use_status = UseStatus.FAILED
-            record.error_message = 'Application context not ready'
+            record.error_message = "Application context not ready"
             self._store.update(record)
             self.record_updated.emit(record)
             self._emit_badge()
@@ -197,6 +222,7 @@ class DownloadsManager(QObject):
         self.record_updated.emit(record)
 
         from workers.use_worker import UseWorker
+
         worker = UseWorker(
             record_id=record.id,
             file_path=record.file_path,
@@ -209,7 +235,9 @@ class DownloadsManager(QObject):
         self._workers[record.id] = worker
         worker.start()
 
-    def _on_use_finished(self, record_id: str, success: bool, needs_manual: bool, error: str):
+    def _on_use_finished(
+        self, record_id: str, success: bool, needs_manual: bool, error: str
+    ):
         record = self._store.find(record_id)
         if not record:
             return
@@ -218,7 +246,7 @@ class DownloadsManager(QObject):
 
         if not success and not needs_manual:
             record.use_status = UseStatus.FAILED
-            record.error_message = error or 'Use failed'
+            record.error_message = error or "Use failed"
             self._store.update(record)
             self.record_updated.emit(record)
             self._emit_badge()
@@ -265,7 +293,7 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
-        if worker and hasattr(worker, 'cancel'):
+        if worker and hasattr(worker, "cancel"):
             worker.cancel()
             worker.requestInterruption()
             worker.finished.connect(worker.deleteLater)
@@ -279,7 +307,10 @@ class DownloadsManager(QObject):
 
     def action_retry(self, record_id: str):
         record = self._store.find(record_id)
-        if not record or record.download_status not in (DownloadStatus.FAILED, DownloadStatus.CANCELLED):
+        if not record or record.download_status not in (
+            DownloadStatus.FAILED,
+            DownloadStatus.CANCELLED,
+        ):
             return
         record.download_status = DownloadStatus.QUEUED
         record.use_status = UseStatus.NOT_STARTED
@@ -298,7 +329,7 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
-        if worker and hasattr(worker, 'cancel'):
+        if worker and hasattr(worker, "cancel"):
             worker.cancel()
         self._store.delete_file_for_record(record)
         self._store.remove(record_id)
@@ -314,19 +345,29 @@ class DownloadsManager(QObject):
     def _open_manual_install_dialog(self, record: DownloadRecord, parent_widget=None):
         try:
             import tempfile
+
             from PyQt6.QtWidgets import QDialog
+
             from ui.dialogs.manual_install_dialog import ManualModInstallDialog
             from utils.archive_utils import extract_archive
-            temp_dir = tempfile.mkdtemp(prefix='dh_manual_')
+
+            temp_dir = tempfile.mkdtemp(prefix="dh_manual_")
             extract_archive(record.file_path, temp_dir)
             contents = os.listdir(temp_dir)
             content_path = temp_dir
-            if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
+            if len(contents) == 1 and os.path.isdir(
+                os.path.join(temp_dir, contents[0])
+            ):
                 content_path = os.path.join(temp_dir, contents[0])
             gb_metadata = self._build_dialog_metadata(record)
-            initial_game_type = (record.metadata.get('game') or 'deltarune') if record.metadata else None
+            initial_game_type = (
+                (record.metadata.get("game") or "deltarune")
+                if record.metadata
+                else None
+            )
             dialog = ManualModInstallDialog(
-                parent_widget or self.parent(), content_path,
+                parent_widget or self.parent(),
+                content_path,
                 gamebanana_metadata=gb_metadata,
                 source_file_path=record.file_path,
                 initial_game_type=initial_game_type,
@@ -347,11 +388,11 @@ class DownloadsManager(QObject):
             else:
                 shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception as e:
-            logger.error('DownloadsManager: manual install dialog failed: %s', e, exc_info=True)
-            try:
+            logger.error(
+                "DownloadsManager: manual install dialog failed: %s", e, exc_info=True
+            )
+            with contextlib.suppress(Exception):
                 shutil.rmtree(temp_dir, ignore_errors=True)
-            except Exception:
-                pass
             record.use_status = UseStatus.NEEDS_MANUAL
             record.error_message = str(e)
             self._store.update(record)
@@ -359,30 +400,36 @@ class DownloadsManager(QObject):
 
     def _build_dialog_metadata(self, record: DownloadRecord) -> dict:
         m = record.metadata or {}
-        if not m.get('gb_mod_id'):
+        if not m.get("gb_mod_id"):
             return {}
         return {
-            'mod_id': m['gb_mod_id'],
-            'item_type': m.get('item_type', 'mod'),
-            'name': record.display_name,
-            'author': m.get('author'),
-            'profile_url': m.get('profile_url'),
-            'external_url': m.get('profile_url'),
-            'icon_url': m.get('icon_url'),
-            'tags': m.get('tags') or [],
-            'category': m.get('category'),
-            'game': m.get('game', 'deltarune'),
+            "mod_id": m["gb_mod_id"],
+            "item_type": m.get("item_type", "mod"),
+            "name": record.display_name,
+            "author": m.get("author"),
+            "profile_url": m.get("profile_url"),
+            "external_url": m.get("profile_url"),
+            "icon_url": m.get("icon_url"),
+            "tags": m.get("tags") or [],
+            "category": m.get("category"),
+            "game": m.get("game", "deltarune"),
         }
 
-    def enqueue_with_feedback(self, feedback_service, **kwargs) -> Tuple[str, bool]:
+    def enqueue_with_feedback(self, feedback_service, **kwargs) -> tuple[str, bool]:
         """Enqueue and show appropriate status feedback. Returns (record_id, is_duplicate)."""
         from config.constants import UI_COLORS
         from services.localization_service import tr
+
         record_id, is_dup = self.enqueue(**kwargs)
         if is_dup:
-            feedback_service.update_status(tr('downloads.already_downloading'), UI_COLORS['status_warning'])
+            feedback_service.update_status(
+                tr("downloads.already_downloading"), UI_COLORS["status_warning"]
+            )
         else:
-            feedback_service.update_status(tr('downloads.enqueued', name=kwargs.get('display_name', '')), UI_COLORS['status_info'])
+            feedback_service.update_status(
+                tr("downloads.enqueued", name=kwargs.get("display_name", "")),
+                UI_COLORS["status_info"],
+            )
         return record_id, is_dup
 
     def clear_downloads(self):
@@ -393,6 +440,11 @@ class DownloadsManager(QObject):
         self._emit_badge()
 
     def _emit_badge(self):
-        count = sum(1 for r in self._store.records if r.effective_status_key in ('downloading', 'ready', 'installing', 'needs_manual'))
+        count = sum(
+            1
+            for r in self._store.records
+            if r.effective_status_key
+            in ("downloading", "ready", "installing", "needs_manual")
+        )
         attention = any(r.needs_attention for r in self._store.records)
         self.badge_changed.emit(count, attention)

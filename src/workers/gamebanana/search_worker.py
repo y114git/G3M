@@ -2,15 +2,21 @@
 
 This module provides a worker thread for searching GameBanana mods.
 """
+
 import logging
 import time
+
 from PyQt6.QtCore import QThread, pyqtSignal
-from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, UI_COLORS
-from services.localization_service import tr
+
 from adapters.gamebanana_adapter import GameBananaAPI
-from typing import List
+from config.constants import (
+    GAMEBANANA_GAME_IDS,
+    GAMEBANANA_PER_PAGE,
+    SEARCH_TIMEOUT_SECONDS,
+    UI_COLORS,
+)
 from models.mod_models import ModInfo
-from config.constants import SEARCH_TIMEOUT_SECONDS
+from services.localization_service import tr
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +25,15 @@ class SearchGameBananaModsThread(QThread):
     result = pyqtSignal(list)
     status = pyqtSignal(str, str)
 
-    def __init__(self, game_id: int, search_string: str, start_page: int = 1, num_pages: int = 1, sort: str = 'relevant', parent=None):
+    def __init__(
+        self,
+        game_id: int,
+        search_string: str,
+        start_page: int = 1,
+        num_pages: int = 1,
+        sort: str = "relevant",
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self.game_id = game_id
         self.search_string = search_string
@@ -35,9 +49,16 @@ class SearchGameBananaModsThread(QThread):
 
     def run(self):
         self._start_time = time.time()
-        new_mods: List[ModInfo] = []
+        new_mods: list[ModInfo] = []
         try:
-            game_name = next((name for name, id_val in GAMEBANANA_GAME_IDS.items() if id_val == self.game_id), None)
+            game_name = next(
+                (
+                    name
+                    for name, id_val in GAMEBANANA_GAME_IDS.items()
+                    if id_val == self.game_id
+                ),
+                None,
+            )
             if not game_name:
                 self.result.emit([])
                 return
@@ -48,12 +69,20 @@ class SearchGameBananaModsThread(QThread):
                 if self._cancelled or self.isInterruptionRequested():
                     break
                 if time.time() - self._start_time > SEARCH_TIMEOUT_SECONDS:
-                    logger.warning(f'SearchGameBananaModsThread: Search timeout after {SEARCH_TIMEOUT_SECONDS} seconds')
+                    logger.warning(
+                        f"SearchGameBananaModsThread: Search timeout after {SEARCH_TIMEOUT_SECONDS} seconds"
+                    )
                     break
-                search_result = self.api.search_mods(self.game_id, search_string=self.search_string, page=page, per_page=GAMEBANANA_PER_PAGE, sort=self.sort)
+                search_result = self.api.search_mods(
+                    self.game_id,
+                    search_string=self.search_string,
+                    page=page,
+                    per_page=GAMEBANANA_PER_PAGE,
+                    sort=self.sort,
+                )
                 if not search_result:
                     break
-                records = search_result.get('_aRecords', [])
+                records = search_result.get("_aRecords", [])
                 if not records:
                     break
                 for record in records:
@@ -61,10 +90,10 @@ class SearchGameBananaModsThread(QThread):
                         break
                     if time.time() - self._start_time > SEARCH_TIMEOUT_SECONDS:
                         break
-                    model_name = record.get('_sModelName')
-                    if model_name not in ('Mod', 'Wip', 'WIP'):
+                    model_name = record.get("_sModelName")
+                    if model_name not in ("Mod", "Wip", "WIP"):
                         continue
-                    is_wip = model_name in ('Wip', 'WIP')
+                    is_wip = model_name in ("Wip", "WIP")
                     mod_info = self.api._map_mod_data(record, game_name, is_wip=is_wip)
                     if not mod_info:
                         continue
@@ -73,6 +102,9 @@ class SearchGameBananaModsThread(QThread):
                     break
             self.result.emit(new_mods)
         except Exception as e:
-            logger.error(f'Error searching GameBanana mods: {e}', exc_info=True)
-            self.status.emit(tr('errors.gamebanana_fetch_failed', error=str(e)), UI_COLORS['status_error'])
+            logger.error(f"Error searching GameBanana mods: {e}", exc_info=True)
+            self.status.emit(
+                tr("errors.gamebanana_fetch_failed", error=str(e)),
+                UI_COLORS["status_error"],
+            )
             self.result.emit([])

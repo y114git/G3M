@@ -3,7 +3,9 @@ import os
 from unittest.mock import Mock, patch
 
 from models.download_models import (
-    DownloadRecord, DownloadStatus, UseStatus,
+    DownloadRecord,
+    DownloadStatus,
+    UseStatus,
 )
 from services.downloads_manager import DownloadsManager, _safe_filename
 
@@ -70,7 +72,7 @@ class TestDownloadsManagerEdgeCases:
         manager.startup()
 
         with patch.object(manager, '_start_download') as mock_start:
-            record_id, _ = manager.enqueue(
+            _record_id, _ = manager.enqueue(
                 display_name='Test Mod',
                 source_url='https://example.com/mod.zip?version=1.0'
             )

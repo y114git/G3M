@@ -28,6 +28,7 @@ class TestAppWindow:
 
     def test_sync_chapter_tab_buttons_hides_extra_buttons_for_single_tab_game(self, qapp):
         from PyQt6.QtWidgets import QPushButton, QWidget
+
         from core.app_window import AppWindow
         from models.game_modes import UndertaleGame
         window = QWidget()
@@ -60,6 +61,7 @@ class TestTabBuilders:
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
         from PyQt6.QtWidgets import QGridLayout
+
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
         builder = ModsBrowserTabBuilder(app_state, None)
         assert builder is not None

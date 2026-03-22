@@ -1,37 +1,49 @@
 """URL-based mod installation worker."""
-import os
+
 import json
+import logging
+import os
 import shutil
 import tempfile
-import logging
-from typing import Optional
+
 from PyQt6.QtCore import pyqtSignal
-from config.constants import UI_COLORS, MOD_CONFIG_FILENAME
-from services.localization_service import tr
+
+from config.constants import MOD_CONFIG_FILENAME, UI_COLORS
 from models.exceptions import AppError
-from utils.file_utils import has_deltamod_info_file, check_filename_is_deltamod_info
-from utils.network_utils import get_session, download_file
+from services.localization_service import tr
+from utils.file_utils import check_filename_is_deltamod_info, has_deltamod_info_file
+from utils.network_utils import download_file, get_session
 from workers.base_install_worker import BaseInstallWorker
-from workers.install.helpers_install import find_mod_config, normalize_mod_key, load_mod_config, save_mod_config
+from workers.install.helpers_install import (
+    find_mod_config,
+    load_mod_config,
+    normalize_mod_key,
+    save_mod_config,
+)
 
 
 class UrlInstallThread(BaseInstallWorker):
     manual_install_required = pyqtSignal(str, str, str)
 
     @staticmethod
-    def _unpack_content_path(archive_path: str, unpack_dir: str, use_shutil: bool = True) -> str:
+    def _unpack_content_path(
+        archive_path: str, unpack_dir: str, use_shutil: bool = True
+    ) -> str:
         if use_shutil:
             shutil.unpack_archive(archive_path, unpack_dir)
         else:
             from utils.archive_utils import extract_any_archive
+
             extract_any_archive(archive_path, unpack_dir)
         content_path = unpack_dir
         unpacked_items = os.listdir(unpack_dir)
-        if len(unpacked_items) == 1 and os.path.isdir(os.path.join(unpack_dir, unpacked_items[0])):
+        if len(unpacked_items) == 1 and os.path.isdir(
+            os.path.join(unpack_dir, unpacked_items[0])
+        ):
             content_path = os.path.join(unpack_dir, unpacked_items[0])
         return content_path
 
-    def __init__(self, main_window, url: str):
+    def __init__(self, main_window, url: str) -> None:
         super().__init__(main_window)
         self.main_window = main_window
         self.url = url
@@ -39,28 +51,36 @@ class UrlInstallThread(BaseInstallWorker):
 
     def run(self):
         try:
-            if self.url.startswith('deltahub://'):
-                content = self.url[len('deltahub://'):].split(',')[0].strip().rstrip('/')
-                if len(content) == 64 and all((c in '0123456789abcdef' for c in content.lower())):
-                    self.finished.emit(False, tr('errors.mod_not_found'))
+            if self.url.startswith("deltahub://"):
+                content = (
+                    self.url[len("deltahub://") :].split(",")[0].strip().rstrip("/")
+                )
+                if len(content) == 64 and all(
+                    c in "0123456789abcdef" for c in content.lower()
+                ):
+                    self.finished.emit(False, tr("errors.mod_not_found"))
                     return
-                if not content.startswith(('http://', 'https://')):
-                    content = content.replace('https//', 'https://').replace('http//', 'http://')
+                if not content.startswith(("http://", "https://")):
+                    content = content.replace("https//", "https://").replace(
+                        "http//", "http://"
+                    )
                 download_url = content
             else:
                 download_url = self.url
-            with tempfile.TemporaryDirectory(prefix='dh-url-install-') as temp_dir:
-                self.status.emit(tr('status.downloading_from_external'), UI_COLORS['status_warning'])
+            with tempfile.TemporaryDirectory(prefix="dh-url-install-") as temp_dir:
+                self.status.emit(
+                    tr("status.downloading_from_external"), UI_COLORS["status_warning"]
+                )
                 archive_path = self._download_archive(download_url, temp_dir)
                 redirect_result = self._check_redirect(archive_path, temp_dir)
                 if redirect_result:
                     return
                 content_type = self._detect_content_type(archive_path)
-                if content_type == 'theme':
+                if content_type == "theme":
                     self._extract_and_install_theme(archive_path, temp_dir)
-                elif content_type == 'plugin':
+                elif content_type == "plugin":
                     self._install_plugin_from_archive(archive_path)
-                elif content_type == 'mod':
+                elif content_type == "mod":
                     self._install_mod_from_archive(archive_path, temp_dir)
                 else:
                     self._prepare_for_manual_install(archive_path)
@@ -68,93 +88,123 @@ class UrlInstallThread(BaseInstallWorker):
             self.finished.emit(False, str(e))
 
     def _process_deltamod_archive(self, url: str):
-        with tempfile.TemporaryDirectory(prefix='dh-redirect-dl-') as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="dh-redirect-dl-") as temp_dir:
             archive_path = self._download_archive(url, temp_dir)
-            with tempfile.TemporaryDirectory(prefix='dh-redirect-unpack-') as unpack_dir:
+            with tempfile.TemporaryDirectory(
+                prefix="dh-redirect-unpack-"
+            ) as unpack_dir:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
                 if MOD_CONFIG_FILENAME in files_in_root:
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
                     if mod_dir:
                         mod_name = os.path.basename(mod_dir)
-                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                        self.finished.emit(
+                            True,
+                            tr("status.install_complete_success", mod_name=mod_name),
+                        )
                     else:
-                        raise AppError('errors.mod_installation_failed')
+                        raise AppError("errors.mod_installation_failed")
                 elif has_deltamod_info_file(files_in_root):
                     from adapters.deltamod_adapter import DeltamodConverter
-                    converter = DeltamodConverter(content_path, self.main_window.app_state.mods_dir)
+
+                    converter = DeltamodConverter(
+                        content_path, self.main_window.app_state.mods_dir
+                    )
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)
-                        self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                        self.finished.emit(
+                            True,
+                            tr("status.install_complete_success", mod_name=mod_name),
+                        )
                     else:
-                        raise AppError('errors.deltamod_conversion_failed_url')
+                        raise AppError("errors.deltamod_conversion_failed_url")
                 else:
-                    raise AppError('errors.deltamod_archive_invalid_redirect')
+                    raise AppError("errors.deltamod_archive_invalid_redirect")
 
-    def _install_deltahub_mod_from_path(self, content_path: str) -> Optional[str]:
+    def _install_deltahub_mod_from_path(self, content_path: str) -> str | None:
         mod_config_path = find_mod_config(content_path)
         if not mod_config_path:
-            logging.error('mod_config.json not found in DELTAHUB mod archive')
+            logging.error("mod_config.json not found in DELTAHUB mod archive")
             return None
         config_data = load_mod_config(mod_config_path)
         if not config_data:
             return None
         key = normalize_mod_key(config_data)
-        mod_name = config_data.get('name', 'imported_mod')
-        target_mod_dir = self._create_unique_mod_dir(self.main_window.app_state.mods_dir, mod_name)
+        mod_name = config_data.get("name", "imported_mod")
+        target_mod_dir = self._create_unique_mod_dir(
+            self.main_window.app_state.mods_dir, mod_name
+        )
         self._copy_directory_contents(content_path, target_mod_dir)
         target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         try:
             save_mod_config(target_config_path, config_data)
-            logging.info(f'Installed DELTAHUB mod from URL: {target_mod_dir}, key={key}')
+            logging.info(
+                f"Installed DELTAHUB mod from URL: {target_mod_dir}, key={key}"
+            )
         except Exception:
             return None
         return target_mod_dir
 
     def _download_archive(self, url: str, temp_dir: str) -> str:
-        from urllib.parse import urlparse, unquote
+        from urllib.parse import unquote, urlparse
+
         from utils.network_utils import get_filename_from_url
+
         parsed_url = urlparse(url)
         filename = unquote(os.path.basename(parsed_url.path))
-        if not filename or '.' not in filename:
+        if not filename or "." not in filename:
             session = get_session()
             filename = get_filename_from_url(session, url)
         from utils.archive_utils import get_file_extension_from_url
+
         if not filename:
             file_ext = get_file_extension_from_url(url)
-            filename = f'archive{file_ext}'
-        supported_extensions = ['.zip', '.rar', '.7z', '.tar.gz', '.lzma']
-        if not any((filename.lower().endswith(ext) for ext in supported_extensions)):
+            filename = f"archive{file_ext}"
+        supported_extensions = [".zip", ".rar", ".7z", ".tar.gz", ".lzma"]
+        if not any(filename.lower().endswith(ext) for ext in supported_extensions):
             file_ext = get_file_extension_from_url(url)
-            filename = f'archive{file_ext}'
+            filename = f"archive{file_ext}"
         archive_path = os.path.join(temp_dir, filename)
         session = get_session()
         self._session = session
         downloaded_ref = [0]
         total_size = self._get_content_length(session, url)
-        progress_callback = self._make_download_progress_callback(tr('status.downloading_mod'), total_size, downloaded_ref)
+        progress_callback = self._make_download_progress_callback(
+            tr("status.downloading_mod"), total_size, downloaded_ref
+        )
 
         def on_response(r):
             self._active_response = r
-        download_file(session, url, archive_path, progress_callback=progress_callback, total_size=total_size, downloaded_ref=downloaded_ref, cancel_check=lambda: self._cancelled, on_response=on_response)
+
+        download_file(
+            session,
+            url,
+            archive_path,
+            progress_callback=progress_callback,
+            total_size=total_size,
+            downloaded_ref=downloaded_ref,
+            cancel_check=lambda: self._cancelled,
+            on_response=on_response,
+        )
         self.progress.emit(100)
         return archive_path
 
     @staticmethod
-    def _classify_filename(name: str) -> Optional[str]:
-        n = name.replace('\\', '/').strip('/')
-        if n == 'theme.json' or n.endswith('/theme.json'):
-            return 'theme'
-        if n == 'plugin_init.py' or n.endswith('/plugin_init.py'):
-            return 'plugin'
-        if n == MOD_CONFIG_FILENAME or n.endswith(f'/{MOD_CONFIG_FILENAME}'):
-            return 'mod'
+    def _classify_filename(name: str) -> str | None:
+        n = name.replace("\\", "/").strip("/")
+        if n == "theme.json" or n.endswith("/theme.json"):
+            return "theme"
+        if n == "plugin_init.py" or n.endswith("/plugin_init.py"):
+            return "plugin"
+        if n == MOD_CONFIG_FILENAME or n.endswith(f"/{MOD_CONFIG_FILENAME}"):
+            return "mod"
         if check_filename_is_deltamod_info(n):
-            return 'mod'
+            return "mod"
         return None
 
-    def _detect_from_names(self, names) -> Optional[str]:
+    def _detect_from_names(self, names) -> str | None:
         for name in names:
             result = self._classify_filename(name)
             if result:
@@ -162,206 +212,271 @@ class UrlInstallThread(BaseInstallWorker):
         return None
 
     def _detect_content_type(self, archive_path: str) -> str:
-        import zipfile
         import tarfile
+        import zipfile
+
         archive_lower = archive_path.lower()
         try:
-            if archive_lower.endswith('.zip'):
-                with zipfile.ZipFile(archive_path, 'r') as zf:
+            if archive_lower.endswith(".zip"):
+                with zipfile.ZipFile(archive_path, "r") as zf:
                     result = self._detect_from_names(zf.namelist())
                     if result:
                         return result
-            elif archive_lower.endswith('.tar.gz'):
-                with tarfile.open(archive_path, 'r:gz') as tf:
-                    result = self._detect_from_names((m.name for m in tf.getmembers()))
+            elif archive_lower.endswith(".tar.gz"):
+                with tarfile.open(archive_path, "r:gz") as tf:
+                    result = self._detect_from_names(m.name for m in tf.getmembers())
                     if result:
                         return result
-            elif archive_lower.endswith('.rar'):
+            elif archive_lower.endswith(".rar"):
                 try:
                     import rarfile
-                    with rarfile.RarFile(archive_path, 'r') as rf:
+
+                    with rarfile.RarFile(archive_path, "r") as rf:
                         result = self._detect_from_names(rf.namelist())
                         if result:
                             return result
                 except (OSError, ImportError) as e:
-                    logging.debug(f'Could not open RAR: {e}')
-            elif archive_lower.endswith('.7z'):
+                    logging.debug(f"Could not open RAR: {e}")
+            elif archive_lower.endswith(".7z"):
                 try:
                     import py7zr
-                    with py7zr.SevenZipFile(archive_path, mode='r') as zf:
+
+                    with py7zr.SevenZipFile(archive_path, mode="r") as zf:
                         result = self._detect_from_names(zf.getnames())
                         if result:
                             return result
                 except (OSError, ImportError) as e:
-                    logging.debug(f'Could not open 7z: {e}')
+                    logging.debug(f"Could not open 7z: {e}")
         except Exception as e:
-            logging.error(f'Error detecting content type: {e}', exc_info=True)
-        return self._detect_content_type_from_extracted(archive_path) or ''
+            logging.error(f"Error detecting content type: {e}", exc_info=True)
+        return self._detect_content_type_from_extracted(archive_path) or ""
 
-    def _detect_content_type_from_extracted(self, archive_path: str) -> Optional[str]:
-        with tempfile.TemporaryDirectory(prefix='dh-detect-type-') as unpack_dir:
+    def _detect_content_type_from_extracted(self, archive_path: str) -> str | None:
+        with tempfile.TemporaryDirectory(prefix="dh-detect-type-") as unpack_dir:
             try:
                 from utils.archive_utils import extract_any_archive
+
                 extract_any_archive(archive_path, unpack_dir)
                 items = os.listdir(unpack_dir)
-                content_path = os.path.join(unpack_dir, items[0]) if len(items) == 1 and os.path.isdir(os.path.join(unpack_dir, items[0])) else unpack_dir
-                for root, _, files in os.walk(content_path):
+                content_path = (
+                    os.path.join(unpack_dir, items[0])
+                    if len(items) == 1
+                    and os.path.isdir(os.path.join(unpack_dir, items[0]))
+                    else unpack_dir
+                )
+                for _root, _, files in os.walk(content_path):
                     for f in files:
-                        if f == 'theme.json':
-                            return 'theme'
-                        if f == 'plugin_init.py':
-                            return 'plugin'
-                        if f == MOD_CONFIG_FILENAME or check_filename_is_deltamod_info(f):
-                            return 'mod'
+                        if f == "theme.json":
+                            return "theme"
+                        if f == "plugin_init.py":
+                            return "plugin"
+                        if f == MOD_CONFIG_FILENAME or check_filename_is_deltamod_info(
+                            f
+                        ):
+                            return "mod"
                 if has_deltamod_info_file(os.listdir(content_path)):
-                    return 'mod'
+                    return "mod"
             except Exception as e:
-                logging.error(f'Error detecting from extracted: {e}', exc_info=True)
+                logging.error(f"Error detecting from extracted: {e}", exc_info=True)
         return None
 
     def _prepare_for_manual_install(self, archive_path: str):
         try:
             from utils.archive_utils import extract_archive
-            persistent_temp_dir = tempfile.mkdtemp(prefix='deltahub_url_manual_install_')
+
+            persistent_temp_dir = tempfile.mkdtemp(
+                prefix="deltahub_url_manual_install_"
+            )
             try:
                 archive_filename = os.path.basename(archive_path)
-                preserved_archive_path = os.path.join(persistent_temp_dir, archive_filename)
+                preserved_archive_path = os.path.join(
+                    persistent_temp_dir, archive_filename
+                )
                 shutil.copy2(archive_path, preserved_archive_path)
-                extract_dir = os.path.join(persistent_temp_dir, 'extracted')
+                extract_dir = os.path.join(persistent_temp_dir, "extracted")
                 os.makedirs(extract_dir, exist_ok=True)
                 extract_archive(preserved_archive_path, extract_dir)
                 content_path = extract_dir
                 contents = os.listdir(extract_dir)
-                if len(contents) == 1 and os.path.isdir(os.path.join(extract_dir, contents[0])):
+                if len(contents) == 1 and os.path.isdir(
+                    os.path.join(extract_dir, contents[0])
+                ):
                     content_path = os.path.join(extract_dir, contents[0])
-                self.status.emit(tr('status.manual_install_ready'), UI_COLORS['status_info'])
-                self.manual_install_required.emit(content_path, preserved_archive_path, persistent_temp_dir)
+                self.status.emit(
+                    tr("status.manual_install_ready"), UI_COLORS["status_info"]
+                )
+                self.manual_install_required.emit(
+                    content_path, preserved_archive_path, persistent_temp_dir
+                )
             except Exception:
                 try:
                     shutil.rmtree(persistent_temp_dir, ignore_errors=True)
                 except Exception as e:
-                    logging.debug(f'UrlInstallThread: Failed to clean up {persistent_temp_dir}: {e}', exc_info=True)
+                    logging.debug(
+                        f"UrlInstallThread: Failed to clean up {persistent_temp_dir}: {e}",
+                        exc_info=True,
+                    )
                 raise
         except Exception as e:
-            logging.error(f'UrlInstallThread: Error preparing for manual install: {e}', exc_info=True)
-            self.finished.emit(False, tr('errors.manual_install_failed', error=str(e)))
+            logging.error(
+                f"UrlInstallThread: Error preparing for manual install: {e}",
+                exc_info=True,
+            )
+            self.finished.emit(False, tr("errors.manual_install_failed", error=str(e)))
 
     def _install_theme_from_dir(self, theme_dir: str):
         try:
-            self.status.emit(tr('themes.installing_theme'), UI_COLORS['status_warning'])
+            self.status.emit(tr("themes.installing_theme"), UI_COLORS["status_warning"])
             config_dir = self.main_window.app_state.config_dir
             app_state = self.main_window.app_state
             settings_service = self.main_window.settings_service
-            theme_json_path = os.path.join(theme_dir, 'theme.json')
+            theme_json_path = os.path.join(theme_dir, "theme.json")
             if not os.path.exists(theme_json_path):
-                raise ValueError('Missing theme.json')
-            with open(theme_json_path, 'r', encoding='utf-8') as f:
+                raise ValueError("Missing theme.json")
+            with open(theme_json_path, encoding="utf-8") as f:
                 theme_settings = json.load(f)
             for key, value in theme_settings.items():
                 app_state.local_config[key] = value
-            for old_file in ['custom_background_music.mp3', 'custom_background_music.wav', 'custom_startup_sound.mp3', 'custom_startup_sound.wav']:
+            for old_file in [
+                "custom_background_music.mp3",
+                "custom_background_music.wav",
+                "custom_startup_sound.mp3",
+                "custom_startup_sound.wav",
+            ]:
                 old_file_path = os.path.join(config_dir, old_file)
                 if os.path.exists(old_file_path):
                     try:
                         os.remove(old_file_path)
                     except Exception as e:
-                        logging.warning(f'Failed to remove old file {old_file}: {e}')
+                        logging.warning(f"Failed to remove old file {old_file}: {e}")
             settings_service.write_local_config()
-            self.status.emit(tr('themes.theme_installed'), 'success')
-            self.finished.emit(True, tr('themes.theme_installed_success'))
+            self.status.emit(tr("themes.theme_installed"), "success")
+            self.finished.emit(True, tr("themes.theme_installed_success"))
         except Exception as e:
-            logging.error(f'UrlInstallThread: Error installing theme from dir: {e}', exc_info=True)
-            self.finished.emit(False, tr('themes.installation_error', error=str(e)))
+            logging.error(
+                f"UrlInstallThread: Error installing theme from dir: {e}", exc_info=True
+            )
+            self.finished.emit(False, tr("themes.installation_error", error=str(e)))
 
     def _extract_and_install_theme(self, archive_path: str, temp_dir: str):
-        with tempfile.TemporaryDirectory(prefix='dh-theme-extract-') as unpack_dir:
+        with tempfile.TemporaryDirectory(prefix="dh-theme-extract-") as unpack_dir:
             try:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 theme_json_path = None
-                for root, dirs, files in os.walk(content_path):
-                    if 'theme.json' in files:
-                        theme_json_path = os.path.join(root, 'theme.json')
+                for root, _dirs, files in os.walk(content_path):
+                    if "theme.json" in files:
+                        theme_json_path = os.path.join(root, "theme.json")
                         break
                 if not theme_json_path:
-                    raise AppError('themes.archive_not_found')
+                    raise AppError("themes.archive_not_found")
                 self._install_theme_from_dir(os.path.dirname(theme_json_path))
             except Exception as e:
-                logging.error(f'UrlInstallThread: Error extracting theme: {e}', exc_info=True)
-                self.finished.emit(False, tr('themes.installation_error', error=str(e)))
+                logging.error(
+                    f"UrlInstallThread: Error extracting theme: {e}", exc_info=True
+                )
+                self.finished.emit(False, tr("themes.installation_error", error=str(e)))
 
     def _install_plugin_from_archive(self, archive_path: str):
         try:
-            self.status.emit(tr('plugins.installing_plugin'), UI_COLORS['status_warning'])
+            self.status.emit(
+                tr("plugins.installing_plugin"), UI_COLORS["status_warning"]
+            )
             plugins_dir = self.main_window.app_state.plugins_dir
             archive_name = os.path.basename(archive_path)
-            if not archive_name or '.' not in archive_name:
+            if not archive_name or "." not in archive_name:
                 from utils.archive_utils import get_file_extension_from_content
+
                 file_ext = get_file_extension_from_content(archive_path)
-                archive_name = f'plugin{file_ext}'
+                archive_name = f"plugin{file_ext}"
             target_archive_path = os.path.join(plugins_dir, archive_name)
             shutil.copy2(archive_path, target_archive_path)
             self._try_remove_file(archive_path)
-            self.status.emit(tr('plugins.plugin_installed'), 'success')
-            self.finished.emit(True, tr('plugins.plugin_installed_success'))
+            self.status.emit(tr("plugins.plugin_installed"), "success")
+            self.finished.emit(True, tr("plugins.plugin_installed_success"))
         except Exception as e:
-            logging.error(f'UrlInstallThread: Error installing plugin: {e}', exc_info=True)
-            self.finished.emit(False, tr('plugins.installation_error', error=str(e)))
+            logging.error(
+                f"UrlInstallThread: Error installing plugin: {e}", exc_info=True
+            )
+            self.finished.emit(False, tr("plugins.installation_error", error=str(e)))
 
     def _check_redirect(self, archive_path: str, temp_dir: str) -> bool:
         try:
-            with tempfile.TemporaryDirectory(prefix='dh-redirect-check-') as unpack_dir:
-                content_path = self._unpack_content_path(archive_path, unpack_dir, use_shutil=False)
+            with tempfile.TemporaryDirectory(prefix="dh-redirect-check-") as unpack_dir:
+                content_path = self._unpack_content_path(
+                    archive_path, unpack_dir, use_shutil=False
+                )
                 files_in_root = os.listdir(content_path)
                 redirect_config_path = None
                 if MOD_CONFIG_FILENAME in files_in_root and len(files_in_root) == 1:
-                    redirect_config_path = os.path.join(content_path, MOD_CONFIG_FILENAME)
+                    redirect_config_path = os.path.join(
+                        content_path, MOD_CONFIG_FILENAME
+                    )
                 if redirect_config_path:
                     try:
-                        with open(redirect_config_path, 'r', encoding='utf-8') as f:
+                        with open(redirect_config_path, encoding="utf-8") as f:
                             redirect_config = json.load(f)
-                        redirect_url = redirect_config.get('dm_url') or redirect_config.get('external_url') or redirect_config.get('download_url')
+                        redirect_url = (
+                            redirect_config.get("dm_url")
+                            or redirect_config.get("external_url")
+                            or redirect_config.get("download_url")
+                        )
                         if redirect_url:
-                            self.status.emit(tr('status.deltamod_redirect_found'), UI_COLORS['status_info'])
+                            self.status.emit(
+                                tr("status.deltamod_redirect_found"),
+                                UI_COLORS["status_info"],
+                            )
                             self.progress.emit(0)
                             self._process_deltamod_archive(redirect_url)
                             return True
                     except Exception as e:
-                        logging.warning(f'UrlInstallThread: Error reading redirect config: {e}')
+                        logging.warning(
+                            f"UrlInstallThread: Error reading redirect config: {e}"
+                        )
         except Exception as e:
-            logging.warning(f'UrlInstallThread: Error checking redirect: {e}')
+            logging.warning(f"UrlInstallThread: Error checking redirect: {e}")
         return False
 
     @staticmethod
-    def _try_remove_file(path: str):
+    def _try_remove_file(path: str) -> None:
         try:
             if path and os.path.exists(path):
                 os.remove(path)
         except Exception as e:
-            logging.warning(f'UrlInstallThread: Failed to remove file {path}: {e}')
+            logging.warning(f"UrlInstallThread: Failed to remove file {path}: {e}")
 
     def _install_mod_from_archive(self, archive_path: str, temp_dir: str):
         try:
-            with tempfile.TemporaryDirectory(prefix='dh-url-unpack-') as unpack_dir:
+            with tempfile.TemporaryDirectory(prefix="dh-url-unpack-") as unpack_dir:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
                 mod_name = None
                 if has_deltamod_info_file(files_in_root):
-                    self.status.emit(tr('status.deltamod_archive_detected_url'), UI_COLORS['status_info'])
+                    self.status.emit(
+                        tr("status.deltamod_archive_detected_url"),
+                        UI_COLORS["status_info"],
+                    )
                     from adapters.deltamod_adapter import DeltamodConverter
-                    new_mod_path = DeltamodConverter(content_path, self.main_window.app_state.mods_dir).convert()
+
+                    new_mod_path = DeltamodConverter(
+                        content_path, self.main_window.app_state.mods_dir
+                    ).convert()
                     if not new_mod_path:
-                        raise AppError('errors.deltamod_conversion_failed_url')
+                        raise AppError("errors.deltamod_conversion_failed_url")
                     mod_name = os.path.basename(new_mod_path)
                 elif MOD_CONFIG_FILENAME in files_in_root:
-                    self.status.emit(tr('status.installing_mod'), UI_COLORS['status_info'])
+                    self.status.emit(
+                        tr("status.installing_mod"), UI_COLORS["status_info"]
+                    )
                     mod_dir = self._install_deltahub_mod_from_path(content_path)
                     if not mod_dir:
-                        raise AppError('errors.mod_installation_failed')
+                        raise AppError("errors.mod_installation_failed")
                     mod_name = os.path.basename(mod_dir)
                 else:
-                    raise AppError('errors.unsupported_mod_format_url')
+                    raise AppError("errors.unsupported_mod_format_url")
                 self._try_remove_file(archive_path)
-                self.finished.emit(True, tr('status.install_complete_success', mod_name=mod_name))
+                self.finished.emit(
+                    True, tr("status.install_complete_success", mod_name=mod_name)
+                )
         except Exception as e:
-            logging.error(f'UrlInstallThread: Error installing mod: {e}', exc_info=True)
+            logging.error(f"UrlInstallThread: Error installing mod: {e}", exc_info=True)
             self.finished.emit(False, str(e))

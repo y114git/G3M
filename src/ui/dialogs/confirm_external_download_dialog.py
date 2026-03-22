@@ -1,6 +1,8 @@
 """Confirmation dialog before downloading from external URL."""
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
 from services.localization_service import tr
 from ui.common.dialog_theme import build_dialog_theme_stylesheet
 
@@ -8,10 +10,10 @@ from ui.common.dialog_theme import build_dialog_theme_stylesheet
 class ConfirmExternalDownloadDialog(QDialog):
     """Small dialog asking user to confirm download from external source."""
 
-    def __init__(self, url: str, app_state=None, parent=None):
+    def __init__(self, url: str, app_state=None, parent=None) -> None:
         super().__init__(parent)
         self._url = url
-        self.setWindowTitle(tr('downloads.confirm_external_title'))
+        self.setWindowTitle(tr("downloads.confirm_external_title"))
         self.setMinimumWidth(400)
         self.setModal(True)
         self._build_ui()
@@ -21,19 +23,19 @@ class ConfirmExternalDownloadDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-        msg = QLabel(tr('downloads.confirm_external_message'))
+        msg = QLabel(tr("downloads.confirm_external_message"))
         msg.setWordWrap(True)
         layout.addWidget(msg)
-        link_label = QLabel(tr('downloads.confirm_external_link', link=self._url))
+        link_label = QLabel(tr("downloads.confirm_external_link", link=self._url))
         link_label.setWordWrap(True)
         link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(link_label)
         btns = QHBoxLayout()
         btns.addStretch()
-        no_btn = QPushButton(tr('downloads.confirm_no'))
+        no_btn = QPushButton(tr("downloads.confirm_no"))
         no_btn.clicked.connect(self.reject)
         btns.addWidget(no_btn)
-        yes_btn = QPushButton(tr('downloads.confirm_yes'))
+        yes_btn = QPushButton(tr("downloads.confirm_yes"))
         yes_btn.setDefault(True)
         yes_btn.clicked.connect(self.accept)
         btns.addWidget(yes_btn)

@@ -1,8 +1,17 @@
 import os
-import sys
 import platform
+import sys
 from unittest.mock import patch
-from utils.path_utils import _replace_svg_color_tokens, get_user_data_root, get_user_mods_dir, get_user_plugins_dir, resource_path, resolve_game_executable, find_chapter_resource_dir
+
+from utils.path_utils import (
+    _replace_svg_color_tokens,
+    find_chapter_resource_dir,
+    get_user_data_root,
+    get_user_mods_dir,
+    get_user_plugins_dir,
+    resolve_game_executable,
+    resource_path,
+)
 
 
 class TestPathUtils:
@@ -26,9 +35,10 @@ class TestPathUtils:
         assert 'DELTAHUB' in plugins_dir
 
     def test_resource_path_frozen(self):
-        with patch.object(sys, 'frozen', True, create=True), patch.object(sys, '_MEIPASS', '/tmp/pyinstaller', create=True):
+        bundle_root = os.path.join('bundle-root', 'pyinstaller')
+        with patch.object(sys, 'frozen', True, create=True), patch.object(sys, '_MEIPASS', bundle_root, create=True):
             path = resource_path('assets/icons/icon.ico')
-            assert '/tmp/pyinstaller' in path
+            assert bundle_root in path
             assert 'assets/icons/icon.ico' in path
 
     def test_resource_path_development(self):
@@ -67,7 +77,7 @@ class TestPathUtils:
             exe_path = os.path.join(game_dir, 'DELTARUNE')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         resolved = resolve_game_executable(game_dir, 'deltarune')
         assert resolved is not None
 
@@ -86,7 +96,7 @@ class TestPathUtils:
             exe_path = os.path.join(game_dir, 'UNDERTALE')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         resolved = resolve_game_executable(game_dir, 'undertale')
         assert resolved is not None
 
@@ -105,7 +115,7 @@ class TestPathUtils:
             exe_path = os.path.join(game_dir, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         resolved = resolve_game_executable(game_dir, 'pizzatower')
         assert resolved is not None
 
@@ -124,7 +134,7 @@ class TestPathUtils:
             exe_path = os.path.join(game_dir, 'SugarySpire_ExhibitionNight')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         resolved = resolve_game_executable(game_dir, 'sugaryspire')
         assert resolved is not None
 
@@ -210,7 +220,7 @@ class TestPathUtils:
             exe_path = os.path.join(macos_path, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
             data_path = os.path.join(resources_path, 'game.ios')
             with open(data_path, 'w') as f:
                 f.write('mock')
@@ -218,7 +228,7 @@ class TestPathUtils:
             exe_path = os.path.join(game_dir, 'PizzaTower')
             with open(exe_path, 'w') as f:
                 f.write('mock')
-            os.chmod(exe_path, 493)
+            os.chmod(exe_path, 0o700)
         is_valid = is_valid_game_path(game_dir, skip_data_check=False, game_type='pizzatower')
         assert is_valid is True
         invalid_dir = os.path.join(temp_dir, 'invalid')

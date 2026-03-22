@@ -1,18 +1,23 @@
-import os
 import json
+import logging
+import os
 import shutil
 import tempfile
-import logging
 import zipfile
-import pytest
 from pathlib import Path
 from unittest.mock import Mock
-from services.g3mtool_patching_service import (
-    G3MToolPatchingService, MOD_TYPE_G3MPATCH, MOD_TYPE_XDELTA,
-    MOD_TYPE_DATAFILE, MOD_TYPE_OVERRIDES_ONLY,
-)
+
+import pytest
+
 from adapters.g3mtool_adapter import G3MToolManager
 from services.backup_service import BackupManager
+from services.g3mtool_patching_service import (
+    MOD_TYPE_DATAFILE,
+    MOD_TYPE_G3MPATCH,
+    MOD_TYPE_OVERRIDES_ONLY,
+    MOD_TYPE_XDELTA,
+    G3MToolPatchingService,
+)
 
 
 class TestG3MToolAdapter:
@@ -92,7 +97,7 @@ class TestModClassification:
             zf.writestr('g3mpatch.json', '{"version": 1}')
         (mod_dir / 'data.xdelta').write_bytes(b'fake')
         patcher = G3MToolPatchingService(Mock(), Mock())
-        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        _patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_G3MPATCH
 
     def test_classify_zip_without_g3mpatch_json_is_not_g3mpatch(self, tmp_path):
@@ -102,19 +107,19 @@ class TestModClassification:
         with zipfile.ZipFile(str(zip_path), 'w') as zf:
             zf.writestr('readme.txt', 'hello')
         patcher = G3MToolPatchingService(Mock(), Mock())
-        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        _patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
 
     def test_classify_empty_dir(self, tmp_path):
         mod_dir = tmp_path / 'empty'
         mod_dir.mkdir()
         patcher = G3MToolPatchingService(Mock(), Mock())
-        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        _patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
 
     def test_classify_nonexistent(self, tmp_path):
         patcher = G3MToolPatchingService(Mock(), Mock())
-        patch_file, mod_type = patcher._classify_mod(str(tmp_path / 'nope'))
+        _patch_file, mod_type = patcher._classify_mod(str(tmp_path / 'nope'))
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
 
 
@@ -169,7 +174,7 @@ class TestBackupFlow:
         bm.backup_file(chapter_id, str(test_file))
         manifest_path = str(tmp_path / 'manifest.json')
         bm.save_backups_to_manifest(manifest_path)
-        with open(manifest_path, 'r') as f:
+        with open(manifest_path) as f:
             manifest_data = json.load(f)
         assert 'modification_order' in manifest_data
         assert chapter_id in manifest_data['modification_order']
@@ -185,7 +190,7 @@ class TestBackupFlow:
             f.write_bytes(f'ORIGINAL_{ch}'.encode())
             files[ch] = f
             bm.backup_file(ch, str(f))
-        for ch, f in files.items():
+        for _ch, f in files.items():
             f.write_bytes(b'MODIFIED')
         bm.restore_all_backups()
         for ch, f in files.items():
@@ -242,7 +247,7 @@ class TestXdeltaPatchApplication:
             temp_data_win = os.path.join(temp_dir, 'data.win')
             shutil.copy2(data_win_path, temp_data_win)
             output_path = os.path.join(temp_dir, 'patched_data.win')
-            returncode, stdout, stderr = g3mtool.xpatch_apply(temp_data_win, patch_file, output_path)
+            returncode, _stdout, stderr = g3mtool.xpatch_apply(temp_data_win, patch_file, output_path)
             if returncode != 0:
                 pytest.fail(f'xpatch apply failed: {stderr[:500]}')
             assert os.path.exists(output_path)
