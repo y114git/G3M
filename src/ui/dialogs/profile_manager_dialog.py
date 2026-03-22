@@ -252,6 +252,10 @@ class ProfileManagerDialog(QDialog):
             QMessageBox.information(
                 self, tr("dialogs.success"), tr("profiles.exported_success")
             )
+        else:
+            QMessageBox.warning(
+                self, tr("errors.error"), tr("profiles.export_failed", name=name)
+            )
 
     def _on_import(self):
         import_path, _ = QFileDialog.getOpenFileName(

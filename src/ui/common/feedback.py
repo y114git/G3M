@@ -1,5 +1,6 @@
 """User feedback and dialog management."""
 
+import html
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -29,7 +30,7 @@ class FeedbackManager(QObject):
 
     @staticmethod
     def _format_html(text: str) -> str:
-        return text.replace("\\n", "<br>").replace("\n", "<br>")
+        return html.escape(text).replace("\\n", "<br>").replace("\n", "<br>")
 
     def show_message(
         self, message_type: str, message_key: str, details: str = "", **kwargs

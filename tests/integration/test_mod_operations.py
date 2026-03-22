@@ -170,3 +170,6 @@ class TestManualInstall:
             ) as open_url:
                 dialog._open_local_file(str(file_path))
                 open_url.assert_called_once()
+                called_url = open_url.call_args[0][0]
+                assert called_url.isLocalFile()
+                assert called_url.toLocalFile() == str(file_path)

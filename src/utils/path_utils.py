@@ -13,12 +13,44 @@ from PyQt6.QtGui import QIcon, QPixmap
 
 from config.constants import CURRENT_PLATFORM, GAME_EXECUTABLES
 
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+}
+
 
 def get_launcher_dir():
     is_frozen = getattr(sys, "frozen", False)
     if is_frozen:
         return os.path.dirname(sys.executable)
     return os.path.abspath(os.path.dirname(__file__))
+
+
+def safe_profile_name(name: str) -> str:
+    safe = re.sub(r"[^\w\- ]+", "_", name or "").strip()[:80] or "Default"
+    if CURRENT_PLATFORM == "Windows" and safe.upper() in _WINDOWS_RESERVED_NAMES:
+        safe = f"{safe}_"
+    return safe
 
 
 def get_user_data_root():
@@ -32,16 +64,16 @@ def get_user_data_root():
     return os.path.join(home, ".local", "share", "DELTAHUB")
 
 
-def safe_profile_name(name: str) -> str:
-    return re.sub(r"[^\w\- ]+", "_", name or "").strip()[:80] or "Default"
-
-
 def get_user_profiles_dir():
     return os.path.join(get_user_data_root(), "profiles")
 
 
-def get_user_profile_dir(name: str = "Default"):
+def get_profile_mods_root(name: str = "Default"):
     return os.path.join(get_user_profiles_dir(), safe_profile_name(name))
+
+
+def get_user_profile_dir(name: str = "Default"):
+    return get_profile_mods_root(name)
 
 
 def get_user_mods_dir():
@@ -50,10 +82,6 @@ def get_user_mods_dir():
 
 def get_user_lang_dir():
     return os.path.join(get_user_data_root(), "lang")
-
-
-def get_user_plugins_dir():
-    return os.path.join(get_user_data_root(), "plugins")
 
 
 def get_user_themes_dir():

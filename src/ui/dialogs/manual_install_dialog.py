@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 
 from config.constants import DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
 from services.localization_service import tr
+from ui.common.dialog_theme import get_dialog_theme_values
 from utils.file_utils import get_chapter_folder_name, get_unique_mod_dir, save_json
 
 
@@ -297,19 +298,23 @@ class ManualModInstallDialog(QDialog):
             label.setMaximumWidth(200)
             return label
         button = QPushButton(file_name)
+        theme = get_dialog_theme_values(self.app_state) if self.app_state else {}
+        theme_color = theme.get("secondary_text", "#6de985")
         button.setFlat(True)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setToolTip(f"{rel_path}\n{tr('ui.open_instructions')}")
         button.setMinimumWidth(120)
         button.setMaximumWidth(200)
         button.setStyleSheet(
-            "QPushButton { text-align: left; color: #4da3ff; border: none; padding: 0px; }"
+            f"QPushButton {{ text-align: left; color: {theme_color}; border: none; padding: 0px; }}"
             "QPushButton:hover { text-decoration: underline; }"
         )
         button.clicked.connect(lambda _=False, p=file_path: self._open_local_file(p))
         return button
 
     def _open_local_file(self, file_path: str):
+        if not self._is_openable_doc(file_path):
+            return
         if not file_path or not os.path.exists(file_path):
             QMessageBox.warning(
                 self, tr("errors.error"), file_path or tr("errors.error")

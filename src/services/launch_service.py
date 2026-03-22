@@ -169,9 +169,7 @@ class GameLauncher(QObject):
             self._continue_after_patching(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self):
-        if self.restore_window_callback and getattr(
-            self.app_state, "game_is_running", False
-        ):
+        if self.restore_window_callback:
             self.restore_window_callback()
         parent = self.parent()
         controller = getattr(parent, "game_launch", None) if parent else None

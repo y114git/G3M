@@ -15,13 +15,13 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
 from utils.path_utils import (
+    get_profile_mods_root,
     get_user_mods_dir,
     get_user_profiles_dir,
     safe_profile_name,
 )
 
 logger = logging.getLogger(__name__)
-
 
 _SAFE_RE = re.compile(r"[^\w\- ]+")
 DEFAULT_PROFILE = "Default"
@@ -114,7 +114,7 @@ class ProfileService(QObject):
     def _apply_profile_paths(self, name: str):
         profile_dir = self._profile_dir(name)
         profile_dir.mkdir(parents=True, exist_ok=True)
-        self.app_state.mods_dir = str(profile_dir)
+        self.app_state.mods_dir = get_profile_mods_root(name)
         self.app_state.mods_metadata_path = os.path.join(profile_dir, "metadata.json")
 
     def _profile_dir(self, name: str) -> Path:
@@ -316,7 +316,11 @@ class ProfileService(QObject):
         if not path.exists():
             return False
         was_active = self._active_name == name
-        shutil.rmtree(path, ignore_errors=True)
+
+        def _on_rm_error(func, path, exc_info):
+            logger.warning("ProfileService: failed to remove %s: %s", path, exc_info[1])
+
+        shutil.rmtree(path, onerror=_on_rm_error)
         self.app_state.local_config["profile_order"] = [
             n
             for n in self.app_state.local_config.get("profile_order", [])
@@ -433,8 +437,8 @@ class ProfileService(QObject):
                 and path.name.lower()
                 not in {
                     "metadata.json",
-                    MOD_CONFIG_FILENAME,
-                    LEGACY_MOD_CONFIG_FILENAME,
+                    MOD_CONFIG_FILENAME.lower(),
+                    LEGACY_MOD_CONFIG_FILENAME.lower(),
                 }
             ),
             None,
