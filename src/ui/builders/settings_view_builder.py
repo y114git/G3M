@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config.constants import SETTINGS_COLOR_CONFIG
+from models.game_modes import get_visible_game_entries
 from services.localization_service import localization_service, tr
 from ui.common.styling import (
     get_border_radius,
@@ -85,6 +86,8 @@ class SettingsViewBuilder:
                 seen.add(id(btn))
                 btn.setIcon(colored_icon(icon_name, tc))
                 btn.setIconSize(QSize(20, 20))
+        if self.parent and hasattr(self.parent, "_update_games_manager_button_style"):
+            self.parent._update_games_manager_button_style()
         for btn, *_ in self.widgets.get("_section_reset_buttons", []):
             icon_name = getattr(btn, "_themed_icon_name", None) if btn else None
             if btn and icon_name and id(btn) not in seen:
@@ -720,17 +723,20 @@ class SettingsViewBuilder:
         gs_layout.addWidget(game_selector_label)
         settings_game_combo = QComboBox()
         self._mark_reset(settings_game_combo, config_key="selected_game_type")
-        for label, data in [
-            ("DELTARUNE", "deltarune"),
-            ("DELTARUNE DEMO", "deltarunedemo"),
-            ("UNDERTALE", "undertale"),
-            ("UNDERTALE Yellow", "undertaleyellow"),
-            ("Pizza Tower", "pizzatower"),
-            ("Sugary Spire", "sugaryspire"),
-        ]:
-            settings_game_combo.addItem(label, data)
+        for entry in get_visible_game_entries():
+            settings_game_combo.addItem(entry.display_name, entry.id)
         settings_game_combo.setMinimumWidth(150)
         gs_layout.addWidget(settings_game_combo)
+        games_manager_button = QPushButton()
+        games_manager_button.setObjectName("games_manager_button")
+        games_manager_button._themed_icon_name = "settings"
+        games_manager_button.setIconSize(QSize(20, 20))
+        games_manager_button.setToolTip(tr("games.manager_title"))
+        games_manager_button.setContentsMargins(0, 0, 0, 0)
+        games_manager_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
+        gs_layout.addWidget(games_manager_button)
         cl.addWidget(game_selector_container, alignment=Qt.AlignmentFlag.AlignCenter)
         path_exe_row = QWidget(page)
         path_exe_layout = QHBoxLayout(path_exe_row)
@@ -845,6 +851,7 @@ class SettingsViewBuilder:
         layout.addStretch()
 
         self.widgets["settings_game_combo"] = settings_game_combo
+        self.widgets["games_manager_button"] = games_manager_button
         self.widgets["settings_game_selector_label"] = game_selector_label
         self.widgets["settings_change_path_button"] = change_path_button
         self.widgets["dont_hide_window_checkbox"] = dont_hide_window_checkbox

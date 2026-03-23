@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import LIBRARY_GAME_OPTIONS
+from models.game_modes import get_visible_game_entries
 from models.game_version_models import GameVersionRecord
 from services.localization_service import tr
 from ui.common.dialog_theme import (
@@ -242,13 +242,8 @@ class GameVersionsDialog(QDialog):
         self._add_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._add_btn.clicked.connect(self._on_add_clicked)
         self._game_combo = QComboBox()
-        for name, data in LIBRARY_GAME_OPTIONS:
-            self._game_combo.addItem(
-                tr(f"ui.{name}")
-                if isinstance(name, str) and not name.isupper()
-                else name,
-                data,
-            )
+        for entry in get_visible_game_entries():
+            self._game_combo.addItem(entry.display_name, entry.id)
         idx = self._game_combo.findData(initial_game)
         self._game_combo.setCurrentIndex(max(idx, 0))
         self._game_combo.currentIndexChanged.connect(self._on_game_changed)
@@ -309,8 +304,12 @@ class GameVersionsDialog(QDialog):
                 margin: 0px;
                 padding: 0px;
             }}
-            QPushButton#game_versions_add_btn:hover {{
+            QPushButton#game_versions_add_btn:hover:enabled {{
                 background-color: {theme["button_hover"]};
+            }}
+            QPushButton#game_versions_add_btn:disabled {{
+                background-color: {theme["background"]};
+                border-color: #6f6f6f;
             }}
             QLabel#game_versions_empty {{
                 font-size: 13px;
@@ -402,6 +401,7 @@ class GameVersionsDialog(QDialog):
         layout = QVBoxLayout(dialog)
         btn_layout = QHBoxLayout()
         create_btn = QPushButton(tr("game_versions.action_create"))
+        create_btn.setMinimumWidth(create_btn.sizeHint().width() + 18)
 
         def on_create():
             dialog.accept()
@@ -410,6 +410,7 @@ class GameVersionsDialog(QDialog):
         create_btn.clicked.connect(on_create)
         btn_layout.addWidget(create_btn)
         import_btn = QPushButton(tr("game_versions.action_import"))
+        import_btn.setMinimumWidth(import_btn.sizeHint().width() + 18)
 
         def on_import():
             dialog.accept()
@@ -520,6 +521,13 @@ class GameVersionsDialog(QDialog):
         self._add_btn.setToolTip(tr("game_versions.add_tooltip"))
         self._add_btn.setIcon(
             colored_icon("add", get_dialog_text_color(self._app_state))
+        )
+        current_game = self._current_game()
+        self._game_combo.clear()
+        for entry in get_visible_game_entries():
+            self._game_combo.addItem(entry.display_name, entry.id)
+        self._game_combo.setCurrentIndex(
+            max(self._game_combo.findData(current_game), 0)
         )
         for w in self._record_widgets.values():
             w.relocalize_ui()

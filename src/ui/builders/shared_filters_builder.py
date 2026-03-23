@@ -95,17 +95,32 @@ def create_tag_checkboxes(app_state, tag_names):
 def create_modgame_combo(app_state, games_list, config_key=None):
     """Create game selection combo."""
     modgame_combo = QComboBox()
-    for name, data in games_list:
-        modgame_combo.addItem(
+    populate_game_combo(
+        modgame_combo,
+        games_list,
+        app_state.local_config.get(config_key, "deltarune") if config_key else None,
+    )
+    return modgame_combo
+
+
+def populate_game_combo(
+    combo: QComboBox, games_list, current_game_id: str | None = None
+):
+    """Fill a combo with game entries or (label, data) tuples."""
+
+    combo.clear()
+    for item in games_list:
+        if hasattr(item, "display_name") and hasattr(item, "id"):
+            combo.addItem(item.display_name, item.id)
+            continue
+        name, data = item
+        combo.addItem(
             tr(f"ui.{name}") if isinstance(name, str) and not name.isupper() else name,
             data,
         )
-    if config_key:
-        game_idx = modgame_combo.findData(
-            app_state.local_config.get(config_key, "deltarune")
-        )
-        modgame_combo.setCurrentIndex(max(game_idx, 0))
-    return modgame_combo
+    if current_game_id is not None:
+        game_idx = combo.findData(current_game_id)
+        combo.setCurrentIndex(max(game_idx, 0))
 
 
 def create_search_button(app_state=None):

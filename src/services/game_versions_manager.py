@@ -368,3 +368,15 @@ class GameVersionsManager(QObject):
 
     def is_applying(self, archive_path: str) -> bool:
         return archive_path in self._applying
+
+    def cleanup_game(self, game_id: str, delete_archives: bool = True) -> None:
+        for record in list(self._store.records_for_game(game_id)):
+            if (
+                delete_archives
+                and record.archive_exists
+                and os.path.isfile(record.archive_path)
+            ):
+                with contextlib.suppress(OSError):
+                    os.remove(record.archive_path)
+            self._store.remove(record.archive_path)
+            self.record_removed.emit(record.archive_path)

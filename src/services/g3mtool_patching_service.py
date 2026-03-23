@@ -317,7 +317,10 @@ class G3MToolPatchingService(QObject):
             )
             return False
 
-        data_win_path = mod_content.find_data_win(target_dir)
+        game_mode = self.app_state.game_mode
+        data_win_path = mod_content.find_data_win(
+            target_dir, game_id=game_mode.game_id if game_mode else None
+        )
         if not data_win_path:
             if not self._request_warning(
                 tr(

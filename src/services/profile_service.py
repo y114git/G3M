@@ -14,8 +14,8 @@ from typing import Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from models.game_modes import get_first_visible_game_id, get_game, get_game_entry
 from utils.path_utils import (
-    get_profile_mods_root,
     get_user_mods_dir,
     get_user_profiles_dir,
     safe_profile_name,
@@ -109,12 +109,14 @@ class ProfileService(QObject):
 
     def _ensure_default_exists(self):
         if not self._profile_path(DEFAULT_PROFILE).exists():
-            self._write_profile(DEFAULT_PROFILE, {"selected_game_type": "deltarune"})
+            self._write_profile(
+                DEFAULT_PROFILE, {"selected_game_type": get_first_visible_game_id()}
+            )
 
     def _apply_profile_paths(self, name: str):
         profile_dir = self._profile_dir(name)
         profile_dir.mkdir(parents=True, exist_ok=True)
-        self.app_state.mods_dir = get_profile_mods_root(name)
+        self.app_state.mods_dir = str(profile_dir)
         self.app_state.mods_metadata_path = os.path.join(profile_dir, "metadata.json")
 
     def _profile_dir(self, name: str) -> Path:
@@ -144,9 +146,14 @@ class ProfileService(QObject):
 
     def _load_into_config(self, name: str):
         data = self._read_profile(name)
+        selected_game = data.get("selected_game_type", get_first_visible_game_id())
+        if not (entry := get_game_entry(selected_game)) or not entry.is_visible:
+            selected_game = get_first_visible_game_id()
+            data["selected_game_type"] = selected_game
+            self._write_profile(name, data)
         for key, value in data.items():
             self.app_state.local_config[key] = value
-        self.app_state.local_config.setdefault("selected_game_type", "deltarune")
+        self.app_state.local_config["selected_game_type"] = selected_game
 
     def _extract_profile_data_from_config(self) -> dict[str, Any]:
         result = {}
@@ -221,12 +228,10 @@ class ProfileService(QObject):
 
     def get_profile_summary(self, name: str) -> dict[str, Any]:
         """Return a lightweight summary dict for display in the profile manager."""
-        from models.game_modes import get_game
-
         data = self._read_profile(name)
-        game = data.get("selected_game_type", "deltarune")
+        game = data.get("selected_game_type", get_first_visible_game_id())
         game_def = get_game(game)
-        display_name = game_def.display_name if game_def else game.upper()
+        display_name = game_def.display_label if game_def else game.upper()
         return {
             "name": safe_profile_name(name),
             "game": game,
@@ -235,14 +240,16 @@ class ProfileService(QObject):
             "total_mod_count": self._count_all_mods(data),
             "profile_mod_count": self._count_profile_mods(name),
             "chapter_mode": data.get("chapter_mode_enabled", False),
-            "direct_launch": data.get("direct_launch_chapter", ""),
+            "direct_launch": self._resolve_chapter_name(
+                game_def, data.get("direct_launch_chapter", "")
+            ),
         }
 
     def create(self, name: str) -> bool:
         name = safe_profile_name(name)
         if not _has_safe_profile_name(name) or self._profile_path(name).exists():
             return False
-        self._write_profile(name, {"selected_game_type": "deltarune"})
+        self._write_profile(name, {"selected_game_type": get_first_visible_game_id()})
         self._append_to_order(name)
         return True
 
@@ -380,6 +387,18 @@ class ProfileService(QObject):
             return imported_name
 
     @staticmethod
+    def _resolve_chapter_name(game_def, tab_id: str) -> str:
+        """Resolve a raw tab_id to its localized display name."""
+        if not tab_id or not game_def:
+            return tab_id
+        tab = game_def.get_tab(tab_id)
+        if tab and tab.name_key:
+            from services.localization_service import tr as _tr
+
+            return _tr(tab.name_key)
+        return tab_id
+
+    @staticmethod
     def _count_all_mods(data: dict[str, Any], prefix: str = "used_mods_") -> int:
         return sum(
             len(val) if isinstance(val, list) else 1
@@ -416,6 +435,31 @@ class ProfileService(QObject):
             order.append(name)
             self.app_state.local_config["profile_order"] = order
         self.save_settings_only()
+
+    def cleanup_game_references(
+        self, game_id: str, fallback_game_id: str, remove_used_mods: bool = False
+    ) -> None:
+        for name in self.list_profiles():
+            data = self._read_profile(name)
+            changed = False
+            if data.get("selected_game_type") == game_id:
+                data["selected_game_type"] = fallback_game_id
+                changed = True
+            if remove_used_mods:
+                prefix = f"used_mods_{game_id}"
+                for key in [key for key in data if key.startswith(prefix)]:
+                    del data[key]
+                    changed = True
+            if changed:
+                self._write_profile(name, data)
+        if self.app_state.local_config.get("selected_game_type") == game_id:
+            self.app_state.local_config["selected_game_type"] = fallback_game_id
+        if remove_used_mods:
+            prefix = f"used_mods_{game_id}"
+            for key in [
+                key for key in self.app_state.local_config if key.startswith(prefix)
+            ]:
+                del self.app_state.local_config[key]
 
     def _next_available_name(self, name: str) -> str:
         base = safe_profile_name(name)

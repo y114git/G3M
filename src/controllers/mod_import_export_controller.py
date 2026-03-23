@@ -248,15 +248,17 @@ class ModImportExportController:
                                 if os.path.exists(
                                     chapter_folder
                                 ) and not chapter_data.get("data_file_url"):
-                                    from config.constants import (
-                                        DATA_FILE_EXTENSIONS,
+                                    from utils.patching.mod_content_utils import (
+                                        find_ready_data_win_files,
                                     )
 
-                                    for file in os.listdir(chapter_folder):
-                                        if file.lower().endswith(DATA_FILE_EXTENSIONS):
-                                            chapter_data["data_file_url"] = file
-                                            config_updated = True
-                                            break
+                                    if files := find_ready_data_win_files(
+                                        chapter_folder
+                                    ):
+                                        chapter_data["data_file_url"] = (
+                                            os.path.basename(files[0])
+                                        )
+                                        config_updated = True
                         icon_path = os.path.join(target_mod_dir, "_icon.png")
                         if not os.path.exists(icon_path):
                             icon_path = os.path.join(target_mod_dir, "icon.png")

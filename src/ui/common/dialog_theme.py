@@ -38,8 +38,23 @@ def build_dialog_theme_stylesheet(app_state):
             padding: 8px;
             font-size: 13px;
         }}
+        QComboBox {{
+            background-color: {theme["background"]};
+            border: 2px solid {theme["border"]};
+            border-radius: {theme["field_radius"]}px;
+            color: {theme["text"]};
+            padding: 6px 8px;
+            font-size: 13px;
+        }}
         QLineEdit:focus {{
             border: 2px solid {theme["button_hover"]};
+        }}
+        QComboBox:focus {{
+            border: 2px solid {theme["button_hover"]};
+        }}
+        QLineEdit:disabled, QComboBox:disabled {{
+            color: #8f8f8f;
+            border-color: #6f6f6f;
         }}
         QListWidget {{
             background-color: {theme["background"]};
@@ -63,8 +78,13 @@ def build_dialog_theme_stylesheet(app_state):
             padding: 8px 15px;
             font-weight: bold;
         }}
-        QPushButton:hover, QPushButton:pressed {{
+        QPushButton:hover:enabled, QPushButton:pressed:enabled {{
             background-color: {theme["button_hover"]};
+        }}
+        QPushButton:disabled {{
+            background-color: {theme["background"]};
+            color: #8f8f8f;
+            border-color: #6f6f6f;
         }}
         QLabel {{
             color: {theme["text"]};
@@ -72,6 +92,9 @@ def build_dialog_theme_stylesheet(app_state):
         QCheckBox {{
             color: {theme["text"]};
             font-size: 13px;
+        }}
+        QCheckBox:disabled {{
+            color: #8f8f8f;
         }}
     """
 

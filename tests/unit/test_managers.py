@@ -250,7 +250,7 @@ class TestLaunchManager:
         assert len(emitted) == 1
         assert emitted[0] == (tr("status.launching_game"), "#654321")
 
-    def test_handle_launch_failure_skips_restore_when_window_was_not_hidden(
+    def test_handle_launch_failure_restores_window_and_updates_button(
         self, app_state, feedback_service
     ):
         from services.launch_service import GameLauncher
@@ -262,12 +262,11 @@ class TestLaunchManager:
             mod_service=Mock(),
         )
         launcher.restore_window_callback = Mock()
-        app_state.game_is_running = False
 
         with patch.object(launcher, "parent", return_value=parent):
             launcher._handle_launch_failure()
 
-        launcher.restore_window_callback.assert_not_called()
+        launcher.restore_window_callback.assert_called_once()
         parent.game_launch.update_button_state.assert_called_once()
 
 

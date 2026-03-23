@@ -37,6 +37,8 @@ def relocalize_texts(w):
     w._apply_widget_localizations(WIDGET_LOCALIZATIONS)
     for combo_name, keys in COMBO_LOCALIZATIONS.items():
         w._apply_combo_localizations(combo_name, keys)
+    if hasattr(w, "refresh_game_lists"):
+        w.refresh_game_lists()
     if hasattr(w, "search_tab_builder") and hasattr(
         w.search_tab_builder, "refresh_dynamic_styles"
     ):
@@ -47,11 +49,8 @@ def relocalize_texts(w):
     ):
         w._update_custom_executable_ui()
     w.full_install_checkbox.setToolTip(w._full_install_tooltip())
-    w.launch_via_steam_checkbox.setToolTip(
-        "<html><body style='white-space: normal;'>"
-        + tr("tooltips.steam")
-        + "</body></html>"
-    )
+    if hasattr(w, "_update_steam_launch_checkbox_state"):
+        w._update_steam_launch_checkbox_state()
     if w.use_portproton_checkbox:
         w.use_portproton_checkbox.setText(tr("ui.use_portproton"))
         w.use_portproton_checkbox.setToolTip(

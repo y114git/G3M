@@ -33,56 +33,6 @@ STEAM_APP_ID_FULL = "1671210"
 STEAM_APP_ID_DEMO = "1690940"
 STEAM_APP_ID_UNDERTALE = "391540"
 STEAM_APP_ID_PIZZA_TOWER = "2231450"
-GAME_PROCESS_NAMES = [
-    "DELTARUNE.exe",
-    "DELTARUNE",
-    "UNDERTALE.exe",
-    "UNDERTALE",
-    "Undertale Yellow.exe",
-    "Undertale Yellow",
-    "PizzaTower.exe",
-    "PizzaTower",
-    "SugarySpire_ExhibitionNight.exe",
-    "SugarySpire_ExhibitionNight",
-    "runner",
-]
-GAME_EXECUTABLES = {
-    "deltarune": {
-        "windows": ("DELTARUNE.exe", "DELTARUNE"),
-        "linux": ("DELTARUNE", "DELTARUNE.exe"),
-        "mac": ("DELTARUNE.app", "DELTARUNEdemo.app"),
-    },
-    "undertale": {
-        "windows": ("UNDERTALE.exe", "UNDERTALE"),
-        "linux": ("UNDERTALE", "UNDERTALE.exe"),
-        "mac": ("UNDERTALE.app",),
-    },
-    "undertaleyellow": {
-        "windows": (
-            "Undertale Yellow.exe",
-            "Undertale Yellow",
-            "UNDERTALE.exe",
-            "UNDERTALE",
-        ),
-        "linux": (
-            "Undertale Yellow",
-            "UNDERTALE",
-            "Undertale Yellow.exe",
-            "UNDERTALE.exe",
-        ),
-        "mac": ("UNDERTALE.app",),
-    },
-    "pizzatower": {
-        "windows": ("PizzaTower.exe", "PizzaTower"),
-        "linux": ("PizzaTower", "PizzaTower.exe"),
-        "mac": ("PizzaTower.app",),
-    },
-    "sugaryspire": {
-        "windows": ("SugarySpire_ExhibitionNight.exe", "SugarySpire_ExhibitionNight"),
-        "linux": ("SugarySpire_ExhibitionNight", "SugarySpire_ExhibitionNight.exe"),
-        "mac": ("SugarySpire_ExhibitionNight.app",),
-    },
-}
 
 """Theme, style, and shared UI configuration."""
 UI_COLORS = {
@@ -121,18 +71,6 @@ SETTINGS_COLOR_CONFIG = {
     "secondary_text": "ui.secondary_text_color",
 }
 BASE_TAG_NAMES = ("textedit", "customization", "gameplay", "other")
-SEARCH_GAME_OPTIONS = (
-    ("deltarune", "deltarune"),
-    ("undertale", "undertale"),
-    ("undertaleyellow", "undertaleyellow"),
-    ("pizzatower", "pizzatower"),
-    ("sugaryspire", "sugaryspire"),
-)
-LIBRARY_GAME_OPTIONS = (
-    *SEARCH_GAME_OPTIONS[:1],
-    ("deltarunedemo", "deltarunedemo"),
-    *SEARCH_GAME_OPTIONS[1:],
-)
 LIBRARY_IMPORT_ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma", ".gz")
 PLUGIN_STATUS_STYLES = {
     "enabled": ("#4CAF50", "plugins.status_enabled"),
@@ -267,6 +205,7 @@ WIDGET_LOCALIZATIONS = [
     ("installed_mods_label", "setText", "ui.installed_mods_label"),
     ("add_mod_button", "setToolTip", "ui.add_mod"),
     ("profile_settings_button", "setToolTip", "profiles.manager_title"),
+    ("games_manager_button", "setToolTip", "games.manager_title"),
     ("theme_button", "setText", "buttons.import_export_themes"),
     ("do_not_save_theme_checkbox", "setText", "ui.do_not_save_theme_after_import"),
     ("hide_mods_browser_tab_checkbox", "setText", "ui.hide_mods_browser_tab"),
@@ -298,30 +237,7 @@ COMBO_LOCALIZATIONS = {
         "ui.sort_by_creation_date",
         "ui.sort_by_update_date",
     ],
-    "modgame_combo": [
-        "ui.deltarune",
-        "ui.undertale",
-        "ui.undertaleyellow",
-        "ui.pizzatower",
-        "ui.sugaryspire",
-    ],
     "library_sort_combo": ["ui.sort_by_name", "ui.sort_by_date"],
-    "game_type_combo": [
-        "ui.deltarune",
-        "ui.deltarunedemo",
-        "ui.undertale",
-        "ui.undertaleyellow",
-        "ui.pizzatower",
-        "ui.sugaryspire",
-    ],
-    "settings_game_combo": [
-        "ui.deltarune",
-        "ui.deltarunedemo",
-        "ui.undertale",
-        "ui.undertaleyellow",
-        "ui.pizzatower",
-        "ui.sugaryspire",
-    ],
 }
 
 """Network, background work, and timing limits."""
@@ -347,19 +263,29 @@ PRESENCE_THREAD_WAIT_TIMEOUT = 2000
 
 """GameBanana integration constants."""
 GAMEBANANA_API_BASE = "https://gamebanana.com/apiv11"
-GAMEBANANA_GAME_IDS = {
-    "deltarune": 6755,
-    "undertale": 5506,
-    "undertaleyellow": 19606,
-    "pizzatower": 7692,
-    "sugaryspire": 18218,
-}
 GAMEBANANA_TOOL_ID_DELTAMOD = 20575
 GAMEBANANA_TOOL_ID_DELTAHUB = 20615
 GAMEBANANA_PER_PAGE = 15
 
 """Mod file, archive, cache, and content metadata constants."""
-DATA_FILE_EXTENSIONS = (".xdelta", ".vcdiff", ".win", ".unx", ".ios", ".droid", ".zip")
+DATA_FILE_EXTENSIONS = (
+    ".xdelta",
+    ".vcdiff",
+    ".win",
+    ".unx",
+    ".ios",
+    ".droid",
+    ".data",
+    ".zip",
+)
+GAME_DATA_FILE_EXTENSIONS = (".win", ".unx", ".ios", ".droid", ".data")
+GAME_DATA_FILENAMES = (
+    "data.win",
+    "game.ios",
+    "game.unx",
+    "game.droid",
+    "game.data",
+)
 MOD_CONFIG_FILENAME = "mod_config.json"
 DATA_WIN_FILENAME = "data.win"
 META_JSON_FILENAME = "meta.json"

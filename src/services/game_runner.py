@@ -193,7 +193,7 @@ def _patch_chapter(
         logger.error(f"Target directory not found for chapter {chapter_id}")
         return False
 
-    data_win_path = mod_content.find_data_win(target_dir)
+    data_win_path = mod_content.find_data_win(target_dir, game_id=game_mode.game_id)
     patch_file, mod_type = _classify_mod(mod_source_dir)
 
     if mod_type == "overrides_only" or not data_win_path:

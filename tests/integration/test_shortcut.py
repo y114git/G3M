@@ -139,7 +139,7 @@ class TestParseShortcutArg:
 
 
 class TestFindModSourceDir:
-    PATCH_TARGET = "utils.path_utils.get_user_profile_dir"
+    PATCH_TARGET = "services.game_runner.get_profile_mods_root"
 
     def test_find_existing_mod(self, mod_on_disk, shortcut_temp_dir):
         profile_dir = os.path.join(shortcut_temp_dir, "profiles", "Default")

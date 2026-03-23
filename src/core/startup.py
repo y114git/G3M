@@ -17,12 +17,12 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from config.constants import (
-    GAME_PROCESS_NAMES,
     LAUNCHER_FALLBACK_TIMEOUT,
     SINGLE_INSTANCE_KEY,
     SPLASH_MIN_DURATION,
     SPLASH_WATCHDOG_TIMEOUT,
 )
+from models.game_modes import get_all_process_names
 from services.localization_service import localization_service, tr
 from ui.splash import create_png_splash
 from ui.utils.audio_utils import _audio_service
@@ -37,7 +37,7 @@ _splash_start_time = None
 def check_game_processes():
     for proc in psutil.process_iter(["name"]):
         try:
-            if proc.info["name"] in GAME_PROCESS_NAMES:
+            if proc.info["name"] in get_all_process_names():
                 return proc.info["name"]
         except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess:
             pass

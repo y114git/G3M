@@ -93,18 +93,10 @@ def resolve_chapter_folder(
     """Resolve the chapter subfolder path for a given file_key."""
     if not mod_folder_path:
         return None
-    if file_key == "demo":
-        return os.path.join(mod_folder_path, "demo")
-    if file_key == "undertale":
-        return os.path.join(mod_folder_path, "undertale")
-    try:
-        from utils.file_utils import get_chapter_folder_name
+    from utils.file_utils import get_chapter_folder_name
 
-        chapter_id = int(file_key)
-        folder_name = get_chapter_folder_name(chapter_id, game)
-        return os.path.join(mod_folder_path, folder_name)
-    except ValueError, TypeError:
-        return None
+    folder_name = get_chapter_folder_name(file_key, game)
+    return os.path.join(mod_folder_path, folder_name) if folder_name else None
 
 
 def resolve_local_icon_url(config_data: dict, mod_folder_path: str | None) -> str:

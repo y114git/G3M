@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
 
 from config.constants import (
     BASE_TAG_NAMES,
-    LIBRARY_GAME_OPTIONS,
     LIBRARY_IMPORT_ARCHIVE_EXTENSIONS,
 )
+from models.game_modes import get_visible_game_entries
 from services.localization_service import tr
 from ui.builders.shared_filters_builder import (
     apply_filters_frame_style,
@@ -153,7 +153,7 @@ class LibraryTabBuilder(QObject):
         ctrl.addWidget(add_btn)
         ctrl.addSpacing(20)
         game_combo = create_modgame_combo(
-            self.app_state, LIBRARY_GAME_OPTIONS, "selected_game_type"
+            self.app_state, get_visible_game_entries(), "selected_game_type"
         )
         ctrl.addWidget(game_combo)
         ctrl.addSpacing(4)

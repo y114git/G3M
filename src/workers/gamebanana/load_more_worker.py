@@ -5,7 +5,8 @@ import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
-from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, UI_COLORS
+from config.constants import GAMEBANANA_PER_PAGE, UI_COLORS
+from models.game_modes import get_gamebanana_reverse_map
 from services.localization_service import tr
 
 logger = logging.getLogger(__name__)
@@ -38,14 +39,7 @@ class LoadMoreGameBananaModsThread(QThread):
     def run(self):
         new_mods = []
         try:
-            game_name = next(
-                (
-                    name
-                    for name, id_val in GAMEBANANA_GAME_IDS.items()
-                    if id_val == self.game_id
-                ),
-                None,
-            )
+            game_name = get_gamebanana_reverse_map().get(self.game_id)
             if not game_name:
                 logger.error(f"Unknown game_id: {self.game_id}")
                 self.result.emit([])

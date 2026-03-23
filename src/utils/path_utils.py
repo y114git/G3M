@@ -11,7 +11,11 @@ from pathlib import Path
 from PyQt6.QtCore import QByteArray, Qt
 from PyQt6.QtGui import QIcon, QPixmap
 
-from config.constants import CURRENT_PLATFORM, GAME_EXECUTABLES
+from config.constants import (
+    CURRENT_PLATFORM,
+    GAME_DATA_FILE_EXTENSIONS,
+    GAME_DATA_FILENAMES,
+)
 
 _WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -106,13 +110,18 @@ def resolve_game_executable(base_dir, executable_type="deltarune"):
     try:
         if not base_dir or not os.path.isdir(base_dir):
             return None
+        from models.game_modes import get_game
+
+        game = get_game(executable_type) or get_game("deltarune")
+        if not game:
+            return None
         search_order = {
             "Windows": ["windows", "linux", "mac"],
             "Linux": ["linux", "windows", "mac"],
             "Darwin": ["mac", "linux", "windows"],
         }.get(CURRENT_PLATFORM, ["windows", "linux", "mac"])
         for plat_key in search_order:
-            for name in GAME_EXECUTABLES.get(executable_type, {}).get(plat_key, ()):
+            for name in game.get_executable_candidates(plat_key):
                 if plat_key == "mac":
                     app = (
                         base_dir
@@ -136,6 +145,71 @@ def resolve_game_executable(base_dir, executable_type="deltarune"):
         return None
     except Exception as e:
         logging.debug(f"resolve_game_executable: failed for {base_dir}: {e}")
+        return None
+
+
+def get_supported_game_data_filenames(
+    preferred_name: str = "", current_platform: str | None = None
+) -> tuple[str, ...]:
+    platform_name = current_platform or CURRENT_PLATFORM
+    priority = {
+        "Darwin": ("game.ios", "data.win"),
+        "Linux": ("game.unx", "data.win", "game.ios"),
+        "Windows": ("data.win", "game.unx", "game.ios"),
+    }.get(platform_name, ())
+    names = tuple(
+        dict.fromkeys(
+            name.strip()
+            for name in (preferred_name, *priority, *GAME_DATA_FILENAMES)
+            if isinstance(name, str) and name.strip()
+        )
+    )
+    return names
+
+
+def find_supported_game_data_file(
+    base_dir: str,
+    preferred_name: str = "",
+    current_platform: str | None = None,
+    fallback_to_supported_names: bool = True,
+) -> str | None:
+    try:
+        if not base_dir or not os.path.isdir(base_dir):
+            return None
+        preferred_name = preferred_name.strip()
+        if preferred_name:
+            candidate = os.path.join(base_dir, preferred_name)
+            if os.path.isfile(candidate):
+                return candidate
+            if not fallback_to_supported_names:
+                return None
+        preferred_names = get_supported_game_data_filenames(
+            preferred_name, current_platform
+        )
+        for name in preferred_names:
+            candidate = os.path.join(base_dir, name)
+            if os.path.isfile(candidate):
+                return candidate
+        matches = [
+            os.path.join(base_dir, entry)
+            for entry in os.listdir(base_dir)
+            if os.path.isfile(os.path.join(base_dir, entry))
+            and entry.lower().endswith(GAME_DATA_FILE_EXTENSIONS)
+        ]
+        if not matches:
+            return None
+        exact_order = {
+            name.lower(): index for index, name in enumerate(preferred_names, start=1)
+        }
+        return min(
+            matches,
+            key=lambda path: (
+                exact_order.get(os.path.basename(path).lower(), len(exact_order) + 1),
+                os.path.basename(path).lower(),
+            ),
+        )
+    except Exception as e:
+        logging.debug(f"find_supported_game_data_file: failed for {base_dir}: {e}")
         return None
 
 
@@ -505,7 +579,17 @@ def colored_icon(name: str, color: str) -> QIcon:
         painter.end()
         icon = QIcon()
         icon.addPixmap(pixmap, QIcon.Mode.Normal)
-        icon.addPixmap(pixmap, QIcon.Mode.Disabled)
+        disabled_pixmap = QPixmap(128, 128)
+        disabled_pixmap.fill(Qt.GlobalColor.transparent)
+        disabled_painter = QPainter(disabled_pixmap)
+        renderer_disabled = QSvgRenderer(
+            QByteArray(
+                _replace_svg_color_tokens(svg, "#808080", replacements).encode("utf-8")
+            )
+        )
+        renderer_disabled.render(disabled_painter)
+        disabled_painter.end()
+        icon.addPixmap(disabled_pixmap, QIcon.Mode.Disabled)
         return icon
     except Exception as e:
         logging.debug(f"colored_icon: failed to render {name}: {e}")

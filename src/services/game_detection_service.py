@@ -1,5 +1,6 @@
 """Game detection and validation utilities."""
 
+import logging
 import os
 import platform
 from pathlib import Path
@@ -7,7 +8,8 @@ from typing import TYPE_CHECKING
 
 import psutil
 
-from config.constants import DATA_WIN_FILENAME, GAME_EXECUTABLES, GAME_PROCESS_NAMES
+from models.game_modes import get_all_process_names, get_game
+from utils.path_utils import find_supported_game_data_file
 
 if TYPE_CHECKING:
     from models.game_modes import GameDefinition
@@ -20,7 +22,7 @@ def is_game_running(pid: int | None = None):
         except psutil.NoSuchProcess, psutil.AccessDenied, ValueError:
             return False
     return any(
-        proc.info["name"] in GAME_PROCESS_NAMES
+        proc.info["name"] in get_all_process_names()
         for proc in psutil.process_iter(["name"])
     )
 
@@ -30,7 +32,11 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
     from models.game_modes import get_game
 
     gm = get_game(game_type)
-    app_names = gm.macos_app_names if gm else ("DELTARUNE.app", "DELTARUNEdemo.app")
+    if not gm:
+        logging.warning("Unknown game_type '%s' in is_valid_mac_game_path", game_type)
+        return False
+    app_names = gm.macos_app_names
+    data_file_name = getattr(gm, "data_file_name", "")
     if not path.endswith(".app"):
         app_path = next(
             (app_path / name for name in app_names if (app_path / name).is_dir()), None
@@ -52,11 +58,12 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
     return (
         has_executable
         if skip_data_check
-        else (
-            has_executable
-            and (
-                (res_dir / "game.ios").is_file()
-                or (res_dir / DATA_WIN_FILENAME).is_file()
+        else has_executable
+        and bool(
+            find_supported_game_data_file(
+                str(res_dir),
+                data_file_name,
+                fallback_to_supported_names=not bool(data_file_name),
             )
         )
     )
@@ -70,11 +77,11 @@ def is_valid_game_path(
     if platform.system() == "Darwin":
         return is_valid_mac_game_path(path, skip_data_check, game_type)
     platform_key = "windows" if platform.system() == "Windows" else "linux"
-    if exe_name := get_executable_name_for_game(game_type, platform_key):
-        return os.path.isfile(os.path.join(path, exe_name))
-    executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES["deltarune"]).get(
-        platform_key, ()
-    )
+    game = get_game(game_type)
+    if not game:
+        logging.warning("Unknown game_type '%s' in is_valid_game_path", game_type)
+        return False
+    executables = game.get_executable_candidates(platform_key)
     return any(os.path.isfile(os.path.join(path, exe)) for exe in executables)
 
 
@@ -101,7 +108,11 @@ def get_executable_name_for_game(
             if platform.system() == "Windows"
             else ("mac" if platform.system() == "Darwin" else "linux")
         )
-    executables = GAME_EXECUTABLES.get(game_type, GAME_EXECUTABLES["deltarune"]).get(
-        os_type, ()
-    )
+    game = get_game(game_type)
+    if not game:
+        logging.warning(
+            "Unknown game_type '%s' in get_executable_name_for_game", game_type
+        )
+        return None
+    executables = game.get_executable_candidates(os_type)
     return executables[0] if executables else None

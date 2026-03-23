@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from models.game_modes import get_game, get_visible_game_entries
 from services.localization_service import tr
 from ui.common.styling import (
     clamp_border_radius,
@@ -86,15 +87,10 @@ class ModEditorDialog(QDialog):
         game_row.addStretch()
         game_row.addWidget(QLabel(tr("ui.mod_type_label")))
         self.game_combo = QComboBox()
-        for label, data in [
-            ("DELTARUNE", "deltarune"),
-            ("DELTARUNE DEMO", "deltarunedemo"),
-            ("UNDERTALE", "undertale"),
-            ("UNDERTALE Yellow", "undertaleyellow"),
-            ("Pizza Tower", "pizzatower"),
-            ("Sugary Spire", "sugaryspire"),
-        ]:
-            self.game_combo.addItem(label, data)
+        self._visible_game_ids = set()
+        for entry in get_visible_game_entries():
+            self.game_combo.addItem(entry.display_name, entry.id)
+            self._visible_game_ids.add(entry.id)
         self.game_combo.currentIndexChanged.connect(self._update_file_tabs)
         game_row.addWidget(self.game_combo)
         game_row.addStretch()
@@ -207,8 +203,6 @@ class ModEditorDialog(QDialog):
         while self.file_tabs.count():
             self.file_tabs.removeTab(0)
         game = self.game_combo.currentData()
-        from models.game_modes import get_game
-
         game_def = get_game(game)
         if game_def:
             for tab in game_def.tabs:
@@ -671,13 +665,8 @@ class ModEditorDialog(QDialog):
     def _collect_files(self):
         files = {}
         game = self.game_combo.currentData()
-        tab_keys = {
-            "deltarunedemo": ["demo"],
-            "undertale": ["undertale"],
-            "undertaleyellow": ["undertale"],
-            "pizzatower": ["pizzatower"],
-            "sugaryspire": ["sugaryspire"],
-        }.get(game, ["0", "1", "2", "3", "4"])
+        game_def = get_game(game)
+        tab_keys = [tab.files_key for tab in game_def.tabs] if game_def else []
         for idx in range(self.file_tabs.count()):
             if idx >= len(tab_keys):
                 break
@@ -772,11 +761,14 @@ class ModEditorDialog(QDialog):
         return None
 
     def _get_file_folder(self, base_dir, file_key, game):
-        if file_key in ("demo", "undertale", "pizzatower", "sugaryspire"):
-            return os.path.join(base_dir, file_key)
-        if file_key == "0":
-            return os.path.join(base_dir, get_chapter_folder_name(0, game=game))
-        return os.path.join(base_dir, f"chapter_{file_key}")
+        game_def = get_game(game)
+        tab = game_def.get_tab(file_key) if game_def else None
+        folder = (
+            game_def.get_folder_name(tab.tab_id)
+            if game_def and tab
+            else get_chapter_folder_name(file_key, game=game)
+        )
+        return os.path.join(base_dir, folder)
 
     def _copy_files_to_mod_dir(self, mod_dir, files_data, game):
         processed = {}
@@ -1075,6 +1067,10 @@ class ModEditorDialog(QDialog):
             version = version.split("|")[0]
         self.version_edit.setText(version)
         game = d.get("game") or d.get("modgame", "deltarune")
+        if game not in self._visible_game_ids:
+            game_def = get_game(game)
+            if game_def:
+                self.game_combo.addItem(game_def.display_name, game)
         for i in range(self.game_combo.count()):
             if self.game_combo.itemData(i) == game:
                 self.game_combo.setCurrentIndex(i)
@@ -1090,15 +1086,28 @@ class ModEditorDialog(QDialog):
             self._populate_file_tabs(files_data, game)
 
     def _populate_file_tabs(self, files_data, game):
-        key_map = {
-            "deltarunedemo": {"demo": 0},
-            "undertale": {"undertale": 0},
-            "pizzatower": {"pizzatower": 0},
-            "sugaryspire": {"sugaryspire": 0},
-        }.get(game, {"0": 0, "1": 1, "2": 2, "3": 3, "4": 4})
-        for fk, ti in key_map.items():
-            if fk in files_data and ti < self.file_tabs.count():
-                fi = files_data[fk]
+        game_def = get_game(game)
+        if not game_def:
+            logging.warning(
+                "Unknown game '%s' in _populate_file_tabs, using first tab", game
+            )
+            fi = next(iter(files_data.values()), None)
+            if fi and self.file_tabs.count():
+                tab = self.file_tabs.widget(0)
+                if tab and (layout := tab.layout()):
+                    mod_folder = self._find_mod_folder()
+                    if fi.get("data_file_url"):
+                        self._create_file_frame(layout, "data")
+                        full_path = self._resolve_path(
+                            fi["data_file_url"], 0, mod_folder, game
+                        )
+                        self._fill_data_in_tab(
+                            layout, full_path, fi.get("data_file_version")
+                        )
+            return
+        for ti, tab_def in enumerate(game_def.tabs):
+            fi = files_data.get(tab_def.files_key) or files_data.get(tab_def.tab_id)
+            if fi and ti < self.file_tabs.count():
                 tab = self.file_tabs.widget(ti)
                 if not tab or not (layout := tab.layout()):
                     continue
@@ -1126,18 +1135,13 @@ class ModEditorDialog(QDialog):
         if not mod_folder:
             return file_path
         game = game or self.game_combo.currentData()
-        if game == "deltarunedemo":
-            cf = "demo"
-        elif game == "undertale":
-            cf = "undertale"
-        elif game == "pizzatower":
-            cf = "pizzatower"
-        elif game == "sugaryspire":
-            cf = "sugaryspire"
-        else:
-            cf = f"chapter_{tab_idx}"
+        game_def = get_game(game)
+        tab = game_def.get_tab_by_index(tab_idx) if game_def else None
+        folders = [game_def.get_folder_name(tab.tab_id)] if game_def and tab else []
+        if tab and tab.files_key not in folders:
+            folders.append(tab.files_key)
         for candidate in [
-            os.path.join(mod_folder, cf, file_path),
+            *(os.path.join(mod_folder, folder, file_path) for folder in folders),
             os.path.join(mod_folder, file_path),
         ]:
             if os.path.exists(candidate):

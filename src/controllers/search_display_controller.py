@@ -6,7 +6,12 @@ import logging
 from PyQt6.QtCore import QMetaObject, QObject, Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog, QMessageBox
 
-from config.constants import GAMEBANANA_GAME_IDS, SEARCH_EXHAUSTED_PAGE_SENTINEL
+from config.constants import SEARCH_EXHAUSTED_PAGE_SENTINEL
+from models.game_modes import (
+    get_gamebanana_game_ids,
+    get_manager_game_entries,
+    get_search_game_entries,
+)
 from services.blocklist_service import BlocklistManager
 from services.localization_service import tr
 from services.mod_filter_service import filter_and_sort_mods
@@ -299,7 +304,7 @@ class SearchDisplayController(QObject):
             self._load_search_results_if_needed(items_needed, preferred_game)
             return
         gamebanana_game = self._get_selected_gamebanana_game()
-        game_id = GAMEBANANA_GAME_IDS.get(gamebanana_game)
+        game_id = get_gamebanana_game_ids().get(gamebanana_game)
         if not game_id:
             return
         last_page = self.app_state.gamebanana_loaded_pages.get(game_id, 0)
@@ -316,7 +321,7 @@ class SearchDisplayController(QObject):
 
         def on_result(mods_list, _id=_identity, _thread=load_thread):
             try:
-                current_game_id = GAMEBANANA_GAME_IDS.get(
+                current_game_id = get_gamebanana_game_ids().get(
                     self._get_selected_gamebanana_game()
                 )
                 current_search = (self.app_state.search_text or "").strip()
@@ -371,7 +376,7 @@ class SearchDisplayController(QObject):
         if len(search_text) < 2:
             return
         gamebanana_game = self._get_selected_gamebanana_game()
-        game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
+        game_id = get_gamebanana_game_ids()[gamebanana_game]
         search_key = search_text.lower()
         if not hasattr(self.app_state, "gamebanana_search_loaded_pages"):
             self.app_state.gamebanana_search_loaded_pages = {}
@@ -397,7 +402,7 @@ class SearchDisplayController(QObject):
 
         def on_result(mods_list, _id=_s_identity, _thread=search_thread):
             try:
-                current_game_id = GAMEBANANA_GAME_IDS.get(
+                current_game_id = get_gamebanana_game_ids().get(
                     self._get_selected_gamebanana_game()
                 )
                 current_search = (self.app_state.search_text or "").strip()
@@ -459,15 +464,7 @@ class SearchDisplayController(QObject):
     def show_blocklist_dialog(self):
         try:
             selected_game = self._get_selected_game()
-            all_games = [
-                "deltarune",
-                "deltarunedemo",
-                "undertale",
-                "undertaleyellow",
-                "pizzatower",
-                "sugaryspire",
-                "global",
-            ]
+            all_games = [entry.id for entry in get_manager_game_entries()] + ["global"]
             all_games.extend(
                 g for g in self.blocklist_service.get_all_games() if g not in all_games
             )
@@ -954,12 +951,17 @@ class SearchDisplayController(QObject):
 
     def _get_selected_gamebanana_game(self) -> str:
         mapped = self._map_modgame_to_gamebanana(self._get_selected_game())
-        return mapped if mapped in GAMEBANANA_GAME_IDS else "deltarune"
+        searchable = [entry.id for entry in get_search_game_entries()]
+        return (
+            mapped
+            if mapped in searchable
+            else (searchable[0] if searchable else "deltarune")
+        )
 
     @staticmethod
     def _map_modgame_to_gamebanana(game: str) -> str:
         key = (game or "").lower()
-        return key if key in GAMEBANANA_GAME_IDS else ""
+        return key if key in get_gamebanana_game_ids() else ""
 
     def load_mods_for_selected_game(self):
         if not hasattr(self.app, "modgame_combo"):
@@ -967,7 +969,7 @@ class SearchDisplayController(QObject):
         gamebanana_game = self._get_selected_gamebanana_game()
         if not gamebanana_game:
             gamebanana_game = "deltarune"
-        game_id = GAMEBANANA_GAME_IDS.get(gamebanana_game)
+        game_id = get_gamebanana_game_ids().get(gamebanana_game)
         if not game_id:
             return
         self._clear_current_gamebanana_mods()

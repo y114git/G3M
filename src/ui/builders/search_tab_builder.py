@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import BASE_TAG_NAMES, SEARCH_GAME_OPTIONS
+from config.constants import BASE_TAG_NAMES
+from models.game_modes import get_search_game_entries
 from services.localization_service import tr
 from ui.builders.shared_filters_builder import (
     apply_filters_frame_style,
@@ -145,7 +146,7 @@ class ModsBrowserTabBuilder(QObject):
         layout.addWidget(sort_combo, 0, _vc)
         layout.addSpacing(20)
         modgame_combo = create_modgame_combo(
-            self.app_state, SEARCH_GAME_OPTIONS, "selected_search_game"
+            self.app_state, get_search_game_entries(), "selected_search_game"
         )
         layout.addWidget(modgame_combo, 0, _vc)
         layout.addSpacing(20)

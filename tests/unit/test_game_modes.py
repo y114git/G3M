@@ -1,6 +1,12 @@
 """Tests for game_modes: get_tab, get_folder_name with files_key fallback."""
 
-from models.game_modes import DeltaruneGame, GameDefinition, GameTab
+from models.game_modes import (
+    CustomGameRecord,
+    CustomSingleTabGame,
+    DeltaruneGame,
+    GameDefinition,
+    GameTab,
+)
 
 
 class TestGetTab:
@@ -61,3 +67,25 @@ class TestGetFolderName:
         ]
         assert game.get_folder_name("main") == "main_data"
         assert game.get_folder_name("testgame_main") == "main_data"
+
+
+class TestCustomSingleTabGame:
+    def test_custom_game_uses_generated_runtime_keys(self):
+        record = CustomGameRecord(
+            id="custom_test",
+            display_name="Test Game",
+            primary_executable="test.exe",
+            data_file_name="game.ios",
+            steam_app_id="123",
+            gamebanana_id=456,
+        )
+        game = CustomSingleTabGame(record)
+        assert game.game_id == "custom_test"
+        assert game.path_config_key == "custom_game_path_custom_test"
+        assert game.custom_exec_config_key == "custom_game_exec_custom_test"
+        assert game.used_mods_config_key == "used_mods_custom_test"
+        assert game.data_file_name == "game.ios"
+        assert game.tabs[0].tab_id == "custom_test"
+        assert game.tabs[0].files_key == "custom_test"
+        assert game.get_folder_name("custom_test") == "custom_test"
+        assert not game.direct_launch_allowed

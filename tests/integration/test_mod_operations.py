@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import zipfile
+from pathlib import Path
 
 
 class TestModInstallation:
@@ -172,4 +173,4 @@ class TestManualInstall:
                 open_url.assert_called_once()
                 called_url = open_url.call_args[0][0]
                 assert called_url.isLocalFile()
-                assert called_url.toLocalFile() == str(file_path)
+                assert Path(called_url.toLocalFile()) == file_path

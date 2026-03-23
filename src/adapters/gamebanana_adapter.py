@@ -11,11 +11,11 @@ import requests
 
 from config.constants import (
     GAMEBANANA_API_BASE,
-    GAMEBANANA_GAME_IDS,
     GAMEBANANA_TOOL_ID_DELTAHUB,
     GAMEBANANA_TOOL_ID_DELTAMOD,
     NETWORK_TIMEOUT_MEDIUM,
 )
+from models.game_modes import get_gamebanana_reverse_map
 from models.mod_models import ModInfo
 from utils.network_utils import get_session
 
@@ -165,9 +165,7 @@ class GameBananaAPI:
         if not isinstance(data, dict):
             return (None, [])
         records = data.get("_aRecords", [])
-        game_name = next(
-            (n for n, v in GAMEBANANA_GAME_IDS.items() if v == game_id), "deltarune"
-        )
+        game_name = get_gamebanana_reverse_map().get(int(game_id), "deltarune")
         mapped_mods: list[ModInfo] = []
         for record in records:
             model_name = record.get("_sModelName")

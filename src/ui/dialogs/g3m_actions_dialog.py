@@ -328,13 +328,14 @@ class _DataConvertWorkerThread(QThread):
 
     def run(self):
         try:
-            from config.constants import DATA_WIN_FILENAME, LEGACY_MOD_CONFIG_FILENAME
+            from config.constants import LEGACY_MOD_CONFIG_FILENAME
             from models.game_modes import get_game
             from utils.mod_config_parser import resolve_chapter_folder
             from utils.mod_version_utils import (
                 create_version_zip,
                 get_unique_version_name,
             )
+            from utils.patching.mod_content_utils import find_data_win
             from utils.path_utils import find_chapter_resource_dir
 
             files_data = self._config_data.get("files", {})
@@ -366,8 +367,8 @@ class _DataConvertWorkerThread(QThread):
                 resource_dir = find_chapter_resource_dir(self._game_path, chapter_id)
                 if not resource_dir:
                     continue
-                original = os.path.join(resource_dir, DATA_WIN_FILENAME)
-                if not os.path.isfile(original):
+                original = find_data_win(resource_dir, game_id=game)
+                if not original:
                     self.finished.emit(
                         False,
                         tr(

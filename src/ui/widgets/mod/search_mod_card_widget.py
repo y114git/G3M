@@ -141,6 +141,7 @@ class SearchModCardWidget(ModCardWidget):
             self.name_label.setMaximumWidth(content_width)
         if hasattr(self, "metadata_widget"):
             self.metadata_widget.setMaximumWidth(content_width)
+            self.metadata_widget.setMinimumHeight(max(16, round(20 * scale)))
         if hasattr(self, "expanded_widget"):
             self.expanded_widget.setMaximumWidth(content_width)
         if hasattr(self, "tagline_label"):

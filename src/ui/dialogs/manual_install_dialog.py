@@ -21,7 +21,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
+from config.constants import GAME_DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
+from models.game_modes import get_game, get_visible_game_entries
 from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values
 from utils.file_utils import get_chapter_folder_name, get_unique_mod_dir, save_json
@@ -102,12 +103,8 @@ class ManualModInstallDialog(QDialog):
         game_layout.addStretch()
         game_layout.addWidget(QLabel(tr("ui.mod_type_label")))
         self.game_combo = QComboBox()
-        self.game_combo.addItem("DELTARUNE", "deltarune")
-        self.game_combo.addItem("DELTARUNE DEMO", "deltarunedemo")
-        self.game_combo.addItem("UNDERTALE", "undertale")
-        self.game_combo.addItem("UNDERTALE Yellow", "undertaleyellow")
-        self.game_combo.addItem("Pizza Tower", "pizzatower")
-        self.game_combo.addItem("Sugary Spire", "sugaryspire")
+        for entry in get_visible_game_entries():
+            self.game_combo.addItem(entry.display_name, entry.id)
         game_value = self.initial_game_type or self.gamebanana_metadata.get("game")
         if not game_value and self.app_state and hasattr(self.app_state, "game_mode"):
             from services.game_detection_service import get_game_type_string
@@ -186,8 +183,6 @@ class ManualModInstallDialog(QDialog):
     def _update_file_tabs(self):
         self.data_tabs.clear()
         game = self.game_combo.currentData()
-        from models.game_modes import get_game
-
         game_def = get_game(game)
         if game_def and game_def.is_multi_tab:
             for tab in game_def.tabs:
@@ -324,13 +319,13 @@ class ManualModInstallDialog(QDialog):
             QMessageBox.warning(self, tr("errors.error"), file_path)
 
     def _browse_data_file(self, chapter_id: str):
-        extensions = set(DATA_FILE_EXTENSIONS) | {".data", ".ios", ".droid", ".unx"}
         selected_data, used_patches = self._get_excluded_files()
         excluded = selected_data | used_patches
         found_files = [
             (fp, rp)
             for fp, rp in self.all_files
-            if fp not in excluded and os.path.splitext(fp)[1].lower() in extensions
+            if fp not in excluded
+            and os.path.splitext(fp)[1].lower() in GAME_DATA_FILE_EXTENSIONS
         ]
         if not found_files:
             QMessageBox.information(
@@ -449,7 +444,7 @@ class ManualModInstallDialog(QDialog):
         )
         layout.addWidget(path_input, 1)
         browse_btn = QPushButton(tr("ui.browse_button"))
-        browse_btn.setMinimumWidth(80)
+        browse_btn.setMinimumWidth(max(80, browse_btn.sizeHint().width() + 18))
         browse_btn.clicked.connect(
             lambda checked, fp=file_path, cid=chapter_id: (
                 self._browse_xdelta_target_file(fp, cid)
@@ -457,7 +452,7 @@ class ManualModInstallDialog(QDialog):
         )
         layout.addWidget(browse_btn)
         clear_btn = QPushButton(tr("ui.clear_button"))
-        clear_btn.setMinimumWidth(70)
+        clear_btn.setMinimumWidth(max(70, clear_btn.sizeHint().width() + 18))
         clear_btn.setObjectName(f"xdelta_clear_btn_{file_path}")
         clear_btn.clicked.connect(
             lambda checked, fp=file_path, cid=chapter_id: self._clear_xdelta_patch(
@@ -632,7 +627,7 @@ class ManualModInstallDialog(QDialog):
             path_input.setEnabled(False)
         layout.addWidget(path_input, 1)
         browse_btn = QPushButton(tr("ui.browse_button"))
-        browse_btn.setMinimumWidth(80)
+        browse_btn.setMinimumWidth(max(80, browse_btn.sizeHint().width() + 18))
         browse_btn.clicked.connect(
             lambda checked, fp=file_path: self._browse_target_folder(fp)
         )
@@ -640,12 +635,13 @@ class ManualModInstallDialog(QDialog):
             browse_btn.setEnabled(False)
         layout.addWidget(browse_btn)
         toggle_btn = QPushButton()
-        toggle_btn.setMinimumWidth(70)
+        toggle_btn.setMinimumWidth(max(70, toggle_btn.sizeHint().width() + 18))
         toggle_btn.setObjectName(f"toggle_btn_{file_path}")
         if file_path in self.unused_files:
             toggle_btn.setText(tr("ui.use_button"))
         else:
             toggle_btn.setText(tr("ui.remove_button"))
+        toggle_btn.setMinimumWidth(max(70, toggle_btn.sizeHint().width() + 18))
         toggle_btn.clicked.connect(
             lambda checked, fp=file_path: self._toggle_file_usage(fp)
         )
@@ -691,12 +687,11 @@ class ManualModInstallDialog(QDialog):
                 )
 
     def _get_or_prompt_game_folder(self) -> str | None:
+        game_def = get_game(self.game_combo.currentData() or "")
         game_root = None
-        if self.app_state and hasattr(self.app_state, "game_mode"):
+        if game_def:
             try:
-                game_root = self.app_state.game_mode.get_game_path(
-                    self.app_state.local_config
-                )
+                game_root = game_def.get_game_path(self.app_state.local_config)
             except Exception as e:
                 logging.debug(
                     f"ManualInstallDialog: Failed to get game path: {e}", exc_info=True
@@ -707,18 +702,21 @@ class ManualModInstallDialog(QDialog):
                 settings_service = self.parent().settings_service
             elif self.app_state and hasattr(self.app_state, "settings_service"):
                 settings_service = self.app_state.settings_service
-            if settings_service and settings_service.prompt_for_game_path(
-                is_initial=False
-            ):
+            if settings_service and game_def:
+                old_game_mode = self.app_state.game_mode
+                self.app_state.game_mode = game_def
                 try:
-                    game_root = self.app_state.game_mode.get_game_path(
-                        self.app_state.local_config
-                    )
-                except Exception as e:
-                    logging.debug(
-                        f"ManualInstallDialog: Failed to get game path after prompt: {e}",
-                        exc_info=True,
-                    )
+                    prompted = settings_service.prompt_for_game_path(is_initial=False)
+                finally:
+                    self.app_state.game_mode = old_game_mode
+                if prompted:
+                    try:
+                        game_root = game_def.get_game_path(self.app_state.local_config)
+                    except Exception as e:
+                        logging.debug(
+                            f"ManualInstallDialog: Failed to get game path after prompt: {e}",
+                            exc_info=True,
+                        )
         return game_root if game_root and os.path.exists(game_root) else None
 
     def _toggle_file_usage(self, file_path: str):
@@ -736,6 +734,7 @@ class ManualModInstallDialog(QDialog):
             toggle_btn.setText(
                 tr("ui.use_button") if is_unused else tr("ui.remove_button")
             )
+            toggle_btn.setMinimumWidth(max(70, toggle_btn.sizeHint().width() + 18))
         path_input = widget.findChild(QLineEdit, "path_input")
         if path_input:
             path_input.setEnabled(not is_unused)

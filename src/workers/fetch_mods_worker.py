@@ -7,7 +7,8 @@ from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from config.constants import GAMEBANANA_GAME_IDS, GAMEBANANA_PER_PAGE, UI_COLORS
+from config.constants import GAMEBANANA_PER_PAGE, UI_COLORS
+from models.game_modes import get_gamebanana_game_ids
 from models.mod_models import ModInfo
 from services.localization_service import tr
 from utils.mod_utils import get_mod_key
@@ -74,12 +75,15 @@ class FetchModsThread(QThread):
                                 "selected_search_game", "deltarune"
                             )
                         gamebanana_game = selected_game
-                        if gamebanana_game not in GAMEBANANA_GAME_IDS:
+                        gamebanana_ids = get_gamebanana_game_ids()
+                        if not gamebanana_ids:
+                            return self.all_mods
+                        if gamebanana_game not in gamebanana_ids:
                             logger.warning(
-                                f"GameBananaFetcher: Unknown game {gamebanana_game}, defaulting to deltarune"
+                                f"GameBananaFetcher: Unknown game {gamebanana_game}, defaulting to first searchable game"
                             )
-                            gamebanana_game = "deltarune"
-                        game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
+                            gamebanana_game = next(iter(gamebanana_ids))
+                        game_id = gamebanana_ids[gamebanana_game]
                         logger.info(
                             f"GameBananaFetcher.fetch_mods: Starting fetch for {selected_game} (GameBanana: {gamebanana_game}) with sort={self.sort_param}, initial_pages={initial_pages}"
                         )
@@ -159,8 +163,9 @@ class FetchModsThread(QThread):
                             else "deltarune"
                         )
                         gamebanana_game = selected_game
-                        if gamebanana_game in GAMEBANANA_GAME_IDS:
-                            game_id = GAMEBANANA_GAME_IDS[gamebanana_game]
+                        gamebanana_ids = get_gamebanana_game_ids()
+                        if gamebanana_game in gamebanana_ids:
+                            game_id = gamebanana_ids[gamebanana_game]
                             game_mods_count = len(gamebanana_mods)
                             pages_loaded = (
                                 (game_mods_count - 1) // GAMEBANANA_PER_PAGE + 1

@@ -47,9 +47,16 @@ from controllers.settings_controller import SettingsUiController
 from controllers.theme_controller import ThemeController
 from core.startup import SingleInstanceServer
 from models.app_state import AppState
-from models.game_modes import DeltaruneGame, get_game
+from models.game_modes import (
+    DeltaruneGame,
+    get_first_visible_game_id,
+    get_game,
+    get_search_game_entries,
+    get_visible_game_entries,
+)
 from services.customization_service import CustomizationManager
 from services.downloads_manager import DownloadsManager
+from services.game_registry_service import GameRegistryService
 from services.game_versions_manager import GameVersionsManager
 from services.launch_service import GameLauncher
 from services.localization_service import localization_service, tr
@@ -208,6 +215,10 @@ class AppWindow(QWidget):
         self._init_localization()
         self._splash_was_shown = False
         self.settings_service.migrate_config_if_needed()
+        self.game_registry_service = GameRegistryService(
+            self.app_state, self.settings_service, self
+        )
+        self.game_registry_service.load()
         from services.profile_service import ProfileService
 
         self.profile_service = ProfileService(
@@ -298,6 +309,9 @@ class AppWindow(QWidget):
             get_user_data_root(), lambda: self.app_state.local_config, self
         )
         self.game_versions_manager.startup()
+        self.game_registry_service.games_changed.connect(
+            self._on_games_registry_changed
+        )
         self._game_versions_dialog = None
         self._g3m_actions_dialog = None
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
@@ -1198,6 +1212,7 @@ class AppWindow(QWidget):
                 "blocklist_button",
                 "hide_library_filters_checkbox",
                 "settings_game_combo",
+                "games_manager_button",
                 "settings_change_path_button",
                 "settings_custom_executable_button",
                 "settings_reset_custom_exe_button",
@@ -1484,6 +1499,7 @@ class AppWindow(QWidget):
         self.settings_game_combo.currentIndexChanged.connect(
             self._on_settings_game_combo_changed
         )
+        self.games_manager_button.clicked.connect(self._open_game_manager)
         self.settings_change_path_button.clicked.connect(self._prompt_for_game_path)
         self.settings_custom_executable_button.clicked.connect(
             self._select_custom_executable_file
@@ -1516,6 +1532,7 @@ class AppWindow(QWidget):
         self.hide_mods_browser_tab_checkbox.stateChanged.connect(
             self.settings_ui.on_toggle_hide_mods_browser_tab
         )
+        self.refresh_game_lists()
         self.hide_library_tab_checkbox.stateChanged.connect(
             self.settings_ui.on_toggle_hide_library_tab
         )
@@ -1631,12 +1648,9 @@ class AppWindow(QWidget):
             sort_button.setIconSize(QSize(12, 12))
 
     def _update_checkbox_visibility(self):
-        game_type = self.game_type_combo.currentData()
         game_def = self.app_state.game_mode
         self.chapter_mode_checkbox.setVisible(game_def.is_multi_tab)
-        self.full_install_checkbox.setVisible(
-            game_type in ("deltarunedemo", "undertaleyellow", "sugaryspire")
-        )
+        self.full_install_checkbox.setVisible(game_def.supports_full_install)
 
     def _on_game_mode_updated_by_state(self, mode_obj):
         try:
@@ -1697,6 +1711,129 @@ class AppWindow(QWidget):
                 self.app_state.game_mode.path_change_button_text
             )
         self._update_custom_executable_ui(current_game_id)
+        self._update_steam_launch_checkbox_state()
+
+    def _refill_game_combo(self, combo, entries, current_game_id: str) -> None:
+        was_blocked = combo.blockSignals(True)
+        combo.clear()
+        for entry in entries:
+            combo.addItem(entry.display_name, entry.id)
+        if combo.count():
+            combo.setCurrentIndex(max(combo.findData(current_game_id), 0))
+        combo.blockSignals(was_blocked)
+
+    def _update_games_manager_button_style(self) -> None:
+        if not hasattr(self, "games_manager_button"):
+            return
+        combo_height = self.settings_game_combo.sizeHint().height()
+        br = clamp_border_radius(
+            get_border_radius(self.app_state.local_config),
+            width=combo_height,
+            height=combo_height,
+            border_width=2,
+        )
+        border = get_theme_color(self.app_state.local_config, "border", "#039d5b")
+        background = get_theme_color(
+            self.app_state.local_config, "background", "#282828"
+        )
+        button = get_theme_color(self.app_state.local_config, "button", "#222222")
+        hover = get_theme_color(self.app_state.local_config, "button_hover", "#616b78")
+        text = get_theme_color(self.app_state.local_config, "text", "#e8e9eb")
+        self.games_manager_button.setFixedSize(combo_height, combo_height)
+        self.games_manager_button.setIcon(colored_icon("settings", text))
+        self.games_manager_button.setStyleSheet(
+            f"QPushButton#games_manager_button {{ border: 2px solid {border}; border-radius: {br}px; background-color: {button}; margin: 0px; padding: 0px; }} "
+            f"QPushButton#games_manager_button:hover:enabled {{ background-color: {hover}; }} "
+            f"QPushButton#games_manager_button:disabled {{ background-color: {background}; border-color: #6f6f6f; }}"
+        )
+
+    def refresh_game_lists(self, preserve_selection: bool = True) -> None:
+        visible_games = get_visible_game_entries()
+        search_games = get_search_game_entries()
+        if not visible_games:
+            return
+        selected_game = (
+            self.app_state.local_config.get("selected_game_type")
+            if preserve_selection
+            else self.app_state.game_mode.game_id
+        ) or get_first_visible_game_id()
+        valid_game = self.game_registry_service.ensure_valid_game_id(selected_game)
+        selection_changed = selected_game != valid_game
+        search_selection = self.app_state.local_config.get("selected_search_game", "")
+        search_ids = {entry.id for entry in search_games}
+        if search_selection not in search_ids:
+            search_selection = search_games[0].id if search_games else ""
+            self.app_state.local_config["selected_search_game"] = search_selection
+        if hasattr(self, "game_type_combo"):
+            self._refill_game_combo(self.game_type_combo, visible_games, valid_game)
+        if hasattr(self, "settings_game_combo"):
+            self._refill_game_combo(self.settings_game_combo, visible_games, valid_game)
+        if hasattr(self, "modgame_combo"):
+            self._refill_game_combo(self.modgame_combo, search_games, search_selection)
+        if getattr(self.app_state.game_mode, "game_id", "") != valid_game:
+            self.used_mods_service.save_used_mods_state()
+            self.used_mods_service.used_mods.clear()
+            self.app_state.game_mode = get_game(valid_game) or DeltaruneGame()
+        self.app_state.local_config["selected_game_type"] = valid_game
+        if not self.app_state.game_mode.is_multi_tab:
+            self.app_state.current_mode = "normal"
+            self.app_state.local_config["chapter_mode_enabled"] = False
+            self._set_checkbox_checked_silently(self.chapter_mode_checkbox, False)
+        if not self.app_state.game_mode.supports_full_install:
+            self.app_state.local_config["full_install_enabled"] = False
+            self._set_checkbox_checked_silently(self.full_install_checkbox, False)
+        self._update_checkbox_visibility()
+        self._update_settings_library_tab()
+        self._update_games_manager_button_style()
+        if selection_changed:
+            self.profile_service.write_local_config()
+
+    def _update_steam_launch_checkbox_state(self) -> None:
+        if not hasattr(self, "launch_via_steam_checkbox"):
+            return
+        direct_launch_id = self.app_state.local_config.get("direct_launch_chapter", "")
+        should_block = (
+            self.app_state.game_mode.block_steam_with_direct_launch
+            and self.app_state.current_mode == "chapter"
+            and bool(direct_launch_id)
+        )
+        has_steam_app = bool(self.app_state.game_mode.steam_app_id)
+        self.launch_via_steam_checkbox.setEnabled(has_steam_app and not should_block)
+        if not has_steam_app:
+            self.launch_via_steam_checkbox.setChecked(False)
+            self.launch_via_steam_checkbox.setToolTip(tr("games.no_steam_app_tooltip"))
+        elif should_block:
+            self.launch_via_steam_checkbox.setChecked(False)
+            self.app_state.local_config["launch_via_steam"] = False
+            self.launch_via_steam_checkbox.setToolTip(
+                "<html><body style='white-space: normal;'>"
+                + tr("ui.steam_launch_direct_conflict")
+                + "</body></html>"
+            )
+        else:
+            self.launch_via_steam_checkbox.setToolTip(
+                "<html><body style='white-space: normal;'>"
+                + tr("tooltips.steam")
+                + "</body></html>"
+            )
+
+    def _on_games_registry_changed(self) -> None:
+        fallback = self.game_registry_service.ensure_valid_game_id(
+            self.app_state.local_config.get("selected_game_type", "")
+        )
+        if self.app_state.local_config.get("selected_game_type") != fallback:
+            self.profile_service.cleanup_game_references(
+                self.app_state.local_config.get("selected_game_type", ""),
+                fallback,
+            )
+            self.profile_service.write_local_config()
+        self.refresh_game_lists()
+        if self._game_versions_dialog:
+            self._game_versions_dialog.relocalize_ui()
+        if hasattr(self, "search_display"):
+            self.search_display.load_mods_for_selected_game()
+        if hasattr(self, "library_display"):
+            self.library_display.update_display()
 
     def _update_section_reset_buttons_visibility(self):
         show_reset_buttons = self.app_state.local_config.get(
@@ -1866,6 +2003,7 @@ class AppWindow(QWidget):
                 viewport.updateGeometry()
         if hasattr(self, "mod_list_widget") and self.mod_list_widget:
             self.mod_list_widget.updateGeometry()
+        self._update_games_manager_button_style()
         if hasattr(self, "search_display"):
             current_tab = (
                 self.main_tab_widget.currentWidget()
@@ -1968,14 +2106,9 @@ class AppWindow(QWidget):
         super().paintEvent(event)
 
     def _initialize_mutual_exclusions(self):
-        direct_launch_id = self.app_state.local_config.get("direct_launch_chapter", "")
-        is_chapter_mode = self.app_state.current_mode == "chapter"
-        is_deltarune = self.app_state.game_mode.game_id == "deltarune"
-        should_block = is_deltarune and is_chapter_mode and bool(direct_launch_id)
-        if not hasattr(self, "launch_via_steam_checkbox"):
-            return
-        self.launch_via_steam_checkbox.setEnabled(not should_block)
-        self.theme.apply_theme()
+        self._update_steam_launch_checkbox_state()
+        if hasattr(self, "color_widgets"):
+            self.theme.apply_theme()
 
     def _post_show_initialization(self):
         from core.app_post_init import post_show_initialization
@@ -2830,6 +2963,20 @@ class AppWindow(QWidget):
         dialog = ProfileManagerDialog(self.profile_service, self.app_state, self)
         dialog.exec()
         self._populate_profile_combo()
+
+    def _open_game_manager(self):
+        from ui.dialogs.game_manager_dialog import GameManagerDialog
+
+        dialog = GameManagerDialog(
+            self.game_registry_service,
+            self.profile_service,
+            self.game_versions_manager,
+            self.settings_service,
+            self.app_state,
+            self,
+        )
+        dialog.exec()
+        self.refresh_game_lists()
 
     def _on_profile_combo_changed(self, index: int):
         name = self.profile_combo.itemData(index)

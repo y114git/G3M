@@ -190,7 +190,7 @@ class SettingsUiController:
         self._call_if_exists(self.used_mods_service, "_update_steam_checkbox_state")
 
     def on_chapter_mode_changed(self, state):
-        if self.app.game_type_combo.currentData() != "deltarune":
+        if not self.app_state.game_mode.is_multi_tab:
             return
         self.app._previous_mode = getattr(self.app, "current_mode", "normal")
         is_chapter = bool(state)
@@ -238,7 +238,7 @@ class SettingsUiController:
         is_steam = self.app.launch_via_steam_checkbox.isChecked()
         if (
             is_steam
-            and self.app_state.game_mode.game_id == "deltarune"
+            and self.app_state.game_mode.block_steam_with_direct_launch
             and self.app_state.current_mode == "chapter"
             and self.app_state.local_config.get("direct_launch_chapter", "")
         ):

@@ -6,7 +6,12 @@ import platform
 import re
 import zipfile
 
-from config.constants import DATA_WIN_FILENAME
+from config.constants import GAME_DATA_FILE_EXTENSIONS
+from models.game_modes import get_game
+from utils.path_utils import (
+    find_supported_game_data_file,
+    get_supported_game_data_filenames,
+)
 
 
 def find_files_by_extension(
@@ -51,9 +56,9 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> list[str]:
     ready_files = []
     if not os.path.isdir(mod_source_dir):
         return ready_files
-    data_file_names = [DATA_WIN_FILENAME, "game.ios"]
+    data_file_names = get_supported_game_data_filenames()
     main_files = find_files_by_extension(
-        mod_source_dir, [".win", ".ios"], data_file_names
+        mod_source_dir, list(GAME_DATA_FILE_EXTENSIONS), list(data_file_names)
     )
     for file_path in main_files:
         file_lower = os.path.basename(file_path).lower()
@@ -61,10 +66,10 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> list[str]:
             ready_files.append(file_path)
             if logger:
                 logger.debug(f"Found ready data file: {file_path}")
-        elif file_lower.endswith(".win") and file_lower != DATA_WIN_FILENAME.lower():
+        elif file_lower.endswith(GAME_DATA_FILE_EXTENSIONS):
             ready_files.append(file_path)
             if logger:
-                logger.debug(f"Found ready .win file: {file_path}")
+                logger.debug(f"Found ready data file by extension: {file_path}")
     if logger:
         logger.info(
             f"find_ready_data_win_files: found {len(ready_files)} ready data file(s) in {mod_source_dir}"
@@ -72,17 +77,18 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> list[str]:
     return ready_files
 
 
-def find_data_win(target_dir: str) -> str | None:
-    system = platform.system()
-    if system == "Darwin":
-        ios_path = os.path.join(target_dir, "game.ios")
-        if os.path.exists(ios_path):
-            return ios_path
-    else:
-        win_path = os.path.join(target_dir, DATA_WIN_FILENAME)
-        if os.path.exists(win_path):
-            return win_path
-    return None
+def find_data_win(
+    target_dir: str, preferred_name: str = "", game_id: str = ""
+) -> str | None:
+    game = get_game(game_id) if game_id else None
+    explicit_name = getattr(game, "data_file_name", "") if game else ""
+    if explicit_name:
+        return find_supported_game_data_file(
+            target_dir,
+            explicit_name,
+            fallback_to_supported_names=False,
+        )
+    return find_supported_game_data_file(target_dir, preferred_name)
 
 
 def extract_chapter_id_from_path(path: str) -> str | None:
@@ -98,7 +104,9 @@ def find_target_files_for_xdelta(target_dir: str, patch_filename: str) -> list[s
     target_files = []
     if not os.path.isdir(target_dir):
         return target_files
-    excluded_files = {DATA_WIN_FILENAME.lower(), "game.ios"}
+    excluded_files = {
+        name.lower() for name in get_supported_game_data_filenames(patch_filename)
+    }
     patch_base_lower = os.path.splitext(patch_filename)[0].lower()
     for root, _dirs, files in os.walk(target_dir):
         for file in files:

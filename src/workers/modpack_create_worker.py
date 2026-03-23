@@ -4,7 +4,6 @@ import contextlib
 import json
 import logging
 import os
-import platform
 import shutil
 import threading
 import time
@@ -17,6 +16,7 @@ from adapters.g3mtool_adapter import G3MToolManager
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
 from utils.file_utils import chapter_id_to_file_key, get_chapter_folder_name
+from utils.patching.mod_content_utils import find_data_win
 
 
 class CreateModpackThread(QThread):
@@ -162,11 +162,10 @@ class CreateModpackThread(QThread):
                 )
                 if not os.path.exists(chapter_modpack_dir):
                     continue
-                system = platform.system()
-                data_filename = "game.ios" if system == "Darwin" else "data.win"
-                modified_data_file = os.path.join(chapter_modpack_dir, data_filename)
-                if not os.path.exists(modified_data_file):
+                modified_data_file = find_data_win(chapter_modpack_dir, game_id=game)
+                if not modified_data_file:
                     continue
+                data_filename = os.path.basename(modified_data_file)
                 original_data_file = self._find_original_data_file(
                     chapter_id, game, data_filename
                 )
@@ -252,11 +251,13 @@ class CreateModpackThread(QThread):
                     f"Chapter directory not found for chapter {chapter_id} in {base_game_path}"
                 )
                 return None
-            original_data_file = os.path.join(chapter_dir, data_filename)
-            if os.path.exists(original_data_file):
+            original_data_file = find_data_win(chapter_dir, data_filename, game)
+            if original_data_file and os.path.exists(original_data_file):
                 logging.info(f"Found original data file: {original_data_file}")
                 return original_data_file
-            logging.warning(f"Original data file not found: {original_data_file}")
+            logging.warning(
+                f"Original data file not found for expected name {data_filename} in {chapter_dir}"
+            )
             return None
         except Exception as e:
             logging.error(f"Error finding original data file: {e}", exc_info=True)
@@ -278,13 +279,18 @@ class CreateModpackThread(QThread):
                 if not os.path.exists(chapter_modpack_dir):
                     continue
                 file_info = {}
-                system = platform.system()
                 if self.xdelta_modpack:
-                    xdelta_patch = os.path.join(
-                        chapter_modpack_dir,
-                        "game.xdelta" if system == "Darwin" else "data.xdelta",
+                    xdelta_files = [
+                        f
+                        for f in os.listdir(chapter_modpack_dir)
+                        if f.lower().endswith(".xdelta")
+                    ]
+                    xdelta_patch = (
+                        os.path.join(chapter_modpack_dir, xdelta_files[0])
+                        if xdelta_files
+                        else ""
                     )
-                    if os.path.exists(xdelta_patch):
+                    if xdelta_patch and os.path.exists(xdelta_patch):
                         file_info["data_file_url"] = os.path.basename(xdelta_patch)
                         file_info["data_file_version"] = "1.0.0"
                         files_data[chapter_key] = file_info
@@ -293,9 +299,8 @@ class CreateModpackThread(QThread):
                         f"xdelta_modpack enabled but xdelta patch not found for chapter {chapter_id}, skipping in config"
                     )
                     continue
-                data_name = "game.ios" if system == "Darwin" else "data.win"
-                if os.path.exists(os.path.join(chapter_modpack_dir, data_name)):
-                    file_info["data_file_url"] = data_name
+                if data_file := find_data_win(chapter_modpack_dir, game_id=game):
+                    file_info["data_file_url"] = os.path.basename(data_file)
                 if file_info:
                     file_info["data_file_version"] = "1.0.0"
                     files_data[chapter_key] = file_info

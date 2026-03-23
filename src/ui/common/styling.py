@@ -822,6 +822,7 @@ def build_button_style(
         }}
         {checked_rule}
         QPushButton#{obj_name}:disabled {{
+            background-color: #3b3b3b;
             color: #808080;
             border-color: #808080;
         }}

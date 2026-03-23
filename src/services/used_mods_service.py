@@ -120,16 +120,10 @@ class UsedModsManager(QObject):
         if not mod_key:
             return
         config_keys = [
-            "used_mods_deltarune",
-            "used_mods_deltarune_chapter",
-            "used_mods_deltarunedemo",
-            "used_mods_undertale",
-            "used_mods_undertaleyellow",
-            "used_mods_pizzatower",
+            config_key
+            for config_key in self.app_state.local_config
+            if config_key.startswith("used_mods_")
         ]
-        for config_key in list(self.app_state.local_config.keys()):
-            if config_key.startswith("used_mods_") and config_key not in config_keys:
-                config_keys.append(config_key)
         config_updated = False
         for config_key in config_keys:
             used_mods_data = self.app_state.local_config.get(config_key, {})
@@ -453,15 +447,10 @@ class UsedModsManager(QObject):
             self.parent_widget._update_chapter_tabs_style()
 
     def _update_steam_checkbox_state(self):
-        if not self.parent_widget or not hasattr(
-            self.parent_widget, "launch_via_steam_checkbox"
-        ):
+        if not self.parent_widget:
             return
-        direct_launch_id = self.app_state.local_config.get("direct_launch_chapter", "")
-        is_chapter_mode = self.app_state.current_mode == "chapter"
-        is_deltarune = self.app_state.game_mode.game_id == "deltarune"
-        should_block = is_deltarune and is_chapter_mode and bool(direct_launch_id)
-        self.parent_widget.launch_via_steam_checkbox.setEnabled(not should_block)
+        if hasattr(self.parent_widget, "_update_steam_launch_checkbox_state"):
+            self.parent_widget._update_steam_launch_checkbox_state()
 
     @staticmethod
     def _migrate_legacy_id(chapter_id_str: str) -> str:

@@ -10,11 +10,11 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
 from config.constants import (
-    GAMEBANANA_GAME_IDS,
     GAMEBANANA_PER_PAGE,
     SEARCH_TIMEOUT_SECONDS,
     UI_COLORS,
 )
+from models.game_modes import get_gamebanana_reverse_map
 from models.mod_models import ModInfo
 from services.localization_service import tr
 
@@ -51,14 +51,7 @@ class SearchGameBananaModsThread(QThread):
         self._start_time = time.time()
         new_mods: list[ModInfo] = []
         try:
-            game_name = next(
-                (
-                    name
-                    for name, id_val in GAMEBANANA_GAME_IDS.items()
-                    if id_val == self.game_id
-                ),
-                None,
-            )
+            game_name = get_gamebanana_reverse_map().get(self.game_id)
             if not game_name:
                 self.result.emit([])
                 return
