@@ -34,9 +34,9 @@ from ui.common.dialog_theme import (
 logger = logging.getLogger(__name__)
 
 _DATA_FILTER = "Data files (*.win *.ios *.unx *.droid);;All Files (*)"
-_PATCH_FILTER = "Patch files (*.zip *.xdelta);;All Files (*)"
+_PATCH_FILTER = "Patch files (*.g3mpatch *.xdelta);;All Files (*)"
 _DATA_PATCH_FILTER = (
-    "Data / Patch files (*.win *.ios *.unx *.droid *.zip *.xdelta);;All Files (*)"
+    "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.xdelta);;All Files (*)"
 )
 _ALL_FILTER = "All Files (*)"
 
@@ -349,7 +349,7 @@ class _DataConvertWorkerThread(QThread):
                 if not data_url:
                     continue
                 is_xdelta = data_url.lower().endswith((".xdelta", ".vcdiff"))
-                is_g3m = data_url.lower().endswith(".zip")
+                is_g3m = data_url.lower().endswith(".g3mpatch")
                 if self._target_xdelta and is_xdelta:
                     continue
                 if not self._target_xdelta and is_g3m:
@@ -430,7 +430,7 @@ class _DataConvertWorkerThread(QThread):
                         if rc != 0:
                             self.finished.emit(False, err[:300])
                             return
-                        new_name = f"{os.path.splitext(os.path.basename(patch_path))[0]}{'.xdelta' if self._target_xdelta else '.zip'}"
+                        new_name = f"{os.path.splitext(os.path.basename(patch_path))[0]}{'.xdelta' if self._target_xdelta else '.g3mpatch'}"
                         new_path = os.path.join(os.path.dirname(patch_path), new_name)
                         if self._target_xdelta:
                             rc, _, err = self._g3m.xpatch_create(
@@ -601,7 +601,7 @@ class _DataConvertTab(QWidget):
                 if not url:
                     continue
                 low = url.lower()
-                if target_xdelta and low.endswith(".zip"):
+                if target_xdelta and low.endswith(".g3mpatch"):
                     has_convertible = True
                     break
                 if not target_xdelta and low.endswith((".xdelta", ".vcdiff")):

@@ -386,7 +386,14 @@ class InstallModsThread(QThread):
                             for fname in os.listdir(cache_dir):
                                 fl = fname.lower()
                                 if fl.endswith(
-                                    (".zip", ".rar", ".7z", ".tar.gz", ".lzma")
+                                    (
+                                        ".zip",
+                                        ".g3mpatch",
+                                        ".rar",
+                                        ".7z",
+                                        ".tar.gz",
+                                        ".lzma",
+                                    )
                                 ):
                                     file_path = os.path.join(cache_dir, fname)
                                     try:

@@ -14,14 +14,37 @@ import zipfile
 
 import pytest
 
+TEST_TIMEOUT = 10
+
+
+def _contains_startup_errors(output: str) -> bool:
+    """Check if output contains any startup error markers."""
+    error_markers = ["STARTUP ERROR", "CRITICAL ERROR", "Fatal error"]
+    return any(marker in output for marker in error_markers)
+
 
 def test_startup_from_environment():
-    """Test startup using environment variables (for CI/CD)."""
-    if 'ARCHIVE_PATH' not in os.environ or 'STARTUP_TARGET' not in os.environ:
-        pytest.skip("ARCHIVE_PATH or STARTUP_TARGET not set")
+    """Test startup using environment variables (CI) or local main.py (dev)."""
+    if "ARCHIVE_PATH" not in os.environ or "STARTUP_TARGET" not in os.environ:
+        project_root = pathlib.Path(__file__).parent.parent
+        main_py = project_root / "src" / "main.py"
+        if not main_py.exists():
+            pytest.skip("Neither CI env vars nor local main.py available")
+        result = subprocess.run(
+            [sys.executable, str(main_py), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=TEST_TIMEOUT,
+            cwd=str(project_root),
+        )
+        output = (result.stdout or "") + (result.stderr or "")
+        assert not _contains_startup_errors(output), (
+            "Application startup failed with startup error(s)"
+        )
+        return
 
-    archive_path = pathlib.Path(os.environ['ARCHIVE_PATH'])
-    startup_target = os.environ['STARTUP_TARGET']
+    archive_path = pathlib.Path(os.environ["ARCHIVE_PATH"])
+    startup_target = os.environ["STARTUP_TARGET"]
 
     success = _test_startup_with_archive(archive_path, startup_target)
     assert success, f"Startup test failed for {startup_target}"
@@ -38,7 +61,7 @@ def test_startup_with_sample_archive(tmp_path):
 
     sample_archive_path = tmp_path / "sample_app.zip"
 
-    with zipfile.ZipFile(sample_archive_path, 'w', zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(sample_archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(main_py_path, "main.py")
 
         src_dir = project_root / "src"
@@ -68,19 +91,17 @@ def test_local_startup():
             [sys.executable, str(main_py_path), "--help"],
             capture_output=True,
             text=True,
-            timeout=30,
-            cwd=str(project_root)
+            timeout=TEST_TIMEOUT,
+            cwd=str(project_root),
         )
 
-        output = (result.stdout or '') + (result.stderr or '')
-
-
-        assert "STARTUP ERROR" not in output, "Application startup failed with STARTUP ERROR"
-        assert "CRITICAL ERROR" not in output, "Application startup failed with CRITICAL ERROR"
-        assert "Fatal error" not in output, "Application startup failed with fatal error"
+        output = (result.stdout or "") + (result.stderr or "")
+        assert not _contains_startup_errors(output), (
+            "Application startup failed with startup error(s)"
+        )
 
     except subprocess.TimeoutExpired:
-        pytest.fail("Application startup timed out after 30 seconds")
+        pytest.fail(f"Application startup timed out after {TEST_TIMEOUT} seconds")
     except Exception as e:
         pytest.fail(f"Unexpected error during startup test: {e}")
 
@@ -100,40 +121,45 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
             target.chmod(target.stat().st_mode | 0o111)
             cwd = str(extract_path)
 
-            if startup_target.endswith('.py'):
-                result = subprocess.run([sys.executable, str(target), '--help'],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=10,
-                                        cwd=cwd)
+            if startup_target.endswith(".py"):
+                result = subprocess.run(
+                    [sys.executable, str(target), "--help"],
+                    capture_output=True,
+                    text=True,
+                    timeout=TEST_TIMEOUT,
+                    cwd=cwd,
+                )
             else:
-                result = subprocess.run([str(target), '--help'],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=10,
-                                        cwd=cwd)
-            output = (result.stdout or '') + (result.stderr or '')
-
-            return 'STARTUP ERROR' not in output
+                result = subprocess.run(
+                    [str(target), "--help"],
+                    capture_output=True,
+                    text=True,
+                    timeout=TEST_TIMEOUT,
+                    cwd=cwd,
+                )
+            output = (result.stdout or "") + (result.stderr or "")
+            return not _contains_startup_errors(output)
 
     except subprocess.TimeoutExpired:
+        print(f"Startup test timed out after 10 seconds for {startup_target}", file=sys.stderr)
         return False
-    except Exception:
+    except Exception as e:
+        print(f"Startup test failed with exception for {startup_target}: {e}", file=sys.stderr)
         return False
 
 
 def main():
     """Main function for standalone script usage."""
-    if 'ARCHIVE_PATH' not in os.environ or 'STARTUP_TARGET' not in os.environ:
+    if "ARCHIVE_PATH" not in os.environ or "STARTUP_TARGET" not in os.environ:
         raise SystemExit(1)
 
-    archive_path = pathlib.Path(os.environ['ARCHIVE_PATH'])
-    startup_target = os.environ['STARTUP_TARGET']
+    archive_path = pathlib.Path(os.environ["ARCHIVE_PATH"])
+    startup_target = os.environ["STARTUP_TARGET"]
 
     success = _test_startup_with_archive(archive_path, startup_target)
     if not success:
         raise SystemExit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

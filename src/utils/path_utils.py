@@ -518,6 +518,7 @@ _ICON_DEFS = {
     "import": ("import_icon.svg", [('fill="#0D0D0D"', 'fill="{c}"')]),
     "duplicate": ("duplicate_icon.svg", [('fill="#000000"', 'fill="{c}"')]),
     "tool": ("tool_icon.svg", [('stroke="#000000"', 'stroke="{c}"')]),
+    "block": ("block_icon.svg", [('stroke="#000000"', 'stroke="{c}"')]),
 }
 
 

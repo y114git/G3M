@@ -49,7 +49,7 @@ def build_dialog_theme_stylesheet(app_state):
         QLineEdit:focus {{
             border: 2px solid {theme["button_hover"]};
         }}
-        QComboBox:focus {{
+        QComboBox:hover, QComboBox:focus {{
             border: 2px solid {theme["button_hover"]};
         }}
         QLineEdit:disabled, QComboBox:disabled {{

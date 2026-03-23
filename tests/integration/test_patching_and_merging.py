@@ -3,7 +3,6 @@ import logging
 import os
 import shutil
 import tempfile
-import zipfile
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -50,13 +49,11 @@ class TestModClassification:
     def test_classify_g3mpatch(self, tmp_path):
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
-        zip_path = mod_dir / "patch.zip"
-        with zipfile.ZipFile(str(zip_path), "w") as zf:
-            zf.writestr("g3mpatch.json", '{"version": 1}')
+        (mod_dir / "patch.g3mpatch").write_bytes(b"fake")
         patcher = G3MToolPatchingService(Mock(), Mock())
         patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_G3MPATCH
-        assert patch_file.endswith(".zip")
+        assert patch_file.endswith(".g3mpatch")
 
     def test_classify_xdelta(self, tmp_path):
         mod_dir = tmp_path / "mod"
@@ -97,20 +94,16 @@ class TestModClassification:
     def test_classify_g3mpatch_priority_over_xdelta(self, tmp_path):
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
-        zip_path = mod_dir / "patch.zip"
-        with zipfile.ZipFile(str(zip_path), "w") as zf:
-            zf.writestr("g3mpatch.json", '{"version": 1}')
+        (mod_dir / "patch.g3mpatch").write_bytes(b"fake")
         (mod_dir / "data.xdelta").write_bytes(b"fake")
         patcher = G3MToolPatchingService(Mock(), Mock())
         _patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_G3MPATCH
 
-    def test_classify_zip_without_g3mpatch_json_is_not_g3mpatch(self, tmp_path):
+    def test_classify_plain_zip_is_not_g3mpatch(self, tmp_path):
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
-        zip_path = mod_dir / "random.zip"
-        with zipfile.ZipFile(str(zip_path), "w") as zf:
-            zf.writestr("readme.txt", "hello")
+        (mod_dir / "random.zip").write_bytes(b"fake")
         patcher = G3MToolPatchingService(Mock(), Mock())
         _patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
@@ -389,7 +382,10 @@ class TestG3MPatchProgressText:
 
         assert patcher._apply_multi_mod(
             str(tmp_path / "data.win"),
-            [("a.zip", MOD_TYPE_G3MPATCH, "a"), ("b.zip", MOD_TYPE_G3MPATCH, "b")],
+            [
+                ("a.g3mpatch", MOD_TYPE_G3MPATCH, "a"),
+                ("b.g3mpatch", MOD_TYPE_G3MPATCH, "b"),
+            ],
             str(tmp_path / "out.win"),
             str(tmp_path / "g3mtool.log"),
             "chapter1",

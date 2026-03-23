@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog, QMessageBox
 from config.constants import SEARCH_EXHAUSTED_PAGE_SENTINEL
 from models.game_modes import (
     get_gamebanana_game_ids,
-    get_manager_game_entries,
     get_search_game_entries,
 )
 from services.blocklist_service import BlocklistManager
@@ -464,12 +463,9 @@ class SearchDisplayController(QObject):
     def show_blocklist_dialog(self):
         try:
             selected_game = self._get_selected_game()
-            all_games = [entry.id for entry in get_manager_game_entries()] + ["global"]
-            all_games.extend(
-                g for g in self.blocklist_service.get_all_games() if g not in all_games
-            )
+            search_games = get_search_game_entries()
             dialog = BlocklistDialog(
-                self.blocklist_service, selected_game, all_games, self.app
+                self.blocklist_service, selected_game, search_games, self.app
             )
             dialog.blocklist_changed.connect(self.on_blocklist_changed)
             dialog.exec()

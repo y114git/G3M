@@ -17,6 +17,7 @@ from models.game_modes import get_search_game_entries
 from services.localization_service import tr
 from ui.builders.shared_filters_builder import (
     apply_filters_frame_style,
+    create_blocklist_button,
     create_downloads_button,
     create_filters_frame,
     create_modgame_combo,
@@ -161,6 +162,9 @@ class ModsBrowserTabBuilder(QObject):
         )
         layout.addWidget(show_nsfw_checkbox, 0, _vc)
         layout.addStretch()
+        blocklist_btn = create_blocklist_button(self.app_state)
+        layout.addWidget(blocklist_btn, 0, _vc)
+        layout.addSpacing(4)
         downloads_btn = create_downloads_button(self.app_state)
         layout.addWidget(downloads_btn, 0, _vc)
         layout.addSpacing(4)
@@ -172,6 +176,7 @@ class ModsBrowserTabBuilder(QObject):
                 "modgame_combo": modgame_combo,
                 "tags_label": tags_label,
                 "show_nsfw_checkbox": show_nsfw_checkbox,
+                "blocklist_button": blocklist_btn,
                 "search_button": search_btn,
                 "downloads_button": downloads_btn,
             }

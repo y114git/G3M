@@ -583,18 +583,6 @@ class SettingsViewBuilder:
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(
-            tr("ui.settings_section_filters"),
-            "mods_filters",
-            "ui.settings_section_filters",
-            parent=page,
-        )
-        blocklist_button = self._styled_button(
-            tr("ui.blocklist"), 100, tr("ui.blocklist_tooltip")
-        )
-        cl.addWidget(blocklist_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sec)
-
-        sec, cl = self._collapsible_section(
             tr("downloads.title"), "mods_downloads", "downloads.title", parent=page
         )
         downloads_no_auto_use_cb = self._styled_checkbox(
@@ -620,7 +608,6 @@ class SettingsViewBuilder:
         layout.addStretch()
 
         self.widgets["hide_mods_browser_tab_checkbox"] = hide_mods_browser_tab_checkbox
-        self.widgets["blocklist_button"] = blocklist_button
         self.widgets["downloads_no_auto_use_checkbox"] = downloads_no_auto_use_cb
         self.widgets["downloads_delete_after_use_checkbox"] = (
             downloads_delete_after_use_cb

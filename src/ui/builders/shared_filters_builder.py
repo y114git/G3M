@@ -134,6 +134,17 @@ def create_search_button(app_state=None):
     return search_btn
 
 
+def create_blocklist_button(app_state=None):
+    """Create Blocklist button with icon only."""
+    btn = QPushButton()
+    btn.setObjectName("blocklistBtn")
+    btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    btn.setToolTip(tr("ui.blocklist"))
+    btn.setAccessibleName(tr("ui.blocklist"))
+    _install_themed_button_icon(btn, "block", app_state, QSize(22, 22))
+    return btn
+
+
 def create_downloads_button(app_state=None):
     """Create Downloads button with icon only. Badge count managed externally."""
     btn = QPushButton()

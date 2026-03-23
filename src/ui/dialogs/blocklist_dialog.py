@@ -1,5 +1,8 @@
 "Dialog for managing mod blocklist entries."
 
+from collections.abc import Sequence
+from typing import Protocol
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
@@ -27,6 +30,11 @@ from ui.common.dialog_theme import (
 )
 
 
+class _GameEntryLike(Protocol):
+    id: str
+    display_name: str
+
+
 class BlocklistDialog(QDialog):
     blocklist_changed = pyqtSignal()
 
@@ -34,7 +42,7 @@ class BlocklistDialog(QDialog):
         self,
         blocklist_service: BlocklistManager,
         current_game: str,
-        available_games: list[str],
+        available_games: Sequence[_GameEntryLike],
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -47,7 +55,7 @@ class BlocklistDialog(QDialog):
 
     def setup_ui(self):
         self.setWindowTitle(tr("blocklist.title"))
-        self.setMinimumSize(600, 500)
+        self.setMinimumSize(775, 500)
         self.setModal(True)
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
@@ -58,7 +66,6 @@ class BlocklistDialog(QDialog):
         self.game_label.setFont(QFont("", 10, QFont.Weight.Bold))
         game_selector_layout.addWidget(self.game_label)
         self.game_combo = QComboBox()
-        self.game_combo.setMinimumWidth(150)
         self.game_combo.currentIndexChanged.connect(self.on_game_changed)
         game_selector_layout.addWidget(self.game_combo)
         main_layout.addLayout(game_selector_layout)
@@ -131,30 +138,43 @@ class BlocklistDialog(QDialog):
         if parent and hasattr(parent, "app_state") and parent.app_state:
             theme = get_dialog_theme_values(parent.app_state)
             bg_color = theme["background"]
+            border_color = theme["border"]
             text_color = theme["text"]
             hover_color = theme["button_hover"]
             br = theme["border_radius"]
-            button_radius = theme["button_radius"]
-            field_radius = theme["field_radius"]
             self.setStyleSheet(
                 build_dialog_theme_stylesheet(parent.app_state)
-                + f"""\n                QGroupBox {{\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {br}px;\n                    margin-top: 10px;\n                    padding-top: 10px;\n                    background-color: {bg_color};\n                }}\n                QGroupBox::title {{\n                    subcontrol-origin: margin;\n                    left: 10px;\n                    padding: 0 5px 0 5px;\n                    color: {text_color};\n                }}\n                QPushButton {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                    border-radius: {button_radius}px;\n                    padding: 5px 15px;\n                    font-size: 12px;\n                }}\n                QPushButton:hover {{\n                    background-color: {hover_color};\n                    color: {text_color};\n                }}\n                QPushButton:disabled {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    opacity: 0.5;\n                }}\n                QLineEdit, QComboBox, QListWidget {{\n                    background-color: {bg_color};\n                    color: {text_color};\n                    border: 2px solid {text_color};\n                }}\n                QLineEdit, QComboBox {{\n                    border-radius: {field_radius}px;\n                    padding: 3px;\n                }}\n                QListWidget {{\n                    border-radius: {br}px;\n                    padding: 3px;\n                }}\n                QListWidget::item:selected {{\n                    background-color: {hover_color};\n                }}\n            """
+                + f"""
+                QGroupBox {{
+                    color: {text_color};
+                    border: 2px solid {border_color};
+                    border-radius: {br}px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    background-color: {bg_color};
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px 0 5px;
+                    color: {text_color};
+                }}
+                QListWidget::item:selected {{
+                    background-color: {hover_color};
+                    color: {text_color};
+                }}
+            """
             )
 
     def load_blocklist(self):
         self.game_combo.clear()
-        game_names = {
-            "deltarune": tr("ui.deltarune"),
-            "deltarunedemo": tr("ui.deltarunedemo"),
-            "undertale": tr("ui.undertale"),
-            "undertaleyellow": tr("ui.undertaleyellow"),
-            "pizzatower": tr("ui.pizzatower"),
-            "sugaryspire": tr("ui.sugaryspire"),
-            "global": tr("blocklist.global"),
-        }
-        for game in self.available_games:
-            display_name = game_names.get(game, game)
-            self.game_combo.addItem(display_name, game)
+        for game_entry in self.available_games:
+            if not hasattr(game_entry, "display_name") or not hasattr(game_entry, "id"):
+                raise TypeError(
+                    "available_games entries must expose 'display_name' and 'id'"
+                )
+            self.game_combo.addItem(game_entry.display_name, game_entry.id)
+        self.game_combo.addItem(tr("blocklist.global"), "global")
         current_index = self.game_combo.findData(self.current_game)
         if current_index >= 0:
             self.game_combo.setCurrentIndex(current_index)

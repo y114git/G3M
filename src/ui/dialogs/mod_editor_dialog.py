@@ -532,6 +532,7 @@ class ModEditorDialog(QDialog):
                     p.endswith(ext)
                     for ext in [
                         ".zip",
+                        ".g3mpatch",
                         ".rar",
                         ".7z",
                         ".exe",

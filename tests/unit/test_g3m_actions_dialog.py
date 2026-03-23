@@ -103,6 +103,6 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     version_zip = versions_dir / "1.2.3 - g3mpatch.zip"
     assert version_zip.is_file()
     with zipfile.ZipFile(version_zip) as zf:
-        assert "chapter1/data.zip" in zf.namelist()
+        assert "chapter1/data.g3mpatch" in zf.namelist()
         converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
-    assert converted_config["files"]["1"]["data_file_url"] == "data.zip"
+    assert converted_config["files"]["1"]["data_file_url"] == "data.g3mpatch"

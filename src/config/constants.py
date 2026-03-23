@@ -191,7 +191,6 @@ WIDGET_LOCALIZATIONS = [
     ("disable_animations_checkbox", "setText", "checkboxes.disable_animations"),
     ("disable_background_checkbox", "setText", "checkboxes.disable_background"),
     ("disable_splash_checkbox", "setText", "checkboxes.disable_splash"),
-    ("blocklist_button", "setText", "ui.blocklist"),
     ("blocklist_button", "setToolTip", "ui.blocklist_tooltip"),
     ("priority_button", "setText", "ui.priority"),
     ("create_modpack_button", "setText", "ui.create_modpack_button"),
@@ -276,7 +275,7 @@ DATA_FILE_EXTENSIONS = (
     ".ios",
     ".droid",
     ".data",
-    ".zip",
+    ".g3mpatch",
 )
 GAME_DATA_FILE_EXTENSIONS = (".win", ".unx", ".ios", ".droid", ".data")
 GAME_DATA_FILENAMES = (

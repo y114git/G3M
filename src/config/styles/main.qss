@@ -219,7 +219,7 @@ QPushButton#sortOrderBtn {
     font-weight: bold;
     font-size: 12px;
 }
-QPushButton#searchBtn, QPushButton#gameVersionsBtn, QPushButton#g3mActionsBtn {
+QPushButton#searchBtn, QPushButton#gameVersionsBtn, QPushButton#g3mActionsBtn, QPushButton#blocklistBtn {
     min-width: 35px;
     max-width: 35px;
     min-height: 30px;
@@ -256,15 +256,6 @@ QPushButton#topRefreshBtn {
     margin: 0px;
     font-size: 18px;
     border-radius: %top_refresh_button_radius%;
-}
-QPushButton#blocklistBtn {
-    font-size: 12px;
-    padding: 3px 8px;
-    min-width: 80px;
-}
-QPushButton#blocklistBtn:hover {
-    background-color: %button_hover_color%;
-    color: %main_text_color%;
 }
 QTabBar::tab {
     background-color: %button_color%;

@@ -904,7 +904,7 @@ class AppWindow(QWidget):
                 "tag_other",
                 "search_button",
             ),
-            optional=("downloads_button",),
+            optional=("downloads_button", "blocklist_button"),
         )
         self.sort_combo.currentIndexChanged.connect(self._on_search_sort_changed)
         if "selected_search_game" not in self.app_state.local_config:
@@ -941,6 +941,10 @@ class AppWindow(QWidget):
 
         self.show_nsfw_checkbox.stateChanged.connect(on_show_nsfw_changed)
         self.search_button.clicked.connect(self.search_display.show_search_dialog)
+        if hasattr(self, "blocklist_button") and self.blocklist_button:
+            self.blocklist_button.clicked.connect(
+                self.search_display.show_blocklist_dialog
+            )
         if hasattr(self, "downloads_button") and self.downloads_button:
             self.downloads_button.clicked.connect(self._open_downloads_dialog)
             self.downloads_manager.badge_changed.connect(
@@ -1209,7 +1213,6 @@ class AppWindow(QWidget):
                 "theme_save_btn",
                 "theme_delete_btn",
                 "do_not_save_theme_checkbox",
-                "blocklist_button",
                 "hide_library_filters_checkbox",
                 "settings_game_combo",
                 "games_manager_button",
@@ -1492,7 +1495,6 @@ class AppWindow(QWidget):
                     self.theme.on_custom_style_edited(),
                 )
             )
-        self.blocklist_button.clicked.connect(self.search_display.show_blocklist_dialog)
         self.hide_library_filters_checkbox.stateChanged.connect(
             self.settings_ui.on_toggle_hide_library_filters
         )

@@ -1,10 +1,8 @@
 """Mod type, asset, and resource detection utilities for the patching system."""
 
-import logging
 import os
 import platform
 import re
-import zipfile
 
 from config.constants import GAME_DATA_FILE_EXTENSIONS
 from models.game_modes import get_game
@@ -33,22 +31,14 @@ def find_files_by_extension(
 
 
 def find_g3m_patches(mod_source_dir: str) -> list[str]:
-    """Find .zip archives that contain g3mpatch.json inside (g3mpatch format)."""
+    """Find .g3mpatch files in a mod directory."""
     results = []
     if not os.path.isdir(mod_source_dir):
         return results
     for root, _dirs, files in os.walk(mod_source_dir):
         for f in files:
-            if f.lower().endswith(".zip"):
-                zip_path = os.path.join(root, f)
-                try:
-                    with zipfile.ZipFile(zip_path, "r") as zf:
-                        if "g3mpatch.json" in zf.namelist():
-                            results.append(zip_path)
-                except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
-                    logging.warning(
-                        f"find_g3m_patches: Failed to read zip {zip_path}: {e}"
-                    )
+            if f.lower().endswith(".g3mpatch"):
+                results.append(os.path.join(root, f))
     return results
 
 
