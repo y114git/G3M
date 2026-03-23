@@ -313,7 +313,7 @@ class AppWindow(QWidget):
             self._on_games_registry_changed
         )
         self._game_versions_dialog = None
-        self._g3m_actions_dialog = None
+        self._modding_tools_dialog = None
         self._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         self.mod_ops = ModOperationsController(
             self.app_state, self.feedback_service, self.mod_service, self
@@ -999,7 +999,7 @@ class AppWindow(QWidget):
                 "create_modpack_button",
                 "library_downloads_button",
                 "library_game_versions_button",
-                "library_g3m_actions_button",
+                "library_modding_tools_button",
                 "mod_summary_panel",
             ),
         )
@@ -1057,11 +1057,11 @@ class AppWindow(QWidget):
                 self._open_game_versions_dialog
             )
         if (
-            hasattr(self, "library_g3m_actions_button")
-            and self.library_g3m_actions_button
+            hasattr(self, "library_modding_tools_button")
+            and self.library_modding_tools_button
         ):
-            self.library_g3m_actions_button.clicked.connect(
-                self._open_g3m_actions_dialog
+            self.library_modding_tools_button.clicked.connect(
+                self._open_modding_tools_dialog
             )
         self._populate_profile_combo()
         self.profile_combo.currentIndexChanged.connect(self._on_profile_combo_changed)
@@ -2929,23 +2929,23 @@ class AppWindow(QWidget):
         self._game_versions_dialog.raise_()
         self._game_versions_dialog.activateWindow()
 
-    def _open_g3m_actions_dialog(self):
+    def _open_modding_tools_dialog(self):
         from adapters.g3mtool_adapter import G3MToolManager
-        from ui.dialogs.g3m_actions_dialog import G3MActionsDialog
+        from ui.dialogs.modding_tools_dialog import ModdingToolsDialog
 
-        if self._g3m_actions_dialog and self._g3m_actions_dialog.isVisible():
-            self._g3m_actions_dialog.raise_()
-            self._g3m_actions_dialog.activateWindow()
+        if self._modding_tools_dialog and self._modding_tools_dialog.isVisible():
+            self._modding_tools_dialog.raise_()
+            self._modding_tools_dialog.activateWindow()
             return
         g3m = getattr(self, "_g3m_manager", None)
         if not g3m:
             g3m = G3MToolManager()
             self._g3m_manager = g3m
-        self._g3m_actions_dialog = G3MActionsDialog(g3m, self.app_state, self)
-        self._g3m_actions_dialog.destroyed.connect(
-            lambda: setattr(self, "_g3m_actions_dialog", None)
+        self._modding_tools_dialog = ModdingToolsDialog(g3m, self.app_state, self)
+        self._modding_tools_dialog.destroyed.connect(
+            lambda: setattr(self, "_modding_tools_dialog", None)
         )
-        self._g3m_actions_dialog.show()
+        self._modding_tools_dialog.show()
 
     def _populate_profile_combo(self):
         combo = self.profile_combo

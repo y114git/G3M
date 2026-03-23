@@ -1360,8 +1360,8 @@
     "error_mod_not_found": "所选模组未在磁盘上找到。它可能已被删除或移动。",
     "error_g3mtool_unavailable": "G3MTool 不可用。模组补丁需要 G3MTool。"
   },
-  "g3m_actions": {
-    "title": "G3M 操作",
+  "modding_tools": {
+    "title": "模组工具",
     "tab_patch": "补丁",
     "tab_merge": "合并",
     "tab_info": "信息",

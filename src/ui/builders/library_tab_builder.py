@@ -25,8 +25,8 @@ from ui.builders.shared_filters_builder import (
     apply_filters_frame_style,
     create_downloads_button,
     create_filters_frame,
-    create_g3m_actions_button,
     create_game_versions_button,
+    create_modding_tools_button,
     create_modgame_combo,
     create_search_button,
     create_sort_controls,
@@ -410,8 +410,8 @@ class LibraryTabBuilder(QObject):
         for t in tags.values():
             layout.addWidget(t, 0, _vc)
         layout.addStretch()
-        g3m_actions_btn = create_g3m_actions_button(self.app_state)
-        layout.addWidget(g3m_actions_btn, 0, _vc)
+        modding_tools_btn = create_modding_tools_button(self.app_state)
+        layout.addWidget(modding_tools_btn, 0, _vc)
         layout.addSpacing(4)
         downloads_btn = create_downloads_button(self.app_state)
         layout.addWidget(downloads_btn, 0, _vc)
@@ -425,7 +425,7 @@ class LibraryTabBuilder(QObject):
                 "library_tags_label": tags_lbl,
                 "library_search_button": search_btn,
                 "library_downloads_button": downloads_btn,
-                "library_g3m_actions_button": g3m_actions_btn,
+                "library_modding_tools_button": modding_tools_btn,
                 "library_tag_widgets": list(tags.values()),
             }
         )

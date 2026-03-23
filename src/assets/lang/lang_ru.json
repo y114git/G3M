@@ -1360,8 +1360,8 @@
     "error_mod_not_found": "Выбранный мод не найден на диске. Возможно, он был удалён или перемещён.",
     "error_g3mtool_unavailable": "G3MTool недоступен. Для патчинга модов необходим G3MTool."
   },
-  "g3m_actions": {
-    "title": "G3M Действия",
+  "modding_tools": {
+    "title": "Инструменты моддинга",
     "tab_patch": "Патч",
     "tab_merge": "Слияние",
     "tab_info": "Инфо",

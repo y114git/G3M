@@ -218,7 +218,7 @@ class _CollapsibleSection(QWidget):
         lay.setSpacing(0)
 
         self._header = QPushButton(f"\u25b6  {title}")
-        self._header.setObjectName("g3m_actions_section_header")
+        self._header.setObjectName("modding_tools_section_header")
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._header.clicked.connect(self._toggle)
         self._title = title
@@ -226,7 +226,7 @@ class _CollapsibleSection(QWidget):
 
         self._body = QTextEdit()
         self._body.setReadOnly(True)
-        self._body.setObjectName("g3m_actions_section_body")
+        self._body.setObjectName("modding_tools_section_body")
         self._body.setVisible(False)
         self._body.setHtml(
             f"<div style=\"font-family:'{font_family}';font-size:12px\">{body_html}</div>"
@@ -259,7 +259,7 @@ class DiffViewerDialog(QDialog):
         super().__init__(parent)
         self._app_state = app_state
         self._md_path = md_path
-        self.setWindowTitle(tr("g3m_actions.diff_viewer_title"))
+        self.setWindowTitle(tr("modding_tools.diff_viewer_title"))
         self.setMinimumSize(900, 600)
         self.resize(1300, 820)
         self.setModal(False)
@@ -283,8 +283,8 @@ class DiffViewerDialog(QDialog):
         main.setSpacing(6)
 
         header = QHBoxLayout()
-        self._title_label = QLabel(tr("g3m_actions.diff_viewer_title"))
-        self._title_label.setObjectName("g3m_actions_title")
+        self._title_label = QLabel(tr("modding_tools.diff_viewer_title"))
+        self._title_label.setObjectName("modding_tools_title")
         font = self._title_label.font()
         font.setPointSize(14)
         font.setBold(True)
@@ -292,8 +292,8 @@ class DiffViewerDialog(QDialog):
         header.addWidget(self._title_label)
         header.addStretch()
         self._export_btn = QPushButton()
-        self._export_btn.setObjectName("g3m_actions_export_btn")
-        self._export_btn.setToolTip(tr("g3m_actions.export_report"))
+        self._export_btn.setObjectName("modding_tools_export_btn")
+        self._export_btn.setToolTip(tr("modding_tools.export_report"))
         self._export_btn.clicked.connect(self._on_export)
         self._export_btn.setFixedSize(30, 30)
         try:
@@ -307,14 +307,14 @@ class DiffViewerDialog(QDialog):
         header.addWidget(self._export_btn)
         header.addSpacing(4)
         self._close_btn = QPushButton(tr("common.close"))
-        self._close_btn.setObjectName("g3m_actions_close_btn")
+        self._close_btn.setObjectName("modding_tools_close_btn")
         self._close_btn.clicked.connect(self.close)
         header.addWidget(self._close_btn)
         main.addLayout(header)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setObjectName("g3m_actions_diff_scroll")
+        scroll.setObjectName("modding_tools_diff_scroll")
         container = QWidget()
         self._container_lay = QVBoxLayout(container)
         self._container_lay.setContentsMargins(4, 4, 4, 4)
@@ -364,7 +364,7 @@ class DiffViewerDialog(QDialog):
     def _on_export(self):
         path, _ = QFileDialog.getSaveFileName(
             self,
-            tr("g3m_actions.export_report"),
+            tr("modding_tools.export_report"),
             "",
             "Markdown files (*.md);;All Files (*)",
         )
@@ -379,10 +379,10 @@ class DiffViewerDialog(QDialog):
         theme = get_dialog_theme_values(self._app_state)
         font_family = _get_app_font(self._app_state)
         extra = f"""
-            QLabel#g3m_actions_title {{
+            QLabel#modding_tools_title {{
                 font-size: 16px;
             }}
-            QPushButton#g3m_actions_section_header {{
+            QPushButton#modding_tools_section_header {{
                 background-color: {theme["button"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
@@ -393,10 +393,10 @@ class DiffViewerDialog(QDialog):
                 padding: 8px 12px;
                 text-align: left;
             }}
-            QPushButton#g3m_actions_section_header:hover {{
+            QPushButton#modding_tools_section_header:hover {{
                 background-color: {theme["button_hover"]};
             }}
-            QTextEdit#g3m_actions_section_body {{
+            QTextEdit#modding_tools_section_body {{
                 background-color: {theme["background"]};
                 border: 2px solid {theme["border"]};
                 border-top: none;
@@ -407,16 +407,16 @@ class DiffViewerDialog(QDialog):
                 font-size: 12px;
                 padding: 6px;
             }}
-            QScrollArea#g3m_actions_diff_scroll {{
+            QScrollArea#modding_tools_diff_scroll {{
                 border: none;
                 background: transparent;
             }}
-            QPushButton#g3m_actions_export_btn {{
+            QPushButton#modding_tools_export_btn {{
                 background-color: {theme["button"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
             }}
-            QPushButton#g3m_actions_export_btn:hover {{
+            QPushButton#modding_tools_export_btn:hover {{
                 background-color: {theme["button_hover"]};
             }}
         """
@@ -425,8 +425,8 @@ class DiffViewerDialog(QDialog):
     def closeEvent(self, event):
         reply = QMessageBox.question(
             self,
-            tr("g3m_actions.diff_viewer_title"),
-            tr("g3m_actions.confirm_close"),
+            tr("modding_tools.diff_viewer_title"),
+            tr("modding_tools.confirm_close"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -437,10 +437,10 @@ class DiffViewerDialog(QDialog):
             event.ignore()
 
     def relocalize_ui(self):
-        self.setWindowTitle(tr("g3m_actions.diff_viewer_title"))
-        self._title_label.setText(tr("g3m_actions.diff_viewer_title"))
+        self.setWindowTitle(tr("modding_tools.diff_viewer_title"))
+        self._title_label.setText(tr("modding_tools.diff_viewer_title"))
         self._close_btn.setText(tr("common.close"))
-        self._export_btn.setToolTip(tr("g3m_actions.export_report"))
+        self._export_btn.setToolTip(tr("modding_tools.export_report"))
 
     def refresh_theme(self):
         self._apply_theme()

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from PyQt6.QtWidgets import QApplication
 
-from ui.dialogs.g3m_actions_dialog import _DataConvertTab, _DataConvertWorkerThread
+from ui.dialogs.modding_tools_dialog import _DataConvertTab, _DataConvertWorkerThread
 
 
 class _FakeG3M:
@@ -91,7 +91,8 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
 
     worker.run()
 
-    assert result and result[0][0] is True
+    assert len(result) == 1, "Expected exactly one finished signal emission"
+    assert result[0][0] is True, f"Conversion failed: {result[0][1]}"
     assert patch_path.read_text(encoding="utf-8") == "old patch"
     assert (
         json.loads(config_path.read_text(encoding="utf-8"))["files"]["1"][

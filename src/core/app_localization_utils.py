@@ -149,16 +149,16 @@ def relocalize_texts(w):
     ):
         w._game_versions_dialog.relocalize_ui()
     if (
-        hasattr(w, "_g3m_actions_dialog")
-        and w._g3m_actions_dialog
-        and w._g3m_actions_dialog.isVisible()
+        hasattr(w, "_modding_tools_dialog")
+        and w._modding_tools_dialog
+        and w._modding_tools_dialog.isVisible()
     ):
-        w._g3m_actions_dialog.relocalize_ui()
-    for btn_attr in ("library_g3m_actions_button",):
+        w._modding_tools_dialog.relocalize_ui()
+    for btn_attr in ("library_modding_tools_button",):
         btn = getattr(w, btn_attr, None)
         if btn:
-            btn.setToolTip(tr("g3m_actions.title"))
-            btn.setAccessibleName(tr("g3m_actions.title"))
+            btn.setToolTip(tr("modding_tools.title"))
+            btn.setAccessibleName(tr("modding_tools.title"))
     summary = getattr(w, "mod_summary_panel", None)
     if summary and hasattr(summary, "update_labels_text"):
         summary.update_labels_text()

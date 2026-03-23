@@ -1360,8 +1360,8 @@
     "error_mod_not_found": "The selected mod was not found on disk. It may have been deleted or moved.",
     "error_g3mtool_unavailable": "G3MTool is not available. Mod patching requires G3MTool to be present."
   },
-  "g3m_actions": {
-    "title": "G3M Actions",
+  "modding_tools": {
+    "title": "Modding Tools",
     "tab_patch": "Patch",
     "tab_merge": "Merge",
     "tab_info": "Info",

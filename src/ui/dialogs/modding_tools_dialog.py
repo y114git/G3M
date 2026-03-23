@@ -1,4 +1,4 @@
-"""Non-modal G3M Actions dialog with Convert DATA, Patch, Merge, Info, Diff tabs."""
+"""Non-modal Modding Tools dialog with Convert DATA, Patch, Merge, Info, Diff tabs."""
 
 import json
 import logging
@@ -43,10 +43,10 @@ _ALL_FILTER = "All Files (*)"
 
 def _get_app_font(app_state) -> str:
     """Return the current DELTAHUB font family or fallback."""
-    parent = app_state
-    while parent and not hasattr(parent, "custom_font_family"):
-        parent = getattr(parent, "parent", None)
-    ff = getattr(parent, "custom_font_family", None) if parent else None
+    ff = app_state.local_config.get("custom_font_family")
+    if not ff:
+        parent = getattr(app_state, "_app_window", None)
+        ff = getattr(parent, "custom_font_family", None) if parent else None
     return f"'{ff}'" if ff else "'Segoe UI', sans-serif"
 
 
@@ -87,7 +87,7 @@ class _PathRow(QWidget):
         self._edit.setPlaceholderText(tr("ui.file_path_placeholder"))
         lay.addWidget(self._edit, 1)
         self._btn = QPushButton(tr("ui.browse_button"))
-        self._btn.setObjectName("g3m_actions_browse_btn")
+        self._btn.setObjectName("modding_tools_browse_btn")
         self._btn.clicked.connect(self._browse)
         lay.addWidget(self._btn)
 
@@ -168,21 +168,21 @@ class _PatchTab(QWidget):
 
         mode_row = QHBoxLayout()
         mode_row.setSpacing(10)
-        self._mode_label = QLabel(tr("g3m_actions.patch_mode"))
+        self._mode_label = QLabel(tr("modding_tools.patch_mode"))
         mode_row.addWidget(self._mode_label)
         self._mode_combo = QComboBox()
         self._mode_combo.addItems(["g3mpatch", "xdelta"])
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_row.addWidget(self._mode_combo)
         mode_row.addSpacing(20)
-        self._action_label = QLabel(tr("g3m_actions.patch_action"))
+        self._action_label = QLabel(tr("modding_tools.patch_action"))
         mode_row.addWidget(self._action_label)
         self._action_combo = QComboBox()
         self._action_combo.addItems(
             [
-                tr("g3m_actions.action_create"),
-                tr("g3m_actions.action_apply"),
-                tr("g3m_actions.action_convert"),
+                tr("modding_tools.action_create"),
+                tr("modding_tools.action_apply"),
+                tr("modding_tools.action_convert"),
             ]
         )
         self._action_combo.currentIndexChanged.connect(self._on_action_changed)
@@ -190,12 +190,12 @@ class _PatchTab(QWidget):
         mode_row.addStretch()
         lay.addLayout(mode_row)
 
-        self._original_row = _PathRow("g3m_actions.original_file", _DATA_FILTER)
+        self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER)
         lay.addWidget(self._original_row)
-        self._second_row = _PathRow("g3m_actions.modified_file", _DATA_FILTER)
+        self._second_row = _PathRow("modding_tools.modified_file", _DATA_FILTER)
         lay.addWidget(self._second_row)
         self._output_row = _PathRow(
-            "g3m_actions.output_file", _ALL_FILTER, save_mode=True
+            "modding_tools.output_file", _ALL_FILTER, save_mode=True
         )
         lay.addWidget(self._output_row)
 
@@ -203,15 +203,15 @@ class _PatchTab(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self._run_btn = QPushButton(tr("g3m_actions.run"))
-        self._run_btn.setObjectName("g3m_actions_run_btn")
+        self._run_btn = QPushButton(tr("modding_tools.run"))
+        self._run_btn.setObjectName("modding_tools_run_btn")
         self._run_btn.clicked.connect(self._on_run)
         btn_row.addWidget(self._run_btn)
         btn_row.addStretch()
         lay.addLayout(btn_row)
 
         self._status_label = QLabel("")
-        self._status_label.setObjectName("g3m_actions_status")
+        self._status_label.setObjectName("modding_tools_status")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setWordWrap(True)
         lay.addWidget(self._status_label)
@@ -219,11 +219,11 @@ class _PatchTab(QWidget):
     def _on_action_changed(self, _idx):
         action = self._action_combo.currentIndex()
         if action == 2:
-            key = "g3m_actions.source_patch"
+            key = "modding_tools.source_patch"
         elif action == 1:
-            key = "g3m_actions.patch_file"
+            key = "modding_tools.patch_file"
         else:
-            key = "g3m_actions.modified_file"
+            key = "modding_tools.modified_file"
         self._second_row._label.setText(tr(key))
         self._second_row._label_key = key
         self._update_filters()
@@ -250,7 +250,7 @@ class _PatchTab(QWidget):
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("errors.g3mtool_not_available")
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
             )
             return
         orig, second, out = (
@@ -260,13 +260,13 @@ class _PatchTab(QWidget):
         )
         if not orig or not second or not out:
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("g3m_actions.select_all_paths")
+                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
             )
             return
         mode = self._mode_combo.currentText()
         action = self._action_combo.currentIndex()
         self._run_btn.setEnabled(False)
-        self._status_label.setText(tr("g3m_actions.running"))
+        self._status_label.setText(tr("modding_tools.running"))
         if action == 2:
             target_is_xdelta = mode == "xdelta"
             self._worker = _ConvertWorkerThread(
@@ -286,9 +286,9 @@ class _PatchTab(QWidget):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc == 0:
-            self._status_label.setText(tr("g3m_actions.success"))
+            self._status_label.setText(tr("modding_tools.success"))
         else:
-            self._status_label.setText(tr("g3m_actions.failed", error=err[:300]))
+            self._status_label.setText(tr("modding_tools.failed", error=err[:300]))
 
     def has_user_interaction(self) -> bool:
         return bool(
@@ -299,15 +299,15 @@ class _PatchTab(QWidget):
         )
 
     def relocalize(self):
-        self._mode_label.setText(tr("g3m_actions.patch_mode"))
-        self._action_label.setText(tr("g3m_actions.patch_action"))
-        self._action_combo.setItemText(0, tr("g3m_actions.action_create"))
-        self._action_combo.setItemText(1, tr("g3m_actions.action_apply"))
-        self._action_combo.setItemText(2, tr("g3m_actions.action_convert"))
+        self._mode_label.setText(tr("modding_tools.patch_mode"))
+        self._action_label.setText(tr("modding_tools.patch_action"))
+        self._action_combo.setItemText(0, tr("modding_tools.action_create"))
+        self._action_combo.setItemText(1, tr("modding_tools.action_apply"))
+        self._action_combo.setItemText(2, tr("modding_tools.action_convert"))
         self._original_row.relocalize()
         self._second_row.relocalize()
         self._output_row.relocalize()
-        self._run_btn.setText(tr("g3m_actions.run"))
+        self._run_btn.setText(tr("modding_tools.run"))
 
 
 class _DataConvertWorkerThread(QThread):
@@ -372,8 +372,8 @@ class _DataConvertWorkerThread(QThread):
                     self.finished.emit(
                         False,
                         tr(
-                            "g3m_actions.convert_original_not_found",
-                            path=original,
+                            "modding_tools.convert_original_not_found",
+                            path=resource_dir,
                         ),
                     )
                     return
@@ -382,7 +382,7 @@ class _DataConvertWorkerThread(QThread):
                 )
 
             if not items:
-                self.finished.emit(False, tr("g3m_actions.convert_no_data_files"))
+                self.finished.emit(False, tr("modding_tools.convert_no_data_files"))
                 return
 
             total = len(items)
@@ -394,7 +394,7 @@ class _DataConvertWorkerThread(QThread):
                 f"{version} - {'xdelta' if self._target_xdelta else 'g3mpatch'}",
             )
             self.progress.emit(
-                tr("g3m_actions.convert_saving_version", version=version_name)
+                tr("modding_tools.convert_saving_version", version=version_name)
             )
 
             with tempfile.TemporaryDirectory(prefix="g3m_modconv_") as tmp:
@@ -409,7 +409,7 @@ class _DataConvertWorkerThread(QThread):
                     patch_path = os.path.join(converted_mod_folder, patch_rel_path)
                     self.progress.emit(
                         tr(
-                            "g3m_actions.convert_progress",
+                            "modding_tools.convert_progress",
                             current=i + 1,
                             total=total,
                             file=os.path.basename(patch_path),
@@ -464,7 +464,7 @@ class _DataConvertWorkerThread(QThread):
             self.finished.emit(
                 True,
                 tr(
-                    "g3m_actions.convert_data_success",
+                    "modding_tools.convert_data_success",
                     count=converted,
                     version=version_name,
                 ),
@@ -489,7 +489,7 @@ class _DataConvertTab(QWidget):
 
         profile_row = QHBoxLayout()
         profile_row.addStretch()
-        self._profile_label = QLabel(tr("g3m_actions.convert_select_profile"))
+        self._profile_label = QLabel(tr("modding_tools.convert_select_profile"))
         profile_row.addWidget(self._profile_label)
         self._profile_combo = QComboBox()
         self._profile_combo.setMinimumWidth(200)
@@ -500,7 +500,7 @@ class _DataConvertTab(QWidget):
 
         fmt_row = QHBoxLayout()
         fmt_row.addStretch()
-        self._fmt_label = QLabel(tr("g3m_actions.convert_target_format"))
+        self._fmt_label = QLabel(tr("modding_tools.convert_target_format"))
         fmt_row.addWidget(self._fmt_label)
         self._fmt_combo = QComboBox()
         self._fmt_combo.addItems(["g3mpatch", "xdelta"])
@@ -509,7 +509,7 @@ class _DataConvertTab(QWidget):
         fmt_row.addStretch()
         lay.addLayout(fmt_row)
 
-        self._mod_label = QLabel(tr("g3m_actions.convert_select_mod"))
+        self._mod_label = QLabel(tr("modding_tools.convert_select_mod"))
         lay.addWidget(self._mod_label)
         self._mod_list = QListWidget()
         self._mod_list.setMinimumHeight(150)
@@ -517,8 +517,8 @@ class _DataConvertTab(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self._run_btn = QPushButton(tr("g3m_actions.run"))
-        self._run_btn.setObjectName("g3m_actions_run_btn")
+        self._run_btn = QPushButton(tr("modding_tools.run"))
+        self._run_btn.setObjectName("modding_tools_run_btn")
         self._run_btn.clicked.connect(self._on_run)
         self._run_btn.setEnabled(False)
         btn_row.addWidget(self._run_btn)
@@ -526,7 +526,7 @@ class _DataConvertTab(QWidget):
         lay.addLayout(btn_row)
 
         self._status_label = QLabel("")
-        self._status_label.setObjectName("g3m_actions_status")
+        self._status_label.setObjectName("modding_tools_status")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setWordWrap(True)
         lay.addWidget(self._status_label)
@@ -571,7 +571,7 @@ class _DataConvertTab(QWidget):
             return
         mods_root = get_profile_mods_root(profile_name)
         if not os.path.isdir(mods_root):
-            self._status_label.setText(tr("g3m_actions.convert_no_mods"))
+            self._status_label.setText(tr("modding_tools.convert_no_mods"))
             return
         target_xdelta = self._fmt_combo.currentIndex() == 1
         found = 0
@@ -617,7 +617,7 @@ class _DataConvertTab(QWidget):
             found += 1
 
         if found == 0:
-            self._status_label.setText(tr("g3m_actions.convert_no_mods"))
+            self._status_label.setText(tr("modding_tools.convert_no_mods"))
         else:
             self._run_btn.setEnabled(True)
 
@@ -647,7 +647,7 @@ class _DataConvertTab(QWidget):
                 config_data = json.load(f)
         except Exception as e:
             self._status_label.setText(
-                tr("g3m_actions.convert_data_failed", error=str(e))
+                tr("modding_tools.convert_data_failed", error=str(e))
             )
             return
 
@@ -657,7 +657,7 @@ class _DataConvertTab(QWidget):
         game_def = get_game(game)
         if not game_def:
             self._status_label.setText(
-                tr("g3m_actions.convert_game_path_missing", game=game)
+                tr("modding_tools.convert_game_path_missing", game=game)
             )
             return
 
@@ -665,7 +665,7 @@ class _DataConvertTab(QWidget):
         if not game_path or not os.path.isdir(game_path):
             self._status_label.setText(
                 tr(
-                    "g3m_actions.convert_game_path_missing",
+                    "modding_tools.convert_game_path_missing",
                     game=game_def.display_name,
                 )
             )
@@ -673,7 +673,7 @@ class _DataConvertTab(QWidget):
 
         target_xdelta = self._fmt_combo.currentIndex() == 1
         self._set_busy(True)
-        self._status_label.setText(tr("g3m_actions.running"))
+        self._status_label.setText(tr("modding_tools.running"))
         self._worker = _DataConvertWorkerThread(
             self._g3m, mod_folder, config_data, game_path, target_xdelta
         )
@@ -690,10 +690,10 @@ class _DataConvertTab(QWidget):
         return bool(self._worker)
 
     def relocalize(self):
-        self._profile_label.setText(tr("g3m_actions.convert_select_profile"))
-        self._fmt_label.setText(tr("g3m_actions.convert_target_format"))
-        self._mod_label.setText(tr("g3m_actions.convert_select_mod"))
-        self._run_btn.setText(tr("g3m_actions.run"))
+        self._profile_label.setText(tr("modding_tools.convert_select_profile"))
+        self._fmt_label.setText(tr("modding_tools.convert_target_format"))
+        self._mod_label.setText(tr("modding_tools.convert_select_mod"))
+        self._run_btn.setText(tr("modding_tools.run"))
 
 
 class _MergeTab(QWidget):
@@ -716,10 +716,10 @@ class _MergeTab(QWidget):
         cb_row.addStretch()
         lay.addLayout(cb_row)
 
-        self._original_row = _PathRow("g3m_actions.original_file", _DATA_FILTER)
+        self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER)
         lay.addWidget(self._original_row)
 
-        list_label = QLabel(tr("g3m_actions.merge_list"))
+        list_label = QLabel(tr("modding_tools.merge_list"))
         lay.addWidget(list_label)
         self._list_label = list_label
 
@@ -729,11 +729,11 @@ class _MergeTab(QWidget):
 
         list_btns = QHBoxLayout()
         list_btns.setSpacing(6)
-        self._add_btn = QPushButton(tr("g3m_actions.merge_add"))
-        self._add_btn.setObjectName("g3m_actions_merge_add")
+        self._add_btn = QPushButton(tr("modding_tools.merge_add"))
+        self._add_btn.setObjectName("modding_tools_merge_add")
         self._add_btn.clicked.connect(self._on_add)
-        self._remove_btn = QPushButton(tr("g3m_actions.merge_remove"))
-        self._remove_btn.setObjectName("g3m_actions_merge_remove")
+        self._remove_btn = QPushButton(tr("modding_tools.merge_remove"))
+        self._remove_btn.setObjectName("modding_tools_merge_remove")
         self._remove_btn.clicked.connect(self._on_remove)
         self._up_btn = QPushButton(tr("ui.move_up"))
         self._up_btn.clicked.connect(lambda: self._move(-1))
@@ -745,21 +745,21 @@ class _MergeTab(QWidget):
         lay.addLayout(list_btns)
 
         self._output_row = _PathRow(
-            "g3m_actions.output_file", _ALL_FILTER, save_mode=True
+            "modding_tools.output_file", _ALL_FILTER, save_mode=True
         )
         lay.addWidget(self._output_row)
 
         run_row = QHBoxLayout()
         run_row.addStretch()
-        self._run_btn = QPushButton(tr("g3m_actions.merge_run"))
-        self._run_btn.setObjectName("g3m_actions_run_btn")
+        self._run_btn = QPushButton(tr("modding_tools.merge_run"))
+        self._run_btn.setObjectName("modding_tools_run_btn")
         self._run_btn.clicked.connect(self._on_run)
         run_row.addWidget(self._run_btn)
         run_row.addStretch()
         lay.addLayout(run_row)
 
         self._status_label = QLabel("")
-        self._status_label.setObjectName("g3m_actions_status")
+        self._status_label.setObjectName("modding_tools_status")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setWordWrap(True)
         lay.addWidget(self._status_label)
@@ -791,7 +791,7 @@ class _MergeTab(QWidget):
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("errors.g3mtool_not_available")
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
             )
             return
         orig = self._original_row.path()
@@ -802,11 +802,11 @@ class _MergeTab(QWidget):
         ]
         if not orig or len(patches) < 2 or not out:
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("g3m_actions.merge_need_files")
+                self, tr("modding_tools.title"), tr("modding_tools.merge_need_files")
             )
             return
         self._run_btn.setEnabled(False)
-        self._status_label.setText(tr("g3m_actions.running"))
+        self._status_label.setText(tr("modding_tools.running"))
         self._worker = _WorkerThread(
             self._g3m.merge_patches,
             (
@@ -826,9 +826,9 @@ class _MergeTab(QWidget):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc == 0:
-            self._status_label.setText(tr("g3m_actions.success"))
+            self._status_label.setText(tr("modding_tools.success"))
         else:
-            self._status_label.setText(tr("g3m_actions.failed", error=err[:300]))
+            self._status_label.setText(tr("modding_tools.failed", error=err[:300]))
 
     def has_user_interaction(self) -> bool:
         return bool(
@@ -842,13 +842,13 @@ class _MergeTab(QWidget):
         self._code_cb.setText(tr("checkboxes.merge_code"))
         self._props_cb.setText(tr("checkboxes.merge_properties"))
         self._original_row.relocalize()
-        self._list_label.setText(tr("g3m_actions.merge_list"))
-        self._add_btn.setText(tr("g3m_actions.merge_add"))
-        self._remove_btn.setText(tr("g3m_actions.merge_remove"))
+        self._list_label.setText(tr("modding_tools.merge_list"))
+        self._add_btn.setText(tr("modding_tools.merge_add"))
+        self._remove_btn.setText(tr("modding_tools.merge_remove"))
         self._up_btn.setText(tr("ui.move_up"))
         self._down_btn.setText(tr("ui.move_down"))
         self._output_row.relocalize()
-        self._run_btn.setText(tr("g3m_actions.merge_run"))
+        self._run_btn.setText(tr("modding_tools.merge_run"))
 
 
 class _InfoTab(QWidget):
@@ -865,39 +865,39 @@ class _InfoTab(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
-        self._file_row = _PathRow("g3m_actions.info_file", _DATA_PATCH_FILTER)
+        self._file_row = _PathRow("modding_tools.info_file", _DATA_PATCH_FILTER)
         lay.addWidget(self._file_row)
 
         cb_row = QHBoxLayout()
-        self._verbose_cb = QCheckBox(tr("g3m_actions.verbose"))
+        self._verbose_cb = QCheckBox(tr("modding_tools.verbose"))
         cb_row.addWidget(self._verbose_cb)
         cb_row.addStretch()
-        self._run_btn = QPushButton(tr("g3m_actions.info_run"))
-        self._run_btn.setObjectName("g3m_actions_run_btn")
+        self._run_btn = QPushButton(tr("modding_tools.info_run"))
+        self._run_btn.setObjectName("modding_tools_run_btn")
         self._run_btn.clicked.connect(self._on_run)
         cb_row.addWidget(self._run_btn)
         lay.addLayout(cb_row)
 
         self._output = QTextEdit()
         self._output.setReadOnly(True)
-        self._output.setObjectName("g3m_actions_info_output")
+        self._output.setObjectName("modding_tools_info_output")
         self._output.textChanged.connect(self._on_output_text_changed)
         lay.addWidget(self._output, 1)
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("errors.g3mtool_not_available")
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
             )
             return
         target = self._file_row.path()
         if not target:
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("g3m_actions.select_all_paths")
+                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
             )
             return
         self._run_btn.setEnabled(False)
-        self._set_output_text(tr("g3m_actions.running"))
+        self._set_output_text(tr("modding_tools.running"))
         self._worker = _WorkerThread(
             self._g3m.info, (target, self._verbose_cb.isChecked())
         )
@@ -911,7 +911,7 @@ class _InfoTab(QWidget):
             self._set_output_text(out)
         else:
             self._set_output_text(
-                tr("g3m_actions.failed", error=err[:500]) + "\n\n" + out
+                tr("modding_tools.failed", error=err[:500]) + "\n\n" + out
             )
 
     def _set_output_text(self, text: str):
@@ -931,8 +931,8 @@ class _InfoTab(QWidget):
 
     def relocalize(self):
         self._file_row.relocalize()
-        self._verbose_cb.setText(tr("g3m_actions.verbose"))
-        self._run_btn.setText(tr("g3m_actions.info_run"))
+        self._verbose_cb.setText(tr("modding_tools.verbose"))
+        self._run_btn.setText(tr("modding_tools.info_run"))
 
 
 class _DiffTab(QWidget):
@@ -941,6 +941,7 @@ class _DiffTab(QWidget):
         self._g3m, self._app_state = g3m, app_state
         self._parent_dialog = parent_dialog
         self._worker = None
+        self._out_dir = None
         self._build_ui()
 
     def _build_ui(self):
@@ -948,22 +949,22 @@ class _DiffTab(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
-        self._file1_row = _PathRow("g3m_actions.diff_file1", _DATA_PATCH_FILTER)
+        self._file1_row = _PathRow("modding_tools.diff_file1", _DATA_PATCH_FILTER)
         lay.addWidget(self._file1_row)
-        self._file2_row = _PathRow("g3m_actions.diff_file2", _DATA_PATCH_FILTER)
+        self._file2_row = _PathRow("modding_tools.diff_file2", _DATA_PATCH_FILTER)
         lay.addWidget(self._file2_row)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self._run_btn = QPushButton(tr("g3m_actions.diff_run"))
-        self._run_btn.setObjectName("g3m_actions_run_btn")
+        self._run_btn = QPushButton(tr("modding_tools.diff_run"))
+        self._run_btn.setObjectName("modding_tools_run_btn")
         self._run_btn.clicked.connect(self._on_run)
         btn_row.addWidget(self._run_btn)
         btn_row.addStretch()
         lay.addLayout(btn_row)
 
         self._status_label = QLabel("")
-        self._status_label.setObjectName("g3m_actions_status")
+        self._status_label.setObjectName("modding_tools_status")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setWordWrap(True)
         lay.addWidget(self._status_label)
@@ -972,18 +973,18 @@ class _DiffTab(QWidget):
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("errors.g3mtool_not_available")
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
             )
             return
         f1, f2 = self._file1_row.path(), self._file2_row.path()
         if not f1 or not f2:
             QMessageBox.warning(
-                self, tr("g3m_actions.title"), tr("g3m_actions.select_all_paths")
+                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
             )
             return
         self._run_btn.setEnabled(False)
-        self._status_label.setText(tr("g3m_actions.running"))
-        out_dir = tempfile.mkdtemp(prefix="g3m_actions_diff_")
+        self._status_label.setText(tr("modding_tools.running"))
+        out_dir = tempfile.mkdtemp(prefix="modding_tools_diff_")
         self._out_dir = out_dir
         self._worker = _WorkerThread(self._g3m.diff, (f1, f2, out_dir))
         self._worker.finished.connect(self._on_finished)
@@ -993,10 +994,10 @@ class _DiffTab(QWidget):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc != 0:
-            self._status_label.setText(tr("g3m_actions.failed", error=err[:300]))
+            self._status_label.setText(tr("modding_tools.failed", error=err[:300]))
             self._cleanup_out_dir()
             return
-        self._status_label.setText(tr("g3m_actions.success"))
+        self._status_label.setText(tr("modding_tools.success"))
         md_file = self._find_md(self._out_dir)
         if md_file:
             from ui.dialogs.g3mtool_diff_viewer import DiffViewerDialog
@@ -1007,7 +1008,7 @@ class _DiffTab(QWidget):
             dlg.destroyed.connect(self._cleanup_out_dir)
             dlg.show()
         else:
-            self._status_label.setText(tr("g3m_actions.diff_no_report"))
+            self._status_label.setText(tr("modding_tools.diff_no_report"))
             self._cleanup_out_dir()
 
     def _cleanup_out_dir(self):
@@ -1028,17 +1029,17 @@ class _DiffTab(QWidget):
     def relocalize(self):
         self._file1_row.relocalize()
         self._file2_row.relocalize()
-        self._run_btn.setText(tr("g3m_actions.diff_run"))
+        self._run_btn.setText(tr("modding_tools.diff_run"))
 
 
-class G3MActionsDialog(QDialog):
-    """Non-modal G3M Actions dialog."""
+class ModdingToolsDialog(QDialog):
+    """Non-modal Modding Tools dialog."""
 
     def __init__(self, g3m_manager, app_state, parent=None) -> None:
         super().__init__(parent)
         self._g3m = g3m_manager
         self._app_state = app_state
-        self.setWindowTitle(tr("g3m_actions.title"))
+        self.setWindowTitle(tr("modding_tools.title"))
         self.setMinimumSize(900, 600)
         self.resize(1300, 820)
         self.setModal(False)
@@ -1051,8 +1052,8 @@ class G3MActionsDialog(QDialog):
         main.setSpacing(4)
 
         header = QHBoxLayout()
-        self._title_label = QLabel(tr("g3m_actions.title"))
-        self._title_label.setObjectName("g3m_actions_title")
+        self._title_label = QLabel(tr("modding_tools.title"))
+        self._title_label.setObjectName("modding_tools_title")
         font = self._title_label.font()
         font.setPointSize(14)
         font.setBold(True)
@@ -1060,7 +1061,7 @@ class G3MActionsDialog(QDialog):
         header.addWidget(self._title_label)
         header.addStretch()
         self._close_btn = QPushButton(tr("common.close"))
-        self._close_btn.setObjectName("g3m_actions_close_btn")
+        self._close_btn.setObjectName("modding_tools_close_btn")
         self._close_btn.clicked.connect(self.close)
         header.addWidget(self._close_btn)
         main.addLayout(header)
@@ -1071,11 +1072,13 @@ class G3MActionsDialog(QDialog):
         self._merge_tab = _MergeTab(self._g3m, self._app_state)
         self._info_tab = _InfoTab(self._g3m, self._app_state)
         self._diff_tab = _DiffTab(self._g3m, self._app_state, self)
-        self._tabs.addTab(self._data_convert_tab, tr("g3m_actions.convert_data_title"))
-        self._tabs.addTab(self._patch_tab, tr("g3m_actions.tab_patch"))
-        self._tabs.addTab(self._merge_tab, tr("g3m_actions.tab_merge"))
-        self._tabs.addTab(self._info_tab, tr("g3m_actions.tab_info"))
-        self._tabs.addTab(self._diff_tab, tr("g3m_actions.tab_diff"))
+        self._tabs.addTab(
+            self._data_convert_tab, tr("modding_tools.convert_data_title")
+        )
+        self._tabs.addTab(self._patch_tab, tr("modding_tools.tab_patch"))
+        self._tabs.addTab(self._merge_tab, tr("modding_tools.tab_merge"))
+        self._tabs.addTab(self._info_tab, tr("modding_tools.tab_info"))
+        self._tabs.addTab(self._diff_tab, tr("modding_tools.tab_diff"))
         main.addWidget(self._tabs)
 
     def _apply_theme(self):
@@ -1083,14 +1086,14 @@ class G3MActionsDialog(QDialog):
         theme = get_dialog_theme_values(self._app_state)
         font_family = _get_app_font(self._app_state)
         extra = f"""
-            QLabel#g3m_actions_title {{
+            QLabel#modding_tools_title {{
                 font-size: 16px;
             }}
-            QLabel#g3m_actions_status {{
+            QLabel#modding_tools_status {{
                 font-size: 12px;
                 color: {theme["secondary_text"]};
             }}
-            QTextEdit#g3m_actions_info_output {{
+            QTextEdit#modding_tools_info_output {{
                 background-color: {theme["background"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["field_radius"]}px;
@@ -1146,14 +1149,14 @@ class G3MActionsDialog(QDialog):
         self.setStyleSheet(base + extra)
 
     def relocalize_ui(self):
-        self.setWindowTitle(tr("g3m_actions.title"))
-        self._title_label.setText(tr("g3m_actions.title"))
+        self.setWindowTitle(tr("modding_tools.title"))
+        self._title_label.setText(tr("modding_tools.title"))
         self._close_btn.setText(tr("common.close"))
-        self._tabs.setTabText(0, tr("g3m_actions.convert_data_title"))
-        self._tabs.setTabText(1, tr("g3m_actions.tab_patch"))
-        self._tabs.setTabText(2, tr("g3m_actions.tab_merge"))
-        self._tabs.setTabText(3, tr("g3m_actions.tab_info"))
-        self._tabs.setTabText(4, tr("g3m_actions.tab_diff"))
+        self._tabs.setTabText(0, tr("modding_tools.convert_data_title"))
+        self._tabs.setTabText(1, tr("modding_tools.tab_patch"))
+        self._tabs.setTabText(2, tr("modding_tools.tab_merge"))
+        self._tabs.setTabText(3, tr("modding_tools.tab_info"))
+        self._tabs.setTabText(4, tr("modding_tools.tab_diff"))
         self._data_convert_tab.relocalize()
         self._patch_tab.relocalize()
         self._merge_tab.relocalize()
@@ -1170,8 +1173,11 @@ class G3MActionsDialog(QDialog):
         ):
             worker = getattr(tab, "_worker", None)
             if worker and worker.isRunning():
-                worker.quit()
+                worker.requestInterruption()
                 worker.wait(3000)
+                if worker.isRunning():
+                    worker.terminate()
+                    worker.wait(1000)
         if self._g3m and hasattr(self._g3m, "cancel_active_processes"):
             self._g3m.cancel_active_processes()
 
@@ -1191,8 +1197,8 @@ class G3MActionsDialog(QDialog):
         if self._has_any_interaction():
             reply = QMessageBox.question(
                 self,
-                tr("g3m_actions.title"),
-                tr("g3m_actions.confirm_close"),
+                tr("modding_tools.title"),
+                tr("modding_tools.confirm_close"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
