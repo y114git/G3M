@@ -5,6 +5,12 @@ import os
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from app.game_ui import (
+    update_change_path_button_text,
+    update_portproton_ui,
+    update_steam_launch_checkbox_state,
+)
+from app.update_handler import check_and_show_announce
 from config.constants import CLOUD_FUNCTIONS_BASE_URL, ONLINE_UPDATE_INTERVAL, UI_COLORS
 from services.game_detection_service import is_game_running
 from services.localization_service import tr
@@ -30,7 +36,8 @@ class _NetworkInitThread(QThread):
                 )
                 if r.status_code == 200:
                     global_settings = r.json() or {}
-            except Exception:
+            except Exception as e:
+                logging.debug(f"Failed to fetch global settings: {e}")
                 has_internet = False
         if not has_internet:
             logging.info("No internet connection detected, running in offline mode")
@@ -69,7 +76,7 @@ def post_show_initialization(app):
                 app.app_state.initialization_completed
                 and not app.app_state.update_in_progress
             ):
-                app._check_and_show_announce()
+                check_and_show_announce(app)
         app.presence_thread.start()
         app._online_timer.start(ONLINE_UPDATE_INTERVAL)
         from PyQt6.QtCore import QMetaObject, Qt
@@ -149,7 +156,7 @@ def _restore_ui_state_from_config(app):
         app.hide_library_filters_checkbox.setChecked(
             config.get("hide_library_filters", False)
         )
-    app._update_change_path_button_text()
+    update_change_path_button_text(app)
     app.theme.update_background_button_state()
     app.skip_patching_warnings_checkbox.setChecked(
         config.get("skip_patching_warnings", False)
@@ -160,10 +167,10 @@ def _restore_ui_state_from_config(app):
     )
     if app.use_portproton_checkbox:
         app.use_portproton_checkbox.setChecked(config.get("use_portproton", False))
-        app._update_portproton_ui()
+        update_portproton_ui(app)
     for key in ("merge_properties", "merge_code"):
         if w := getattr(app, f"{key}_checkbox", None):
             w.setChecked(config.get(key, False))
-    app._initialize_mutual_exclusions()
+    update_steam_launch_checkbox_state(app)
     app.settings_ui.on_toggle_steam_launch()
     app.theme.apply_theme()

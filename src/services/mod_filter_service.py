@@ -102,7 +102,7 @@ def _is_prefixed_key(key, prefix: str) -> bool:
 def _int_value(value, default=0):
     try:
         return int(value or 0)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return default
 
 

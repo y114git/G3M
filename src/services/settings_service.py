@@ -91,7 +91,7 @@ class SettingsManager(QObject):
             from utils.file_utils import save_json
 
             save_json(path, data, indent=2)
-        except PermissionError, OSError:
+        except (PermissionError, OSError):
             self._handle_permission_error(os.path.dirname(path))
         except (ValueError, TypeError) as e:
             logging.error(
@@ -564,7 +564,7 @@ class SettingsManager(QObject):
             btn.setText(cs.get_font_button_text())
 
     def is_valid_hex_color(self, s: str) -> bool:
-        return bool(re.fullmatch("#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", s or ""))
+        return bool(re.fullmatch(r"#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", s or ""))
 
     def on_custom_style_edited(self, color_widgets: dict):
         for key, widget in color_widgets.items():

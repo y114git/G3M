@@ -90,7 +90,7 @@ class GameLauncher(QObject):
     def _get_used_mods_selections(self) -> dict[str, Any]:
         try:
             parent_obj = self.parent()
-        except AttributeError, TypeError:
+        except (AttributeError, TypeError):
             parent_obj = None
         used_mods_service = (
             getattr(parent_obj, "used_mods_service", None) if parent_obj else None
@@ -668,7 +668,7 @@ class GameLauncher(QObject):
             if not os.path.isfile(manifest_path):
                 return
             logging.warning(
-                f"Found stale session manifest: {manifest_path} — previous session may have crashed"
+                f"Found stale session manifest: {manifest_path} - previous session may have crashed"
             )
             self.feedback_service.update_status(
                 tr("status.recovering_previous_session"), UI_COLORS["status_warning"]

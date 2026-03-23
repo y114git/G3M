@@ -191,7 +191,7 @@ class ProfileService(QObject):
         )
 
     def write_local_config(self):
-        """Replacement for settings_service.write_local_config — splits data."""
+        """Replacement for settings_service.write_local_config - splits data."""
         self.save_active()
         self.save_settings_only()
 
@@ -387,7 +387,7 @@ class ProfileService(QObject):
             return imported_name
 
     @staticmethod
-    def _resolve_chapter_name(game_def, tab_id: str) -> str:
+    def _resolve_chapter_name(game_def: Any, tab_id: str) -> str:
         """Resolve a raw tab_id to its localized display name."""
         if not tab_id or not game_def:
             return tab_id

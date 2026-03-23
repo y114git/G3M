@@ -122,7 +122,7 @@ class ProfileManagerDialog(QDialog):
             if summary["direct_launch"]:
                 cm += f" ({summary['direct_launch']})"
             parts.append(cm)
-        detail_label = QLabel(" — ".join(parts), info)
+        detail_label = QLabel(" - ".join(parts), info)
         detail_label.setObjectName("profileDetailLabel")
         v_layout.addWidget(detail_label)
         h_layout.addWidget(info, 1)

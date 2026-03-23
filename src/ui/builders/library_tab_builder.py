@@ -45,7 +45,6 @@ from ui.common.styling import (
     install_scroll_area_update_handlers,
     install_size_hint_height_sync,
 )
-from ui.widgets.shared.custom_controls import _ZeroHintWidget
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +257,7 @@ class LibraryTabBuilder(QObject):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        mods_w = _ZeroHintWidget(scroll)
+        mods_w = QWidget(scroll)
         mw_layout = QVBoxLayout(mods_w)
         mw_layout.addStretch()
         mw_layout.setContentsMargins(0, 0, 0, 0)
@@ -341,7 +340,7 @@ class LibraryTabBuilder(QObject):
                 ):
                     scroll.setViewportMargins(*viewport_margin_key)
                     scroll._library_viewport_margin_key = viewport_margin_key
-            except AttributeError, TypeError:
+            except (AttributeError, TypeError):
                 logger.exception(
                     "LibraryTabBuilder: setViewportMargins failed for viewport_inset=%s",
                     viewport_inset,

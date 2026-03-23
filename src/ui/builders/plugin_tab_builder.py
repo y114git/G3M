@@ -20,7 +20,6 @@ from ui.common.styling import (
     install_scroll_viewport_clip,
     set_layout_stretch_factors,
 )
-from ui.widgets.shared.custom_controls import _ZeroHintWidget
 
 
 class PluginTabBuilder:
@@ -71,7 +70,7 @@ class PluginTabBuilder:
             QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored
         )
         plugins_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        plugins_widget = _ZeroHintWidget(plugins_scroll)
+        plugins_widget = QWidget(plugins_scroll)
         plugins_widget.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
         )

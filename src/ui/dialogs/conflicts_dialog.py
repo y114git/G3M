@@ -19,7 +19,7 @@ from services.localization_service import tr
 class ConflictsDialog(QDialog):
     """Informational dialog showing merge conflict report.
 
-    Does not block game launch or modpack flow — purely informational.
+    Does not block game launch or modpack flow - purely informational.
     """
 
     def __init__(self, report_md_path: str, parent=None) -> None:

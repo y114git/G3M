@@ -2,9 +2,9 @@ from unittest.mock import Mock, patch
 
 
 class TestAppWindow:
-    @patch("core.app_window.SingleInstanceServer")
+    @patch("app.window.SingleInstanceServer")
     def test_app_window_creation(self, mock_server, qapp, temp_dir):
-        from core.app_window import AppWindow
+        from app.window import AppWindow
 
         mock_server_instance = Mock()
         mock_server_instance.listen.return_value = True
@@ -40,7 +40,7 @@ class TestAppWindow:
     ):
         from PyQt6.QtWidgets import QPushButton, QWidget
 
-        from core.app_window import AppWindow
+        from app.game_ui import sync_chapter_tab_buttons
         from models.game_modes import UndertaleGame
 
         window = QWidget()
@@ -50,7 +50,7 @@ class TestAppWindow:
         window.chapter_tabs_widget = QWidget()
         window.chapter_tab_buttons = [QPushButton() for _ in range(5)]
         window._on_chapter_tab_clicked = Mock()
-        tabs = AppWindow._sync_chapter_tab_buttons(window)
+        tabs = sync_chapter_tab_buttons(window)
         assert len(tabs) == 1
         assert window.chapter_tab_buttons[0].isVisible()
         assert (

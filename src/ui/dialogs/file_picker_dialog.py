@@ -94,7 +94,7 @@ class GameBananaFilePickerDialog(QDialog):
             format=self._format_gamebanana_format(file_data.get("compatibility")),
             security=self._format_security(file_data),
             description=description.strip(),
-            md5=file_data.get("md5") or "—",
+            md5=file_data.get("md5") or "-",
         )
 
     def _format_security(self, file_data: dict) -> str:
@@ -126,7 +126,7 @@ class GameBananaFilePickerDialog(QDialog):
         try:
             dt = datetime.fromtimestamp(timestamp)
             return dt.strftime("%d.%m.%Y %H:%M")
-        except ValueError, OSError:
+        except (ValueError, OSError):
             return tr("defaults.not_specified")
 
     @staticmethod

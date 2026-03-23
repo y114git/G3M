@@ -1,4 +1,4 @@
-"""Mod Versions dialog — manage per-mod version snapshots stored as zips in mod_versions/."""
+"""Mod Versions dialog - manage per-mod version snapshots stored as zips in mod_versions/."""
 
 import contextlib
 import logging
@@ -82,31 +82,6 @@ def _clear_mod_folder(mod_folder: str):
                 os.remove(path)
             except OSError as e:
                 logger.warning("mod_versions: failed to remove %s: %s", path, e)
-
-
-def _ensure_versions_dir(mod_folder: str) -> str:
-    """Ensure mod_versions directory exists and return its path."""
-    versions_dir = os.path.join(mod_folder, MOD_VERSIONS_DIR)
-    os.makedirs(versions_dir, exist_ok=True)
-    return versions_dir
-
-
-def _sanitize_version_name(name: str) -> str:
-    """Sanitize version name by removing invalid characters."""
-    return (
-        "".join(c if c.isalnum() or c in " _-." else "_" for c in name).strip()
-        or "version"
-    )
-
-
-def _create_version_zip(
-    source_dir: str,
-    mod_folder: str,
-    version_name: str,
-    ignore_versions_dir: bool = False,
-) -> str:
-    """Create a version zip from source directory."""
-    return create_version_zip(source_dir, mod_folder, version_name, ignore_versions_dir)
 
 
 def _resolve_content_path(temp_dir: str) -> str:

@@ -262,7 +262,7 @@ class SearchDisplayController(QObject):
             try:
                 timer.stop()
                 timer.deleteLater()
-            except RuntimeError, ValueError:
+            except (RuntimeError, ValueError):
                 pass
         self._active_search_timers.clear()
 
@@ -285,7 +285,7 @@ class SearchDisplayController(QObject):
                         )
 
                 thread.finished.connect(cleanup_when_really_finished)
-        except RuntimeError, ValueError:
+        except (RuntimeError, ValueError):
             pass
 
     def _load_more_gamebanana_mods_if_needed(
@@ -864,7 +864,7 @@ class SearchDisplayController(QObject):
         """Suppress repaints for cards far outside the viewport.
 
         Uses setUpdatesEnabled() instead of setVisible() so the grid layout
-        keeps its geometry (no size jumps). Cards are never hidden — only
+        keeps its geometry (no size jumps). Cards are never hidden - only
         their painting is suspended when they are outside the buffer zone.
         """
         scroll = getattr(self.app, "mods_browser_scroll", None)

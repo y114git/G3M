@@ -80,14 +80,9 @@ class ModScanThread(QThread):
                             "config_data": config_data,
                             "config_mtime": config_mtime,
                         }
-                    except OSError, PermissionError:
+                    except (OSError, PermissionError, ValueError):
                         logging.warning(
                             f"ModScanThread: Corrupted config detected (failed to access) in {config_path}"
-                        )
-                        continue
-                    except json.JSONDecodeError:
-                        logging.warning(
-                            f"ModScanThread: Corrupted config detected (invalid JSON) in {config_path}"
                         )
                         continue
                     except KeyError:

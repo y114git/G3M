@@ -343,7 +343,7 @@ class GameBananaAPI:
     def _safe_int(value: Any) -> int | None:
         try:
             return int(value)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
 
     @staticmethod
@@ -425,7 +425,7 @@ class GameBananaAPI:
         try:
             dt = datetime.fromtimestamp(timestamp)
             return dt.strftime("%d.%m.%y %H:%M")
-        except ValueError, OSError:
+        except (ValueError, OSError):
             return None
 
     @staticmethod
@@ -581,12 +581,12 @@ class GameBananaAPI:
         raw_downloads = gb_data.get("_nDownloadCount")
         try:
             downloads = None if raw_downloads is None else max(int(raw_downloads), 0)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             downloads = None
         raw_likes = gb_data.get("_nLikeCount")
         try:
             like_count = None if raw_likes is None else max(int(raw_likes), 0)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             like_count = None
         gbc = (
             gb_data.get("_aRootCategory")

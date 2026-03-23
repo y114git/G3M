@@ -143,7 +143,7 @@ def download_file(
                 downloaded_ref[0] = 0
             try:
                 this_request_expected = int(r.headers.get("content-length", 0))
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 this_request_expected = 0
             written_this_request = 0
             with open(tmp_path, mode) as f:

@@ -261,8 +261,8 @@ def _match_steam_path(normalized, steam_path):
             )
             if normalized == sp or normalized.startswith(sp + "/"):
                 return True
-    except OSError, ValueError:
-        pass
+    except (OSError, ValueError):
+        logging.debug("Failed to match steam path, continuing")
     return False
 
 
@@ -271,7 +271,7 @@ def is_path_in_steam_common(game_path: str, game_name: str) -> bool:
         return False
     try:
         game_path_normalized = os.path.normpath(os.path.abspath(game_path)).lower()
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return False
     path_parts = game_path_normalized.replace("\\", "/").split("/")
     for i, part in enumerate(path_parts):
@@ -382,8 +382,8 @@ def autodetect_path(game_name: str) -> str | None:
                                 sp = os.path.join(item_path, sub, game_name)
                                 if os.path.exists(sp):
                                     paths.append(sp)
-                except OSError, PermissionError:
-                    pass
+                except (OSError, PermissionError):
+                    logging.debug("Failed to scan mount points, continuing")
         for extra in [
             "/run/media/mmcblk0p1",
             "/run/media/mmcblk1p1",
@@ -477,7 +477,7 @@ def version_sort_key(v: str):
                 1 if g[3] else 0,
                 g[3] or "",
             )
-        p = [int(x) if x.isdigit() else x for x in re.split("[.-]", s)]
+        p = [int(x) if x.isdigit() else x for x in re.split(r"[.-]", s)]
         nums = [x for x in p if isinstance(x, int)][:3]
         nums += [0] * (3 - len(nums))
         suff = next((str(x) for x in p if isinstance(x, str)), "")

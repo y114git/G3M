@@ -395,10 +395,7 @@ def run_app():
                 )
                 QTimer.singleShot(
                     remaining_time,
-                    lambda: (
-                        close_splash(),
-                        show_launcher_window(launcher_app.get("instance")),
-                    ),
+                    close_splash_and_show_launcher,
                 )
             else:
                 close_splash()
@@ -428,7 +425,7 @@ def run_app():
 
         def create_launcher():
             try:
-                from core.app_window import AppWindow
+                from app.window import AppWindow
 
                 launcher_app["instance"] = AppWindow(
                     parent_for_dialogs=splash, initial_url=initial_url
@@ -456,7 +453,9 @@ def run_app():
                         close_splash_and_show_launcher()
                     ex = launcher_app.get("instance")
                     if ex:
-                        ex._restore_last_active_tab()
+                        from app.plugin_tabs import restore_last_active_tab
+
+                        restore_last_active_tab(ex)
 
                 launcher_app["instance"].initialization_finished.connect(
                     on_initialization_finished
@@ -482,7 +481,9 @@ def run_app():
                             close_splash_and_show_launcher()
                         ex = launcher_app.get("instance")
                         if ex:
-                            ex._restore_last_active_tab()
+                            from app.plugin_tabs import restore_last_active_tab
+
+                            restore_last_active_tab(ex)
 
                 if show_animation:
                     fallback_time = max(
@@ -510,3 +511,4 @@ def run_app():
         error_msg = tr("errors.startup_error_message", details=str(e))
         logging.exception(f"STARTUP ERROR: {error_msg}")
         QMessageBox.critical(None, tr("errors.startup_error_title"), error_msg)
+        sys.exit(1)

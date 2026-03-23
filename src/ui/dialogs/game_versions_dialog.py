@@ -109,7 +109,7 @@ class _VersionRecordWidget(QFrame):
         r = self._record
         busy = self._manager.is_busy(r.archive_path)
         applying = busy and self._manager.is_applying(r.archive_path)
-        self._name_label.setText(r.display_name or "—")
+        self._name_label.setText(r.display_name or "-")
         if applying:
             self._status_label.setText(tr("game_versions.status_applying"))
         elif busy:

@@ -86,7 +86,7 @@ class ModPatchingThread(QThread):
                 self.patcher.progress_update.connect(self.progress_update.emit)
                 self.patcher.status_update.connect(self.status_update.emit)
             except RuntimeError:
-                pass
+                logging.debug("Failed to connect patcher signals")
             self.patcher._session_manifest_path = self.session_manifest_path
             self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
@@ -108,7 +108,7 @@ class ModPatchingThread(QThread):
                 self.status_update.emit(f"Patching failed: {e!s}", "error")
                 self.finished.emit(False)
             except RuntimeError:
-                pass
+                logging.debug("Failed to emit patching status after failure")
         finally:
             if self.patcher:
                 failed = (

@@ -59,6 +59,7 @@ def _build_theme_test_window():
     app_window.chapter_mode_checkbox = Mock()
     app_window.full_install_checkbox = Mock()
     app_window.installed_mods_label = None
+    app_window.chapter_tab_buttons = []
     app_window.plugin_tab_builder = None
     app_window.mod_list_widget = None
     app_window.installed_mods_widget = None
@@ -170,7 +171,9 @@ class TestColorDialogBlackHandling:
     def test_black_color_picker_seed_preserves_alpha(self):
         from PyQt6.QtGui import QColor
 
-        from core.app_window import _get_black_color_picker_seed
+        from ui.common.color_picker import (
+            get_black_color_picker_seed as _get_black_color_picker_seed,
+        )
 
         seeded = _get_black_color_picker_seed(QColor(0, 0, 0, 128))
         assert seeded.red() == 255
@@ -183,7 +186,9 @@ class TestColorDialogBlackHandling:
         from PyQt6.QtGui import QColor
         from PyQt6.QtWidgets import QColorDialog
 
-        from core.app_window import _BlackColorPickerEventFilter
+        from ui.common.color_picker import (
+            BlackColorPickerEventFilter as _BlackColorPickerEventFilter,
+        )
 
         dialog = QColorDialog()
         dialog.setCurrentColor(QColor(0, 0, 0, 255))
@@ -492,11 +497,13 @@ class TestThemeApplication:
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
         app_window = _build_theme_test_window()
+        app_window.app_state = app_state
         app_state.local_config = {
             "custom_color_text": "#FF0000",
             "custom_color_background": "#00FF00",
             "custom_color_button": "#0000FF",
             "custom_color_border": "#FFFF00",
+            "ui_scale": 1.0,
         }
         with (
             patch(
@@ -545,7 +552,11 @@ class TestThemeApplication:
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
         app_window = _build_theme_test_window()
-        app_state.local_config = {"custom_color_background": "#8000FF00"}
+        app_window.app_state = app_state
+        app_state.local_config = {
+            "custom_color_background": "#8000FF00",
+            "ui_scale": 1.0,
+        }
         with (
             patch(
                 "controllers.theme_controller.THEMES",
@@ -597,7 +608,8 @@ class TestThemeApplication:
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
         app_window = _build_theme_test_window()
-        app_state.local_config = {"custom_border_radius": 50}
+        app_window.app_state = app_state
+        app_state.local_config = {"custom_border_radius": 50, "ui_scale": 1.0}
 
         def _styled_widget():
             widget = Mock()

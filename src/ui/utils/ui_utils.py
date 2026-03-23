@@ -77,8 +77,9 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
     if hasattr(main_window, "plugin_service") and main_window.plugin_service:
         main_window.plugin_service.convert_plugin_archives()
         main_window.plugin_service.load_plugins()
-    if hasattr(main_window, "_update_plugin_tabs"):
-        main_window._update_plugin_tabs()
+    from app.plugin_tabs import update_plugin_tabs
+
+    update_plugin_tabs(main_window)
     if hasattr(main_window, "plugin_display"):
         main_window.plugin_display.update_display()
     if mod_service:
@@ -128,7 +129,7 @@ def safe_stop_thread(thread, timeout=2000, blocking=True):
                         f"safe_stop_thread: failed to terminate thread {type(thread).__name__}: {e}",
                         exc_info=True,
                     )
-        except RuntimeError, AttributeError:
+        except (RuntimeError, AttributeError):
             pass
         except Exception as e:
             logging.error(

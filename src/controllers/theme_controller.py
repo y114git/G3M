@@ -5,6 +5,7 @@ import contextlib
 from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 
+from app.game_ui import update_chapter_tabs_style
 from config.constants import THEMES
 from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
 from services.localization_service import tr
@@ -285,8 +286,7 @@ class ThemeController:
                 w = getattr(self.app, attr, None)
                 if w:
                     w.setStyleSheet(checkbox_style)
-            if hasattr(self.app, "_update_chapter_tabs_style"):
-                self.app._update_chapter_tabs_style()
+            update_chapter_tabs_style(self.app)
             if hasattr(self.app, "library_tab_builder"):
                 self.app.library_tab_builder.update_priority_button_style()
             summary = getattr(self.app, "mod_summary_panel", None)
@@ -327,7 +327,7 @@ class ThemeController:
                     style.unpolish(widget)
                     style.polish(widget)
                 widget.update()
-            except AttributeError, RuntimeError:
+            except (AttributeError, RuntimeError):
                 continue
 
     def _iter_filter_scrolls(self):

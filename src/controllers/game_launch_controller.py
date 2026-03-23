@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from app.game_ui import full_install_tooltip
 from config.constants import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
@@ -98,7 +99,7 @@ class GameLaunchController(QObject):
         try:
             self.app_state.progress_bar_value = 0
             self.app_state.progress_bar_visible = False
-        except AttributeError, RuntimeError:
+        except (AttributeError, RuntimeError):
             pass
 
     def _cancel_patching_operation(self):
@@ -121,7 +122,7 @@ class GameLaunchController(QObject):
                 patching_thread.finished.disconnect()
                 if hasattr(patching_thread, "warning_confirmation_needed"):
                     patching_thread.warning_confirmation_needed.disconnect()
-            except TypeError, RuntimeError:
+            except (TypeError, RuntimeError):
                 pass
             patching_thread.cancel()
             if patching_thread.isRunning():
@@ -278,7 +279,7 @@ class GameLaunchController(QObject):
             )
             folder_name = "UNDERTALE Yellow" if is_yellow else "DELTARUNEdemo"
         v = QVBoxLayout(dlg)
-        lbl = QLabel(self.app._full_install_tooltip())
+        lbl = QLabel(full_install_tooltip(self.app))
         lbl.setWordWrap(True)
         v.addWidget(lbl)
         bb = QDialogButtonBox(

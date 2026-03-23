@@ -157,7 +157,7 @@ def scan_mods_directory(
                                         folder_path = sub.path
                                         found_nested = True
                                         break
-                    except OSError, PermissionError:
+                    except (OSError, PermissionError):
                         pass
                     if not found_nested:
                         continue

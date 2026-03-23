@@ -229,7 +229,7 @@ def _validate_shortcut_prerequisites(app_state, has_any_mod: bool) -> str | None
 def on_shortcut_button_click(
     app_state, feedback_service, used_mods_service, parent_widget: QWidget
 ):
-    """Handle the Shortcut button click — show dialog, pick file, write shortcut."""
+    """Handle the Shortcut button click - show dialog, pick file, write shortcut."""
     if not app_state.initialization_completed:
         return
 

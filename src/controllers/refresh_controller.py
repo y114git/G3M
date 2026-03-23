@@ -83,13 +83,13 @@ class RefreshController:
             try:
                 if hasattr(thread, "cancel"):
                     thread.cancel()
-            except RuntimeError, AttributeError:
-                pass
+            except (RuntimeError, AttributeError):
+                logging.debug("Failed to cancel thread")
             try:
                 if not check_running or thread.isRunning():
                     safe_stop_thread(thread, timeout=200, blocking=False)
-            except RuntimeError, AttributeError:
-                pass
+            except (RuntimeError, AttributeError):
+                logging.debug("Failed to cancel thread")
             self._cleanup_thread_later(thread)
         except Exception as e:
             logging.debug(
@@ -141,7 +141,7 @@ class RefreshController:
                                 "RefreshController: Previous fetch thread still running, ignoring new fetch"
                             )
                             return
-                    except RuntimeError, AttributeError:
+                    except (RuntimeError, AttributeError):
                         self.fetch_thread = None
             except Exception as e:
                 logging.debug(f"RefreshController: Error checking fetch thread: {e}")

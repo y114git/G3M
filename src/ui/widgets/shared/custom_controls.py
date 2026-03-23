@@ -1,18 +1,10 @@
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtWidgets import QComboBox, QLabel, QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QComboBox, QLabel
 
 
 class NoScrollComboBox(QComboBox):
     def wheelEvent(self, event):
         event.ignore()
-
-
-class _ZeroHintWidget(QWidget):
-    def sizeHint(self) -> QSize:
-        return QSize(0, 0)
-
-    def minimumSizeHint(self) -> QSize:
-        return QSize(0, 0)
 
 
 class AnimatedToolTip(QLabel):

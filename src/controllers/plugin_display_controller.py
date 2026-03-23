@@ -7,6 +7,7 @@ import webbrowser
 
 from PyQt6.QtWidgets import QDialog
 
+from app.plugin_tabs import update_plugin_tabs
 from config.constants import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
@@ -148,8 +149,7 @@ class PluginDisplayController:
                     UI_COLORS["status_success"],
                 )
             self.plugin_service.reload_plugin(plugin_name)
-            if hasattr(self.app, "_update_plugin_tabs"):
-                self.app._update_plugin_tabs()
+            update_plugin_tabs(self.app)
             self.update_display()
         except Exception as e:
             error_msg = str(e)
@@ -190,8 +190,7 @@ class PluginDisplayController:
             if os.path.exists(plugin_path):
                 shutil.rmtree(plugin_path)
             self.plugin_service.load_plugins()
-            if hasattr(self.app, "_update_plugin_tabs"):
-                self.app._update_plugin_tabs()
+            update_plugin_tabs(self.app)
             self.update_display()
             self.feedback_service.update_status(
                 tr("plugins.plugin_deleted", name=localized_name),
@@ -252,8 +251,7 @@ class PluginDisplayController:
                 self.plugin_service.convert_plugin_archives()
                 self.plugin_service.load_plugins()
             self.feedback_service.update_status(message, UI_COLORS["status_success"])
-            if hasattr(self.app, "_update_plugin_tabs"):
-                self.app._update_plugin_tabs()
+            update_plugin_tabs(self.app)
             self.update_display()
         else:
             self.feedback_service.show_message("error", "errors.error", message)

@@ -454,7 +454,7 @@ class ModSummaryPanel(QFrame):
             if ch_id == 0:
                 return tr("tabs.menu_root")
             return tr("ui.chapter_title", chapter_num=ch_id)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return chapter_key.capitalize()
 
     def update_use_button_state(self, is_active=False):

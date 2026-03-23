@@ -4,6 +4,16 @@ import contextlib
 import logging
 import os
 
+from app.game_ui import (
+    full_install_tooltip,
+    refresh_game_lists,
+    update_change_path_button_text,
+    update_custom_executable_ui,
+    update_portproton_ui,
+    update_settings_library_tab,
+    update_steam_launch_checkbox_state,
+)
+from app.plugin_tabs import init_plugin_placeholder_tab, update_plugin_tabs
 from config.constants import (
     COMBO_LOCALIZATIONS,
     PLUGIN_WIDGET_LOCALIZATIONS,
@@ -37,8 +47,7 @@ def relocalize_texts(w):
     w._apply_widget_localizations(WIDGET_LOCALIZATIONS)
     for combo_name, keys in COMBO_LOCALIZATIONS.items():
         w._apply_combo_localizations(combo_name, keys)
-    if hasattr(w, "refresh_game_lists"):
-        w.refresh_game_lists()
+    refresh_game_lists(w)
     if hasattr(w, "search_tab_builder") and hasattr(
         w.search_tab_builder, "refresh_dynamic_styles"
     ):
@@ -47,10 +56,9 @@ def relocalize_texts(w):
         hasattr(w, "settings_reset_custom_exe_button")
         and w.settings_reset_custom_exe_button
     ):
-        w._update_custom_executable_ui()
-    w.full_install_checkbox.setToolTip(w._full_install_tooltip())
-    if hasattr(w, "_update_steam_launch_checkbox_state"):
-        w._update_steam_launch_checkbox_state()
+        update_custom_executable_ui(w)
+    w.full_install_checkbox.setToolTip(full_install_tooltip(w))
+    update_steam_launch_checkbox_state(w)
     if w.use_portproton_checkbox:
         w.use_portproton_checkbox.setText(tr("ui.use_portproton"))
         w.use_portproton_checkbox.setToolTip(
@@ -60,7 +68,7 @@ def relocalize_texts(w):
         )
     if w.select_portproton_path_button:
         w.select_portproton_path_button.setText(tr("buttons.select_portproton_path"))
-    w._update_change_path_button_text()
+    update_change_path_button_text(w)
     if hasattr(w, "settings_tab_widget"):
         w.settings_tab_widget.setTabText(0, tr("ui.settings_tab_general"))
         w.settings_tab_widget.setTabText(1, tr("ui.settings_tab_appearance"))
@@ -68,8 +76,7 @@ def relocalize_texts(w):
         w.settings_tab_widget.setTabText(3, tr("ui.settings_tab_mods_browser"))
         w.settings_tab_widget.setTabText(4, tr("ui.settings_tab_library"))
         w.settings_tab_widget.setTabText(5, tr("ui.settings_tab_plugins"))
-    if hasattr(w, "_update_settings_library_tab"):
-        w._update_settings_library_tab()
+    update_settings_library_tab(w)
     if hasattr(w, "_section_headers"):
         for lbl, key in w._section_headers:
             with contextlib.suppress(RuntimeError, AttributeError):
@@ -128,8 +135,8 @@ def relocalize_texts(w):
             reset_btn = w.settings_builder.get_widgets().get(f"color_reset_{key}")
             if reset_btn:
                 reset_btn.setToolTip(tr("buttons.reset_settings"))
-    if hasattr(w, "_update_portproton_ui") and w.portproton_frame:
-        w._update_portproton_ui()
+    if w.portproton_frame:
+        update_portproton_ui(w)
     for btn_attr in ("downloads_button", "library_downloads_button"):
         btn = getattr(w, btn_attr, None)
         if btn:
@@ -186,18 +193,18 @@ def relocalize_ui(w):
         localization_service.load_language(language_code)
         w._update_qt_locale(language_code)
         w.custom_font_family = localization_service.load_font()
-        if (
-            (cs := getattr(w, "customization_service", None))
-            and (cfp := cs.get_custom_font_path())
-            and os.path.exists(cfp)
-        ):
-            from PyQt6.QtGui import QFontDatabase
+        cs = getattr(w, "customization_service", None)
+        if cs:
+            cfp = cs.get_custom_font_path()
+            if cfp and os.path.exists(cfp):
+                from PyQt6.QtGui import QFontDatabase
 
-            if families := QFontDatabase.applicationFontFamilies(
-                QFontDatabase.addApplicationFont(cfp)
-            ):
-                w.custom_font_family = families[0]
-        w._update_plugin_tabs()
+                families = QFontDatabase.applicationFontFamilies(
+                    QFontDatabase.addApplicationFont(cfp)
+                )
+                if families:
+                    w.custom_font_family = families[0]
+        update_plugin_tabs(w)
         try:
             if (
                 hasattr(w, "main_tab_widget")
@@ -206,13 +213,13 @@ def relocalize_ui(w):
             ):
                 w.main_tab_widget.setCurrentIndex(current_index)
                 if current_plugin:
-                    w._init_plugin_placeholder_tab(current_index)
+                    init_plugin_placeholder_tab(w, current_index)
         except Exception as e:
             logging.debug(
                 f"relocalize_app_ui: failed to restore current tab/plugin placeholder: {e}",
                 exc_info=True,
             )
-        w._relocalize_texts()
+        relocalize_texts(w)
         w.theme.apply_theme()
         try:
             if hasattr(w, "online_label"):

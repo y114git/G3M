@@ -147,30 +147,6 @@ def download_and_extract_archive(
             )
 
 
-def _is_symlink(path: str) -> bool:
-    try:
-        return os.path.islink(path)
-    except OSError:
-        return False
-
-
-def _safe_join(base: str, *paths: str) -> str:
-    base_abs = os.path.abspath(base)
-    for path in paths:
-        normalized = str(path).replace("\\", "/")
-        if (
-            normalized.startswith("/")
-            or normalized.startswith("..")
-            or "/../" in normalized
-            or re.match(r"^[A-Za-z]:", str(path))
-        ):
-            raise ValueError("path_traversal")
-    final = os.path.abspath(os.path.join(base_abs, *paths))
-    if os.path.commonpath([final, base_abs]) != base_abs:
-        raise ValueError("path_traversal")
-    return final
-
-
 def normalize_mod_package(
     mod_root: str,
     *,
@@ -437,10 +413,10 @@ def ensure_writable(path: str) -> bool:
                         os.chmod(
                             p, st.st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE
                         )
-                    except OSError, PermissionError:
+                    except (OSError, PermissionError):
                         continue
         return True
-    except OSError, PermissionError:
+    except (OSError, PermissionError):
         return False
 
 

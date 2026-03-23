@@ -292,7 +292,7 @@ class InstalledModWidget(BaseModWidget):
                         chapter_folder = os.path.join(
                             mod_folder, get_chapter_folder_name(chapter_id)
                         )
-                    except ValueError, TypeError:
+                    except (ValueError, TypeError):
                         chapter_folder = os.path.join(mod_folder, chapter_key)
                 data_file_path = os.path.join(chapter_folder, data_file)
                 if not os.path.exists(data_file_path):

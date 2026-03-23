@@ -5,6 +5,7 @@ import logging
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QWidget
 
+from app.plugin_tabs import resolve_plugin_from_widget, run_with_plugin_api
 from services.localization_service import tr
 
 
@@ -36,7 +37,7 @@ def handle_tab_changed(w, index):
                 if w._handling_plugin_tab:
                     return
                 w._handling_plugin_tab = True
-                plugin = w._resolve_plugin_from_widget(
+                plugin = resolve_plugin_from_widget(
                     current_widget, visible_plugins, plugin
                 )
                 try:
@@ -47,7 +48,7 @@ def handle_tab_changed(w, index):
                         else plugin.get("on_tab_open")
                     )
                     if callable(handler):
-                        new_widget = w._run_with_plugin_api(plugin, handler)
+                        new_widget = run_with_plugin_api(w, plugin, handler)
                     if isinstance(new_widget, QWidget):
                         try:
                             new_widget.setProperty(
@@ -76,7 +77,10 @@ def handle_tab_changed(w, index):
                     w.feedback_service.show_message(
                         "error",
                         "errors.error",
-                        f"Failed to run plugin '{tr(plugin['name_key'])}':\n{e}",
+                        tr(
+                            "errors.plugin_init_failed",
+                            plugin_name=tr(plugin["name_key"]),
+                        ),
                     )
                     w._programmatic_tab_change = True
                     w.main_tab_widget.setCurrentIndex(w.previous_tab_index)
@@ -87,7 +91,7 @@ def handle_tab_changed(w, index):
             on_tab_open_handler = plugin.get("on_tab_open")
             if callable(on_tab_open_handler):
                 try:
-                    w._run_with_plugin_api(plugin, on_tab_open_handler)
+                    run_with_plugin_api(w, plugin, on_tab_open_handler)
                 except Exception as e:
                     logging.debug(
                         f"Error calling on_tab_open for plugin '{plugin.get('name_key', 'unknown')}': {e}"

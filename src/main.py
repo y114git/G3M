@@ -22,7 +22,7 @@ if __name__ == "__main__":
         run_shortcut(sys.argv[idx + 1])
         sys.exit(0)
 
-    from core.startup import run_app
+    from app.startup import run_app
     from utils.path_utils import cleanup_old_updater_files
 
     cleanup_old_updater_files()

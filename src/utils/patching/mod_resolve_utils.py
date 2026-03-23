@@ -1,4 +1,4 @@
-"""Path resolution utilities for mod patching — resolves mod source dirs and game target dirs."""
+"""Path resolution utilities for mod patching - resolves mod source dirs and game target dirs."""
 
 import logging
 import os

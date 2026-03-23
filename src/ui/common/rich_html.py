@@ -33,7 +33,7 @@ def _parse_attrs(attr_str: str) -> dict:
 def _positive_int(value) -> int:
     try:
         parsed = int(str(value).strip())
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 0
     return parsed if parsed > 0 else 0
 
@@ -48,7 +48,7 @@ def _style_dimension(style: str, name: str) -> str:
 def _safe_inline_media_width(widget_width: int) -> int:
     try:
         width = int(widget_width or 0)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         width = 0
     return max(1, width - 10) if width > 10 else max(1, width)
 
@@ -56,7 +56,7 @@ def _safe_inline_media_width(widget_width: int) -> int:
 def _placeholder_resource_width(target_width: int) -> int:
     try:
         width = int(target_width or 0)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         width = 0
     if width <= 0:
         return 280
@@ -154,14 +154,14 @@ def _refresh_browser_document(browser: QTextBrowser, doc: QTextDocument):
 
         if _sip.isdeleted(browser):
             return
-    except RuntimeError, AttributeError:
+    except (RuntimeError, AttributeError):
         return
     try:
         cursor = browser.textCursor()
         browser.setDocument(doc)
         browser.setTextCursor(cursor)
-    except RuntimeError, AttributeError:
-        pass
+    except (RuntimeError, AttributeError) as e:
+        logging.debug(f"Failed to refresh browser document: {e}")
 
 
 def _resolve_classes(html: str) -> str:
@@ -223,13 +223,13 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
                 pct = float(width_attr.rstrip("%"))
                 w = max(1, int(safe_width * pct / 100))
             except ValueError:
-                pass
+                logging.debug("Failed to parse percentage width, using default")
         else:
             with contextlib.suppress(ValueError):
                 w = int(width_attr)
     if height_attr:
         if height_attr.endswith("%"):
-            pass
+            logging.debug("Percentage height not supported for images")
         else:
             with contextlib.suppress(ValueError):
                 h = int(height_attr)
@@ -237,7 +237,7 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
         if h:
             try:
                 h = max(1, int(h * safe_width / w))
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 h = 0
         w = safe_width
     size_attrs = ""
@@ -251,7 +251,7 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
 def preprocess_html(html: str, widget_width: int = 600) -> str:
     """Preprocess HTML for QTextBrowser: resolve classes, font tags, image sizes.
 
-    Does NOT download images — call ``load_remote_images`` separately for that.
+    Does NOT download images - call ``load_remote_images`` separately for that.
     Returns cleaned HTML string ready for setHtml().
     """
     html = _resolve_classes(html)
@@ -370,7 +370,7 @@ def load_remote_images(
 
             if _sip.isdeleted(browser) or _sip.isdeleted(doc):
                 return
-        except RuntimeError, AttributeError:
+        except (RuntimeError, AttributeError):
             return
 
         img = QImage()

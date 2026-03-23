@@ -32,7 +32,7 @@ class _WidgetUpdateFilter(QObject):
             try:
                 if sip.isdeleted(widget):
                     return False
-            except RuntimeError, AttributeError:
+            except (RuntimeError, AttributeError):
                 return False
             self._callback()
         return False
@@ -67,7 +67,7 @@ class _ScrollAreaUpdateFilter(_WidgetUpdateFilter):
             try:
                 if sip.isdeleted(widget):
                     return False
-            except RuntimeError, AttributeError:
+            except (RuntimeError, AttributeError):
                 return False
             self._callback()
         return False
@@ -160,8 +160,8 @@ def apply_rounded_mask(widget, radius, inset=0):
         widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
         widget._rounded_mask_applied = True
         widget._rounded_mask_cache_key = cache_key
-    except RuntimeError, AttributeError:
-        pass
+    except (RuntimeError, AttributeError):
+        logging.debug("Failed to apply rounded mask to widget")
 
 
 def install_size_hint_height_sync(
@@ -207,7 +207,7 @@ def get_ui_scale_factor(
             value = float(config.get("ui_scale", default) or default)
         else:
             value = float(default)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         value = float(default)
     return max(minimum, min(maximum, value))
 
@@ -460,15 +460,15 @@ def clamp_border_radius(
 ) -> int:
     try:
         radius_value = max(0, int(radius))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 0
     try:
         border_value = max(0, int(border_width))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         border_value = 0
     try:
         margin_value = max(0, int(margin))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         margin_value = 0
     dimensions = []
     for dimension in (width, height):
@@ -476,7 +476,7 @@ def clamp_border_radius(
             continue
         try:
             available = max(0, int(dimension) + (border_value * 2) - (margin_value * 2))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         if available > 0:
             dimensions.append(available)
@@ -504,7 +504,7 @@ def _normalize_box_values(values) -> tuple[int, int, int, int]:
     for value in values:
         try:
             normalized.append(max(0, int(value)))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             normalized.append(0)
     if len(normalized) == 1:
         normalized *= 4
@@ -529,7 +529,7 @@ def build_panel_style(
 ) -> str:
     try:
         margin_value = max(0, int(margin))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         margin_value = 0
     return f"QWidget#{selector} {{ background-color: {background_color}; border-radius: {border_radius}px; margin: {margin_value}px; }}"
 
@@ -613,13 +613,13 @@ def apply_scroll_area_chrome(
     try:
         if not vertical_scrollbar.isVisible():
             return 0
-    except RuntimeError, AttributeError:
+    except (RuntimeError, AttributeError):
         return 0
     try:
         active_extent = (
             vertical_scrollbar.width() or vertical_scrollbar.sizeHint().width()
         )
-    except RuntimeError, AttributeError:
+    except (RuntimeError, AttributeError):
         active_extent = 0
     return max(minimum_extent, active_extent)
 
@@ -1092,7 +1092,7 @@ def load_mod_icon_universal(
                         try:
                             if sip.isdeleted(lbl):
                                 return
-                        except RuntimeError, AttributeError:
+                        except (RuntimeError, AttributeError):
                             return
                         try:
                             if not hasattr(lbl, "parent") or (
@@ -1100,8 +1100,10 @@ def load_mod_icon_universal(
                                 and lbl.parent() is None
                                 and (not hasattr(lbl, "window"))
                             ):
-                                pass
-                        except RuntimeError, AttributeError:
+                                logging.debug(
+                                    "Widget has no parent or window, but continuing"
+                                )
+                        except (RuntimeError, AttributeError):
                             return
                         if img is not None and (
                             not getattr(img, "isNull", lambda: True)()
@@ -1157,7 +1159,7 @@ def load_mod_icon_universal(
                                         else fb_pm
                                     )
                                     return
-                        except RuntimeError, AttributeError:
+                        except (RuntimeError, AttributeError):
                             return
 
                 def _on_error(url, err):
@@ -1182,9 +1184,9 @@ def load_mod_icon_universal(
                         )
                     try:
                         if hasattr(icon_label, "_icon_loader_signals"):
-                            delattr(icon_label, "_icon_loader_signals")
+                            del icon_label._icon_loader_signals
                         if hasattr(icon_label, "_icon_loader_runnable"):
-                            delattr(icon_label, "_icon_loader_runnable")
+                            del icon_label._icon_loader_runnable
                     except Exception as e:
                         logging.debug(
                             f"load_mod_icon_universal: Error cleaning up icon loader attributes: {e}"

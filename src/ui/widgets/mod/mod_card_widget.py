@@ -123,7 +123,7 @@ class ModCardWidget(BaseModWidget):
                 thread.requestInterruption()
                 thread.quit()
                 if not thread.wait(100):
-                    pass
+                    logging.debug("Thread did not stop in 100ms, continuing")
             if thread.isFinished():
                 thread.deleteLater()
         except Exception as e:
@@ -285,8 +285,8 @@ class ModCardWidget(BaseModWidget):
                     if cached:
                         self._on_compatibility_checked(self.mod_data, cached)
                         return
-            except ValueError, TypeError:
-                pass
+            except (ValueError, TypeError):
+                logging.debug("Failed to parse mod key for compatibility check")
         if self._compatibility_thread:
             if self._compatibility_thread.isFinished():
                 with contextlib.suppress(TypeError, RuntimeError):

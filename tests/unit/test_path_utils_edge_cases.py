@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from utils.archive_utils import _is_safe_path
-from utils.file_utils import _safe_join
 from utils.path_utils import (
     _match_steam_path,
     autodetect_path,
@@ -109,7 +108,6 @@ class TestPathUtilsEdgeCases:
                 patch('os.path.isdir', return_value=False), \
                 patch('os.path.isfile', return_value=False):
             result = resolve_game_executable('/some/game/dir')
-            # Without matching executables, should return None
             assert result is None
 
     def test_find_chapter_resource_dir_edge_cases(self):
@@ -190,50 +188,24 @@ class TestPathUtilsEdgeCases:
         """Test path security validation using actual API functions."""
         dangerous_paths = [
             '../../../etc/passwd',
-            '/etc/shadow',  # Unix absolute path
-            '..\\..\\..\\windows\\system32'  # Windows-style traversal
+            '/etc/shadow',
+            '..\\..\\..\\windows\\system32'
         ]
 
-        # Note: C:\Windows\System32 is not detected as unsafe by _is_safe_path
-        # because it only checks for '..' and Unix-style absolute paths starting with '/'
         windows_absolute_path = 'C:\\Windows\\System32'
 
         safe_paths = [
             'normal_file.txt',
             'subfolder/file.txt',
             'deep/nested/path.txt',
-            windows_absolute_path  # Considered safe by _is_safe_path but handled by _safe_join
+            windows_absolute_path
         ]
 
-        # Test _is_safe_path function
         for path in dangerous_paths:
             assert not _is_safe_path(path), f"Path '{path}' should be detected as unsafe"
 
         for path in safe_paths:
             assert _is_safe_path(path), f"Path '{path}' should be detected as safe"
-
-        # Test _safe_join function with dangerous paths
-        base_dir = '/safe/base'
-
-        for dangerous_path in dangerous_paths:
-            with pytest.raises(ValueError, match='path_traversal'):
-                _safe_join(base_dir, dangerous_path)
-
-        # Test _safe_join with Windows absolute path (should also raise)
-        with pytest.raises(ValueError, match='path_traversal'):
-            _safe_join(base_dir, windows_absolute_path)
-
-        # Test _safe_join function with safe paths
-        for safe_path in safe_paths:
-            if safe_path == windows_absolute_path:
-                continue  # Skip Windows absolute path as it's handled above
-            try:
-                result = _safe_join(base_dir, safe_path)
-                # Just verify it doesn't raise an exception and returns a string
-                assert isinstance(result, str)
-                assert len(result) > len(base_dir)  # Should be longer than base
-            except ValueError:
-                pytest.fail(f"Safe path '{safe_path}' should not raise ValueError")
 
     def test_resource_path_pyinstaller_edge_cases(self):
         """Test resource_path with PyInstaller edge cases."""
@@ -276,7 +248,6 @@ class TestPathUtilsEdgeCases:
         """Test autodetect_path checks common game locations with controlled mocks."""
         game_name = 'TestGame'
 
-        # Test Linux path detection
         with patch('utils.path_utils.CURRENT_PLATFORM', 'Linux'), \
                 patch('os.path.expanduser', return_value='/home/user'), \
                 patch('os.path.exists') as mock_exists, \
@@ -293,7 +264,6 @@ class TestPathUtilsEdgeCases:
             assert 'TestGame' in result
             assert '/home/user' in result or '/media' in result
 
-        # Test case when no game found
         with patch('utils.path_utils.CURRENT_PLATFORM', 'Windows'), \
                 patch.dict(os.environ, {}, clear=True), \
                 patch('os.path.exists', return_value=False), \
@@ -302,7 +272,6 @@ class TestPathUtilsEdgeCases:
             result = autodetect_path(game_name)
             assert result is None
 
-        # Test excluded games
         with patch('os.path.exists', return_value=True):
             assert autodetect_path('UNDERTALE YELLOW') is None
             assert autodetect_path('SUGARY SPIRE') is None

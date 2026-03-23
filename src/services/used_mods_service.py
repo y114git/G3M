@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
 if TYPE_CHECKING:
-    from core.app_window import AppWindow
+    from app.window import AppWindow
 
+from app.game_ui import update_chapter_tabs_style, update_steam_launch_checkbox_state
 from models.app_state import AppState
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
@@ -441,16 +442,13 @@ class UsedModsManager(QObject):
             self.parent_widget, "launch_via_steam_checkbox"
         ):
             self._update_steam_checkbox_state()
-        if self.parent_widget and hasattr(
-            self.parent_widget, "_update_chapter_tabs_style"
-        ):
-            self.parent_widget._update_chapter_tabs_style()
+        if self.parent_widget:
+            update_chapter_tabs_style(self.parent_widget)
 
     def _update_steam_checkbox_state(self):
         if not self.parent_widget:
             return
-        if hasattr(self.parent_widget, "_update_steam_launch_checkbox_state"):
-            self.parent_widget._update_steam_launch_checkbox_state()
+        update_steam_launch_checkbox_state(self.parent_widget)
 
     @staticmethod
     def _migrate_legacy_id(chapter_id_str: str) -> str:

@@ -251,7 +251,7 @@ class ChatWindow(QDialog):
                     try:
                         self.status_label.setText(tr("chat.error_loading"))
                         self.message_input.setEnabled(True)
-                    except RuntimeError, AttributeError:
+                    except (RuntimeError, AttributeError):
                         self._closed = True
             finally:
                 self._loading_messages = False
@@ -450,7 +450,7 @@ class ChatWindow(QDialog):
                 if not self._closed:
                     try:
                         self.status_label.setText(tr("chat.error_sending"))
-                    except RuntimeError, AttributeError:
+                    except (RuntimeError, AttributeError):
                         self._closed = True
                 return
             if success:
@@ -467,7 +467,7 @@ class ChatWindow(QDialog):
                         self._sync_channel_buttons()
                         if not self._closed:
                             self._refresh_messages_immediate(channel)
-                    except RuntimeError, AttributeError:
+                    except (RuntimeError, AttributeError):
                         self._closed = True
             elif not self._closed:
                 try:
@@ -481,7 +481,7 @@ class ChatWindow(QDialog):
                     self.status_label.setText(
                         tr(error_keys.get(error, "chat.error_sending"))
                     )
-                except RuntimeError, AttributeError:
+                except (RuntimeError, AttributeError):
                     self._closed = True
         except (RuntimeError, AttributeError) as e:
             self._closed = True
@@ -491,7 +491,7 @@ class ChatWindow(QDialog):
             if not self._closed:
                 try:
                     self.status_label.setText(tr("chat.error_sending"))
-                except RuntimeError, AttributeError:
+                except (RuntimeError, AttributeError):
                     self._closed = True
         finally:
             if not self._closed:
@@ -503,7 +503,7 @@ class ChatWindow(QDialog):
                         self._on_input_changed(self.message_input.text())
                     elif channel in self.channel_buttons:
                         self._switch_channel(channel)
-                except RuntimeError, AttributeError:
+                except (RuntimeError, AttributeError):
                     self._closed = True
 
     def _on_chat_error(self, channel: str, error_message: str):
@@ -514,7 +514,7 @@ class ChatWindow(QDialog):
                 try:
                     self.status_label.setText(tr("chat.error_loading"))
                     self.message_input.setEnabled(True)
-                except RuntimeError, AttributeError:
+                except (RuntimeError, AttributeError):
                     self._closed = True
             self._loading_messages = False
         elif self._refreshing_messages:

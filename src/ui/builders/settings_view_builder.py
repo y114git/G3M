@@ -406,11 +406,9 @@ class SettingsViewBuilder:
         theme_save_btn = self._create_icon_btn("🖫", app_state=self.app_state)
         theme_delete_btn = self._create_icon_btn("🗑", app_state=self.app_state)
         themes_row.addWidget(themes_list_widget)
-        (
-            themes_row.addWidget(theme_apply_btn),
-            themes_row.addWidget(theme_save_btn),
-            themes_row.addWidget(theme_delete_btn),
-        )
+        themes_row.addWidget(theme_apply_btn)
+        themes_row.addWidget(theme_save_btn)
+        themes_row.addWidget(theme_delete_btn)
         cl.addLayout(themes_row)
 
         do_not_save_theme_checkbox = self._styled_checkbox(

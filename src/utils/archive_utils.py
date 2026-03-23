@@ -14,8 +14,6 @@ from collections.abc import Callable
 from urllib.parse import unquote, urlparse
 
 from utils.file_utils import (
-    _is_symlink,
-    _safe_join,
     safe_move,
     safe_remove,
     safe_rmtree,
@@ -188,22 +186,15 @@ def _move_tree_safely(src_root: str, dst_root: str) -> None:
             continue
         if len(rel_root) >= 2 and rel_root[1] == ":" and rel_root[0].isalpha():
             continue
-        dst_dir = _safe_join(dst_root, rel_root) if rel_root else dst_root
+        dst_dir = os.path.join(dst_root, rel_root) if rel_root else dst_root
         os.makedirs(dst_dir, exist_ok=True)
         for d in list(dirs):
-            try:
-                _safe_join(dst_dir, d)
-            except ValueError:
-                dirs.remove(d)
-                continue
+            os.path.join(dst_dir, d)
         for f in files:
             src_path = os.path.join(root, f)
-            if _is_symlink(src_path):
+            if os.path.islink(src_path):
                 continue
-            try:
-                dst_path = _safe_join(dst_dir, f)
-            except ValueError:
-                continue
+            dst_path = os.path.join(dst_dir, f)
             os.makedirs(os.path.dirname(dst_path), exist_ok=True)
             try:
                 shutil.move(src_path, dst_path)

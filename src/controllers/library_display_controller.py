@@ -8,6 +8,7 @@ import shutil
 from PyQt6.QtCore import QEventLoop, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
+from app.game_ui import show_chapter_mode_instruction
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
 from services.mod_filter_service import filter_and_sort_mods
@@ -118,7 +119,7 @@ class LibraryDisplayController:
             self.app.installed_mods_container.setUpdatesEnabled(False)
             try:
                 clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
-                self.app._show_chapter_mode_instruction()
+                show_chapter_mode_instruction(self.app)
             finally:
                 self.app.installed_mods_container.setUpdatesEnabled(True)
 
@@ -233,10 +234,8 @@ class LibraryDisplayController:
             )
             or selected_chapter_id is None
         ):
-            if selected_chapter_id is None and hasattr(
-                self.app, "_show_chapter_mode_instruction"
-            ):
-                self.app._show_chapter_mode_instruction()
+            if selected_chapter_id is None:
+                show_chapter_mode_instruction(self.app)
             return
         self._clear_summary()
         self.app._updating_chapter_mods = True

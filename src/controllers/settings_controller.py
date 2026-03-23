@@ -4,8 +4,17 @@ import logging
 
 from PyQt6.QtWidgets import QWidget
 
+from app.game_ui import (
+    on_game_mode_updated_by_state,
+    show_chapter_mode_instruction,
+    update_change_path_button_text,
+    update_checkbox_visibility,
+    update_custom_executable_ui,
+    update_portproton_ui,
+    update_settings_library_tab,
+)
+from app.post_init import _restore_ui_state_from_config
 from config.constants import UI_COLORS
-from core.app_post_init import _restore_ui_state_from_config
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
 
@@ -34,11 +43,6 @@ class SettingsUiController:
             customization_service,
             app_window,
         )
-
-    def _call_if_exists(self, obj, *attrs):
-        for attr in attrs:
-            if hasattr(obj, attr):
-                getattr(obj, attr)()
 
     def toggle_settings_view(self):
         self.app_state.is_settings_view = not self.app_state.is_settings_view
@@ -104,8 +108,7 @@ class SettingsUiController:
             self._set_combo_data(self.app.game_type_combo, game_type)
             game_def = get_game(game_type)
             self.app_state.game_mode = game_def if game_def else DeltaruneGame()
-            if hasattr(self.app, "_on_game_mode_updated_by_state"):
-                self.app._on_game_mode_updated_by_state(self.app_state.game_mode)
+            on_game_mode_updated_by_state(self.app, self.app_state.game_mode)
         self._set_value_silently(
             self.app.ui_scale_spinbox, int(config.get("ui_scale", 1.0) * 100)
         )
@@ -129,14 +132,11 @@ class SettingsUiController:
         ):
             if hasattr(self.app, attr):
                 getattr(self.app, attr).setChecked(config.get(key, False))
-        self._call_if_exists(
-            self.app,
-            "_update_settings_library_tab",
-            "_update_portproton_ui",
-            "_update_custom_executable_ui",
-            "_update_checkbox_visibility",
-            "_update_section_reset_buttons_visibility",
-        )
+        update_settings_library_tab(self.app)
+        update_portproton_ui(self.app)
+        update_custom_executable_ui(self.app)
+        update_checkbox_visibility(self.app)
+        self.app._update_section_reset_buttons_visibility()
         self.app.background_music_button.setText(
             self.customization_service.get_background_music_button_text()
         )
@@ -186,8 +186,9 @@ class SettingsUiController:
         self.app_state.game_mode = game_def if game_def else DeltaruneGame()
         self.app_state.local_config["selected_game_type"] = game_type
         self.settings_service.write_local_config()
-        self._call_if_exists(self.app, "_update_checkbox_visibility")
-        self._call_if_exists(self.used_mods_service, "_update_steam_checkbox_state")
+        update_checkbox_visibility(self.app)
+        if hasattr(self.used_mods_service, "_update_steam_checkbox_state"):
+            self.used_mods_service._update_steam_checkbox_state()
 
     def on_chapter_mode_changed(self, state):
         if not self.app_state.game_mode.is_multi_tab:
@@ -210,17 +211,18 @@ class SettingsUiController:
         if is_chapter:
             if hasattr(self.app, "library_display"):
                 self.app.library_display.enter_chapter_mode()
-            self._call_if_exists(self.app, "_show_chapter_mode_instruction")
+            show_chapter_mode_instruction(self.app)
         elif hasattr(self.app, "library_display"):
             if hasattr(self.app, "installed_mods_layout"):
                 from ui.common.styling import clear_layout_widgets
 
                 clear_layout_widgets(self.app.installed_mods_layout, keep_last_n=1)
             self.app.library_display.update_display()
-        self.app._update_change_path_button_text()
+        update_change_path_button_text(self.app)
         self.app_state.local_config["chapter_mode_enabled"] = is_chapter
         self.settings_service.write_local_config()
-        self._call_if_exists(self.used_mods_service, "_update_steam_checkbox_state")
+        if hasattr(self.used_mods_service, "_update_steam_checkbox_state"):
+            self.used_mods_service._update_steam_checkbox_state()
 
     def on_toggle_beta_updates(self):
         self.settings_service.on_toggle_beta_updates(
@@ -248,8 +250,8 @@ class SettingsUiController:
             self.app.launch_via_steam_checkbox.setChecked(False)
             return
         self.settings_service.on_toggle_steam_launch(is_steam)
-        self.app._update_custom_executable_ui()
-        self._call_if_exists(self.app, "_update_portproton_ui")
+        update_custom_executable_ui(self.app)
+        update_portproton_ui(self.app)
 
     def on_toggle_portproton(self):
         use = (
@@ -259,7 +261,7 @@ class SettingsUiController:
             else False
         )
         self.settings_service.on_toggle_portproton(use)
-        self._call_if_exists(self.app, "_update_portproton_ui")
+        update_portproton_ui(self.app)
 
     def on_toggle_dont_hide_window_on_launch(self, state):
         self.settings_service.on_toggle_dont_hide_window_on_launch(bool(state))
@@ -271,7 +273,7 @@ class SettingsUiController:
 
     def on_toggle_show_reset_buttons(self, state):
         self.settings_service.on_toggle_show_reset_buttons(bool(state))
-        self._call_if_exists(self.app, "_update_section_reset_buttons_visibility")
+        self.app._update_section_reset_buttons_visibility()
 
     def on_toggle_disable_animations(self, state):
         self.settings_service.on_toggle_disable_animations(bool(state))

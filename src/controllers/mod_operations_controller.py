@@ -375,7 +375,7 @@ class ModOperationsController:
             )
             self._start_install_thread(install_thread, op_id)
         except (OSError, KeyError, Exception) as e:
-            from core.exceptions import ModInstallationError
+            from models.exceptions import ModInstallationError
 
             key = get_mod_key(mod)
             mod_name_str = get_mod_name(mod, "Unknown Mod")

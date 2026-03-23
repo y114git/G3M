@@ -386,7 +386,7 @@ class G3MToolPatchingService(QObject):
             and not self.backup_service.backup_file(chapter_id, data_win_path)
         ):
             self.patching_logger.error(
-                f"CRITICAL: Failed to backup {data_win_path} — aborting to protect game files"
+                f"CRITICAL: Failed to backup {data_win_path} - aborting to protect game files"
             )
             self.status_update.emit(
                 tr("errors.backup_failed", path=data_win_path), "error"
@@ -670,7 +670,7 @@ class G3MToolPatchingService(QObject):
         display_name: str,
     ) -> bool:
 
-        patch_files = [pf for pf, mt, sd in mod_infos]
+        patch_files = [pf for pf, _, _ in mod_infos]
         report_path = (
             os.path.join(self._temp_dir, f"merge_report_{chapter_id}.md")
             if self._temp_dir

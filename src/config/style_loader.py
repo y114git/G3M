@@ -102,7 +102,7 @@ def invalidate_stylesheet_cache():
 def _parse_px_value(value: str, default: int = 0) -> int:
     try:
         return max(0, int(str(value).replace("px", "").strip()))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return default
 
 

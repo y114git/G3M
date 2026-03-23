@@ -119,7 +119,7 @@ class LoadModDetailsThread(QThread):
         if isinstance(screenshots_data, dict):
             try:
                 screenshots_data = json.dumps(screenshots_data)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 return []
             return api.extract_screenshots_from_api(screenshots_data, is_wip=is_wip)
         if not isinstance(screenshots_data, list):
@@ -261,7 +261,7 @@ class ModDetailsOverlay(QWidget):
     def _is_alive(obj) -> bool:
         try:
             return not _sip.isdeleted(obj)
-        except RuntimeError, AttributeError:
+        except (RuntimeError, AttributeError):
             return False
 
     def _can_update(self) -> bool:
@@ -1078,8 +1078,8 @@ class ModDetailsOverlay(QWidget):
         try:
             if self._is_alive(self) and self.isVisible():
                 self._apply_overlay_geometry()
-        except RuntimeError, AttributeError:
-            pass
+        except (RuntimeError, AttributeError) as e:
+            logging.debug(f"Failed to apply overlay geometry: {e}")
         if self._original_resize_event:
             with contextlib.suppress(RuntimeError, AttributeError):
                 self._original_resize_event(event)
@@ -1235,8 +1235,8 @@ class ModDetailsOverlay(QWidget):
             try:
                 self.main_window.resizeEvent = self._original_resize_event
                 self._original_resize_event = None
-            except RuntimeError, AttributeError:
-                pass
+            except (RuntimeError, AttributeError) as e:
+                logging.debug(f"Failed to restore main window resize event: {e}")
 
     def _stop_thread(self, thread):
         """Stop and clean up a QThread safely."""

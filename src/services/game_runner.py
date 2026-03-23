@@ -1,4 +1,4 @@
-"""Headless shortcut runner — patches mods and launches the game without GUI.
+"""Headless shortcut runner - patches mods and launches the game without GUI.
 
 Uses G3MToolManager and BackupManager directly (plain classes) so no
 QApplication is needed.  Supports multi-chapter mod selections via the
@@ -544,8 +544,6 @@ def run_shortcut(shortcut_arg: str):
         if backup_mgr is None:
             sys.exit(1)
         logger.info("All chapters patched successfully")
-    else:
-        pass
 
     logger.info("Launching game...")
     _launch_game(shortcut_config, game_mode, local_config, game_path)
