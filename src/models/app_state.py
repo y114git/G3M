@@ -58,9 +58,7 @@ class AppState(QObject):
         self.undertale_game_path: str = ""
         self.config_dir: str = ""
         self.mods_dir: str = ""
-        self.plugins_dir: str = ""
         self.mods_metadata_path: str = ""
-        self.plugins_metadata_path: str = ""
         self.config_path: str = ""
         self._all_mods: list[ModInfo] = []
         self.mods_loaded: bool = False
@@ -75,7 +73,6 @@ class AppState(QObject):
         self.is_shown_to_user: bool = False
         self._game_mode: GameDefinition = DeltaruneGame()
         self.global_settings: dict[str, Any] = {}
-        self.plugins: list[dict[str, Any]] = []
         self.is_full_install: bool = False
         self.game_is_running: bool = False
         self.pending_dialogs: list[Any] = []

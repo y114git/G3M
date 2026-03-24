@@ -49,7 +49,6 @@ class GameLauncher(QObject):
         self.mod_patcher.progress_update.connect(self._on_patching_progress)
         self._patching_thread = None
         self.restore_window_callback = None
-        self.execute_plugin_hooks = None
 
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
@@ -79,12 +78,9 @@ class GameLauncher(QObject):
             except Exception as e:
                 logging.error(f"Failed to terminate game process: {e}", exc_info=True)
 
-    def launch_game_with_all_mods(
-        self, execute_plugin_hooks=None, restore_window_callback=None
-    ):
-        selections = self._get_used_mods_selections()
+    def launch_game_with_all_mods(self, restore_window_callback=None):
         self._launch_game_with_selections(
-            selections, execute_plugin_hooks, restore_window_callback
+            self._get_used_mods_selections(), restore_window_callback
         )
 
     def _get_used_mods_selections(self) -> dict[str, Any]:
@@ -104,18 +100,9 @@ class GameLauncher(QObject):
     def _launch_game_with_selections(
         self,
         selections: dict[str, Any],
-        execute_plugin_hooks=None,
         restore_window_callback=None,
     ):
-        self.execute_plugin_hooks = execute_plugin_hooks
         self.restore_window_callback = restore_window_callback
-        if execute_plugin_hooks:
-            hook_result = execute_plugin_hooks("on_before_game_launch")
-            if hook_result is False:
-                if restore_window_callback:
-                    restore_window_callback()
-                return
-            self._hook_result = hook_result
         self.status_changed.emit(
             tr("status.launching_game"), self._launch_status_color()
         )
@@ -306,8 +293,6 @@ class GameLauncher(QObject):
             self._handle_launch_failure()
 
     def _on_game_process_finished(self, vanilla_mode: bool):
-        if self.execute_plugin_hooks:
-            self.execute_plugin_hooks("on_before_game_exit")
         self._check_game_running(vanilla_mode)
 
     def _check_game_running(self, vanilla_mode):
@@ -606,8 +591,6 @@ class GameLauncher(QObject):
         if needs_multi_mod and self.restore_window_callback:
             self.game_launch_started.emit()
         self._execute_game(launch_config)
-        if self.execute_plugin_hooks:
-            self.execute_plugin_hooks("on_after_game_launch")
 
     def _on_patching_status(self, message: str, status_type: str):
         color = UI_COLORS.get(f"status_{status_type}", UI_COLORS["status_error"])

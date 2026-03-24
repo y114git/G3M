@@ -9,7 +9,6 @@ from utils.path_utils import (
     find_supported_game_data_file,
     get_user_data_root,
     get_user_mods_dir,
-    get_user_plugins_dir,
     resolve_game_executable,
     resource_path,
 )
@@ -28,12 +27,6 @@ class TestPathUtils:
         assert "mods" in mods_dir
         assert "DELTAHUB" in mods_dir
 
-    def test_get_user_plugins_dir(self):
-        plugins_dir = get_user_plugins_dir()
-        assert isinstance(plugins_dir, str)
-        assert "plugins" in plugins_dir
-        assert "DELTAHUB" in plugins_dir
-
     def test_resource_path_frozen(self):
         bundle_root = os.path.join("bundle-root", "pyinstaller")
         with (
@@ -49,9 +42,9 @@ class TestPathUtils:
         _meipass_attr = getattr(sys, "_MEIPASS", None)
         try:
             if hasattr(sys, "frozen"):
-                delattr(sys, "frozen")
+                del sys.frozen
             if hasattr(sys, "_MEIPASS"):
-                delattr(sys, "_MEIPASS")
+                del sys._MEIPASS
             path = resource_path("assets/icons/icon.ico")
             assert "src" in path or "assets" in path
         finally:

@@ -49,8 +49,6 @@ def _build_theme_test_window():
     app_window.status_label.setFont = Mock()
     app_window.findChildren = Mock(return_value=[])
     app_window._bg_loader = None
-    app_window.plugin_display = Mock()
-    app_window.plugin_display._plugin_widgets = {}
     app_window.tab_widget = Mock()
     app_window.tab_widget.count.return_value = 0
     app_window.tab_widget.tabText = Mock(return_value="")
@@ -60,7 +58,6 @@ def _build_theme_test_window():
     app_window.full_install_checkbox = Mock()
     app_window.installed_mods_label = None
     app_window.chapter_tab_buttons = []
-    app_window.plugin_tab_builder = None
     app_window.mod_list_widget = None
     app_window.installed_mods_widget = None
     app_window.search_display = None

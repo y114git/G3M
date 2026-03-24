@@ -6,10 +6,9 @@ def test_build_application_context_creates_services_and_session(qapp, temp_dir):
     from app_context.application_context import build_application_context
 
     user_root = os.path.join(temp_dir, "user")
-    plugins_dir = os.path.join(temp_dir, "plugins")
     mods_dir = os.path.join(temp_dir, "mods")
     profiles_dir = os.path.join(temp_dir, "profiles")
-    for path in (user_root, plugins_dir, mods_dir, profiles_dir):
+    for path in (user_root, mods_dir, profiles_dir):
         os.makedirs(path, exist_ok=True)
     mock_presence_response = Mock()
     mock_presence_response.status_code = 200
@@ -19,10 +18,6 @@ def test_build_application_context_creates_services_and_session(qapp, temp_dir):
     with (
         patch("app_context.application_context.get_user_data_root", return_value=user_root),
         patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
-        patch(
-            "app_context.application_context.get_user_plugins_dir",
-            return_value=plugins_dir,
-        ),
         patch(
             "services.g3mtool_patching_service.get_user_data_root",
             return_value=user_root,

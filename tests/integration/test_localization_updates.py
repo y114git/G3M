@@ -76,7 +76,7 @@ class TestWidgetRelocalizeMethods:
         ui_widgets_dir = _PROJECT_ROOT / 'src' / 'ui' / 'widgets'
         if not ui_widgets_dir.exists():
             pytest.skip('src/ui/widgets directory not found')
-        widgets_to_check = ['mod_card_widget.py', 'installed_mod_widget.py', 'plugin_widget.py']
+        widgets_to_check = ['mod_card_widget.py', 'installed_mod_widget.py']
         issues = []
         for widget_file in widgets_to_check:
             widget_path = ui_widgets_dir / widget_file

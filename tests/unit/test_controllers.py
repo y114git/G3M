@@ -362,10 +362,8 @@ class TestThemeController:
         app_window.logo_placeholder = Mock()
         app_window.launcher_icon_label = Mock()
         app_window.findChildren.return_value = []
-        app_window.plugin_tab_builder = None
         app_window.library_tag_widgets = []
         app_window.search_display = None
-        app_window.plugin_display = None
         app_window.library_tab_builder = Mock()
         app_window.library_tab_builder.update_priority_button_style = Mock()
         app_window._apply_window_corner_mask = Mock()
@@ -436,10 +434,8 @@ class TestThemeController:
         app_window.logo_placeholder = Mock()
         app_window.launcher_icon_label = Mock()
         app_window.findChildren.return_value = []
-        app_window.plugin_tab_builder = None
         app_window.library_tag_widgets = []
         app_window.search_display = None
-        app_window.plugin_display = None
         app_window.library_tab_builder = Mock()
         app_window.library_tab_builder.update_priority_button_style = Mock()
         app_window._apply_window_corner_mask = Mock()
@@ -490,7 +486,6 @@ class TestGameLaunchController:
         from services.launch_service import GameLauncher
         from services.localization_service import localization_service
         from services.mod_service import ModManager
-        from services.plugin_service import PluginManager
         from services.settings_service import SettingsManager
         from services.used_mods_service import UsedModsManager
 
@@ -506,7 +501,6 @@ class TestGameLaunchController:
         )
         game_launcher = GameLauncher(app_state, feedback_service, mod_service)
         customization_service = CustomizationManager(app_state)
-        plugin_service = PluginManager(app_state, settings_service)
         app_window = Mock()
         controller = GameLaunchController(
             app_state=app_state,
@@ -516,7 +510,6 @@ class TestGameLaunchController:
             settings_service=settings_service,
             game_launcher=game_launcher,
             customization_service=customization_service,
-            plugin_service=plugin_service,
             app_window=app_window,
         )
         assert controller is not None
@@ -549,7 +542,6 @@ class TestGameLaunchController:
         used_mods_service = Mock()
         used_mods_service.check_used_mods_need_updates.return_value = False
         customization_service = Mock()
-        plugin_service = Mock()
         controller = GameLaunchController(
             app_state=app_state,
             feedback_service=feedback_service,
@@ -558,7 +550,6 @@ class TestGameLaunchController:
             settings_service=settings_service,
             game_launcher=Mock(),
             customization_service=customization_service,
-            plugin_service=plugin_service,
             app_window=Mock(),
         )
 

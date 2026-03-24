@@ -252,32 +252,6 @@ class LocalizationManager:
             logging.error(f"Error loading language {language_code}: {e}")
             return False
 
-    def merge_plugin_strings(self, plugin_id: str, plugin_strings: dict):
-        if plugin_id not in self.strings:
-            self.strings[plugin_id] = {}
-
-        def _merge_nested(target: dict, source: dict):
-            for key, value in source.items():
-                if isinstance(value, dict):
-                    if key not in target:
-                        target[key] = {}
-                    _merge_nested(target[key], value)
-                else:
-                    target[key] = value
-
-        _merge_nested(self.strings[plugin_id], plugin_strings)
-
-    def get_plugin_tr(self, plugin_id: str):
-
-        def plugin_tr(key: str, **kwargs) -> str:
-            prefixed_key = f"{plugin_id}.{key}"
-            result = self.get_text(prefixed_key, **kwargs)
-            if result == f"[{prefixed_key}]":
-                result = self.get_text(key, **kwargs)
-            return result
-
-        return plugin_tr
-
     def _resolve_key(self, source: dict, key: str, **kwargs) -> str | None:
         """Traverse nested dict by dotted key, process and format. Returns None on miss."""
         value = source

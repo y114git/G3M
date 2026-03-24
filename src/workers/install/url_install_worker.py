@@ -77,8 +77,6 @@ class UrlInstallThread(BaseInstallWorker):
                 content_type = self._detect_content_type(archive_path)
                 if content_type == "theme":
                     self._extract_and_install_theme(archive_path, temp_dir)
-                elif content_type == "plugin":
-                    self._install_plugin_from_archive(archive_path)
                 elif content_type == "mod":
                     self._install_mod_from_archive(archive_path, temp_dir)
                 else:
@@ -195,8 +193,6 @@ class UrlInstallThread(BaseInstallWorker):
         n = name.replace("\\", "/").strip("/")
         if n == "theme.json" or n.endswith("/theme.json"):
             return "theme"
-        if n == "plugin_init.py" or n.endswith("/plugin_init.py"):
-            return "plugin"
         if n == MOD_CONFIG_FILENAME or n.endswith(f"/{MOD_CONFIG_FILENAME}"):
             return "mod"
         if check_filename_is_deltamod_info(n):
@@ -267,8 +263,6 @@ class UrlInstallThread(BaseInstallWorker):
                     for f in files:
                         if f == "theme.json":
                             return "theme"
-                        if f == "plugin_init.py":
-                            return "plugin"
                         if f == MOD_CONFIG_FILENAME or check_filename_is_deltamod_info(
                             f
                         ):
@@ -374,29 +368,6 @@ class UrlInstallThread(BaseInstallWorker):
                     f"UrlInstallThread: Error extracting theme: {e}", exc_info=True
                 )
                 self.finished.emit(False, tr("themes.installation_error", error=str(e)))
-
-    def _install_plugin_from_archive(self, archive_path: str):
-        try:
-            self.status.emit(
-                tr("plugins.installing_plugin"), UI_COLORS["status_warning"]
-            )
-            plugins_dir = self.main_window.app_state.plugins_dir
-            archive_name = os.path.basename(archive_path)
-            if not archive_name or "." not in archive_name:
-                from utils.archive_utils import get_file_extension_from_content
-
-                file_ext = get_file_extension_from_content(archive_path)
-                archive_name = f"plugin{file_ext}"
-            target_archive_path = os.path.join(plugins_dir, archive_name)
-            shutil.copy2(archive_path, target_archive_path)
-            self._try_remove_file(archive_path)
-            self.status.emit(tr("plugins.plugin_installed"), "success")
-            self.finished.emit(True, tr("plugins.plugin_installed_success"))
-        except Exception as e:
-            logging.error(
-                f"UrlInstallThread: Error installing plugin: {e}", exc_info=True
-            )
-            self.finished.emit(False, tr("plugins.installation_error", error=str(e)))
 
     def _check_redirect(self, archive_path: str, temp_dir: str) -> bool:
         try:

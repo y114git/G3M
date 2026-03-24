@@ -158,25 +158,6 @@ class TestSettingsManager:
         assert manager.was_window_maximized() is True
 
 
-class TestPluginManager:
-    def test_plugin_service_initialization(self, app_state, feedback_service, qapp):
-        from services.localization_service import localization_service
-        from services.plugin_service import PluginManager
-        from services.settings_service import SettingsManager
-
-        settings_service = SettingsManager(
-            app_state=app_state,
-            feedback_service=feedback_service,
-            localization_service=localization_service,
-            parent=qapp,
-        )
-        plugin_service = PluginManager(
-            app_state=app_state, settings_service=settings_service
-        )
-        assert plugin_service is not None
-        assert plugin_service.app_state == app_state
-
-
 class TestLocalizationManager:
     def test_localization_service_tr(self):
         from services.localization_service import tr

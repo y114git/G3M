@@ -74,14 +74,6 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
     from config.config import UI_COLORS
     from services.localization_service import tr
 
-    if hasattr(main_window, "plugin_service") and main_window.plugin_service:
-        main_window.plugin_service.convert_plugin_archives()
-        main_window.plugin_service.load_plugins()
-    from app.plugin_tabs import update_plugin_tabs
-
-    update_plugin_tabs(main_window)
-    if hasattr(main_window, "plugin_display"):
-        main_window.plugin_display.update_display()
     if mod_service:
         mod_service.invalidate_mods_cache()
         mod_service.load_local_mods(_skip_conversion=True)

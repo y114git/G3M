@@ -13,10 +13,8 @@ from app.game_ui import (
     update_settings_library_tab,
     update_steam_launch_checkbox_state,
 )
-from app.plugin_tabs import init_plugin_placeholder_tab, update_plugin_tabs
 from config.config import (
     COMBO_LOCALIZATIONS,
-    PLUGIN_WIDGET_LOCALIZATIONS,
     SETTINGS_COLOR_CONFIG,
     WIDGET_LOCALIZATIONS,
 )
@@ -38,8 +36,6 @@ def relocalize_texts(w):
         tab_labels.append((w.mods_browser_tab, tr("ui.search_tab")))
     if hasattr(w, "library_tab"):
         tab_labels.append((w.library_tab, tr("ui.library_tab")))
-    if hasattr(w, "plugins_tab"):
-        tab_labels.append((w.plugins_tab, tr("ui.plugins_tab")))
     for tab_widget, label in tab_labels:
         idx = w.main_tab_widget.indexOf(tab_widget)
         if idx >= 0:
@@ -75,7 +71,6 @@ def relocalize_texts(w):
         w.settings_tab_widget.setTabText(2, tr("ui.settings_tab_game"))
         w.settings_tab_widget.setTabText(3, tr("ui.settings_tab_mods_browser"))
         w.settings_tab_widget.setTabText(4, tr("ui.settings_tab_library"))
-        w.settings_tab_widget.setTabText(5, tr("ui.settings_tab_plugins"))
     update_settings_library_tab(w)
     if hasattr(w, "_section_headers"):
         for lbl, key in w._section_headers:
@@ -178,17 +173,6 @@ def relocalize_ui(w):
         current_index = (
             w.main_tab_widget.currentIndex() if hasattr(w, "main_tab_widget") else -1
         )
-        current_plugin = None
-        try:
-            if current_index >= 0 and current_index in getattr(
-                w, "_plugin_tab_map", {}
-            ):
-                current_plugin = w._plugin_tab_map.get(current_index)
-        except Exception as e:
-            logging.debug(
-                f"relocalize_app_ui: failed to resolve current plugin tab: {e}",
-                exc_info=True,
-            )
         language_code = w.app_state.local_config.get("language", "en")
         localization_service.load_language(language_code)
         w._update_qt_locale(language_code)
@@ -204,21 +188,8 @@ def relocalize_ui(w):
                 )
                 if families:
                     w.custom_font_family = families[0]
-        update_plugin_tabs(w)
-        try:
-            if (
-                hasattr(w, "main_tab_widget")
-                and current_index >= 0
-                and (current_index < w.main_tab_widget.count())
-            ):
-                w.main_tab_widget.setCurrentIndex(current_index)
-                if current_plugin:
-                    init_plugin_placeholder_tab(w, current_index)
-        except Exception as e:
-            logging.debug(
-                f"relocalize_app_ui: failed to restore current tab/plugin placeholder: {e}",
-                exc_info=True,
-            )
+        if hasattr(w, "main_tab_widget") and current_index >= 0 and current_index < w.main_tab_widget.count():
+            w.main_tab_widget.setCurrentIndex(current_index)
         relocalize_texts(w)
         w.theme.apply_theme()
         try:
@@ -236,17 +207,6 @@ def relocalize_ui(w):
         w.library_display.update_display()
         w.search_display.update_pagination()
         w.game_launch.update_button_state()
-        w._apply_widget_localizations(PLUGIN_WIDGET_LOCALIZATIONS)
-        if hasattr(w, "plugin_tab_builder") and hasattr(
-            w.plugin_tab_builder, "widgets"
-        ):
-            widgets = w.plugin_tab_builder.widgets
-            if "installed_plugins_label" in widgets:
-                widgets["installed_plugins_label"].setText(
-                    tr("plugins.installed_plugins")
-                )
-        if hasattr(w, "plugin_display"):
-            w.plugin_display.relocalize_plugin_widgets()
         w.update()
     finally:
         w._suppress_tab_handlers = False

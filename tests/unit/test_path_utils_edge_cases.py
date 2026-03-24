@@ -15,7 +15,6 @@ from utils.path_utils import (
     get_user_data_root,
     get_user_lang_dir,
     get_user_mods_dir,
-    get_user_plugins_dir,
     get_user_themes_dir,
     resolve_game_executable,
     resource_path,
@@ -79,7 +78,6 @@ class TestPathUtilsEdgeCases:
         root = get_user_data_root()
         assert get_user_mods_dir() == os.path.join(root, 'mods')
         assert get_user_lang_dir() == os.path.join(root, 'lang')
-        assert get_user_plugins_dir() == os.path.join(root, 'plugins')
         assert get_user_themes_dir() == os.path.join(root, 'themes')
 
     def test_resource_path_edge_cases(self):

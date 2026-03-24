@@ -121,7 +121,6 @@ class WindowComposition:
             window.settings_service,
             window.game_launcher,
             window.customization_service,
-            window.plugin_service,
             window,
         )
         window.refresh_controller = RefreshController(

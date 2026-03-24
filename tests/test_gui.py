@@ -249,7 +249,43 @@ class GUIWindow(QMainWindow):
         global_controls.addStretch()
         layout.addLayout(global_controls)
         self.tabs = QTabWidget()
-        test_categories = [{'name': 'Unit Tests', 'key': 'unit', 'files': [{'name': 'test_utils.py', 'path': 'unit/test_utils.py', 'description': 'Utility functions tests'}, {'name': 'test_path_utils.py', 'path': 'unit/test_path_utils.py', 'description': 'Path utility functions tests'}, {'name': 'test_services.py', 'path': 'unit/test_services.py', 'description': 'Manager classes tests'}, {'name': 'test_models.py', 'path': 'unit/test_models.py', 'description': 'Data models tests'}, {'name': 'test_controllers.py', 'path': 'unit/test_controllers.py', 'description': 'Controller classes tests'}, {'name': 'test_config.py', 'path': 'unit/test_config.py', 'description': 'Configuration tests'}]}, {'name': 'Integration Tests', 'key': 'integration', 'files': [{'name': 'test_mod_operations.py', 'path': 'integration/test_mod_operations.py', 'description': 'Mod installation/removal tests'}, {'name': 'test_gamebanana.py', 'path': 'integration/test_gamebanana.py', 'description': 'GameBanana integration tests'}, {'name': 'test_plugin_system.py', 'path': 'integration/test_plugin_system.py', 'description': 'Plugin system tests'}, {'name': 'test_patching_and_merging.py', 'path': 'integration/test_patching_and_merging.py', 'description': 'Patching and merging tests'}, {'name': 'test_mod_system.py', 'path': 'integration/test_mod_system.py', 'description': 'Full mod system tests (structure, installation, processing)'}, {'name': 'test_game_launch_simulation.py', 'path': 'integration/test_game_launch_simulation.py', 'description': 'Game launch simulation and path resolution tests'}, {'name': 'test_customization_colors.py', 'path': 'integration/test_customization_colors.py', 'description': 'UI color customization tests'}, {'name': 'test_refresh_updates.py', 'path': 'integration/test_refresh_updates.py', 'description': 'UI refresh functionality tests'}, {'name': 'test_localization_updates.py', 'path': 'integration/test_localization_updates.py', 'description': 'Localization update tests'}]}, {'name': 'UI Tests', 'key': 'ui', 'files': [{'name': 'test_dialogs.py', 'path': 'ui/test_dialogs.py', 'description': 'Dialog components tests'}, {'name': 'test_widgets.py', 'path': 'ui/test_widgets.py', 'description': 'Widget components tests'}, {'name': 'test_main_window.py', 'path': 'ui/test_main_window.py', 'description': 'Main window tests'}]}]
+        test_categories = [
+            {
+                'name': 'Unit Tests',
+                'key': 'unit',
+                'files': [
+                    {'name': 'test_utils.py', 'path': 'unit/test_utils.py', 'description': 'Utility functions tests'},
+                    {'name': 'test_path_utils.py', 'path': 'unit/test_path_utils.py', 'description': 'Path utility functions tests'},
+                    {'name': 'test_services.py', 'path': 'unit/test_services.py', 'description': 'Manager classes tests'},
+                    {'name': 'test_models.py', 'path': 'unit/test_models.py', 'description': 'Data models tests'},
+                    {'name': 'test_controllers.py', 'path': 'unit/test_controllers.py', 'description': 'Controller classes tests'},
+                    {'name': 'test_config.py', 'path': 'unit/test_config.py', 'description': 'Configuration tests'},
+                ]
+            },
+            {
+                'name': 'Integration Tests',
+                'key': 'integration',
+                'files': [
+                    {'name': 'test_mod_operations.py', 'path': 'integration/test_mod_operations.py', 'description': 'Mod installation/removal tests'},
+                    {'name': 'test_gamebanana.py', 'path': 'integration/test_gamebanana.py', 'description': 'GameBanana integration tests'},
+                    {'name': 'test_patching_and_merging.py', 'path': 'integration/test_patching_and_merging.py', 'description': 'Patching and merging tests'},
+                    {'name': 'test_mod_system.py', 'path': 'integration/test_mod_system.py', 'description': 'Full mod system tests (structure, installation, processing)'},
+                    {'name': 'test_game_launch_simulation.py', 'path': 'integration/test_game_launch_simulation.py', 'description': 'Game launch simulation and path resolution tests'},
+                    {'name': 'test_customization_colors.py', 'path': 'integration/test_customization_colors.py', 'description': 'UI color customization tests'},
+                    {'name': 'test_refresh_updates.py', 'path': 'integration/test_refresh_updates.py', 'description': 'UI refresh functionality tests'},
+                    {'name': 'test_localization_updates.py', 'path': 'integration/test_localization_updates.py', 'description': 'Localization update tests'},
+                ]
+            },
+            {
+                'name': 'UI Tests',
+                'key': 'ui',
+                'files': [
+                    {'name': 'test_dialogs.py', 'path': 'ui/test_dialogs.py', 'description': 'Dialog components tests'},
+                    {'name': 'test_widgets.py', 'path': 'ui/test_widgets.py', 'description': 'Widget components tests'},
+                    {'name': 'test_main_window.py', 'path': 'ui/test_main_window.py', 'description': 'Main window tests'},
+                ]
+            }
+        ]
         for category in test_categories:
             tab = CategoryTabWidget(category['name'], category['files'], self)
             tab.category_key = category.get('key', category['name'].lower().replace(' ', '_'))

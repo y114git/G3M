@@ -168,7 +168,6 @@ class SettingsManager(QObject):
             "merge_code": False,
             "hide_mods_browser_tab": False,
             "hide_library_tab": False,
-            "hide_plugins_tab": False,
             "hide_library_filters": False,
             "show_reset_buttons": False,
             "custom_border_radius": 7,
@@ -234,9 +233,6 @@ class SettingsManager(QObject):
 
     def on_toggle_hide_library_tab(self, enabled: bool):
         self._toggle_setting("hide_library_tab", enabled, None)
-
-    def on_toggle_hide_plugins_tab(self, enabled: bool):
-        self._toggle_setting("hide_plugins_tab", enabled, None)
 
     def on_toggle_show_reset_buttons(self, enabled: bool):
         self._toggle_setting("show_reset_buttons", enabled, None)

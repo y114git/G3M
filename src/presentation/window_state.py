@@ -23,8 +23,6 @@ def initialize_window_runtime(window) -> None:
     window._bg_music_running = False
     window._bg_music_thread = None
     window._suppress_tab_handlers = False
-    window._handling_plugin_tab = False
-    window._plugin_tab_map = {}
     window._last_online_count = 0
     window._install_op_id = 0
     window.pending_updates = []

@@ -45,7 +45,6 @@ class GameLaunchController(QObject):
         settings_service,
         game_launcher,
         customization_service,
-        plugin_service,
         app_window,
     ) -> None:
         super().__init__()
@@ -56,7 +55,6 @@ class GameLaunchController(QObject):
         self.settings_service = settings_service
         self.game_launcher = game_launcher
         self.customization_service = customization_service
-        self.plugin_service = plugin_service
         self.app = app_window
         self._full_install_checkbox_is_checked = False
         self._window_hidden_for_launch = False
@@ -212,9 +210,6 @@ class GameLaunchController(QObject):
 
     def launch_game(self):
         self.game_launcher.launch_game_with_all_mods(
-            execute_plugin_hooks=lambda hook_name: self.plugin_service.execute_hooks(
-                hook_name, self.app
-            ),
             restore_window_callback=self.app.restore_window_signal.emit,
         )
 
@@ -249,7 +244,6 @@ class GameLaunchController(QObject):
         self.search_display_update_requested.emit()
         self.customization_service.maybe_start_background_music()
         self.show_pending_dialogs_requested.emit()
-        self.plugin_service.execute_hooks("on_after_game_exit", self.app)
 
     def perform_full_install(self):
         if self.app_state.is_installing or (

@@ -87,10 +87,6 @@ SETTINGS_COLOR_CONFIG = {
 }
 BASE_TAG_NAMES = ("textedit", "customization", "gameplay", "other")
 LIBRARY_IMPORT_ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma", ".gz")
-PLUGIN_STATUS_STYLES = {
-    "enabled": ("#4CAF50", "plugins.status_enabled"),
-    "disabled": ("#FFA500", "plugins.status_disabled"),
-}
 CHAT_MESSAGE_BACKGROUND_COLOR = "rgba(255, 255, 255, 0.1)"
 RICH_HTML_IMAGE_CACHE_MAX_SIZE = 128
 STYLES_TEMPLATE_SUBDIR = "config/styles"
@@ -103,7 +99,6 @@ QSS_PADDING_LEFT_8 = "padding-left:8px;"
 QSS_PADDING_LEFT_5 = "padding-left: 5px;"
 QSS_ARROW_LABEL = "font-size: 10px; background: transparent;"
 QSS_LOADING_LABEL = "font-size: 16px; padding: 20px; color: gray;"
-QSS_EMPTY_PLUGIN_LABEL = "font-size: 18px; color: gray;"
 QSS_TAB_ALIGNMENT = """
     QTabWidget::tab-bar { alignment: center; }
     QTabBar::tab { min-width: 92px; padding: 6px 10px; }
@@ -241,7 +236,6 @@ WIDGET_LOCALIZATIONS = [
     ("do_not_save_theme_checkbox", "setText", "ui.do_not_save_theme_after_import"),
     ("hide_mods_browser_tab_checkbox", "setText", "ui.hide_mods_browser_tab"),
     ("hide_library_tab_checkbox", "setText", "ui.hide_library_tab"),
-    ("hide_plugins_tab_checkbox", "setText", "ui.hide_plugins_tab"),
     ("merge_properties_checkbox", "setText", "checkboxes.merge_properties"),
     ("merge_code_checkbox", "setText", "checkboxes.merge_code"),
     ("merge_properties_checkbox", "setToolTip", "tooltips.merge_properties"),
@@ -249,10 +243,6 @@ WIDGET_LOCALIZATIONS = [
     ("downloads_no_auto_use_checkbox", "setText", "downloads.settings_no_auto_use"),
     ("downloads_delete_after_use_checkbox", "setText", "downloads.settings_delete_after_use",),
     ("downloads_save_local_imports_checkbox", "setText", "downloads.settings_save_local_imports",),
-]
-PLUGIN_WIDGET_LOCALIZATIONS = [
-    ("plugins_search_button", "setText", "plugins.search_plugins"),
-    ("plugins_import_button", "setText", "plugins.import_plugins"),
 ]
 COMBO_LOCALIZATIONS = {
     "sort_combo": [

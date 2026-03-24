@@ -128,7 +128,6 @@ class SettingsUiController:
         for attr, key in (
             ("hide_mods_browser_tab_checkbox", "hide_mods_browser_tab"),
             ("hide_library_tab_checkbox", "hide_library_tab"),
-            ("hide_plugins_tab_checkbox", "hide_plugins_tab"),
         ):
             if hasattr(self.app, attr):
                 getattr(self.app, attr).setChecked(config.get(key, False))
@@ -300,10 +299,6 @@ class SettingsUiController:
         self.settings_service.on_toggle_hide_library_tab(bool(state))
         self._update_tab_visibility()
 
-    def on_toggle_hide_plugins_tab(self, state):
-        self.settings_service.on_toggle_hide_plugins_tab(bool(state))
-        self._update_tab_visibility()
-
     def _update_tab_visibility(self):
         """Dynamically update tab visibility based on settings."""
         if not hasattr(self.app, "main_tab_widget"):
@@ -314,7 +309,6 @@ class SettingsUiController:
             "hide_mods_browser_tab", False
         )
         hide_library = self.app_state.local_config.get("hide_library_tab", False)
-        hide_plugins = self.app_state.local_config.get("hide_plugins_tab", False)
 
         old_suppress = getattr(self.app, "_suppress_tab_handlers", False)
         self.app._suppress_tab_handlers = True
@@ -332,35 +326,8 @@ class SettingsUiController:
             if not hide_library and hasattr(self.app, "library_tab"):
                 tab_widget.addTab(self.app.library_tab, tr("ui.library_tab"))
                 main_tabs_visible += 1
-            if not hide_plugins and hasattr(self.app, "plugins_tab"):
-                tab_widget.addTab(self.app.plugins_tab, tr("ui.plugins_tab"))
-                main_tabs_visible += 1
 
             self.app._num_main_tabs_visible = main_tabs_visible
-
-            plugin_tabs_count = 0
-            if hasattr(self.app, "plugin_service") and hasattr(
-                self.app.plugin_service, "update_plugin_tabs"
-            ):
-                try:
-                    self.app._handling_plugin_tab = True
-                    self.app._plugin_tab_map = (
-                        self.app.plugin_service.update_plugin_tabs(
-                            tab_widget,
-                            num_original_tabs=main_tabs_visible,
-                            preserve_widgets=True,
-                        )
-                    )
-                    plugin_tabs_count = len(self.app._plugin_tab_map)
-                except Exception as e:
-                    logger.debug(
-                        f"_update_tab_visibility: failed to update plugin tabs: {e}",
-                        exc_info=True,
-                    )
-                finally:
-                    self.app._handling_plugin_tab = False
-
-            self.app._update_nobody_came_state(main_tabs_visible, plugin_tabs_count)
 
             if tab_widget.count() > 0:
                 tab_widget.setCurrentIndex(min(current_index, tab_widget.count() - 1))

@@ -205,7 +205,6 @@ class RefreshController:
         update_filtered_mods_callback=None,
         update_installed_mods_callback=None,
         update_action_button_callback=None,
-        update_plugin_tabs_callback=None,
         mods_loaded_signal=None,
         fetch_thread=None,
     ):
@@ -271,8 +270,6 @@ class RefreshController:
                 )
                 if fetch_thread_to_cleanup:
                     self._cleanup_thread_later(fetch_thread_to_cleanup)
-                if update_plugin_tabs_callback:
-                    update_plugin_tabs_callback()
                 self._cleanup_thread_later(self._post_fetch_worker)
                 self._post_fetch_worker = None
 

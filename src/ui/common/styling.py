@@ -324,7 +324,6 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         border_radius_val, width=button_width, height=button_height, border_width=2
     )
     is_selected = getattr(widget, "is_selected", False)
-    icon_selector = "pluginIcon" if frame_selector == "pluginWidget" else "modIcon"
     style_sheet = generate_widget_style(
         frame_selector,
         card_bg_color,
@@ -333,7 +332,7 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         text_color,
         secondary_text_color,
         is_selected,
-        icon_selector,
+        "modIcon",
         frame_border_radius,
         icon_border_radius,
         button_border_radius,

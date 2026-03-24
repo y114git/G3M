@@ -187,15 +187,6 @@ class ThemeController:
         bold_label_style = (
             f"font-weight: bold; font-size: {scale(16)}px; color: {text_color};"
         )
-        if (
-            hasattr(self.app, "plugin_tab_builder")
-            and self.app.plugin_tab_builder is not None
-        ):
-            plugin_lbl = self.app.plugin_tab_builder.widgets.get(
-                "installed_plugins_label"
-            )
-            if plugin_lbl:
-                plugin_lbl.setStyleSheet(bold_label_style)
         if self.app.installed_mods_label:
             self.app.installed_mods_label.setStyleSheet(bold_label_style)
 
@@ -243,13 +234,8 @@ class ThemeController:
 
         search_container = getattr(self.app, "search_container", None)
         library_container = getattr(self.app, "installed_mods_container", None)
-        plugins_container = None
-        if hasattr(self.app, "plugin_tab_builder") and self.app.plugin_tab_builder:
-            plugins_container = self.app.plugin_tab_builder.widgets.get(
-                "plugins_container"
-            )
         self.customization_service.update_translucent_backgrounds(
-            search_container, library_container, plugins_container
+            search_container, library_container, None
         )
 
         from ui.common.styling import build_tag_checkbox_style
@@ -264,12 +250,6 @@ class ThemeController:
                 self.app.search_display, "update_all_cards_labels"
             ):
                 self.app.search_display.update_all_cards_labels()
-            if hasattr(self.app, "plugin_display") and hasattr(
-                self.app.plugin_display, "_plugin_widgets"
-            ):
-                for widget in self.app.plugin_display._plugin_widgets.values():
-                    if hasattr(widget, "_update_style"):
-                        widget._update_style()
             for cb in getattr(self.app, "library_tag_widgets", ()):
                 cb.setStyleSheet(checkbox_style)
             for attr in ("chapter_mode_checkbox", "full_install_checkbox"):

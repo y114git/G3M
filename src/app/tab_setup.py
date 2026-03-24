@@ -1,4 +1,4 @@
-"""Search, library, and plugins tab setup extracted from AppWindow."""
+"""Search and library tab setup extracted from AppWindow."""
 
 import contextlib
 
@@ -283,28 +283,3 @@ def _update_initial_priority_button(w):
                 if chapter_id is not None:
                     w.library_display._update_priority_button_visibility(chapter_id)
                     break
-
-
-def setup_plugins_tab(w):
-    """Build and wire the Plugins tab."""
-    from ui.builders.plugin_tab_builder import PluginTabBuilder
-
-    plugin_builder = PluginTabBuilder(w.app_state, w)
-    w.plugin_tab_builder = plugin_builder
-    w.plugins_tab = plugin_builder.build()
-    for attr, key in (
-        ("plugins_search_button", "search_button"),
-        ("plugins_import_button", "import_button"),
-        ("plugins_container", "plugins_container"),
-        ("plugins_scroll", "plugins_scroll"),
-        ("plugins_widget", "plugins_widget"),
-        ("plugins_layout", "plugins_layout"),
-    ):
-        setattr(w, attr, w.plugin_tab_builder.widgets[key])
-    from controllers.plugin_display_controller import PluginDisplayController
-
-    w.plugin_display = PluginDisplayController(
-        w.app_state, w.feedback_service, w.plugin_service, w
-    )
-    w.plugins_search_button.clicked.connect(w.plugin_display.on_search_plugins)
-    w.plugins_import_button.clicked.connect(w.plugin_display.on_import_plugin)

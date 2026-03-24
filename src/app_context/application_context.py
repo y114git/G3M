@@ -16,14 +16,13 @@ from services.game_versions_manager import GameVersionsManager
 from services.launch_service import GameLauncher
 from services.localization_service import localization_service
 from services.mod_service import ModManager
-from services.plugin_service import PluginManager
 from services.profile_service import ProfileService
 from services.settings_service import SettingsManager
 from services.updatecheck_service import UpdateChecker
 from services.used_mods_service import UsedModsManager
 from session.session_manager import SessionManager
 from ui.common.feedback import FeedbackManager
-from utils.path_utils import get_launcher_dir, get_user_data_root, get_user_plugins_dir
+from utils.path_utils import get_launcher_dir, get_user_data_root
 
 logger = logging.getLogger(__name__)
 
@@ -86,14 +85,9 @@ def build_application_context(parent=None) -> ApplicationContext:
 
     app_state.network_session = _build_session()
     app_state.config_dir = os.path.join(get_user_data_root(), "settings")
-    app_state.plugins_dir = get_user_plugins_dir()
     app_state.mods_dir = ""
     app_state.mods_metadata_path = ""
-    app_state.plugins_metadata_path = os.path.join(
-        app_state.plugins_dir, "metadata.json"
-    )
-    for path in (app_state.config_dir, app_state.plugins_dir):
-        os.makedirs(path, exist_ok=True)
+    os.makedirs(app_state.config_dir, exist_ok=True)
     app_state.config_path = os.path.join(app_state.config_dir, "settings.json")
     _migrate_settings_config_file(app_state.config_dir)
     feedback_service = FeedbackManager(parent)
@@ -120,7 +114,6 @@ def build_application_context(parent=None) -> ApplicationContext:
     mod_service = ModManager(app_state, feedback_service, settings_service, parent)
     game_launcher = GameLauncher(app_state, feedback_service, mod_service, parent)
     update_checker = UpdateChecker(app_state, feedback_service, parent)
-    plugin_service = PluginManager(app_state, settings_service, parent)
     customization_service = CustomizationManager(app_state, parent)
     used_mods_service = UsedModsManager(
         app_state,
@@ -147,7 +140,6 @@ def build_application_context(parent=None) -> ApplicationContext:
         mod_service=mod_service,
         game_launcher=game_launcher,
         update_checker=update_checker,
-        plugin_service=plugin_service,
         customization_service=customization_service,
         used_mods_service=used_mods_service,
         downloads_manager=downloads_manager,

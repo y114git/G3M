@@ -66,9 +66,6 @@ class SettingsViewBuilder:
         tab_widget.addTab(
             self._build_library_tab(tab_widget), tr("ui.settings_tab_library")
         )
-        tab_widget.addTab(
-            self._build_plugins_tab(tab_widget), tr("ui.settings_tab_plugins")
-        )
         settings_layout.addWidget(tab_widget, stretch=1)
 
         settings_layout.addStretch()
@@ -668,26 +665,6 @@ class SettingsViewBuilder:
         self.widgets["game_versions_full_replace_checkbox"] = (
             game_versions_full_replace_cb
         )
-        return self._wrap_in_scroll(page, parent)
-
-    def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:
-        page, layout = self._build_simple_tab_page()
-
-        sec, cl = self._collapsible_section(
-            tr("ui.settings_section_general"),
-            "plugins_general",
-            "ui.settings_section_general",
-            parent=page,
-        )
-        hide_plugins_tab_checkbox = self._styled_checkbox(
-            tr("ui.hide_plugins_tab"), config_key="hide_plugins_tab"
-        )
-        cl.addWidget(hide_plugins_tab_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(sec)
-
-        layout.addStretch()
-
-        self.widgets["hide_plugins_tab_checkbox"] = hide_plugins_tab_checkbox
         return self._wrap_in_scroll(page, parent)
 
     def _build_game_tab(self, parent: QWidget = None) -> QWidget:

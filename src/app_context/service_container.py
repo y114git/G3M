@@ -8,7 +8,6 @@ from services.game_registry_service import GameRegistryService
 from services.game_versions_manager import GameVersionsManager
 from services.launch_service import GameLauncher
 from services.mod_service import ModManager
-from services.plugin_service import PluginManager
 from services.profile_service import ProfileService
 from services.settings_service import SettingsManager
 from services.updatecheck_service import UpdateChecker
@@ -25,7 +24,6 @@ class ServiceContainer:
     mod_service: ModManager
     game_launcher: GameLauncher
     update_checker: UpdateChecker
-    plugin_service: PluginManager
     customization_service: CustomizationManager
     used_mods_service: UsedModsManager
     downloads_manager: DownloadsManager

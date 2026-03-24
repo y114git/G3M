@@ -239,7 +239,6 @@ def setup_settings_tab(w):
             "dont_hide_window_checkbox",
             "hide_mods_browser_tab_checkbox",
             "hide_library_tab_checkbox",
-            "hide_plugins_tab_checkbox",
             "merge_properties_checkbox",
             "merge_code_checkbox",
             "ui_scale_label",
@@ -368,9 +367,6 @@ def setup_settings_tab(w):
     w.hide_library_tab_checkbox.stateChanged.connect(
         w.settings_ui.on_toggle_hide_library_tab
     )
-    w.hide_plugins_tab_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_hide_plugins_tab
-    )
     w.merge_properties_checkbox.stateChanged.connect(
         w.settings_ui.on_toggle_merge_properties
     )
@@ -383,9 +379,6 @@ def setup_settings_tab(w):
     )
     w.hide_library_tab_checkbox.setChecked(
         w.app_state.local_config.get("hide_library_tab", False)
-    )
-    w.hide_plugins_tab_checkbox.setChecked(
-        w.app_state.local_config.get("hide_plugins_tab", False)
     )
     if w.downloads_no_auto_use_checkbox:
         w.downloads_no_auto_use_checkbox.setChecked(

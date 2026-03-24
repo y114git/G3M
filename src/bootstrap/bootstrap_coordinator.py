@@ -104,10 +104,6 @@ class BootstrapCoordinator:
     def _finalize_window_display(self) -> None:
         self.window_shown = True
         self._close_splash_and_show_launcher()
-        if self.instance:
-            from app.plugin_tabs import restore_last_active_tab
-
-            restore_last_active_tab(self.instance)
 
     def _on_initialization_finished(self) -> None:
         if self.window_shown:
@@ -220,7 +216,6 @@ class BootstrapCoordinator:
             for path in (
                 window.app_state.config_dir,
                 window.app_state.mods_dir,
-                window.app_state.plugins_dir,
             ):
                 os.makedirs(path, exist_ok=True)
             window._mod_scan_thread = ModScanThread(window.app_state.mods_dir, window)

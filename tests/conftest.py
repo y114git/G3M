@@ -108,21 +108,12 @@ def temp_config_dir(temp_dir):
 
 
 @pytest.fixture
-def temp_plugins_dir(temp_dir):
-    plugins_dir = os.path.join(temp_dir, 'plugins')
-    os.makedirs(plugins_dir, exist_ok=True)
-    return plugins_dir
-
-
-@pytest.fixture
-def app_state(temp_dir, temp_mods_dir, temp_config_dir, temp_plugins_dir):
+def app_state(temp_dir, temp_mods_dir, temp_config_dir):
     state = AppState()
     state.config_dir = temp_config_dir
     state.mods_dir = temp_mods_dir
-    state.plugins_dir = temp_plugins_dir
     state.config_path = os.path.join(temp_config_dir, 'settings.json')
     state.mods_metadata_path = os.path.join(temp_mods_dir, 'metadata.json')
-    state.plugins_metadata_path = os.path.join(temp_plugins_dir, 'metadata.json')
     return state
 
 

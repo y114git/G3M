@@ -134,13 +134,6 @@ class TestPathUtils:
         assert isinstance(mods_dir, str)
         assert 'mods' in mods_dir
 
-    def test_get_user_plugins_dir(self):
-        from utils.path_utils import get_user_plugins_dir
-        plugins_dir = get_user_plugins_dir()
-        assert plugins_dir is not None
-        assert isinstance(plugins_dir, str)
-        assert 'plugins' in plugins_dir
-
     def test_resource_path(self):
         from utils.path_utils import resource_path
         path = resource_path('assets/test.txt')

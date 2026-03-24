@@ -34,7 +34,6 @@ from app.game_ui import (
     update_games_manager_button_style,
 )
 from app.localization_utils import relocalize_ui
-from app.plugin_tabs import update_plugin_tabs
 from app.update_handler import check_and_show_announce, prompt_for_update
 from app_context.application_context import (
     ApplicationContext,
@@ -129,7 +128,6 @@ class AppWindow(QWidget):
 
     def _finalize_window_setup(self):
         self.init_ui()
-        update_plugin_tabs(self)
         self.custom_font_family = localization_service.load_font()
         if (
             cfp := self.customization_service.get_custom_font_path()
@@ -221,12 +219,6 @@ class AppWindow(QWidget):
         self._on_refresh_clicked(is_initial=is_initial)
 
     def _refresh_after_install(self) -> None:
-        if self.plugin_service:
-            self.plugin_service.convert_plugin_archives()
-            self.plugin_service.load_plugins()
-        update_plugin_tabs(self)
-        if hasattr(self, "plugin_display"):
-            self.plugin_display.update_display()
         if self.mod_service:
             self.mod_service.invalidate_mods_cache()
             self.mod_service.load_local_mods(_skip_conversion=True)
@@ -526,7 +518,7 @@ class AppWindow(QWidget):
         self.app_state.filtered_mods = []
         self.sort_ascending = False
         self.app_state.search_text = ""
-        from app.tab_setup import setup_library_tab, setup_plugins_tab, setup_search_tab
+        from app.tab_setup import setup_library_tab, setup_search_tab
 
         setup_search_tab(self)
         self.library_sort_ascending = self.app_state.local_config.get(
@@ -535,23 +527,13 @@ class AppWindow(QWidget):
         self.app_state.library_search_text = ""
         self._previous_mode = "normal"
         setup_library_tab(self)
-        setup_plugins_tab(self)
-
-        hide_mods_browser = self.app_state.local_config.get(
-            "hide_mods_browser_tab", False
-        )
-        hide_library = self.app_state.local_config.get("hide_library_tab", False)
-        hide_plugins = self.app_state.local_config.get("hide_plugins_tab", False)
 
         self._num_main_tabs_visible = 0
-        if not hide_mods_browser:
+        if not self.app_state.local_config.get("hide_mods_browser_tab", False):
             self.main_tab_widget.addTab(self.mods_browser_tab, tr("ui.search_tab"))
             self._num_main_tabs_visible += 1
-        if not hide_library:
+        if not self.app_state.local_config.get("hide_library_tab", False):
             self.main_tab_widget.addTab(self.library_tab, tr("ui.library_tab"))
-            self._num_main_tabs_visible += 1
-        if not hide_plugins:
-            self.main_tab_widget.addTab(self.plugins_tab, tr("ui.plugins_tab"))
             self._num_main_tabs_visible += 1
 
         self.previous_tab_index = 0
@@ -700,8 +682,6 @@ class AppWindow(QWidget):
             self.search_display.update_display()
         if hasattr(self, "library_display"):
             self.library_display.update_display()
-        if hasattr(self, "plugin_display"):
-            self.plugin_display.update_display()
 
     @staticmethod
     def _localized_value(data, ru_key, en_key, fallback_key=None) -> str:
@@ -1232,14 +1212,10 @@ class AppWindow(QWidget):
         def update_action_callback():
             return self.game_launch.update_button_state()
 
-        def update_plugin_callback():
-            update_plugin_tabs(self)
-
         callbacks = {
             "update_filtered_mods_callback": update_filtered_callback,
             "update_installed_mods_callback": update_installed_callback,
             "update_action_button_callback": update_action_callback,
-            "update_plugin_tabs_callback": update_plugin_callback,
             "mods_loaded_signal": self.mods_loaded_signal,
         }
 

@@ -7,11 +7,10 @@ class TestAppWindow:
         from app.window import AppWindow
 
         user_root = os.path.join(temp_dir, "user")
-        plugins_dir = os.path.join(temp_dir, "plugins")
         mods_dir = os.path.join(temp_dir, "mods")
         profiles_dir = os.path.join(temp_dir, "profiles")
         themes_dir = os.path.join(temp_dir, "themes")
-        for path in (user_root, plugins_dir, mods_dir, profiles_dir, themes_dir):
+        for path in (user_root, mods_dir, profiles_dir, themes_dir):
             os.makedirs(path, exist_ok=True)
         mock_presence_response = Mock()
         mock_presence_response.status_code = 200
@@ -21,10 +20,6 @@ class TestAppWindow:
         with (
             patch("app_context.application_context.get_user_data_root", return_value=user_root),
             patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
-            patch(
-                "app_context.application_context.get_user_plugins_dir",
-                return_value=plugins_dir,
-            ),
             patch(
                 "services.g3mtool_patching_service.get_user_data_root",
                 return_value=user_root,
@@ -61,11 +56,10 @@ class TestAppWindow:
         from app.window import AppWindow
 
         user_root = os.path.join(temp_dir, "user")
-        plugins_dir = os.path.join(temp_dir, "plugins")
         mods_dir = os.path.join(temp_dir, "mods")
         profiles_dir = os.path.join(temp_dir, "profiles")
         themes_dir = os.path.join(temp_dir, "themes")
-        for path in (user_root, plugins_dir, mods_dir, profiles_dir, themes_dir):
+        for path in (user_root, mods_dir, profiles_dir, themes_dir):
             os.makedirs(path, exist_ok=True)
         mock_presence_response = Mock()
         mock_presence_response.status_code = 200
@@ -75,10 +69,6 @@ class TestAppWindow:
         with (
             patch("app_context.application_context.get_user_data_root", return_value=user_root),
             patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
-            patch(
-                "app_context.application_context.get_user_plugins_dir",
-                return_value=plugins_dir,
-            ),
             patch(
                 "services.g3mtool_patching_service.get_user_data_root",
                 return_value=user_root,
@@ -177,12 +167,6 @@ class TestTabBuilders:
         base_style = checkbox.styleSheet()
         assert scaled_style != base_style
         widget.deleteLater()
-
-    def test_plugin_tab_builder_creation(self, qapp, app_state, feedback_service):
-        from ui.builders.plugin_tab_builder import PluginTabBuilder
-
-        builder = PluginTabBuilder(app_state, None)
-        assert builder is not None
 
     def test_settings_view_builder_creation(self, qapp, app_state, feedback_service):
         from ui.builders.settings_view_builder import SettingsViewBuilder
