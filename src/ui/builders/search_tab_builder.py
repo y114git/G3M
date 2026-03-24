@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import BASE_TAG_NAMES
+from config.config import BASE_TAG_NAMES, QSS_TRANSPARENT_SCROLL
 from models.game_modes import get_search_game_entries
 from services.localization_service import tr
 from ui.builders.shared_filters_builder import (
@@ -48,7 +48,7 @@ class ModsBrowserTabBuilder(QObject):
             return
         config = getattr(self.app_state, "local_config", None)
         scale = get_ui_scale_factor(config)
-        text_color = get_theme_color(config, "text", "#e8e9eb")
+        text_color = get_theme_color(config, "text")
         show_nsfw_checkbox.setStyleSheet(
             build_tag_checkbox_style(
                 text_color,
@@ -73,7 +73,7 @@ class ModsBrowserTabBuilder(QObject):
         f_scroll = QScrollArea(widget)
         f_scroll.setWidgetResizable(True)
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        f_scroll.setStyleSheet("QScrollArea { background-color: transparent; }")
+        f_scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         f_scroll.setMinimumWidth(200)
         f_widget = self._create_filters_widget()
@@ -94,7 +94,7 @@ class ModsBrowserTabBuilder(QObject):
         scroll = QScrollArea(container)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: transparent; }")
+        scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         mod_list = QWidget(scroll)
         mod_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)

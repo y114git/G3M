@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QLabel
 
-from config.constants import THEMES
+from config.config import DEFAULT_COLORS
 from services.localization_service import tr
 from ui.common.styling import install_panel_style_handler, qt_hex_to_display_hex
 from utils.path_utils import resource_path
@@ -242,16 +242,7 @@ class CustomizationManager(QObject):
     def load_custom_style_settings(
         self, color_widgets: dict, apply_theme_callback: Callable | None = None
     ):
-        defaults = THEMES["default"]["colors"]
-        placeholder_defaults = {
-            "background": defaults.get("background")
-            or defaults.get("main_fg", "#282828"),
-            "button": defaults.get("button", "#222222"),
-            "border": defaults.get("border", "#039d5b"),
-            "button_hover": defaults.get("button_hover", "#616b78"),
-            "text": defaults.get("text", "#e8e9eb"),
-            "secondary_text": defaults.get("secondary_text", "#6de985"),
-        }
+        placeholder_defaults = dict(DEFAULT_COLORS)
         for key, widget in color_widgets.items():
             default_display_hex = qt_hex_to_display_hex(
                 placeholder_defaults.get(key, "#000000")

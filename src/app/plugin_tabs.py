@@ -5,6 +5,7 @@ import logging
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from config.config import QSS_EMPTY_PLUGIN_LABEL
 from services.localization_service import tr
 
 
@@ -15,7 +16,7 @@ def create_nobody_came_tab(w):
     lay = QVBoxLayout(widget)
     lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lbl = QLabel(tr("ui.nobody_came"))
-    lbl.setStyleSheet("font-size: 18px; color: gray;")
+    lbl.setStyleSheet(QSS_EMPTY_PLUGIN_LABEL)
     lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lay.addWidget(lbl)
     w.main_tab_widget.addTab(widget, "")

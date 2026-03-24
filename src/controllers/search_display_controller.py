@@ -6,7 +6,7 @@ import logging
 from PyQt6.QtCore import QMetaObject, QObject, Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog, QMessageBox
 
-from config.constants import SEARCH_EXHAUSTED_PAGE_SENTINEL
+from config.config import QSS_LOADING_LABEL, SEARCH_EXHAUSTED_PAGE_SENTINEL
 from models.game_modes import (
     get_gamebanana_game_ids,
     get_search_game_entries,
@@ -246,7 +246,7 @@ class SearchDisplayController(QObject):
         return False
 
     def _set_search_btn_icon(self, is_searching: bool):
-        tc = get_theme_color(self.app_state.local_config, "text", "#ffffff")
+        tc = get_theme_color(self.app_state.local_config, "text")
         icon = colored_icon("reset", tc) if is_searching else colored_icon("search", tc)
         self.ui_button_icon_update.emit("search_button", icon)
         tooltip = (
@@ -624,9 +624,7 @@ class SearchDisplayController(QObject):
                 loading_label = QLabel(tr("ui.loading_placeholder"))
                 loading_label.setObjectName("loading_indicator")
                 loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                loading_label.setStyleSheet(
-                    "font-size: 16px; padding: 20px; color: gray;"
-                )
+                loading_label.setStyleSheet(QSS_LOADING_LABEL)
                 self._place_layout_widget(
                     loading_label,
                     position,
@@ -834,7 +832,7 @@ class SearchDisplayController(QObject):
         loading_label = QLabel(tr("ui.loading_placeholder"))
         loading_label.setObjectName("loading_indicator")
         loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        loading_label.setStyleSheet("font-size: 16px; padding: 20px; color: gray;")
+        loading_label.setStyleSheet(QSS_LOADING_LABEL)
         self._place_layout_widget(
             loading_label,
             layout.count(),

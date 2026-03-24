@@ -6,9 +6,11 @@ import tempfile
 
 from PyQt6.QtCore import QFile, QIODevice
 
-from config.constants import (
+from config.config import (
     ARROW_DOWN_SVG_TEMPLATE,
     ARROW_UP_SVG_TEMPLATE,
+    FALLBACK_SCROLL_GROOVE,
+    FALLBACK_TOOLTIP_BG,
     STYLES_TEMPLATE_SUBDIR,
 )
 from ui.common.styling import border_radius_px
@@ -121,8 +123,8 @@ def build_stylesheet(
     font_size_small: int,
     checkbox_checked_color: str,
     scroll_handle_color: str,
-    tooltip_bg_color: str = "rgba(40, 40, 40, 230)",
-    scroll_groove_color: str = "rgba(40, 40, 40, 40)",
+    tooltip_bg_color: str = FALLBACK_TOOLTIP_BG,
+    scroll_groove_color: str = FALLBACK_SCROLL_GROOVE,
     zoom_factor: float = 1.0,
     custom_border_radius: str = "7px",
 ) -> str:
@@ -145,6 +147,10 @@ def build_stylesheet(
     if cache_key in _stylesheet_cache:
         return _stylesheet_cache[cache_key]
     main_template = _load_qss_template("main.qss")
+    titlebar_template = _load_qss_template("titlebar.qss")
+    buttons_template = _load_qss_template("buttons.qss")
+    tooltips_template = _load_qss_template("tooltips.qss")
+    settings_template = _load_qss_template("settings.qss")
     scrollbar_template = _load_qss_template("scrollbar.qss")
     arrow_down_path, arrow_up_path = _ensure_arrow_svgs(main_text_color)
     border_radius_value = _parse_px_value(custom_border_radius)
@@ -179,45 +185,48 @@ def build_stylesheet(
     scrollbar_radius = border_radius_px(
         border_radius_value, width=16, height=16, margin=1
     )
-    main_stylesheet = _apply_template_replacements(
+    shared_replacements = {
+        "%frame_bg_color%": frame_bg_color,
+        "%button_color%": button_color,
+        "%border_color%": border_color,
+        "%button_hover_color%": button_hover_color,
+        "%main_text_color%": main_text_color,
+        "%font_family_main%": font_family_main,
+        "%font_size_main%": str(font_size_main),
+        "%font_size_small%": str(font_size_small),
+        "%checkbox_checked_color%": checkbox_checked_color,
+        "%tooltip_bg_color%": tooltip_bg_color,
+        "%custom_border_radius%": custom_border_radius,
+        "%title_bar_radius%": title_bar_radius,
+        "%title_bar_menu_button_radius%": title_bar_menu_button_radius,
+        "%title_bar_window_button_radius%": title_bar_window_button_radius,
+        "%title_bar_popup_radius%": title_bar_popup_radius,
+        "%title_bar_popup_item_radius%": title_bar_popup_item_radius,
+        "%button_border_radius%": button_border_radius,
+        "%add_localization_button_radius%": add_localization_button_radius,
+        "%top_refresh_button_radius%": top_refresh_button_radius,
+        "%field_border_radius%": field_border_radius,
+        "%tab_border_radius%": tab_border_radius,
+        "%editor_border_radius%": editor_border_radius,
+        "%checkbox_indicator_radius%": checkbox_indicator_radius,
+        "%arrow_down_path%": arrow_down_path,
+        "%arrow_up_path%": arrow_up_path,
+    }
+    scrollbar_replacements = {
+        "%scroll_handle_color%": scroll_handle_color,
+        "%scroll_groove_color%": scroll_groove_color,
+        "%scrollbar_radius%": scrollbar_radius,
+    }
+    templates = (
         main_template,
-        {
-            "%frame_bg_color%": frame_bg_color,
-            "%button_color%": button_color,
-            "%border_color%": border_color,
-            "%button_hover_color%": button_hover_color,
-            "%main_text_color%": main_text_color,
-            "%font_family_main%": font_family_main,
-            "%font_size_main%": str(font_size_main),
-            "%font_size_small%": str(font_size_small),
-            "%checkbox_checked_color%": checkbox_checked_color,
-            "%tooltip_bg_color%": tooltip_bg_color,
-            "%custom_border_radius%": custom_border_radius,
-            "%title_bar_radius%": title_bar_radius,
-            "%title_bar_menu_button_radius%": title_bar_menu_button_radius,
-            "%title_bar_window_button_radius%": title_bar_window_button_radius,
-            "%title_bar_popup_radius%": title_bar_popup_radius,
-            "%title_bar_popup_item_radius%": title_bar_popup_item_radius,
-            "%button_border_radius%": button_border_radius,
-            "%add_localization_button_radius%": add_localization_button_radius,
-            "%top_refresh_button_radius%": top_refresh_button_radius,
-            "%field_border_radius%": field_border_radius,
-            "%tab_border_radius%": tab_border_radius,
-            "%editor_border_radius%": editor_border_radius,
-            "%checkbox_indicator_radius%": checkbox_indicator_radius,
-            "%arrow_down_path%": arrow_down_path,
-            "%arrow_up_path%": arrow_up_path,
-        },
+        titlebar_template,
+        buttons_template,
+        tooltips_template,
+        settings_template,
     )
-    scrollbar_stylesheet = _apply_template_replacements(
-        scrollbar_template,
-        {
-            "%scroll_handle_color%": scroll_handle_color,
-            "%scroll_groove_color%": scroll_groove_color,
-            "%scrollbar_radius%": scrollbar_radius,
-        },
-    )
-    combined = main_stylesheet + scrollbar_stylesheet
+    combined = "".join(
+        _apply_template_replacements(t, shared_replacements) for t in templates
+    ) + _apply_template_replacements(scrollbar_template, scrollbar_replacements)
     if zoom_factor != 1.0:
         combined = re.sub(
             r"(\d+)px",

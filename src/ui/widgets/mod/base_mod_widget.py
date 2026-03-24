@@ -193,7 +193,7 @@ class BaseModWidget(QFrame):
     def _load_icon(self):
         config = self._resolve_theme_config()
         br = get_border_radius(config)
-        bc = get_theme_color(config, "border", "#039d5b") if config else None
+        bc = get_theme_color(config, "border") if config else None
         bw = 2 if bc else 0
         local_fallback = self._resolve_local_icon_fallback()
         icon_width, icon_height = get_widget_dimensions(
@@ -246,8 +246,8 @@ class BaseModWidget(QFrame):
             self._load_icon()
         config = self._resolve_theme_config()
         if config:
-            text_color = get_theme_color(config, "text", "#e8e9eb")
-            secondary_text_color = get_theme_color(config, "secondary_text", "#6de985")
+            text_color = get_theme_color(config, "text")
+            secondary_text_color = get_theme_color(config, "secondary_text")
             title_font_size = self._title_font_size()
             if hasattr(self, "name_label") and self.name_label:
                 with contextlib.suppress(RuntimeError):

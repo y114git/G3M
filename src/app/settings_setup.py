@@ -213,7 +213,6 @@ def setup_settings_tab(w):
             "fullscreen_checkbox",
             "disable_animations_checkbox",
             "disable_background_checkbox",
-            "disable_splash_checkbox",
             "change_background_button",
             "change_logo_button",
             "change_font_button",
@@ -292,9 +291,6 @@ def setup_settings_tab(w):
     )
     w.disable_background_checkbox.stateChanged.connect(
         w.settings_ui.on_toggle_disable_background
-    )
-    w.disable_splash_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_disable_splash
     )
     w.change_background_button.clicked.connect(w.theme.on_background_button_click)
     w.theme.update_background_button_state()

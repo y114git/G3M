@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 
-from config.constants import ARCHIVE_EXTENSIONS, SKIP_FILES
+from config.config import ARCHIVE_EXTENSIONS, SKIP_FILES
 from services.localization_service import tr
 from utils.patching import mod_content_utils as mod_content
 
@@ -147,7 +147,7 @@ def apply_file_overrides(
         return True
     if used_archive_names is None:
         used_archive_names = set()
-    from config.constants import DATA_FILE_EXTENSIONS
+    from config.config import DATA_FILE_EXTENSIONS
 
     xdelta_extensions = DATA_FILE_EXTENSIONS
     archive_extensions = ARCHIVE_EXTENSIONS

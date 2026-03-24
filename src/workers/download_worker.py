@@ -43,7 +43,7 @@ class DownloadWorker(QThread):
 
     def run(self):
         try:
-            from config.constants import NETWORK_TIMEOUT_HEAD
+            from config.config import NETWORK_TIMEOUT_HEAD
             from utils.network_utils import download_file, get_session
 
             session = get_session()

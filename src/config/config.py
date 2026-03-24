@@ -1,8 +1,6 @@
-"""
-Application-wide constants and configuration values.
+"""Application-wide constants and configuration values.
 
-This module is the central source of immutable project configuration shared across
-the DELTAHUB application.
+Single source of truth for all immutable project configuration shared across DELTAHUB.
 """
 
 import platform
@@ -62,6 +60,23 @@ THEMES = {
         },
     }
 }
+DEFAULT_COLORS = {
+    "background": "#282828",
+    "button": "#222222",
+    "button_hover": "#616b78",
+    "text": "#e8e9eb",
+    "border": "#039d5b",
+    "secondary_text": "#6de985",
+}
+FALLBACK_FRAME_BG = "rgba(40, 40, 40, 150)"
+FALLBACK_TOOLTIP_BG = "rgba(40, 40, 40, 230)"
+FALLBACK_WINDOW_BG = "rgba(0, 0, 0, 200)"
+FALLBACK_SCROLL_GROOVE = "rgba(40, 40, 40, 40)"
+DISABLED_BG = "#333333"
+DISABLED_TEXT = "#888888"
+DISABLED_BORDER = "#555555"
+DISABLED_BUTTON_BG = "#3b3b3b"
+DISABLED_BUTTON_TEXT = "#808080"
 SETTINGS_COLOR_CONFIG = {
     "background": "ui.background_color",
     "button": "ui.elements_color",
@@ -79,6 +94,24 @@ PLUGIN_STATUS_STYLES = {
 CHAT_MESSAGE_BACKGROUND_COLOR = "rgba(255, 255, 255, 0.1)"
 RICH_HTML_IMAGE_CACHE_MAX_SIZE = 128
 STYLES_TEMPLATE_SUBDIR = "config/styles"
+QSS_TRANSPARENT_SCROLL = "QScrollArea { background-color: transparent; }"
+QSS_TRANSPARENT_BG = "background: transparent;"
+QSS_BOLD_LABEL = "font-weight: bold;"
+QSS_BOLD_TRANSPARENT = "font-weight: bold; background: transparent;"
+QSS_TRANSPARENT_NOPAD = "background: transparent; padding: 0px;"
+QSS_PADDING_LEFT_8 = "padding-left:8px;"
+QSS_PADDING_LEFT_5 = "padding-left: 5px;"
+QSS_ARROW_LABEL = "font-size: 10px; background: transparent;"
+QSS_LOADING_LABEL = "font-size: 16px; padding: 20px; color: gray;"
+QSS_EMPTY_PLUGIN_LABEL = "font-size: 18px; color: gray;"
+QSS_TAB_ALIGNMENT = """
+    QTabWidget::tab-bar { alignment: center; }
+    QTabBar::tab { min-width: 92px; padding: 6px 10px; }
+"""
+QSS_SETTINGS_TAB_ALIGNMENT = """
+    QTabWidget::tab-bar { alignment: center; }
+    QTabBar::tab { min-width: 110px; padding: 6px 14px; }
+"""
 MOD_WIDGET_STYLE_TEMPLATE = """QFrame#{frame_selector} {{
     background-color: {bg_color};
     border: {border_width} solid {border_color};
@@ -190,7 +223,6 @@ WIDGET_LOCALIZATIONS = [
     ("hide_library_filters_checkbox", "setToolTip", "tooltips.hide_library_filters"),
     ("disable_animations_checkbox", "setText", "checkboxes.disable_animations"),
     ("disable_background_checkbox", "setText", "checkboxes.disable_background"),
-    ("disable_splash_checkbox", "setText", "checkboxes.disable_splash"),
     ("blocklist_button", "setToolTip", "ui.blocklist_tooltip"),
     ("priority_button", "setText", "ui.priority"),
     ("create_modpack_button", "setText", "ui.create_modpack_button"),
@@ -215,16 +247,8 @@ WIDGET_LOCALIZATIONS = [
     ("merge_properties_checkbox", "setToolTip", "tooltips.merge_properties"),
     ("merge_code_checkbox", "setToolTip", "tooltips.merge_code"),
     ("downloads_no_auto_use_checkbox", "setText", "downloads.settings_no_auto_use"),
-    (
-        "downloads_delete_after_use_checkbox",
-        "setText",
-        "downloads.settings_delete_after_use",
-    ),
-    (
-        "downloads_save_local_imports_checkbox",
-        "setText",
-        "downloads.settings_save_local_imports",
-    ),
+    ("downloads_delete_after_use_checkbox", "setText", "downloads.settings_delete_after_use",),
+    ("downloads_save_local_imports_checkbox", "setText", "downloads.settings_save_local_imports",),
 ]
 PLUGIN_WIDGET_LOCALIZATIONS = [
     ("plugins_search_button", "setText", "plugins.search_plugins"),
@@ -244,7 +268,6 @@ NETWORK_TIMEOUT_SHORT = 5
 NETWORK_TIMEOUT_MEDIUM = 15
 NETWORK_TIMEOUT_LONG = 45
 NETWORK_TIMEOUT_HEAD = 15
-SPLASH_MIN_DURATION = 10.0
 INITIALIZATION_TIMEOUT = 5000
 ONLINE_UPDATE_INTERVAL = 60000
 LAUNCHER_FALLBACK_TIMEOUT = 8000
@@ -274,16 +297,14 @@ DATA_FILE_EXTENSIONS = (
     ".unx",
     ".ios",
     ".droid",
-    ".data",
     ".g3mpatch",
 )
-GAME_DATA_FILE_EXTENSIONS = (".win", ".unx", ".ios", ".droid", ".data")
+GAME_DATA_FILE_EXTENSIONS = (".win", ".unx", ".ios", ".droid")
 GAME_DATA_FILENAMES = (
     "data.win",
     "game.ios",
     "game.unx",
     "game.droid",
-    "game.data",
 )
 MOD_CONFIG_FILENAME = "mod_config.json"
 DATA_WIN_FILENAME = "data.win"
@@ -299,130 +320,13 @@ MOD_TYPE_OVERRIDES_ONLY = "overrides_only"
 MOD_FILTER_TRUE_VALUES = (True, "true", "True", 1)
 MOD_FILTER_NSFW_TEXT_MARKERS = ("nsfw", "adult", "18+", "18plus", "explicit", "mature")
 
-"""Patching system constants."""
-EXPORT_SCRIPT_CONFIGS = [
-    ("ExportSprites", "Sprites"),
-    ("ExportBackgrounds", "Backgrounds"),
-    ("ExportShaders", "Shaders"),
-    ("ExportFonts", "Fonts"),
-    ("ExportSounds", "Sounds"),
-    ("ExportCodeEntries", "CodeEntries"),
-    ("ExportTilesets", "Tilesets"),
-    ("ExportRooms", "Rooms"),
-    ("ExportGameObjects", "GameObjects"),
-    ("ExportPaths", "Paths"),
-    ("ExportTimelines", "Timelines"),
-    ("ExportAudioGroups", "AudioGroups"),
-    ("ExportTextureGroupInfo", "TextureGroups"),
-    ("ExportExtensions", "Extensions"),
-    ("ExportGeneralInfo", "GeneralInfo"),
-]
-IMPORT_SCRIPT_CONFIGS = [
-    ("ImportGeneralInfo", "GeneralInfo"),
-    ("ImportAudioGroups", "AudioGroups"),
-    ("ImportTextureGroupInfo", "TextureGroups"),
-    ("ImportSprites", "Sprites"),
-    ("ImportBackgrounds", "Backgrounds"),
-    ("ImportFonts", "Fonts"),
-    ("ImportSounds", "Sounds"),
-    ("ImportPaths", "Paths"),
-    ("ImportTilesets", "Tilesets"),
-    ("ImportShaders", "Shaders"),
-    ("ImportTimelines", "Timelines"),
-    ("ImportGameObjects", "GameObjects"),
-    ("ImportRooms", "Rooms"),
-    ("ImportCodeEntries", "CodeEntries"),
-    ("ImportExtensions", "Extensions"),
-]
-SCRIPT_TYPES = [
-    "Sprites",
-    "Sounds",
-    "CodeEntries",
-    "Fonts",
-    "Shaders",
-    "Backgrounds",
-    "Tilesets",
-    "Rooms",
-    "GameObjects",
-    "Paths",
-    "Timelines",
-    "AudioGroups",
-    "TextureGroupInfo",
-    "Extensions",
-    "GeneralInfo",
-]
-ASSET_TRACKING_CONFIGS = [
-    ("CodeEntries", ".gml", "code_files", False),
-    ("Sprites", None, "sprites", True),
-    ("Backgrounds", ".png", "backgrounds", False),
-    ("Tilesets", ".json", "tilesets", False),
-    ("Shaders", None, "shaders", True),
-]
-PATCH_SUBDIRS = [
-    ("Sprites", "sprite", True),
-    ("Backgrounds", "background", False),
-    ("Tilesets", "tileset", False),
-    ("Shaders", "shader", False),
-    ("Fonts", "font", False),
-    ("Sounds", "sound", False),
-    ("Rooms", "room", True),
-]
-XDELTA_ERROR_MAP = {
-    "checksum": (
-        "xdelta_checksum_mismatch",
-        "dialogs.patching_warning.xdelta_checksum_mismatch",
-        "errors.xdelta_patch_checksum_mismatch",
-        True,
-    ),
-    "not_found": (None, None, "errors.xdelta_patch_file_not_found", False),
-    "permission": (None, None, "errors.xdelta_patch_permission_denied", False),
-    "corrupted": (
-        "xdelta_patch_corrupted",
-        "dialogs.patching_warning.xdelta_patch_failed",
-        "errors.xdelta_patch_corrupted",
-        True,
-    ),
-    "io": (None, None, "errors.xdelta_patch_io_error", False),
-    "unknown": (
-        "xdelta_patch_failed",
-        "dialogs.patching_warning.xdelta_patch_failed",
-        "errors.xdelta_patch_unknown_error",
-        True,
-    ),
-}
-XDELTA_EXCEPTION_ERROR_KEYS = {
-    "permission": "errors.xdelta_patch_permission_denied",
-    "not_found": "errors.xdelta_patch_file_not_found",
-    "io": "errors.xdelta_patch_io_error",
-}
-COMPILATION_ERROR_PATTERNS = [
-    (
-        "variable\\s+name\\s+[\\'\"]?(\\w+)[\\'\"]?\\s+index\\s+\\([^)]+\\)\\s+not\\s+set\\s+before\\s+reading",
-        "variable_not_set",
-    ),
-    (
-        "global\\s+variable\\s+name\\s+[\\'\"]?(\\w+)[\\'\"]?\\s+index\\s+\\([^)]+\\)\\s+not\\s+set",
-        "global_variable_not_set",
-    ),
-    (
-        "ERROR\\s+in\\s+action\\s+number\\s+\\d+\\s+of\\s+(\\w+)\\s+Event\\d+\\s+for\\s+object\\s+(\\w+):",
-        "runtime_error",
-    ),
-    ("undefined\\s+variable\\s+[\\'\"]?(\\w+)[\\'\"]?", "undefined_variable"),
-    ("compilation\\s+error", "compilation_error"),
-    ("compilation\\s+failed", "compilation_failed"),
-    ("failed\\s+to\\s+compile", "compilation_failed"),
-    (
-        "variable\\s+[\\'\"]?(\\w+)[\\'\"]?\\s+is\\s+not\\s+defined",
-        "variable_not_defined",
-    ),
-]
+
 SKIP_FILES = (
     "config.json",
     "mod_config.json",
     "_icon.png",
     "icon.png",
     "meta.json",
-    "_deltamodinfo.json",
+    "_deltamodInfo.json",
 )
 ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma")

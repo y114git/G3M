@@ -202,7 +202,7 @@ class TestPathUtils:
     ):
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
-        fallback = os.path.join(game_dir, "modded.data")
+        fallback = os.path.join(game_dir, "modded.win")
         with open(fallback, "w") as f:
             f.write("fallback")
         resolved = find_supported_game_data_file(game_dir)

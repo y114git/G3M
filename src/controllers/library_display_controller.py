@@ -5,7 +5,8 @@ import logging
 import os
 import shutil
 
-from PyQt6.QtCore import QEventLoop, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEventLoop, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication
 
 from app.game_ui import show_chapter_mode_instruction
@@ -256,11 +257,9 @@ class LibraryDisplayController:
                 if mod_data and self.mod_service.mod_has_files_for_chapter(
                     mod_data, selected_chapter_id
                 ):
-                    added_date = mod_info.get("added_date")
                     mod_widget = InstalledModWidget(
                         mod_data,
                         parent=cards_parent,
-                        installed_date=added_date,
                         parent_app=self.app,
                     )
                     mod_widget.clicked.connect(self.on_mod_clicked)
@@ -415,11 +414,9 @@ class LibraryDisplayController:
                             mod_info, getattr(self.app_state, "all_mods", None)
                         )
                         if mod_data:
-                            added_date = mod_info.get("added_date")
                             mod_widget = InstalledModWidget(
                                 mod_data,
                                 parent=cards_parent,
-                                installed_date=added_date,
                                 parent_app=self.app,
                             )
                             mod_widget.clicked.connect(self.on_mod_clicked)
@@ -600,16 +597,7 @@ class LibraryDisplayController:
             key = get_mod_key(mod_data)
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if mod_folder and os.path.isdir(mod_folder):
-                import platform
-                import subprocess
-
-                system = platform.system()
-                if system == "Windows":
-                    subprocess.Popen(["explorer", os.path.normpath(mod_folder)])
-                elif system == "Darwin":
-                    subprocess.Popen(["open", mod_folder])
-                else:
-                    subprocess.Popen(["xdg-open", mod_folder])
+                QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.normpath(mod_folder)))
         except Exception as e:
             logging.error(f"Failed to open mod folder: {e}", exc_info=True)
 
@@ -717,19 +705,12 @@ class LibraryDisplayController:
             for mod_data in expected_mods:
                 mod_key = get_mod_key(mod_data)
                 if mod_key in keys_to_add:
-                    added_date = None
-                    for mod_info in installed_mods:
-                        if get_mod_key(mod_info) == mod_key:
-                            added_date = mod_info.get("added_date")
-                            break
-
                     cards_parent = getattr(
                         self.app, "installed_mods_widget", None
                     ) or getattr(self.app, "installed_mods_scroll", None)
                     mod_widget = InstalledModWidget(
                         mod_data,
                         parent=cards_parent,
-                        installed_date=added_date,
                         parent_app=self.app,
                     )
                     mod_widget.clicked.connect(self.on_mod_clicked)
@@ -954,12 +935,12 @@ class LibraryDisplayController:
     def _on_modpack_progress(self, progress: int, message: str):
         self.app_state.progress_bar_value = progress
         if message:
-            from config.constants import UI_COLORS
+            from config.config import UI_COLORS
 
             self.feedback_service.update_status(message, UI_COLORS["status_info"])
 
     def _on_modpack_status(self, message: str, status_type: str):
-        from config.constants import UI_COLORS
+        from config.config import UI_COLORS
 
         color = UI_COLORS.get(f"status_{status_type}", UI_COLORS["status_error"])
         self.feedback_service.update_status(message, color)

@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
-from config.constants import (
+from config.config import (
     GAME_DATA_FILE_EXTENSIONS,
     ICON_PNG_FILENAME,
     IS_WINDOWS_PLATFORM,
@@ -68,7 +68,7 @@ def download_file_with_progress(
     on_response=None,
     downloaded_ref=None,
 ) -> bool:
-    from config.constants import NETWORK_TIMEOUT_HEAD
+    from config.config import NETWORK_TIMEOUT_HEAD
 
     session = session or get_session()
     total_size = 0

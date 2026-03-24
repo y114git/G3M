@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import CHAT_MESSAGE_BACKGROUND_COLOR
+from config.config import CHAT_MESSAGE_BACKGROUND_COLOR
 from services.chat_service import ChatManager
 from services.localization_service import tr
 from ui.common.dialog_theme import (

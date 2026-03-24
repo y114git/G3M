@@ -50,7 +50,7 @@ class InstalledModWidget(BaseModWidget):
             return True
 
     def __init__(
-        self, mod_data, parent=None, installed_date=None, parent_app=None
+        self, mod_data, parent=None, parent_app=None
     ) -> None:
         super().__init__(mod_data, parent)
         if parent_app:
@@ -58,7 +58,6 @@ class InstalledModWidget(BaseModWidget):
         self.hide()
         self._is_broken_cache = None
         self.use_button = None
-        self.added_date = installed_date
         self.is_active = False
         self.status = "ready"
         self.frame_selector = "installedMod"
@@ -90,18 +89,6 @@ class InstalledModWidget(BaseModWidget):
         self._update_indicator()
         self.title_layout.addWidget(self.status_indicator)
         self.title_layout.addStretch()
-        added_date_text = self.added_date or "N/A"
-        date_label_text = tr("ui.added_label")
-        installed_container = QWidget(self)
-        installed_container_layout = QHBoxLayout(installed_container)
-        installed_container_layout.setContentsMargins(0, 0, 0, 0)
-        installed_container_layout.setSpacing(0)
-        self.added_label_title = QLabel(date_label_text, installed_container)
-        self.added_label_title.setObjectName("primaryText")
-        added_label_value = QLabel(f" {added_date_text}", installed_container)
-        added_label_value.setObjectName("secondaryText")
-        installed_container_layout.addWidget(self.added_label_title)
-        installed_container_layout.addWidget(added_label_value)
         game_version_text = getattr(self.mod_data, "game_version", None) or tr(
             "defaults.not_specified"
         )
@@ -122,7 +109,6 @@ class InstalledModWidget(BaseModWidget):
         containers = [
             self.author_container,
             game_version_container,
-            installed_container,
         ]
         for i, container in enumerate(containers):
             self.metadata_layout.addWidget(container)
@@ -140,10 +126,11 @@ class InstalledModWidget(BaseModWidget):
             cache_attr="_checkmark_button_stylesheet_cache",
         )
         self.checkmark_button.setVisible(False)
-        _chk_color = get_theme_color(self._resolve_theme_config(), "text", "#e8e9eb")
+        config = self._resolve_theme_config()
+        checkmark_color = get_theme_color(config, "text") if config else "#039d5b"
         self.checkmark_button.setIcon(
             self._checkmark_icons.setdefault(
-                (24, _chk_color), colored_icon("checkmark", _chk_color)
+                (24, checkmark_color), colored_icon("checkmark", checkmark_color)
             )
         )
         self.checkmark_button.setIconSize(QSize(24, 24))
@@ -181,21 +168,20 @@ class InstalledModWidget(BaseModWidget):
         super()._update_style()
         config = self._resolve_theme_config()
         if config:
-            text_color = get_theme_color(config, "text", "#e8e9eb")
-            for attr in ("added_label_title", "game_version_label_title"):
-                label = getattr(self, attr, None)
-                if label:
-                    apply_stylesheet_if_changed(
-                        label,
-                        f"color: {text_color};",
-                        cache_attr=f"_{attr}_stylesheet_cache",
-                    )
+            text_color = get_theme_color(config, "text")
+            label = getattr(self, "game_version_label_title", None)
+            if label:
+                apply_stylesheet_if_changed(
+                    label,
+                    f"color: {text_color};",
+                    cache_attr="_game_version_label_title_stylesheet_cache",
+                )
             if hasattr(self, "checkmark_button") and self.checkmark_button:
                 icon_size = max(18, round(24 * self._layout_scale()))
-                _chk_color = get_theme_color(config, "text", "#e8e9eb")
+                checkmark_color = get_theme_color(config, "text")
                 self.checkmark_button.setIcon(
                     self._checkmark_icons.setdefault(
-                        (icon_size, _chk_color), colored_icon("checkmark", _chk_color)
+                        (icon_size, checkmark_color), colored_icon("checkmark", checkmark_color)
                     )
                 )
                 self.checkmark_button.setIconSize(QSize(icon_size, icon_size))
@@ -314,9 +300,9 @@ class InstalledModWidget(BaseModWidget):
         if not self.use_button:
             return
         config = self._resolve_theme_config()
-        border = get_theme_color(config, "border", "#039d5b") if config else "#039d5b"
-        br = get_border_radius(config)
-        button_width, button_height, button_font_size = get_card_button_metrics(config)
+        border = get_theme_color(config, "border") if config else "#039d5b"
+        br = get_border_radius(config) if config else 4
+        button_width, button_height, button_font_size = get_card_button_metrics(config) if config else (80, 28, 12)
         if self.status == "active":
             self.use_button.setText(tr("ui.remove_button"))
             apply_stylesheet_if_changed(

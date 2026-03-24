@@ -53,7 +53,7 @@ class PluginTabBuilder:
         plugins_container_layout = QVBoxLayout(plugins_container)
         plugins_container_layout.setContentsMargins(15, 15, 15, 15)
         plugins_container_layout.setSpacing(10)
-        text_color = get_theme_color(self.app_state.local_config, "text", "#e8e9eb")
+        text_color = get_theme_color(self.app_state.local_config, "text")
         installed_plugins_label = QLabel(tr("plugins.installed_plugins"))
         installed_plugins_label.setStyleSheet(
             f"font-weight: bold; font-size: 16px; color: {text_color};"

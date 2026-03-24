@@ -14,7 +14,7 @@ from app.game_ui import (
     update_steam_launch_checkbox_state,
 )
 from app.plugin_tabs import init_plugin_placeholder_tab, update_plugin_tabs
-from config.constants import (
+from config.config import (
     COMBO_LOCALIZATIONS,
     PLUGIN_WIDGET_LOCALIZATIONS,
     SETTINGS_COLOR_CONFIG,

@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from services.localization_service import tr
 from ui.common.styling import (
+    DEFAULT_COLORS,
     apply_stylesheet_if_changed,
     build_button_style,
     get_border_radius,
@@ -239,7 +240,7 @@ class ModSummaryPanel(QFrame):
         self._tagline_label.setText(tagline)
         config = self._get_config()
         br = get_border_radius(config) if config else 0
-        bc = get_theme_color(config, "border", "#039d5b") if config else None
+        bc = get_theme_color(config, "border") if config else None
         load_mod_icon_universal(
             self._mod_icon,
             mod_data,
@@ -260,11 +261,11 @@ class ModSummaryPanel(QFrame):
 
     def _update_metadata(self, mod_data, mod_folder, cache_result=False):
         config = self._get_config()
-        tc = get_theme_color(config, "text", "#e8e9eb") if config else "#e8e9eb"
+        tc = get_theme_color(config, "text") if config else DEFAULT_COLORS["text"]
         sc = (
-            get_theme_color(config, "secondary_text", "#6de985")
+            get_theme_color(config, "secondary_text")
             if config
-            else "#6de985"
+            else DEFAULT_COLORS["secondary_text"]
         )
         parts = []
         author = getattr(mod_data, "author", None)
@@ -327,18 +328,18 @@ class ModSummaryPanel(QFrame):
     def _populate_file_info(self, mod_data, mod_folder, cache_result=False):
         files = getattr(mod_data, "files", None)
         if not files or not isinstance(files, dict):
-            data_text = f"<span style='color:{get_theme_color(self._get_config(), 'secondary_text', '#6de985') if self._get_config() else '#6de985'}'>{tr('ui.no_data_files')}</span>"
+            data_text = f"<span style='color:{get_theme_color(self._get_config(), 'secondary_text', DEFAULT_COLORS['secondary_text']) if self._get_config() else DEFAULT_COLORS['secondary_text']}'>{tr('ui.no_data_files')}</span>"
             if cache_result:
                 self._cached_file_info = (data_text, False)
             self._data_label.setText(data_text)
             self._extra_label.hide()
             return
         config = self._get_config()
-        tc = get_theme_color(config, "text", "#e8e9eb") if config else "#e8e9eb"
+        tc = get_theme_color(config, "text") if config else DEFAULT_COLORS["text"]
         sc = (
-            get_theme_color(config, "secondary_text", "#6de985")
+            get_theme_color(config, "secondary_text")
             if config
-            else "#6de985"
+            else DEFAULT_COLORS["secondary_text"]
         )
         sorted_keys = sorted(
             files.keys(),
@@ -459,7 +460,7 @@ class ModSummaryPanel(QFrame):
 
     def update_use_button_state(self, is_active=False):
         config = self._get_config()
-        border = get_theme_color(config, "border", "#039d5b") if config else "#039d5b"
+        border = get_theme_color(config, "border") if config else "#039d5b"
         br = get_border_radius(config) if config else 0
         metrics = get_card_button_metrics(config) if config else None
         bw, bh, bfs = (metrics[0], metrics[1], metrics[2]) if metrics else (100, 30, 13)
@@ -502,10 +503,10 @@ class ModSummaryPanel(QFrame):
         config = self._get_config()
         if not config:
             return
-        text_color = get_theme_color(config, "text", "#e8e9eb")
-        secondary = get_theme_color(config, "secondary_text", "#6de985")
-        border = get_theme_color(config, "border", "#039d5b")
-        button_hover = get_theme_color(config, "button_hover", "#616b78")
+        text_color = get_theme_color(config, "text")
+        secondary = get_theme_color(config, "secondary_text")
+        border = get_theme_color(config, "border")
+        button_hover = get_theme_color(config, "button_hover")
         br = get_border_radius(config)
         title_fs = max(14, round(16 * self._layout_scale()))
         for name, btn in self._action_buttons.items():

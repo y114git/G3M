@@ -6,7 +6,7 @@ from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 
 from app.game_ui import update_chapter_tabs_style
-from config.constants import THEMES
+from config.config import DEFAULT_COLORS, QSS_TRANSPARENT_NOPAD, THEMES
 from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
 from services.localization_service import tr
 from ui.common.styling import get_border_radius, rgba_from_color
@@ -149,7 +149,8 @@ class ThemeController:
             palette.setColor(role, txt_col)
         (QApplication.instance() or self.app).setPalette(palette)
         scroll_handle_color = (
-            self.app_state.local_config.get("custom_color_button") or "#e8e9eb"
+            self.app_state.local_config.get("custom_color_button")
+            or DEFAULT_COLORS["text"]
         )
         checkbox_checked_color = (
             "#ffffff"
@@ -182,7 +183,7 @@ class ThemeController:
 
         from ui.common.styling import get_theme_color
 
-        text_color = get_theme_color(self.app_state.local_config, "text", "#e8e9eb")
+        text_color = get_theme_color(self.app_state.local_config, "text")
         bold_label_style = (
             f"font-weight: bold; font-size: {scale(16)}px; color: {text_color};"
         )
@@ -219,9 +220,7 @@ class ThemeController:
 
         if hasattr(self.app, "launcher_icon_label"):
             self.app.launcher_icon_label.setFixedSize(scale(250), scale(60))
-            self.app.launcher_icon_label.setStyleSheet(
-                "background: transparent; padding: 0px;"
-            )
+            self.app.launcher_icon_label.setStyleSheet(QSS_TRANSPARENT_NOPAD)
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
             def _recenter_logo():
@@ -536,9 +535,6 @@ class ThemeController:
         )
         self.app.disable_background_checkbox.setChecked(
             self.app_state.local_config.get("background_disabled", False)
-        )
-        self.app.disable_splash_checkbox.setChecked(
-            self.app_state.local_config.get("disable_splash", False)
         )
         if hasattr(self.app, "disable_animations_checkbox"):
             self.app.disable_animations_checkbox.setChecked(

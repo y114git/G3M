@@ -147,7 +147,7 @@ class CustomTitleBar(QWidget):
 
     def _tc(self):
         return (
-            get_theme_color(self.app_state.local_config, "text", "#ffffff")
+            get_theme_color(self.app_state.local_config, "text")
             if self.app_state
             else "#ffffff"
         )

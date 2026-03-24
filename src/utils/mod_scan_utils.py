@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any
 
-from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
 
 
 class ModFolderInfo:

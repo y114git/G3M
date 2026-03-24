@@ -3,7 +3,7 @@ import logging
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.game_detection_service import is_game_running
 from services.localization_service import localization_service, tr
 from ui.utils.ui_utils import safe_stop_thread

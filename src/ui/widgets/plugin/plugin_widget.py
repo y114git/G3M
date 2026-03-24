@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import PLUGIN_STATUS_STYLES
+from config.config import PLUGIN_STATUS_STYLES
 from services.localization_service import tr
 from ui.common.styling import (
     apply_stylesheet_if_changed,
@@ -283,8 +283,8 @@ class PluginWidget(QFrame):
             if app_state and hasattr(app_state, "local_config")
             else None
         )
-        text_color = get_theme_color(config, "text", "#e8e9eb")
-        border = get_theme_color(config, "border", "#039d5b")
+        text_color = get_theme_color(config, "text")
+        border = get_theme_color(config, "border")
         br = get_border_radius(config)
         self.delete_button.setStyleSheet(
             build_button_style(
@@ -321,7 +321,7 @@ class PluginWidget(QFrame):
             if app_state and hasattr(app_state, "local_config")
             else None
         )
-        border = get_theme_color(config, "border", "#039d5b")
+        border = get_theme_color(config, "border")
         br = get_border_radius(config)
         button_width, button_height, button_font_size = get_card_button_metrics(config)
         if status == "enabled":
@@ -370,8 +370,8 @@ class PluginWidget(QFrame):
             )
             self._load_icon()
         config = self._resolve_theme_config()
-        text_color = get_theme_color(config, "text", "#e8e9eb")
-        secondary_text_color = get_theme_color(config, "secondary_text", "#6de985")
+        text_color = get_theme_color(config, "text")
+        secondary_text_color = get_theme_color(config, "secondary_text")
         title_font_size = self._title_font_size()
         if hasattr(self, "name_label") and self.name_label:
             apply_stylesheet_if_changed(
@@ -386,7 +386,7 @@ class PluginWidget(QFrame):
                 cache_attr="_plugin_version_stylesheet_cache",
             )
         if hasattr(self, "delete_button") and self.delete_button:
-            border = get_theme_color(config, "border", "#039d5b")
+            border = get_theme_color(config, "border")
             br = get_border_radius(config)
             button_width, button_height, button_font_size = get_card_button_metrics(
                 config
@@ -531,8 +531,8 @@ class PluginWidget(QFrame):
             if app_state and hasattr(app_state, "local_config")
             else None
         )
-        border_color = get_theme_color(config, "border", "#039d5b")
-        bg_color = get_theme_color(config, "background", "#333")
+        border_color = get_theme_color(config, "border")
+        bg_color = get_theme_color(config, "background")
         br = get_border_radius(config)
         bw = 2 if border_color else 0
         target_size = max(1, self.icon_label.width() or self._icon_size())

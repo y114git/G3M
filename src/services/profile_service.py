@@ -13,7 +13,7 @@ from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
 from models.game_modes import get_first_visible_game_id, get_game, get_game_entry
 from utils.path_utils import (
     get_user_mods_dir,

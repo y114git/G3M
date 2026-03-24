@@ -365,7 +365,6 @@
   },
   "checkboxes": {
     "disable_background": "Desactivar fondo",
-    "disable_splash": "Desactivar pantalla de inicio",
     "xdelta_modpack": "XDELTA en lugar de data.win/.ios",
     "merge_properties": "Fusión de propiedades",
     "merge_code": "Fusión de código",

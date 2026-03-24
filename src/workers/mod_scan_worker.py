@@ -6,7 +6,7 @@ import os
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from config.constants import MOD_CONFIG_FILENAME
+from config.config import MOD_CONFIG_FILENAME
 
 
 class ModScanThread(QThread):

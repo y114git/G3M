@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 
 import models.mod_models as mod_models
 from adapters.deltamod_adapter import DeltamodConverter
-from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME, UI_COLORS
+from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME, UI_COLORS
 from models.exceptions import ModUninstallationError
 from models.mod_models import ModFileData
 from services.localization_service import tr

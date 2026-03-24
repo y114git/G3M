@@ -5,7 +5,7 @@ import logging
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
-from config.constants import GAMEBANANA_PER_PAGE, UI_COLORS
+from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_reverse_map
 from services.localization_service import tr
 

@@ -365,7 +365,6 @@
   },
   "checkboxes": {
     "disable_background": "Отключить задний фон",
-    "disable_splash": "Отключить заставку",
     "xdelta_modpack": "XDELTA вместо data.win/.ios",
     "merge_properties": "Слияние свойств",
     "merge_code": "Слияние кода",

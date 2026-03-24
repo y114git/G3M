@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import GAME_DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
+from config.config import GAME_DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
 from models.game_modes import get_game, get_visible_game_entries
 from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values

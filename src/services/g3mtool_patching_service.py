@@ -14,7 +14,7 @@ from typing import Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from adapters.g3mtool_adapter import G3MToolManager
-from config.constants import (
+from config.config import (
     MAX_PATCHING_ARCHIVES,
     MOD_TYPE_DATAFILE,
     MOD_TYPE_G3MPATCH,

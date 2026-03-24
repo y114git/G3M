@@ -539,7 +539,6 @@ class ModEditorDialog(QDialog):
                         ".xdelta",
                         ".win",
                         ".ios",
-                        ".data",
                         ".patch",
                         ".tar",
                         ".gz",

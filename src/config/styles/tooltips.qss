@@ -1,0 +1,20 @@
+/* Animated tooltip and native QToolTip styles */
+
+#animated_tooltip {
+    background-color: %tooltip_bg_color% !important;
+    border: 2px solid %border_color%;
+    color: %main_text_color% !important;
+    font-family: "%font_family_main%", sans-serif;
+    font-size: %font_size_small%pt;
+    outline: none;
+    border-radius: %custom_border_radius%;
+    padding: 2px;
+}
+
+QToolTip {
+    background-color: %tooltip_bg_color% !important;
+    border: 2px solid %border_color%;
+    color: %main_text_color% !important;
+    padding: 10px;
+    border-radius: %custom_border_radius%;
+}

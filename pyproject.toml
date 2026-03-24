@@ -43,10 +43,14 @@ namespaces = true
 where = ["src"]
 include = [
     "adapters*",
+    "app*",
+    "app_context*",
+    "bootstrap*",
     "config*",
     "controllers*",
-    "core*",
     "models*",
+    "presentation*",
+    "session*",
     "services*",
     "ui*",
     "utils*",

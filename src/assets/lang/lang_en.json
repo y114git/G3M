@@ -365,7 +365,6 @@
   },
   "checkboxes": {
     "disable_background": "Disable background",
-    "disable_splash": "Disable splash",
     "xdelta_modpack": "XDELTA instead of data.win/.ios",
     "merge_properties": "Properties merge",
     "merge_code": "Code merge",

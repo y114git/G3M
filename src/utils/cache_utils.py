@@ -7,7 +7,7 @@ from collections import OrderedDict
 
 from PyQt6.QtGui import QImage
 
-from config.constants import IMAGE_CACHE_MAX_SIZE, NETWORK_SEMAPHORE_LIMIT
+from config.config import IMAGE_CACHE_MAX_SIZE, NETWORK_SEMAPHORE_LIMIT
 
 try:
     _IMG_CACHE: OrderedDict[str, QImage] = OrderedDict()

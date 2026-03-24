@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from config.constants import NETWORK_TIMEOUT_HEAD, UI_COLORS
+from config.config import NETWORK_TIMEOUT_HEAD, UI_COLORS
 from services.localization_service import tr
 from ui.utils.ui_utils import format_size_mb
 

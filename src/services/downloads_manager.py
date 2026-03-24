@@ -70,6 +70,10 @@ class DownloadsManager(QObject):
     def records(self):
         return self._store.records
 
+    @property
+    def mods_dir(self) -> str | None:
+        return self._mods_dir
+
     def startup(self):
         self._store.load()
         self._store.startup_recovery()
@@ -417,7 +421,7 @@ class DownloadsManager(QObject):
 
     def enqueue_with_feedback(self, feedback_service, **kwargs) -> tuple[str, bool]:
         """Enqueue and show appropriate status feedback. Returns (record_id, is_duplicate)."""
-        from config.constants import UI_COLORS
+        from config.config import UI_COLORS
         from services.localization_service import tr
 
         record_id, is_dup = self.enqueue(**kwargs)

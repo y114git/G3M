@@ -299,7 +299,7 @@ class DiffViewerDialog(QDialog):
         try:
             from utils.path_utils import colored_icon
 
-            tc = get_theme_color(self._app_state.local_config, "text", "#ffffff")
+            tc = get_theme_color(self._app_state.local_config, "text")
             self._export_btn.setIcon(colored_icon("export", tc))
             self._export_btn.setIconSize(QSize(18, 18))
         except Exception:
@@ -323,12 +323,12 @@ class DiffViewerDialog(QDialog):
         font_family = _get_app_font(self._app_state)
         config = getattr(self._app_state, "local_config", None)
         quote_border_color = rgba_from_color(
-            get_theme_color(config, "text", "#ffffff"),
+            get_theme_color(config, "text"),
             alpha=76,
             fallback="rgba(255, 255, 255, 76)",
         )
         quote_text_color = rgba_from_color(
-            get_theme_color(config, "text", "#ffffff"),
+            get_theme_color(config, "text"),
             alpha=178,
             fallback="rgba(255, 255, 255, 178)",
         )
@@ -338,7 +338,7 @@ class DiffViewerDialog(QDialog):
             fallback="rgba(0, 0, 0, 76)",
         )
         inline_code_background_color = rgba_from_color(
-            get_theme_color(config, "text", "#ffffff"),
+            get_theme_color(config, "text"),
             alpha=15,
             fallback="rgba(255, 255, 255, 15)",
         )

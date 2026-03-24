@@ -8,7 +8,7 @@ import webbrowser
 from PyQt6.QtWidgets import QDialog
 
 from app.plugin_tabs import update_plugin_tabs
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.widgets.plugin.plugin_widget import PluginWidget

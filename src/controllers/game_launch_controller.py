@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.game_ui import full_install_tooltip
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
 from utils.mod_utils import get_mod_key

@@ -9,7 +9,7 @@ import time
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
-from config.constants import (
+from config.config import (
     GAMEBANANA_PER_PAGE,
     SEARCH_TIMEOUT_SECONDS,
     UI_COLORS,

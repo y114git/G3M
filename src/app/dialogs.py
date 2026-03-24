@@ -3,7 +3,7 @@
 import logging
 
 from app.game_ui import refresh_game_lists, update_checkbox_visibility
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
 

@@ -14,7 +14,7 @@ from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
 from PyQt6.QtWidgets import QFileDialog, QWidget
 
-from config.constants import LAUNCHER_VERSION, UI_COLORS
+from config.config import LAUNCHER_VERSION, UI_COLORS
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
@@ -37,7 +37,7 @@ class SettingsManager(QObject):
         "custom_color_text",
         "custom_color_secondary_text",
     )
-    _THEME_FLAG_KEYS = ("background_disabled", "disable_splash", "disable_animations")
+    _THEME_FLAG_KEYS = ("background_disabled", "disable_animations")
     _IMAGE_EXTENSIONS = (
         ".png",
         ".jpg",
@@ -184,8 +184,6 @@ class SettingsManager(QObject):
                 "custom_color_secondary_text"
             ):
                 self.app_state.local_config["custom_color_secondary_text"] = old_val
-        self.app_state.local_config.setdefault("disable_splash", False)
-        self.app_state.local_config.setdefault("first_launch_splash_shown", False)
         self.write_local_config()
 
     def on_language_changed(self, language_code: str):
@@ -227,9 +225,6 @@ class SettingsManager(QObject):
 
     def on_toggle_disable_background(self, enabled: bool):
         self._toggle_setting("background_disabled", enabled, "theme_changed")
-
-    def on_toggle_disable_splash(self, enabled: bool):
-        self._toggle_setting("disable_splash", enabled, None)
 
     def on_toggle_skip_patching_warnings(self, enabled: bool):
         self._toggle_setting("skip_patching_warnings", enabled)
@@ -737,15 +732,6 @@ class SettingsManager(QObject):
                                     "custom_background_path"
                                 ] = dest_path
                             break
-
-            self.app_state.local_config["first_launch_splash_shown"] = True
-
-            if "disable_splash" in theme_settings:
-                self.app_state.local_config["disable_splash"] = theme_settings[
-                    "disable_splash"
-                ]
-            elif "disable_splash" not in self.app_state.local_config:
-                self.app_state.local_config["disable_splash"] = True
 
             self.write_local_config()
             self.theme_changed.emit()

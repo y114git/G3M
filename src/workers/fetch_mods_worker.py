@@ -7,7 +7,7 @@ from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from config.constants import GAMEBANANA_PER_PAGE, UI_COLORS
+from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_game_ids
 from models.mod_models import ModInfo
 from services.localization_service import tr

@@ -13,7 +13,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from config.constants import (
+from config.config import (
     DOWNLOAD_CHUNK_SIZE,
     MAX_DOWNLOAD_RETRIES,
     NETWORK_TIMEOUT_HEAD,
@@ -43,7 +43,7 @@ def get_session(app_state=None):
 
 
 def _build_session():
-    from config.constants import BROWSER_HEADERS, LAUNCHER_VERSION
+    from config.config import BROWSER_HEADERS, LAUNCHER_VERSION
 
     for n in ("urllib3.connectionpool", "requests"):
         logging.getLogger(n).setLevel(logging.ERROR)
@@ -203,7 +203,7 @@ def safe_request(method, url, session=None, timeout=None, **kwargs):
 
 
 def increment_launch_counter():
-    from config.constants import CLOUD_FUNCTIONS_BASE_URL
+    from config.config import CLOUD_FUNCTIONS_BASE_URL
 
     os_k = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(
         platform.system(), "other"

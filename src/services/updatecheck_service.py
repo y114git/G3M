@@ -12,7 +12,7 @@ import time
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from config.constants import ARCH, LAUNCHER_VERSION, UI_COLORS
+from config.config import ARCH, LAUNCHER_VERSION, UI_COLORS
 from models.app_state import AppState
 from models.exceptions import AppError
 from services.localization_service import tr

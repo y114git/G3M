@@ -10,7 +10,7 @@ from typing import Any
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.game_detection_service import (
     get_game_name_string,

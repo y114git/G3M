@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 import sys
-import tempfile
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -85,7 +85,10 @@ def cleanup_threads(qapp):
 
 @pytest.fixture
 def temp_dir():
-    temp_path = tempfile.mkdtemp(prefix='deltahub_test_')
+    base_dir = os.path.join(os.getcwd(), ".pytest_temp")
+    os.makedirs(base_dir, exist_ok=True)
+    temp_path = os.path.join(base_dir, f"deltahub_test_{uuid.uuid4().hex}")
+    os.makedirs(temp_path, exist_ok=False)
     yield temp_path
     shutil.rmtree(temp_path, ignore_errors=True)
 

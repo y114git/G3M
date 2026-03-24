@@ -13,8 +13,8 @@ from app.game_ui import (
     update_portproton_ui,
     update_settings_library_tab,
 )
-from app.post_init import _restore_ui_state_from_config
-from config.constants import UI_COLORS
+from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+from config.config import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
 
@@ -115,7 +115,7 @@ class SettingsUiController:
         self._set_value_silently(
             self.app.border_radius_spinbox, int(config.get("custom_border_radius", 7))
         )
-        _restore_ui_state_from_config(self.app)
+        BootstrapCoordinator.restore_ui_state_from_config(self.app)
         self.customization_service.load_custom_style_settings(self.app.color_widgets)
         if hasattr(self.app, "disable_animations_checkbox"):
             self.app.disable_animations_checkbox.setChecked(
@@ -282,9 +282,6 @@ class SettingsUiController:
         self.settings_service.on_toggle_disable_background(bool(state))
         if hasattr(self.app, "theme"):
             self.app.theme.update_background_button_state()
-
-    def on_toggle_disable_splash(self, state):
-        self.settings_service.on_toggle_disable_splash(bool(state))
 
     def on_toggle_skip_patching_warnings(self, state):
         self.settings_service.on_toggle_skip_patching_warnings(bool(state))

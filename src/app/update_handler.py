@@ -4,7 +4,7 @@ import logging
 
 from PyQt6.QtCore import QThread, QTimer, pyqtSignal
 
-from config.constants import CLOUD_FUNCTIONS_BASE_URL
+from config.config import CLOUD_FUNCTIONS_BASE_URL
 from services.localization_service import tr
 from utils.network_utils import get_session
 
@@ -171,7 +171,7 @@ def save_announce(app, version: int):
 
 
 def prompt_for_update(app, update_info):
-    from config.constants import LAUNCHER_VERSION, UI_COLORS
+    from config.config import LAUNCHER_VERSION, UI_COLORS
 
     logging.info(
         f"_prompt_for_update called with version {update_info.get('version', 'unknown')}"

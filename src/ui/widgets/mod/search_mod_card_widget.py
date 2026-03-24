@@ -1,5 +1,7 @@
+import contextlib
 import logging
 
+from PyQt6 import sip
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QApplication,
@@ -265,7 +267,7 @@ class SearchModCardWidget(ModCardWidget):
     def _load_icon(self):
         config = self._resolve_theme_config()
         br = get_border_radius(config)
-        bc = get_theme_color(config, "border", "#039d5b") if config else None
+        bc = get_theme_color(config, "border") if config else None
         bw = 2 if bc else 0
         local_fallback = self._resolve_local_icon_fallback()
         icon_key = (
@@ -445,9 +447,9 @@ class SearchModCardWidget(ModCardWidget):
         super()._update_style()
         config = self._resolve_theme_config()
         scale = self.layout_scale_for_config(config)
-        text_color = get_theme_color(config, "text", "#e8e9eb") if config else "#e8e9eb"
+        text_color = get_theme_color(config, "text") if config else "#e8e9eb"
         secondary = (
-            get_theme_color(config, "secondary_text", "#6de985")
+            get_theme_color(config, "secondary_text")
             if config
             else "#6de985"
         )
@@ -538,8 +540,15 @@ class SearchModCardWidget(ModCardWidget):
         self._update_tagline_text()
 
     def _clear_selection_if_focus_is_outside(self):
-        focus_widget = QApplication.focusWidget()
-        if focus_widget is self or (focus_widget and self.isAncestorOf(focus_widget)):
+        if sip.isdeleted(self):
+            return
+        with contextlib.suppress(RuntimeError, AttributeError):
+            focus_widget = QApplication.focusWidget()
+            if focus_widget and not sip.isdeleted(focus_widget) and (
+                focus_widget is self or self.isAncestorOf(focus_widget)
+            ):
+                return
+        if QApplication.focusWidget() is self:
             return
         if self.is_selected:
             self.set_selected(False)

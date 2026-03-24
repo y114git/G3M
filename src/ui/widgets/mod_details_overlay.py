@@ -236,15 +236,7 @@ class ModDetailsOverlay(QWidget):
         local_cfg = (
             getattr(self._app_state, "local_config", None) if self._app_state else None
         )
-        self._colors = get_theme_colors(
-            local_cfg,
-            text="#e8e9eb",
-            secondary_text="#6de985",
-            border="#039d5b",
-            background="#282828",
-            button="#222222",
-            button_hover="#616b78",
-        )
+        self._colors = get_theme_colors(local_cfg)
         self._colors["btn_hover"] = self._colors["button_hover"]
         self._border_radius = get_border_radius(local_cfg)
 
@@ -1065,14 +1057,20 @@ class ModDetailsOverlay(QWidget):
             cleanup()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.close_overlay()
-        super().keyPressEvent(event)
+        with contextlib.suppress(RuntimeError, AttributeError):
+            if event.key() == Qt.Key.Key_Escape:
+                self.close_overlay()
+                event.accept()
+                return
+        with contextlib.suppress(RuntimeError, AttributeError):
+            super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
-        if not self.childAt(event.pos()):
-            self.close_overlay()
-        super().mousePressEvent(event)
+        with contextlib.suppress(RuntimeError, AttributeError):
+            if not self.childAt(event.pos()):
+                self.close_overlay()
+        with contextlib.suppress(RuntimeError, AttributeError):
+            super().mousePressEvent(event)
 
     def _on_main_window_resize(self, event):
         try:

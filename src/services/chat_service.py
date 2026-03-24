@@ -5,7 +5,7 @@ import re
 
 import requests
 
-from config.constants import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
+from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
 from utils.network_utils import check_internet_connection, get_session
 
 

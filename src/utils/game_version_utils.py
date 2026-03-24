@@ -3,7 +3,7 @@
 import os
 import re
 
-from config.constants import CURRENT_PLATFORM
+from config.config import CURRENT_PLATFORM
 
 _SAFE_RE = re.compile(r"[^\w\-. ]+")
 

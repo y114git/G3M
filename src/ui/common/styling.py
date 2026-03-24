@@ -10,7 +10,8 @@ from PyQt6.QtCore import QEvent, QObject, QRectF, Qt, QThreadPool
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QRegion
 from PyQt6.QtWidgets import QLabel
 
-from config.constants import (
+from config.config import (
+    DEFAULT_COLORS,
     EMPTY_LAYOUT_MESSAGE_STYLE,
     MOD_WIDGET_STYLE_TEMPLATE,
     UI_COLORS,
@@ -297,17 +298,17 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         ):
             config = parent_app.app_state.local_config
     if config:
-        card_bg_color = get_theme_color(config, "background", "#282828")
-        border_color = get_theme_color(config, "border", "#039d5b")
-        hover_border_color = get_theme_color(config, "button_hover", "#616b78")
-        text_color = get_theme_color(config, "text", "#e8e9eb")
-        secondary_text_color = get_theme_color(config, "secondary_text", "#6de985")
+        card_bg_color = get_theme_color(config, "background")
+        border_color = get_theme_color(config, "border")
+        hover_border_color = get_theme_color(config, "button_hover")
+        text_color = get_theme_color(config, "text")
+        secondary_text_color = get_theme_color(config, "secondary_text")
     else:
-        card_bg_color = "#282828"
-        border_color = "#039d5b"
-        hover_border_color = "#616b78"
-        text_color = "#e8e9eb"
-        secondary_text_color = "#6de985"
+        card_bg_color = DEFAULT_COLORS["background"]
+        border_color = DEFAULT_COLORS["border"]
+        hover_border_color = DEFAULT_COLORS["button_hover"]
+        text_color = DEFAULT_COLORS["text"]
+        secondary_text_color = DEFAULT_COLORS["secondary_text"]
     border_radius_val = get_border_radius(config)
     layout_scale = get_card_layout_scale(config)
     primary_font_size = max(12, round(14 * layout_scale))
@@ -357,11 +358,7 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
 
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
-    empty_text_color = "#6de985"
-    if local_config:
-        empty_text_color = get_theme_color(
-            local_config, "secondary_text", empty_text_color
-        )
+    empty_text_color = get_theme_color(local_config, "secondary_text") if local_config else DEFAULT_COLORS["secondary_text"]
     parent = layout.parentWidget() if hasattr(layout, "parentWidget") else None
     empty_label = QLabel(text, parent)
     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -375,7 +372,10 @@ _theme_color_cache: dict[tuple, str] = {}
 _mod_icon_pixmap_cache: dict[tuple, QPixmap] = {}
 
 
-def get_theme_color(config, color_key, default_color):
+def get_theme_color(config, color_key, default_color=None):
+    """Return themed color from config, falling back to DEFAULT_COLORS."""
+    if default_color is None:
+        default_color = DEFAULT_COLORS.get(color_key, DEFAULT_COLORS["text"])
     if config and hasattr(config, "get"):
         color_config_key = f"custom_color_{color_key}"
         current_value = config.get(color_config_key)
@@ -393,10 +393,10 @@ def get_launch_status_color(config):
     return get_theme_color(config, "border", UI_COLORS["status_success"])
 
 
-def get_theme_colors(config, **defaults):
-    return {
-        key: get_theme_color(config, key, default) for key, default in defaults.items()
-    }
+def get_theme_colors(config, **overrides):
+    """Return dict of themed colors, using DEFAULT_COLORS as base."""
+    merged = {**DEFAULT_COLORS, **overrides}
+    return {key: get_theme_color(config, key, default) for key, default in merged.items()}
 
 
 def invalidate_theme_color_cache():
@@ -741,7 +741,7 @@ def build_scrollbar_qss(
 
 
 def get_section_line_color(config) -> str:
-    raw = get_theme_color(config, "button", "#222222")
+    raw = get_theme_color(config, "button")
     if components := get_color_components(raw):
         r, g, b, _, _ = components
         return f"rgba({r},{g},{b},0.45)"
@@ -767,8 +767,8 @@ def build_button_style(
     obj_name: str,
     bg_color: str,
     hover_color: str,
-    text_color: str = "#e8e9eb",
-    border: str = "#039d5b",
+    text_color: str = DEFAULT_COLORS["text"],
+    border: str = DEFAULT_COLORS["border"],
     width: int | None = 110,
     height: int | None = 35,
     font_size: int = 15,

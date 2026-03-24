@@ -61,7 +61,7 @@ def _load_config() -> dict:
 
 def _find_mod_source_dir(mod_key: str, local_config: dict) -> str | None:
     """Resolve a mod key to its root directory on disk."""
-    from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+    from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
 
     mods_dir = get_profile_mods_root(local_config.get("active_profile", "Default"))
     if not os.path.isdir(mods_dir):
@@ -132,7 +132,7 @@ def _apply_file_overrides(
     mod_source_dir: str, target_dir: str, backup_mgr, chapter_id: str, g3mtool
 ):
     """Copy non-patch files from mod source into game target, with backup."""
-    from config.constants import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
+    from config.config import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
 
     if not os.path.isdir(mod_source_dir):
         return

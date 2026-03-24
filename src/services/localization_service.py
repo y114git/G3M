@@ -1,10 +1,12 @@
 """Localization management."""
 
+import contextlib
 import json
 import locale
 import logging
 import os
 import shutil
+import tempfile
 from collections.abc import Callable
 
 from PyQt6.QtCore import QLibraryInfo
@@ -19,7 +21,7 @@ class LocalizationManager:
     def __init__(self) -> None:
         self.internal_lang_dir = resource_path("assets/lang")
         self.external_lang_dir = get_user_lang_dir()
-        os.makedirs(self.external_lang_dir, exist_ok=True)
+        self._ensure_external_lang_dir()
         self._sync_internal_languages()
         self.strings = {}
         self.fallback_strings = {}
@@ -27,6 +29,32 @@ class LocalizationManager:
         self.current_language = "en"
         self._load_available_languages()
         self._load_fallback_strings()
+
+    def _ensure_external_lang_dir(self) -> None:
+        if os.path.isdir(self.external_lang_dir):
+            return
+        if os.path.exists(self.external_lang_dir):
+            backup_path = f"{self.external_lang_dir}.bak"
+            try:
+                if os.path.exists(backup_path):
+                    if os.path.isdir(backup_path):
+                        shutil.rmtree(backup_path)
+                    else:
+                        os.remove(backup_path)
+                shutil.move(self.external_lang_dir, backup_path)
+            except Exception as e:
+                logging.warning(
+                    f"Could not move invalid language path {self.external_lang_dir}: {e}"
+                )
+                with contextlib.suppress(OSError):
+                    os.remove(self.external_lang_dir)
+        try:
+            os.makedirs(self.external_lang_dir, exist_ok=True)
+        except FileExistsError:
+            self.external_lang_dir = os.path.join(
+                tempfile.gettempdir(), "deltahub-lang"
+            )
+            os.makedirs(self.external_lang_dir, exist_ok=True)
 
     def _load_fallback_strings(self):
         """Preload English strings as fallback to avoid disk reads."""

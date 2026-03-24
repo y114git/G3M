@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from config.constants import LAUNCHER_VERSION, SOCIAL_LINKS
+from config.config import LAUNCHER_VERSION, SOCIAL_LINKS
 from services.localization_service import localization_service, tr
 from utils.path_utils import get_user_data_root
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtCore import QByteArray, Qt
 from PyQt6.QtGui import QIcon, QPixmap
 
-from config.constants import (
+from config.config import (
     CURRENT_PLATFORM,
     GAME_DATA_FILE_EXTENSIONS,
     GAME_DATA_FILENAMES,
@@ -519,6 +519,7 @@ _ICON_DEFS = {
     "duplicate": ("duplicate_icon.svg", [('fill="#000000"', 'fill="{c}"')]),
     "tool": ("tool_icon.svg", [('stroke="#000000"', 'stroke="{c}"')]),
     "block": ("block_icon.svg", [('stroke="#000000"', 'stroke="{c}"')]),
+    "time": ("time_icon.svg", [('stroke="#000000"', 'stroke="{c}"')]),
 }
 
 

@@ -110,11 +110,11 @@ def update_games_manager_button_style(w) -> None:
         height=combo_height,
         border_width=2,
     )
-    border = get_theme_color(w.app_state.local_config, "border", "#039d5b")
-    background = get_theme_color(w.app_state.local_config, "background", "#282828")
-    button = get_theme_color(w.app_state.local_config, "button", "#222222")
-    hover = get_theme_color(w.app_state.local_config, "button_hover", "#616b78")
-    text = get_theme_color(w.app_state.local_config, "text", "#e8e9eb")
+    border = get_theme_color(w.app_state.local_config, "border")
+    background = get_theme_color(w.app_state.local_config, "background")
+    button = get_theme_color(w.app_state.local_config, "button")
+    hover = get_theme_color(w.app_state.local_config, "button_hover")
+    text = get_theme_color(w.app_state.local_config, "text")
     w.games_manager_button.setFixedSize(combo_height, combo_height)
     w.games_manager_button.setIcon(colored_icon("settings", text))
     w.games_manager_button.setStyleSheet(
@@ -268,10 +268,10 @@ def update_chapter_tabs_style(w):
         return
     tabs = w.app_state.game_mode.tabs
     direct_launch_chapter_id = w.app_state.local_config.get("direct_launch_chapter", "")
-    border_color = get_theme_color(w.app_state.local_config, "border", "#039d5b")
-    button_color = get_theme_color(w.app_state.local_config, "button", "#222222")
-    hover_color = get_theme_color(w.app_state.local_config, "button_hover", "#616b78")
-    text_color = get_theme_color(w.app_state.local_config, "text", "#e8e9eb")
+    border_color = get_theme_color(w.app_state.local_config, "border")
+    button_color = get_theme_color(w.app_state.local_config, "button")
+    hover_color = get_theme_color(w.app_state.local_config, "button_hover")
+    text_color = get_theme_color(w.app_state.local_config, "text")
     fs = max(1, int(14 * w.app_state.local_config.get("ui_scale", 1.0)))
     for i, (tab, btn) in enumerate(zip(tabs, w.chapter_tab_buttons, strict=False)):
         border_style = "dashed" if direct_launch_chapter_id == tab.tab_id else "solid"

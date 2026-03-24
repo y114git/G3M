@@ -15,9 +15,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import (
+from config.config import (
     BASE_TAG_NAMES,
     LIBRARY_IMPORT_ARCHIVE_EXTENSIONS,
+    QSS_TRANSPARENT_SCROLL,
 )
 from models.game_modes import get_visible_game_entries
 from services.localization_service import tr
@@ -87,14 +88,7 @@ class LibraryTabBuilder(QObject):
         self.app_state, self.parent, self.widgets = app_state, parent, {}
 
     def _get_colors(self):
-        return get_theme_colors(
-            self.app_state.local_config,
-            border="#039d5b",
-            button="#222222",
-            button_hover="#616b78",
-            text="#e8e9eb",
-            background="#282828",
-        )
+        return get_theme_colors(self.app_state.local_config)
 
     def build(self) -> QWidget:
         widget = QWidget()
@@ -104,7 +98,7 @@ class LibraryTabBuilder(QObject):
         f_scroll = QScrollArea(widget)
         f_scroll.setWidgetResizable(True)
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        f_scroll.setStyleSheet("QScrollArea { background-color: transparent; }")
+        f_scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         f_scroll.setMinimumWidth(200)
         filters = self._create_library_filters_widget()

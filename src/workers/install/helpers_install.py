@@ -4,7 +4,7 @@ import json
 import logging
 import os
 
-from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
 from utils.file_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)

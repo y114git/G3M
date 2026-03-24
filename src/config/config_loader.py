@@ -40,10 +40,10 @@ class ConfigLoader:
         try:
             import importlib
 
-            _se = importlib.import_module("secrets_embed")
+            secrets_embed = importlib.import_module("secrets_embed")
             for key in _CONFIG_KEYS:
-                if not os.getenv(key, "") and hasattr(_se, key):
-                    os.environ[key] = getattr(_se, key)
+                if not os.getenv(key, "") and hasattr(secrets_embed, key):
+                    os.environ[key] = getattr(secrets_embed, key)
         except Exception as e:
             logger.debug(
                 f"ConfigLoader: failed to import embedded secrets: {e}", exc_info=True
@@ -60,6 +60,16 @@ _config_loader = ConfigLoader()
 
 def get_config_value(key, default=""):
     return _config_loader.get(key, default)
+
+
+def validate_config() -> None:
+    missing = tuple(
+        name
+        for name in ("DATA_FIREBASE_URL", "CLOUD_FUNCTIONS_BASE_URL")
+        if not str(get_config_value(name, "")).strip()
+    )
+    if missing:
+        raise RuntimeError("Missing required config " + ", ".join(missing))
 
 
 _config_loader.load_config()

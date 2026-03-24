@@ -144,7 +144,7 @@ class UseWorker(QThread):
 
     def _install_deltahub_mod(self, content_path: str, gb_metadata: dict) -> bool:
         try:
-            from config.constants import MOD_CONFIG_FILENAME
+            from config.config import MOD_CONFIG_FILENAME
             from utils.file_utils import sanitize_filename
             from workers.install.helpers_install import (
                 find_mod_config,
@@ -232,7 +232,7 @@ class UseWorker(QThread):
 
     @staticmethod
     def _update_config_key(mod_dir: str, gb_metadata: dict) -> None:
-        from config.constants import MOD_CONFIG_FILENAME
+        from config.config import MOD_CONFIG_FILENAME
         from workers.install.helpers_install import load_mod_config, save_mod_config
 
         config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)

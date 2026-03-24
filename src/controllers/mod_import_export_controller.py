@@ -10,7 +10,7 @@ import zipfile
 
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QMessageBox, QPushButton, QVBoxLayout
 
-from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
 from services.localization_service import tr
 from utils.archive_utils import extract_archive
 from utils.file_utils import find_deltamod_info_file, save_json

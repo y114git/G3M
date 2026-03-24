@@ -14,7 +14,7 @@ from PyQt6.QtCore import QObject, QRectF, QRunnable, Qt, QThreadPool, QUrl, pyqt
 from PyQt6.QtGui import QColor, QGuiApplication, QImage, QPainter, QTextDocument
 from PyQt6.QtWidgets import QTextBrowser, QTextEdit
 
-from config.constants import (
+from config.config import (
     RICH_HTML_ATTR_RE,
     RICH_HTML_CLASS_RE,
     RICH_HTML_CSS_CLASS_MAP,

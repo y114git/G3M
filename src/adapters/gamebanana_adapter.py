@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from config.constants import (
+from config.config import (
     GAMEBANANA_API_BASE,
     GAMEBANANA_TOOL_ID_DELTAHUB,
     GAMEBANANA_TOOL_ID_DELTAMOD,

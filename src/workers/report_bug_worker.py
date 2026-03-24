@@ -14,7 +14,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import PYQT_VERSION_STR, QObject, pyqtSignal
 
-from config.constants import (
+from config.config import (
     CLOUD_FUNCTIONS_BASE_URL,
     LAUNCHER_VERSION,
     NETWORK_TIMEOUT_LONG,

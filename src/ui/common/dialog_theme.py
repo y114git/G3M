@@ -1,18 +1,22 @@
 """Shared theme helper for dialogs."""
 
-from ui.common.styling import clamp_border_radius, get_border_radius, get_theme_colors
+from ui.common.styling import (
+    DEFAULT_COLORS,
+    clamp_border_radius,
+    get_border_radius,
+    get_theme_colors,
+)
 
 
 def get_dialog_theme_values(app_state):
-    colors = get_theme_colors(
-        app_state.local_config,
-        background="#282828",
-        border="#039d5b",
-        button="#222222",
-        button_hover="#616b78",
-        text="#e8e9eb",
-        secondary_text="#6de985",
-    )
+    if not app_state:
+        return {
+            **DEFAULT_COLORS,
+            "border_radius": get_border_radius(None),
+            "button_radius": clamp_border_radius(get_border_radius(None), height=30),
+            "field_radius": clamp_border_radius(get_border_radius(None), height=30),
+        }
+    colors = get_theme_colors(app_state.local_config)
     br = get_border_radius(app_state.local_config)
     return {
         **colors,
@@ -99,14 +103,11 @@ def build_dialog_theme_stylesheet(app_state):
     """
 
 
-def get_dialog_text_color(app_state, fallback="#ffffff") -> str:
+def get_dialog_text_color(app_state) -> str:
+    """Return themed text color for dialogs."""
     from ui.common.styling import get_theme_color
 
-    return (
-        get_theme_color(app_state.local_config, "text", fallback)
-        if app_state
-        else fallback
-    )
+    return get_theme_color(app_state.local_config, "text") if app_state else "#e8e9eb"
 
 
 def apply_dialog_theme(dialog, app_state):

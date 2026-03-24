@@ -365,7 +365,6 @@
   },
   "checkboxes": {
     "disable_background": "禁用背景",
-    "disable_splash": "禁用启动画面",
     "xdelta_modpack": "使用XDELTA代替data.win/.ios",
     "merge_properties": "属性合并",
     "merge_code": "代码合并",

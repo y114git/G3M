@@ -6,7 +6,7 @@ import os
 
 from PyQt6.QtWidgets import QApplication
 
-from config.constants import PRESENCE_THREAD_WAIT_TIMEOUT, THREAD_WAIT_TIMEOUT
+from config.config import THREAD_WAIT_TIMEOUT
 from ui.utils.ui_utils import safe_stop_thread
 
 
@@ -14,8 +14,13 @@ def perform_close_cleanup(w):
     """Perform cleanup during closeEvent. `w` is the AppWindow instance."""
     try:
         w.customization_service.stop_background_music()
-        w._online_timer.stop()
+        if hasattr(w, "session_manager"):
+            w.session_manager.stop()
         threads_to_stop = []
+        for attr in ("_network_init_thread", "_mod_scan_thread"):
+            thread = getattr(w, attr, None)
+            if thread:
+                threads_to_stop.append(thread)
         if w.game_launcher.monitor_thread:
             threads_to_stop.append(w.game_launcher.monitor_thread)
         for attr in ("fetch_thread", "details_thread"):
@@ -28,11 +33,6 @@ def perform_close_cleanup(w):
         for thread in threads_to_stop:
             w._safe_set_parent_none(thread)
             safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT, blocking=True)
-        if w.presence_thread:
-            w._safe_set_parent_none(w.presence_thread)
-            safe_stop_thread(
-                w.presence_thread, timeout=PRESENCE_THREAD_WAIT_TIMEOUT, blocking=True
-            )
         w.game_launcher._cleanup_direct_launch_files()
         if hasattr(w.game_launcher, "mod_patcher"):
             w.game_launcher.mod_patcher.cleanup_processes_and_temp_files()

@@ -8,7 +8,7 @@ import tempfile
 
 from PyQt6.QtCore import pyqtSignal
 
-from config.constants import MOD_CONFIG_FILENAME, UI_COLORS
+from config.config import MOD_CONFIG_FILENAME, UI_COLORS
 from models.exceptions import AppError
 from services.localization_service import tr
 from utils.file_utils import check_filename_is_deltamod_info, has_deltamod_info_file
@@ -46,7 +46,6 @@ class UrlInstallThread(BaseInstallWorker):
     def __init__(self, main_window, url: str) -> None:
         super().__init__(main_window)
         self.main_window = main_window
-        self.url = url
         self.url = url
 
     def run(self):

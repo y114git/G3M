@@ -4,7 +4,7 @@ import os
 import platform
 import re
 
-from config.constants import GAME_DATA_FILE_EXTENSIONS
+from config.config import GAME_DATA_FILE_EXTENSIONS
 from models.game_modes import get_game
 from utils.path_utils import (
     find_supported_game_data_file,

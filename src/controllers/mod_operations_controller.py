@@ -9,7 +9,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog
 
 from adapters.gamebanana_adapter import GameBananaAPI
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.localization_service import tr
 from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget

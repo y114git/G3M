@@ -9,7 +9,7 @@ import os
 import shutil
 import tempfile
 
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.localization_service import tr
 from workers.base_install_worker import BaseInstallWorker
 
@@ -104,18 +104,8 @@ class ThemeInstallWorker(BaseInstallWorker):
                 with open(theme_json_path, encoding="utf-8") as f:
                     theme_settings = json.load(f)
                 self._apply_theme_settings(theme_settings, content_path)
-            self.app_state.local_config["first_launch_splash_shown"] = True
-            if "disable_splash" in theme_settings:
-                self.app_state.local_config["disable_splash"] = theme_settings[
-                    "disable_splash"
-                ]
-                self.settings_service.write_local_config()
-                return True
-            else:
-                if "disable_splash" not in self.app_state.local_config:
-                    self.app_state.local_config["disable_splash"] = True
-                self.settings_service.write_local_config()
-                return True
+            self.settings_service.write_local_config()
+            return True
         except Exception as e:
             logging.error(
                 f"ThemeInstallWorker: Error installing theme from path: {e}",

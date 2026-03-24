@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 
-from config.constants import UI_COLORS
+from config.config import UI_COLORS
 from services.localization_service import tr
 from workers.base_install_worker import BaseInstallWorker
 

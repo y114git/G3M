@@ -1,9 +1,11 @@
 from unittest.mock import patch
 
+import pytest
+
 
 class TestConstants:
     def test_constants_import(self):
-        from config.constants import (
+        from config.config import (
             APP_ID,
             GAMEBANANA_API_BASE,
             LAUNCHER_VERSION,
@@ -18,7 +20,7 @@ class TestConstants:
         assert GAMEBANANA_API_BASE is not None
 
     def test_ui_colors_structure(self):
-        from config.constants import UI_COLORS
+        from config.config import UI_COLORS
 
         assert "status_error" in UI_COLORS
         assert "status_success" in UI_COLORS
@@ -26,7 +28,7 @@ class TestConstants:
         assert "status_info" in UI_COLORS
 
     def test_gamebanana_constants(self):
-        from config.constants import (
+        from config.config import (
             GAMEBANANA_TOOL_ID_DELTAHUB,
             GAMEBANANA_TOOL_ID_DELTAMOD,
         )
@@ -45,6 +47,15 @@ class TestConstants:
             )
         assert GAMEBANANA_TOOL_ID_DELTAHUB is not None
         assert GAMEBANANA_TOOL_ID_DELTAMOD is not None
+
+    def test_validate_config_raises_for_missing_required_urls(self):
+        from config import config_loader as config_loader_module
+
+        with (
+            patch.object(config_loader_module, "get_config_value", side_effect=lambda key, default="": {"DATA_FIREBASE_URL": "", "CLOUD_FUNCTIONS_BASE_URL": "  "}.get(key, default)),
+            pytest.raises(RuntimeError, match="Missing required config DATA_FIREBASE_URL, CLOUD_FUNCTIONS_BASE_URL"),
+        ):
+            config_loader_module.validate_config()
 
 
 class TestConfigLoader:

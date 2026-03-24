@@ -1,7 +1,7 @@
 """Mod filtering and sorting utilities."""
 
 from adapters.gamebanana_adapter import GameBananaAPI
-from config.constants import MOD_FILTER_NSFW_TEXT_MARKERS, MOD_FILTER_TRUE_VALUES
+from config.config import MOD_FILTER_NSFW_TEXT_MARKERS, MOD_FILTER_TRUE_VALUES
 from services.mod_service import parse_mod_date
 
 

@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlparse
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from config.constants import (
+from config.config import (
     DATA_FILE_EXTENSIONS,
     MOD_CONFIG_FILENAME,
     NETWORK_TIMEOUT_HEAD,

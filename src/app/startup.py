@@ -6,32 +6,26 @@ import logging
 import os
 import platform
 import shutil
-import subprocess
 import sys
 import time
 import traceback
 
 import psutil
-from PyQt6.QtCore import QLibraryInfo, Qt, QTimer, QTranslator
+from PyQt6.QtCore import QLibraryInfo, QProcess, QTranslator
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from config.constants import (
-    LAUNCHER_FALLBACK_TIMEOUT,
-    SINGLE_INSTANCE_KEY,
-    SPLASH_MIN_DURATION,
-    SPLASH_WATCHDOG_TIMEOUT,
-)
+from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+from config.config import SINGLE_INSTANCE_KEY
+from config.config_loader import validate_config
 from models.game_modes import get_all_process_names
 from services.localization_service import localization_service, tr
-from ui.splash import create_png_splash
 from ui.utils.audio_utils import _audio_service
 from utils.path_utils import get_launcher_dir, get_user_data_root, resource_path
 
 if platform.system() == "Windows":
     import winreg
 _translator = QTranslator()
-_splash_start_time = None
 
 
 def check_game_processes():
@@ -122,15 +116,15 @@ def register_url_protocol():
             desktop_file_path = os.path.join(apps_dir, "deltahub.desktop")
             with open(desktop_file_path, "w", encoding="utf-8") as f:
                 f.write(desktop_file_content)
-            subprocess.run(
-                [
+            if shutil.which("xdg-mime"):
+                QProcess.startDetached(
                     "xdg-mime",
-                    "default",
-                    "deltahub.desktop",
-                    "x-scheme-handler/deltahub",
-                ],
-                check=False,
-            )
+                    [
+                        "default",
+                        "deltahub.desktop",
+                        "x-scheme-handler/deltahub",
+                    ],
+                )
     except Exception as e:
         logging.warning(f"Failed to register URL protocol handler: {e}", exc_info=True)
 
@@ -183,7 +177,7 @@ def setup_app():
         if _translator.load(qt_locale_file, path):
             app.installTranslator(_translator)
     app.setApplicationName("DELTAHUB")
-    from config.constants import LAUNCHER_VERSION
+    from config.config import LAUNCHER_VERSION
 
     app.setApplicationVersion(LAUNCHER_VERSION)
     app.setOrganizationName("deltahub")
@@ -283,6 +277,7 @@ def run_app():
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith("deltahub://")), None)
     if platform.system() == "Linux":
         os.environ.setdefault("NO_AT_BRIDGE", "1")
+    validate_config()
     app = setup_app()
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
@@ -307,208 +302,22 @@ def run_app():
         logging.warning(
             f"Failed to register URL protocol during startup: {e}", exc_info=True
         )
-    config = _load_config_file()
-    splash_disabled_by_user = config.get("disable_splash", False)
-    show_animated_splash = not splash_disabled_by_user
+    _audio_service.play_deltahub_sound()
+    from app.window import AppWindow
 
-    def create_launcher_and_show_splash(app, initial_url, show_animation: bool):
-        global _splash_start_time
-        launcher_app = {}
-        window_shown_flag = {"shown": False}
-        config_dir = os.path.join(user_root, "settings")
-        splash = create_png_splash(config_dir)
-        if show_animation:
-            _splash_start_time = time.time()
-            from ui.splash import CustomSplashScreen
-
-            gif_path = resource_path("assets/images/splash.gif")
-            if os.path.exists(gif_path):
-                gif_splash = CustomSplashScreen(gif_path=gif_path)
-                if hasattr(gif_splash, "movie") and gif_splash.movie.isValid():
-                    splash = gif_splash
-                    splash.start_gif_animation(
-                        sound_start_callback=_audio_service.play_deltahub_sound
-                    )
-            else:
-                _audio_service.play_deltahub_sound()
-        splash.show()
-        app.processEvents()
-
-        def show_launcher_window(ex):
-            if ex:
-                if hasattr(ex, "app_state") and getattr(
-                    ex.app_state, "game_is_running", False
-                ):
-                    return
-                try:
-                    ex.setWindowState(
-                        ex.windowState() & ~Qt.WindowState.WindowMinimized
-                    )
-                    ex.show()
-                    ex.raise_()
-                    ex.activateWindow()
-                    ex.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-                    ex.show()
-
-                    def _remove_stay_on_top():
-                        ex.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
-                        ex.show()
-
-                    QTimer.singleShot(0, _remove_stay_on_top)
-                    ex.is_shown_to_user = True
-                    if hasattr(ex, "app_state"):
-                        ex.app_state.is_shown_to_user = True
-                    qapp = QApplication.instance()
-                    if qapp:
-                        qapp.processEvents()
-                except Exception as e:
-                    logging.error(f"Error showing launcher window: {e}", exc_info=True)
-
-        def close_splash():
-            if hasattr(splash, "movie"):
-                splash.stop_gif_animation()
-            splash.close()
-
-        def check_minimum_splash_time():
-            if _splash_start_time is None:
-                return True
-            elapsed = time.time() - _splash_start_time
-            return elapsed >= SPLASH_MIN_DURATION
-
-        def close_splash_and_show_launcher():
-            close_splash()
-            ex = launcher_app.get("instance")
-            show_launcher_window(ex)
-
-        def close_splash_when_ready():
-            if (
-                show_animation
-                and (not check_minimum_splash_time())
-                and (_splash_start_time is not None)
-            ):
-                remaining_time = max(
-                    0,
-                    int(
-                        (SPLASH_MIN_DURATION - (time.time() - _splash_start_time))
-                        * 1000
-                    ),
-                )
-                QTimer.singleShot(
-                    remaining_time,
-                    close_splash_and_show_launcher,
-                )
-            else:
-                close_splash()
-                show_launcher_window(launcher_app.get("instance"))
-
-        def watchdog_callback():
-            if window_shown_flag["shown"]:
-                return
-            instance = launcher_app.get("instance")
-            if instance:
-                try:
-                    if not instance.isVisible():
-                        logging.warning(
-                            "Startup timed out, forcing main window display"
-                        )
-                        window_shown_flag["shown"] = True
-                        close_splash()
-                        show_launcher_window(instance)
-                except Exception as e:
-                    logging.error(f"Watchdog callback error: {e}", exc_info=True)
-            else:
-                logging.warning(
-                    "Startup timed out, but main window instance not yet created"
-                )
-
-        QTimer.singleShot(SPLASH_WATCHDOG_TIMEOUT, watchdog_callback)
-
-        def create_launcher():
-            try:
-                from app.window import AppWindow
-
-                launcher_app["instance"] = AppWindow(
-                    parent_for_dialogs=splash, initial_url=initial_url
-                )
-                server = SingleInstanceServer(launcher_app["instance"])
-                if not server.listen(SINGLE_INSTANCE_KEY):
-                    error_msg = tr("errors.single_instance_error")
-                    logging.error(f"STARTUP ERROR: {error_msg}")
-                    QMessageBox.critical(None, tr("errors.error"), error_msg)
-                    sys.exit(1)
-                launcher_app["instance"].server = server
-                if show_animation:
-                    launcher_app["instance"]._splash_was_shown = True
-                launcher_app["instance"]._post_show_initialization()
-                init_ready_flag = {"ready": False}
-
-                def on_initialization_finished():
-                    if window_shown_flag["shown"]:
-                        return
-                    init_ready_flag["ready"] = True
-                    window_shown_flag["shown"] = True
-                    if show_animation:
-                        close_splash_when_ready()
-                    else:
-                        close_splash_and_show_launcher()
-                    ex = launcher_app.get("instance")
-                    if ex:
-                        from app.plugin_tabs import restore_last_active_tab
-
-                        restore_last_active_tab(ex)
-
-                launcher_app["instance"].initialization_finished.connect(
-                    on_initialization_finished
-                )
-                if getattr(
-                    launcher_app["instance"].app_state,
-                    "initialization_completed",
-                    False,
-                ):
-                    on_initialization_finished()
-
-                def fallback_show_window():
-                    if window_shown_flag["shown"]:
-                        return
-                    if not init_ready_flag["ready"]:
-                        logging.info(
-                            "Fallback: Showing window after timeout (initialization not finished in time)"
-                        )
-                        window_shown_flag["shown"] = True
-                        if show_animation:
-                            close_splash_when_ready()
-                        else:
-                            close_splash_and_show_launcher()
-                        ex = launcher_app.get("instance")
-                        if ex:
-                            from app.plugin_tabs import restore_last_active_tab
-
-                            restore_last_active_tab(ex)
-
-                if show_animation:
-                    fallback_time = max(
-                        LAUNCHER_FALLBACK_TIMEOUT, int(SPLASH_MIN_DURATION * 1000)
-                    )
-                    QTimer.singleShot(fallback_time, fallback_show_window)
-                else:
-                    fallback_time = max(LAUNCHER_FALLBACK_TIMEOUT, 10000)
-                    QTimer.singleShot(fallback_time, fallback_show_window)
-            except Exception as e:
-                if hasattr(splash, "movie"):
-                    splash.stop_gif_animation()
-                splash.close()
-                error_msg = tr("errors.startup_error_message", details=str(e))
-                logging.exception(f"STARTUP ERROR: {error_msg}")
-                QMessageBox.critical(None, tr("errors.startup_error_title"), error_msg)
-                sys.exit(1)
-
-        create_launcher()
-
-    create_launcher_and_show_splash(app, url_arg, show_animated_splash)
+    coordinator = BootstrapCoordinator(
+        app=app,
+        user_root=user_root,
+        initial_url=url_arg,
+        window_factory=AppWindow,
+        server_factory=SingleInstanceServer,
+    )
+    app._bootstrap_coordinator = coordinator
+    coordinator.launch()
     try:
         sys.exit(app.exec())
     except Exception as e:
-        error_msg = tr("errors.startup_error_message", details=str(e))
+        error_msg = tr("errors.unexpected_startup_error", details=str(e))
         logging.exception(f"STARTUP ERROR: {error_msg}")
         QMessageBox.critical(None, tr("errors.startup_error_title"), error_msg)
         sys.exit(1)

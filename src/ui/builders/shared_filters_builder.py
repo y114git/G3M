@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
+from config.config import DEFAULT_COLORS, FALLBACK_FRAME_BG
 from services.localization_service import tr
 from ui.common.styling import (
     build_tag_checkbox_style,
@@ -40,7 +41,7 @@ def _apply_themed_button_icon(
     button: QPushButton, icon_name: str, app_state, icon_size: QSize
 ) -> None:
     tc = (
-        get_theme_color(app_state.local_config, "text", "#ffffff")
+        get_theme_color(app_state.local_config, "text")
         if app_state
         else "#ffffff"
     )
@@ -85,7 +86,7 @@ def create_tag_checkboxes(app_state, tag_names):
         for n in tag_names
     }
     style = build_tag_checkbox_style(
-        get_theme_color(app_state.local_config, "text", "#e8e9eb")
+        get_theme_color(app_state.local_config, "text")
     )
     for t in tags.values():
         t.setStyleSheet(style)
@@ -184,11 +185,11 @@ def apply_filters_frame_style(frame: QFrame, app_state):
 
     def _apply_style():
         filter_bg_color = (
-            app_state.local_config.get("custom_color_background")
-            or "rgba(40, 40, 40, 150)"
+            app_state.local_config.get("custom_color_background") or FALLBACK_FRAME_BG
         )
         filter_border_color = (
-            app_state.local_config.get("custom_color_border") or "#039d5b"
+            app_state.local_config.get("custom_color_border")
+            or DEFAULT_COLORS["border"]
         )
         zoom_factor = app_state.local_config.get("ui_scale", 1.0)
         border_width = max(1, int(2 * zoom_factor))

@@ -18,7 +18,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.constants import SETTINGS_COLOR_CONFIG
+from config.config import (
+    QSS_ARROW_LABEL,
+    QSS_BOLD_LABEL,
+    QSS_BOLD_TRANSPARENT,
+    QSS_PADDING_LEFT_5,
+    QSS_SETTINGS_TAB_ALIGNMENT,
+    SETTINGS_COLOR_CONFIG,
+)
 from models.game_modes import get_visible_game_entries
 from services.localization_service import localization_service, tr
 from ui.common.styling import (
@@ -45,10 +52,7 @@ class SettingsViewBuilder:
 
         tab_widget = QTabWidget()
         tab_widget.setObjectName("settings_tab_widget")
-        tab_widget.setStyleSheet("""
-            QTabWidget::tab-bar { alignment: center; }
-            QTabBar::tab { min-width: 110px; padding: 6px 14px; }
-        """)
+        tab_widget.setStyleSheet(QSS_SETTINGS_TAB_ALIGNMENT)
         tab_widget.addTab(
             self._build_general_tab(tab_widget), tr("ui.settings_tab_general")
         )
@@ -78,7 +82,7 @@ class SettingsViewBuilder:
         return settings_widget
 
     def refresh_dynamic_styles(self) -> None:
-        tc = get_theme_color(self.app_state.local_config, "text", "#ffffff")
+        tc = get_theme_color(self.app_state.local_config, "text")
         seen = set()
         for btn in self.widgets.values():
             icon_name = getattr(btn, "_themed_icon_name", None) if btn else None
@@ -170,7 +174,7 @@ class SettingsViewBuilder:
         header_layout.addWidget(line_left, 1)
 
         title_lbl = QLabel(title)
-        title_lbl.setStyleSheet("font-weight: bold; background: transparent;")
+        title_lbl.setStyleSheet(QSS_BOLD_TRANSPARENT)
         header_layout.addWidget(title_lbl)
 
         reset_btn = self._create_icon_btn("⭯", app_state=self.app_state)
@@ -180,7 +184,7 @@ class SettingsViewBuilder:
         header_layout.addWidget(reset_btn)
 
         arrow = QLabel("\u25b6" if is_collapsed else "\u25bc")
-        arrow.setStyleSheet("font-size: 10px; background: transparent;")
+        arrow.setStyleSheet(QSS_ARROW_LABEL)
         header_layout.addWidget(arrow)
 
         line_right = QFrame()
@@ -242,7 +246,7 @@ class SettingsViewBuilder:
     def _styled_label(self, text: str, bold: bool = False) -> QLabel:
         lbl = QLabel(text)
         if bold:
-            lbl.setStyleSheet("font-weight: bold;")
+            lbl.setStyleSheet(QSS_BOLD_LABEL)
         return lbl
 
     def _styled_button(
@@ -270,7 +274,7 @@ class SettingsViewBuilder:
 
             def _apply_icon(b=btn, i=icon_name, s=app_state):
                 b.setIcon(
-                    colored_icon(i, get_theme_color(s.local_config, "text", "#ffffff"))
+                    colored_icon(i, get_theme_color(s.local_config, "text"))
                 )
                 b.setIconSize(QSize(20, 20))
 
@@ -285,7 +289,7 @@ class SettingsViewBuilder:
         row = QHBoxLayout()
         row.setSpacing(15)
         label = QLabel(label_text, parent)
-        label.setStyleSheet("padding-left: 5px;")
+        label.setStyleSheet(QSS_PADDING_LEFT_5)
         disp = QLineEdit(parent)
         disp.setObjectName("color_display")
         disp.setMinimumWidth(180)
@@ -430,9 +434,6 @@ class SettingsViewBuilder:
         disable_background_checkbox = self._styled_checkbox(
             tr("checkboxes.disable_background"), config_key="background_disabled"
         )
-        disable_splash_checkbox = self._styled_checkbox(
-            tr("checkboxes.disable_splash"), config_key="disable_splash"
-        )
         background_buttons_layout = QHBoxLayout()
         background_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         background_buttons_layout.setSpacing(10)
@@ -533,7 +534,6 @@ class SettingsViewBuilder:
         checkboxes_layout.setSpacing(20)
         checkboxes_layout.addWidget(disable_animations_checkbox)
         checkboxes_layout.addWidget(disable_background_checkbox)
-        checkboxes_layout.addWidget(disable_splash_checkbox)
         cl_adv.addLayout(checkboxes_layout)
         layout.addWidget(sec_adv)
 
@@ -541,7 +541,6 @@ class SettingsViewBuilder:
 
         self.widgets["disable_animations_checkbox"] = disable_animations_checkbox
         self.widgets["disable_background_checkbox"] = disable_background_checkbox
-        self.widgets["disable_splash_checkbox"] = disable_splash_checkbox
         self.widgets["change_background_button"] = change_background_button
         self.widgets["change_logo_button"] = change_logo_button
         self.widgets["change_font_button"] = change_font_button

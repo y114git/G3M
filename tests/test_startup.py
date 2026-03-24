@@ -10,6 +10,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import types
 import zipfile
 
 import pytest
@@ -106,6 +107,52 @@ def test_local_startup():
         pytest.fail(f"Unexpected error during startup test: {e}")
 
 
+def test_run_app_startup_path_imports(monkeypatch):
+    """Ensure run_app reaches the normal startup path without runtime import errors."""
+
+    from app import startup as startup_module
+
+    class _Socket:
+        def __getattr__(self, name) -> object:
+            if name == "waitForConnected":
+                return lambda *_args, **_kwargs: False
+            return lambda *_args, **_kwargs: None
+
+    class _App:
+        def __init__(self) -> None:
+            self._bootstrap_coordinator = None
+
+        def exec(self):
+            return 0
+
+    class _Coordinator:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def launch(self):
+            return None
+
+    monkeypatch.setattr(startup_module, "validate_config", lambda: None)
+    monkeypatch.setattr(startup_module, "setup_app", lambda: _App())
+    monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
+    monkeypatch.setattr(startup_module.QLocalServer, "removeServer", lambda *_args: None)
+    monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
+    monkeypatch.setattr(startup_module, "register_url_protocol", lambda: None)
+    monkeypatch.setattr(startup_module, "_load_config_file", lambda: {})
+    monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
+    monkeypatch.setattr(startup_module, "get_user_data_root", lambda: "")
+    monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "")
+    monkeypatch.setattr(startup_module, "install_excepthook", lambda: None)
+    monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", lambda: None)
+    monkeypatch.setattr(startup_module.sys, "argv", ["main.py"])
+    monkeypatch.setitem(sys.modules, "app.window", types.SimpleNamespace(AppWindow=object))
+
+    with pytest.raises(SystemExit) as exc:
+        startup_module.run_app()
+
+    assert exc.value.code == 0
+
+
 def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) -> bool:
     """Core startup testing logic."""
     try:
@@ -141,10 +188,14 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
             return not _contains_startup_errors(output)
 
     except subprocess.TimeoutExpired:
-        print(f"Startup test timed out after 10 seconds for {startup_target}", file=sys.stderr)
+        sys.stderr.write(
+            f"Startup test timed out after {TEST_TIMEOUT} seconds for {startup_target}\n"
+        )
         return False
     except Exception as e:
-        print(f"Startup test failed with exception for {startup_target}: {e}", file=sys.stderr)
+        sys.stderr.write(
+            f"Startup test failed with exception for {startup_target}: {e}\n"
+        )
         return False
 
 

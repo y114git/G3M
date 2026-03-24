@@ -456,7 +456,7 @@ class ModCardWidget(BaseModWidget):
                     config = self._resolve_theme_config()
                     br = get_border_radius(config)
                     bc = (
-                        get_theme_color(config, "border", "#039d5b") if config else None
+                        get_theme_color(config, "border") if config else None
                     )
                     bw = 2 if bc else 0
                     icon_width, icon_height = get_widget_dimensions(

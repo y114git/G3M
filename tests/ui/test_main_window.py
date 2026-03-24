@@ -1,24 +1,44 @@
+import os
 from unittest.mock import Mock, patch
 
 
 class TestAppWindow:
-    @patch("app.window.SingleInstanceServer")
-    def test_app_window_creation(self, mock_server, qapp, temp_dir):
+    def test_app_window_creation(self, qapp, temp_dir):
         from app.window import AppWindow
 
-        mock_server_instance = Mock()
-        mock_server_instance.listen.return_value = True
-        mock_server.return_value = mock_server_instance
+        user_root = os.path.join(temp_dir, "user")
+        plugins_dir = os.path.join(temp_dir, "plugins")
+        mods_dir = os.path.join(temp_dir, "mods")
+        profiles_dir = os.path.join(temp_dir, "profiles")
+        themes_dir = os.path.join(temp_dir, "themes")
+        for path in (user_root, plugins_dir, mods_dir, profiles_dir, themes_dir):
+            os.makedirs(path, exist_ok=True)
         mock_presence_response = Mock()
         mock_presence_response.status_code = 200
         mock_presence_response.json.return_value = {"online": 0}
         mock_presence_session = Mock()
         mock_presence_session.post.return_value = mock_presence_response
         with (
-            patch("utils.path_utils.get_user_data_root", return_value=temp_dir),
-            patch("utils.path_utils.get_launcher_dir", return_value=temp_dir),
-            patch("utils.path_utils.get_user_mods_dir", return_value=temp_dir),
-            patch("utils.path_utils.get_user_plugins_dir", return_value=temp_dir),
+            patch("app_context.application_context.get_user_data_root", return_value=user_root),
+            patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
+            patch(
+                "app_context.application_context.get_user_plugins_dir",
+                return_value=plugins_dir,
+            ),
+            patch(
+                "services.g3mtool_patching_service.get_user_data_root",
+                return_value=user_root,
+            ),
+            patch(
+                "services.blocklist_service.get_user_data_root",
+                return_value=user_root,
+            ),
+            patch("utils.path_utils.get_user_themes_dir", return_value=themes_dir),
+            patch("services.profile_service.get_user_mods_dir", return_value=mods_dir),
+            patch(
+                "services.profile_service.get_user_profiles_dir",
+                return_value=profiles_dir,
+            ),
             patch(
                 "workers.presence_worker.get_session",
                 return_value=mock_presence_session,
@@ -27,11 +47,63 @@ class TestAppWindow:
             window = AppWindow()
             try:
                 assert window is not None
+                assert hasattr(window, "context")
                 assert hasattr(window, "app_state")
                 assert hasattr(window, "settings_service")
                 assert hasattr(window, "mod_service")
                 assert hasattr(window, "game_launch")
+                assert hasattr(window, "session_manager")
                 assert window.windowTitle() == "DELTAHUB"
+            finally:
+                window.close()
+
+    def test_post_show_initialization_runs_once(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        user_root = os.path.join(temp_dir, "user")
+        plugins_dir = os.path.join(temp_dir, "plugins")
+        mods_dir = os.path.join(temp_dir, "mods")
+        profiles_dir = os.path.join(temp_dir, "profiles")
+        themes_dir = os.path.join(temp_dir, "themes")
+        for path in (user_root, plugins_dir, mods_dir, profiles_dir, themes_dir):
+            os.makedirs(path, exist_ok=True)
+        mock_presence_response = Mock()
+        mock_presence_response.status_code = 200
+        mock_presence_response.json.return_value = {"online": 0}
+        mock_presence_session = Mock()
+        mock_presence_session.post.return_value = mock_presence_response
+        with (
+            patch("app_context.application_context.get_user_data_root", return_value=user_root),
+            patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
+            patch(
+                "app_context.application_context.get_user_plugins_dir",
+                return_value=plugins_dir,
+            ),
+            patch(
+                "services.g3mtool_patching_service.get_user_data_root",
+                return_value=user_root,
+            ),
+            patch(
+                "services.blocklist_service.get_user_data_root",
+                return_value=user_root,
+            ),
+            patch("utils.path_utils.get_user_themes_dir", return_value=themes_dir),
+            patch("services.profile_service.get_user_mods_dir", return_value=mods_dir),
+            patch(
+                "services.profile_service.get_user_profiles_dir",
+                return_value=profiles_dir,
+            ),
+            patch(
+                "workers.presence_worker.get_session",
+                return_value=mock_presence_session,
+            ),
+            patch("bootstrap.bootstrap_coordinator.BootstrapCoordinator.post_show_initialization") as post_init,
+        ):
+            window = AppWindow()
+            try:
+                window._post_show_initialization()
+                window._post_show_initialization()
+                assert post_init.call_count == 1
             finally:
                 window.close()
 

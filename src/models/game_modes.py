@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from config.constants import (
+from config.config import (
     STEAM_APP_ID_DEMO,
     STEAM_APP_ID_FULL,
     STEAM_APP_ID_PIZZA_TOWER,

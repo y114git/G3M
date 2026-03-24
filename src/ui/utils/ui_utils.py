@@ -71,7 +71,7 @@ def format_size(size_bytes: int) -> str:
 
 
 def refresh_ui_after_mod_install(main_window, mod_service=None):
-    from config.constants import UI_COLORS
+    from config.config import UI_COLORS
     from services.localization_service import tr
 
     if hasattr(main_window, "plugin_service") and main_window.plugin_service:

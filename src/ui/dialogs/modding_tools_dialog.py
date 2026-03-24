@@ -328,7 +328,7 @@ class _DataConvertWorkerThread(QThread):
 
     def run(self):
         try:
-            from config.constants import LEGACY_MOD_CONFIG_FILENAME
+            from config.config import LEGACY_MOD_CONFIG_FILENAME
             from models.game_modes import get_game
             from utils.mod_config_parser import resolve_chapter_folder
             from utils.mod_version_utils import (
@@ -560,7 +560,7 @@ class _DataConvertTab(QWidget):
             self._profile_combo.addItem(name)
 
     def _scan_mods(self, _idx=0):
-        from config.constants import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+        from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
         from utils.path_utils import get_profile_mods_root
 
         self._mod_list.clear()
@@ -639,7 +639,7 @@ class _DataConvertTab(QWidget):
         mod_folder = item.data(Qt.ItemDataRole.UserRole)
         config_path = os.path.join(mod_folder, "mod_config.json")
         if not os.path.isfile(config_path):
-            from config.constants import LEGACY_MOD_CONFIG_FILENAME
+            from config.config import LEGACY_MOD_CONFIG_FILENAME
 
             config_path = os.path.join(mod_folder, LEGACY_MOD_CONFIG_FILENAME)
         try:

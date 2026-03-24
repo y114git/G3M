@@ -1,7 +1,7 @@
 from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import QDialog, QPushButton, QTextBrowser, QVBoxLayout
 
-from config.constants import NETWORK_TIMEOUT_MEDIUM
+from config.config import NETWORK_TIMEOUT_MEDIUM
 from services.localization_service import tr
 from workers.changelog_worker import FetchChangelogWorker
 
