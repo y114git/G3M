@@ -749,6 +749,7 @@
     "app_not_found_after_unpack": "DELTAHUB.app no encontrado después de descomprimir.",
     "app_path_not_found": "No se pudo encontrar la ruta del paquete .app en la ubicación del ejecutable.",
     "archive_unpack_error": "Error al descomprimir archivo {archive_name}: {error}",
+    "unexpected_startup_error": "Error inesperado al iniciar: {details}",
     "modpack_creation_failed": "Error al crear modpack",
     "changelog_load_failed": "Error al cargar registro de cambios",
     "chapter_folder_search_error": "Error al buscar carpeta de capítulo: {error}",

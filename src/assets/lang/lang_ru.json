@@ -748,6 +748,7 @@
     "access_permission_error": "Ошибка доступа. Проверьте права на редактирование мода.",
     "app_not_found_after_unpack": "DELTAHUB.app не найден после распаковки.",
     "archive_unpack_error": "Ошибка распаковки архива {archive_name}: {error}",
+    "unexpected_startup_error": "Непредвиденная ошибка запуска: {details}",
     "modpack_creation_failed": "Не удалось создать модпак",
     "changelog_load_failed": "Не удалось загрузить журнал изменений",
     "chapter_folder_search_error": "Ошибка при поиске папки главы: {error}",

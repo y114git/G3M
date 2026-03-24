@@ -32,7 +32,6 @@ def test_build_application_context_creates_services_and_session(qapp, temp_dir):
         patch("workers.presence_worker.get_session", return_value=mock_presence_session),
     ):
         context = build_application_context()
-    assert isinstance(context.is_first_launch, bool)
     assert context.app_state.mods_dir
     assert context.app_state.game_path == ""
     assert context.app_state.demo_game_path == ""

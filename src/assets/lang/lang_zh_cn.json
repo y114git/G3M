@@ -748,6 +748,7 @@
     "access_permission_error": "访问错误。检查模组编辑权限。",
     "app_not_found_after_unpack": "解压后未找到DELTAHUB.app。",
     "archive_unpack_error": "解压压缩文件 {archive_name} 时出错：{error}",
+    "unexpected_startup_error": "启动时发生意外错误：{details}",
     "modpack_creation_failed": "创建模组包失败",
     "changelog_load_failed": "加载更新日志失败",
     "chapter_folder_search_error": "搜索章节文件夹时出错：{error}",

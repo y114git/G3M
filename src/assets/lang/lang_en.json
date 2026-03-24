@@ -748,6 +748,7 @@
     "access_permission_error": "Access error. Check mod edit permissions.",
     "app_not_found_after_unpack": "DELTAHUB.app not found after unpacking.",
     "archive_unpack_error": "Error unpacking archive {archive_name}: {error}",
+    "unexpected_startup_error": "Unexpected startup error: {details}",
     "modpack_creation_failed": "Failed to create modpack",
     "changelog_load_failed": "Failed to load changelog",
     "chapter_folder_search_error": "Error searching for chapter folder: {error}",
