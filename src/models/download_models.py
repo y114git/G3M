@@ -1,13 +1,13 @@
 """Data models for the Downloads system."""
 
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from utils.time_utils import utc_now_iso
 
 
-class DownloadStatus(str, Enum):
+class DownloadStatus(StrEnum):
     """Status of the file download phase."""
 
     QUEUED = "queued"
@@ -17,7 +17,7 @@ class DownloadStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class UseStatus(str, Enum):
+class UseStatus(StrEnum):
     """Status of the use/install phase."""
 
     NOT_STARTED = "not_started"
@@ -30,7 +30,7 @@ class UseStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class SourceKind(str, Enum):
+class SourceKind(StrEnum):
     """Where the download originated from."""
 
     GAMEBANANA = "gamebanana"
@@ -39,10 +39,11 @@ class SourceKind(str, Enum):
     LOCAL_FILE = "local_file"
 
 
-class TargetKind(str, Enum):
+class TargetKind(StrEnum):
     """What type of artifact is being downloaded."""
 
     MOD = "mod"
+    PLUGIN = "plugin"
 
 
 @dataclass

@@ -4,6 +4,7 @@ import logging
 
 from app.game_ui import refresh_game_lists, update_checkbox_visibility
 from config.config import UI_COLORS
+from models.download_models import TargetKind
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
 
@@ -31,6 +32,8 @@ def on_downloads_record_updated(w, record):
             UI_COLORS["status_warning"],
         )
     refresh_mod_card_buttons(w)
+    if getattr(record, "target_kind", None) == TargetKind.PLUGIN and hasattr(w, "plugins_ui"):
+        w.plugins_ui.handle_external_refresh()
 
 
 def on_downloads_use_completed(w):

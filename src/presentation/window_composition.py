@@ -5,14 +5,15 @@ from PyQt6.QtWidgets import QApplication
 from app.dialogs import on_downloads_record_updated, on_downloads_use_completed
 from app.game_ui import on_games_registry_changed, on_used_mods_updated
 from app.localization_utils import relocalize_ui
-from app.update_handler import handle_update_info
 from controllers.game_launch_controller import GameLaunchController
 from controllers.library_display_controller import LibraryDisplayController
 from controllers.mod_operations_controller import ModOperationsController
+from controllers.plugins_controller import PluginsController
 from controllers.refresh_controller import RefreshController
 from controllers.search_display_controller import SearchDisplayController
 from controllers.settings_controller import SettingsUiController
 from controllers.theme_controller import ThemeController
+from presentation.update_presenter import handle_update_info
 from ui.utils.ui_utils import DebounceTimer
 
 
@@ -26,6 +27,10 @@ class WindowComposition:
         window = self.window
         window.feedback_service.status_updated.connect(window.update_status_signal.emit)
         window.settings_service.language_changed.connect(lambda _: relocalize_ui(window))
+        if window.plugin_runtime_service is not None:
+            window.settings_service.language_changed.connect(
+                lambda _: window.plugin_runtime_service.execute_hook("language_changed")
+            )
         window.settings_service.restart_required.connect(
             lambda msg: window.feedback_service.show_message(
                 "info",
@@ -34,6 +39,10 @@ class WindowComposition:
             )
         )
         window.settings_service.status_changed.connect(window.update_status_signal.emit)
+        if window.plugin_runtime_service is not None:
+            window.settings_service.theme_changed.connect(
+                lambda: window.plugin_runtime_service.execute_hook("theme_changed")
+            )
         window.mod_service.progress_updated.connect(window.set_progress_signal.emit)
         window.mod_service.status_changed.connect(window.update_status_signal.emit)
         window.mod_service.url_prompt_required.connect(window._handle_url_install_prompt)
@@ -62,6 +71,10 @@ class WindowComposition:
         window.used_mods_service.used_mods_updated.connect(
             lambda: on_used_mods_updated(window)
         )
+        if window.plugin_runtime_service:
+            window.profile_service.profile_switched.connect(
+                lambda _name: window.plugin_runtime_service.execute_hook("profile_changed")
+            )
         window.session_manager.online_count_changed.connect(window._update_online_label)
         window._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         window.mod_ops = ModOperationsController(
@@ -133,6 +146,31 @@ class WindowComposition:
             window.settings_service,
             app_window=window,
         )
+        if (
+            window.plugin_catalog_service is not None
+            and window.plugin_state_service is not None
+            and window.plugin_runtime_service is not None
+            and window.plugin_install_service is not None
+        ):
+            window.plugins_ui = PluginsController(
+                window.app_state,
+                window.feedback_service,
+                window.downloads_manager,
+                window.plugin_catalog_service,
+                window.plugin_state_service,
+                window.plugin_runtime_service,
+                window.plugin_install_service,
+                window,
+            )
+            window.initialization_finished.connect(
+                lambda: window.plugin_runtime_service.execute_hook("app_ready")
+            )
+        else:
+            window.plugins_ui = None
+        if window.plugins_ui is not None:
+            window.settings_service.theme_changed.connect(
+                lambda: window.plugins_ui.handle_theme_refresh()
+            )
         self._connect_cross_service_signals()
 
     def _connect_cross_service_signals(self) -> None:

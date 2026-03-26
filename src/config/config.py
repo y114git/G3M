@@ -3,17 +3,22 @@
 Single source of truth for all immutable project configuration shared across DELTAHUB.
 """
 
+import os
 import platform
 import re
 
-from .config_loader import get_config_value
+from dotenv import load_dotenv
+
+from . import styles as shared_styles
+
+load_dotenv()
 
 """Application identity and external service configuration."""
 LAUNCHER_VERSION = "2.4.7stable"
 APP_ID = "deltahub.y.114"
 SINGLE_INSTANCE_KEY = "deltahub.y.114.single-instance-lock"
-DATA_FIREBASE_URL = get_config_value("DATA_FIREBASE_URL", "")
-CLOUD_FUNCTIONS_BASE_URL = get_config_value("CLOUD_FUNCTIONS_BASE_URL", "")
+DATA_FIREBASE_URL = os.getenv("DATA_FIREBASE_URL") or ""
+CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL") or ""
 SOCIAL_LINKS = {
     "telegram": "https://t.me/y_maintg",
     "discord": "https://discord.gg/T7hyqxmSjf",
@@ -32,138 +37,75 @@ STEAM_APP_ID_DEMO = "1690940"
 STEAM_APP_ID_UNDERTALE = "391540"
 STEAM_APP_ID_PIZZA_TOWER = "2231450"
 
-"""Theme, style, and shared UI configuration."""
-UI_COLORS = {
-    "status_error": "red",
-    "status_warning": "orange",
-    "status_success": "green",
-    "status_info": "gray",
-    "status_ready": "lightgreen",
-    "status_steam": "blue",
+"""Plugin and profile runtime configuration."""
+PLUGIN_API_VERSION = "1.0.0"
+PLUGIN_CATALOG_URL = (
+    "https://github.com/y114git/DELTAHUB/raw/refs/heads/stable/catalog/plugins/plugins.json"
+)
+PLUGIN_HOOKS = {
+    "app_ready",
+    "app_shutdown",
+    "before_mod_apply",
+    "after_mod_apply_before_launch",
+    "after_game_started",
+    "before_restore_after_exit",
+    "after_restore_after_exit",
+    "language_changed",
+    "theme_changed",
+    "profile_changed",
+    "settings_view",
+    "main_view",
+    "navigation_actions",
+    "game_registry",
+    "background_task",
 }
-THEMES = {
-    "default": {
-        "name": "G3M",
-        "background": "images/background.png",
-        "font_family": "Determination Sans Rus",
-        "font_size_main": 16,
-        "font_size_small": 12,
-        "colors": {
-            "main_fg": "#282828",
-            "top_level_fg": "#282828",
-            "button": "#222222",
-            "button_hover": "#616b78",
-            "button_text": "#e8e9eb",
-            "border": "#039d5b",
-            "text": "#e8e9eb",
-            "secondary_text": "#6de985",
-        },
+PLUGIN_TAGS = {
+    "interface",
+    "game_experience",
+    "tool",
+    "other",
+}
+DEFAULT_PROFILE = "Default"
+UNNAMED_PROFILE = "Unnamed"
+PROFILE_STATIC_KEYS = frozenset(
+    {
+        "selected_game_type",
+        "chapter_mode_enabled",
+        "full_install_enabled",
+        "direct_launch_chapter",
     }
-}
-DEFAULT_COLORS = {
-    "background": "#282828",
-    "button": "#222222",
-    "button_hover": "#616b78",
-    "text": "#e8e9eb",
-    "border": "#039d5b",
-    "secondary_text": "#6de985",
-}
-FALLBACK_FRAME_BG = "rgba(40, 40, 40, 150)"
-FALLBACK_TOOLTIP_BG = "rgba(40, 40, 40, 230)"
-FALLBACK_WINDOW_BG = "rgba(0, 0, 0, 200)"
-FALLBACK_SCROLL_GROOVE = "rgba(40, 40, 40, 40)"
-DISABLED_BG = "#333333"
-DISABLED_TEXT = "#888888"
-DISABLED_BORDER = "#555555"
-DISABLED_BUTTON_BG = "#3b3b3b"
-DISABLED_BUTTON_TEXT = "#808080"
-SETTINGS_COLOR_CONFIG = {
-    "background": "ui.background_color",
-    "button": "ui.elements_color",
-    "border": "ui.border_color",
-    "button_hover": "ui.hover_color",
-    "text": "ui.main_text_color",
-    "secondary_text": "ui.secondary_text_color",
-}
+)
+
+"""Shared UI filter and style-adjacent configuration."""
+UI_COLORS = shared_styles.UI_COLORS
+DEFAULT_THEME = shared_styles.DEFAULT_THEME
+DEFAULT_COLORS = shared_styles.DEFAULT_COLORS
+FALLBACK_FRAME_BG = shared_styles.FALLBACK_FRAME_BG
+FALLBACK_TOOLTIP_BG = shared_styles.FALLBACK_TOOLTIP_BG
+FALLBACK_WINDOW_BG = shared_styles.FALLBACK_WINDOW_BG
+FALLBACK_SCROLL_GROOVE = shared_styles.FALLBACK_SCROLL_GROOVE
+SETTINGS_COLOR_CONFIG = shared_styles.SETTINGS_COLOR_CONFIG
+CHAT_MESSAGE_BACKGROUND_COLOR = shared_styles.CHAT_MESSAGE_BACKGROUND_COLOR
+RICH_HTML_IMAGE_CACHE_MAX_SIZE = shared_styles.RICH_HTML_IMAGE_CACHE_MAX_SIZE
+STYLES_TEMPLATE_SUBDIR = shared_styles.STYLES_TEMPLATE_SUBDIR
+QSS_TRANSPARENT_SCROLL = shared_styles.QSS_TRANSPARENT_SCROLL
+QSS_TRANSPARENT_BG = shared_styles.QSS_TRANSPARENT_BG
+QSS_BOLD_LABEL = shared_styles.QSS_BOLD_LABEL
+QSS_BOLD_TRANSPARENT = shared_styles.QSS_BOLD_TRANSPARENT
+QSS_TRANSPARENT_NOPAD = shared_styles.QSS_TRANSPARENT_NOPAD
+QSS_PADDING_LEFT_8 = shared_styles.QSS_PADDING_LEFT_8
+QSS_PADDING_LEFT_5 = shared_styles.QSS_PADDING_LEFT_5
+QSS_ARROW_LABEL = shared_styles.QSS_ARROW_LABEL
+QSS_LOADING_LABEL = shared_styles.QSS_LOADING_LABEL
+QSS_TAB_ALIGNMENT = shared_styles.QSS_TAB_ALIGNMENT
+QSS_SETTINGS_TAB_ALIGNMENT = shared_styles.QSS_SETTINGS_TAB_ALIGNMENT
+MOD_WIDGET_STYLE_TEMPLATE = shared_styles.MOD_WIDGET_STYLE_TEMPLATE
+EMPTY_LAYOUT_MESSAGE_STYLE = shared_styles.EMPTY_LAYOUT_MESSAGE_STYLE
+ARROW_DOWN_SVG_TEMPLATE = shared_styles.ARROW_DOWN_SVG_TEMPLATE
+ARROW_UP_SVG_TEMPLATE = shared_styles.ARROW_UP_SVG_TEMPLATE
+RICH_HTML_CSS_CLASS_MAP = shared_styles.RICH_HTML_CSS_CLASS_MAP
 BASE_TAG_NAMES = ("textedit", "customization", "gameplay", "other")
 LIBRARY_IMPORT_ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma", ".gz")
-CHAT_MESSAGE_BACKGROUND_COLOR = "rgba(255, 255, 255, 0.1)"
-RICH_HTML_IMAGE_CACHE_MAX_SIZE = 128
-STYLES_TEMPLATE_SUBDIR = "config/styles"
-QSS_TRANSPARENT_SCROLL = "QScrollArea { background-color: transparent; }"
-QSS_TRANSPARENT_BG = "background: transparent;"
-QSS_BOLD_LABEL = "font-weight: bold;"
-QSS_BOLD_TRANSPARENT = "font-weight: bold; background: transparent;"
-QSS_TRANSPARENT_NOPAD = "background: transparent; padding: 0px;"
-QSS_PADDING_LEFT_8 = "padding-left:8px;"
-QSS_PADDING_LEFT_5 = "padding-left: 5px;"
-QSS_ARROW_LABEL = "font-size: 10px; background: transparent;"
-QSS_LOADING_LABEL = "font-size: 16px; padding: 20px; color: gray;"
-QSS_TAB_ALIGNMENT = """
-    QTabWidget::tab-bar { alignment: center; }
-    QTabBar::tab { min-width: 92px; padding: 6px 10px; }
-"""
-QSS_SETTINGS_TAB_ALIGNMENT = """
-    QTabWidget::tab-bar { alignment: center; }
-    QTabBar::tab { min-width: 110px; padding: 6px 14px; }
-"""
-MOD_WIDGET_STYLE_TEMPLATE = """QFrame#{frame_selector} {{
-    background-color: {bg_color};
-    border: {border_width} solid {border_color};
-    border-radius: {frame_border_radius};
-}}
-QFrame#{frame_selector}:hover {{
-    border-color: {hover_border_color};
-}}
-QLabel#{icon_selector} {{
-    border: 2px solid {border_color};
-    border-radius: {icon_border_radius};
-}}
-QLabel#versionLabel {{
-    color: {secondary_text_color};
-}}
-QLabel#secondaryText {{
-    color: {secondary_text_color};
-    font-size: {secondary_font_size}px;
-}}
-QLabel#primaryText {{
-    color: {text_color};
-    font-size: {primary_font_size}px;
-}}
-QPushButton#cardButton, QPushButton#cardButtonDownload, QPushButton#cardButtonUninstall {{
-    min-width: {button_width}px;
-    max-width: {button_width}px;
-    min-height: {button_height}px;
-    max-height: {button_height}px;
-    font-size: {button_font_size}px;
-    padding: 1px;
-    border-radius: {button_border_radius};
-}}
-QPushButton#cardButtonDownload {{
-    background-color: #4CAF50;
-    font-weight: bold;
-}}
-QPushButton#cardButtonDownload:hover {{
-    background-color: #5cb85c;
-}}
-QPushButton#cardButtonUninstall {{
-    background-color: #F44336;
-    font-weight: bold;
-}}
-QPushButton#cardButtonUninstall:hover {{
-    background-color: #d32f2f;
-}}"""
-EMPTY_LAYOUT_MESSAGE_STYLE = "QLabel {{\n    color: {color};\n    font-size: {font_size}px;\n    font-style: italic;\n    opacity: 0.75;\n    background-color: transparent;\n    padding: 40px;\n}}"
-ARROW_DOWN_SVG_TEMPLATE = '<?xml version="1.0" encoding="utf-8"?>\n<svg fill="{color}" width="800px" height="800px" viewBox="-6.5 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">\n<path d="M18.813 11.406l-7.906 9.906c-0.75 0.906-1.906 0.906-2.625 0l-7.906-9.906c-0.75-0.938-0.375-1.656 0.781-1.656h16.875c1.188 0 1.531 0.719 0.781 1.656z"></path>\n</svg>'
-ARROW_UP_SVG_TEMPLATE = '<?xml version="1.0" encoding="utf-8"?>\n<svg fill="{color}" width="800px" height="800px" viewBox="-6.5 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">\n<g transform="translate(0,32) scale(1,-1)"><path d="M18.813 11.406l-7.906 9.906c-0.75 0.906-1.906 0.906-2.625 0l-7.906-9.906c-0.75-0.938-0.375-1.656 0.781-1.656h16.875c1.188 0 1.531 0.719 0.781 1.656z"></path></g>\n</svg>'
-RICH_HTML_CSS_CLASS_MAP = {
-    "RedColor": "color:#ff4444;",
-    "BlueColor": "color:#5599ff;",
-    "GreenColor": "color:#44ff44;",
-    "YellowColor": "color:#ffdd44;",
-    "WhiteColor": "color:#ffffff;",
-    "SelectedElement": "",
-}
 RICH_HTML_IMG_RE = re.compile(r"<img\b([^>]*)/?>", re.IGNORECASE | re.DOTALL)
 RICH_HTML_ATTR_RE = re.compile(r'(\w[\w-]*)=["\']([^"\']*)["\']')
 RICH_HTML_CLASS_RE = re.compile(
@@ -218,6 +160,11 @@ WIDGET_LOCALIZATIONS = [
     ("hide_library_filters_checkbox", "setToolTip", "tooltips.hide_library_filters"),
     ("disable_animations_checkbox", "setText", "checkboxes.disable_animations"),
     ("disable_background_checkbox", "setText", "checkboxes.disable_background"),
+    (
+        "disable_startup_sound_checkbox",
+        "setText",
+        "checkboxes.disable_startup_sound",
+    ),
     ("blocklist_button", "setToolTip", "ui.blocklist_tooltip"),
     ("priority_button", "setText", "ui.priority"),
     ("create_modpack_button", "setText", "ui.create_modpack_button"),
@@ -229,7 +176,10 @@ WIDGET_LOCALIZATIONS = [
     ("library_tag_gamebanana", "setText", "ui.only_gamebanana"),
     ("library_search_button", "setToolTip", "ui.search_placeholder"),
     ("installed_mods_label", "setText", "ui.installed_mods_label"),
+    ("add_mod_button", "setText", "ui.add_mod"),
     ("add_mod_button", "setToolTip", "ui.add_mod"),
+    ("library_profile_label", "setText", "ui.profile_label"),
+    ("library_game_label", "setText", "ui.game_label"),
     ("profile_settings_button", "setToolTip", "profiles.manager_title"),
     ("games_manager_button", "setToolTip", "games.manager_title"),
     ("theme_button", "setText", "buttons.import_export_themes"),
@@ -280,6 +230,8 @@ GAMEBANANA_TOOL_ID_DELTAHUB = 20615
 GAMEBANANA_PER_PAGE = 15
 
 """Mod file, archive, cache, and content metadata constants."""
+GAME_VERSION_MANIFEST_FILENAME = "game_version_data.json"
+MOD_VERSIONS_DIR = "mod_versions"
 DATA_FILE_EXTENSIONS = (
     ".xdelta",
     ".vcdiff",
@@ -300,7 +252,6 @@ MOD_CONFIG_FILENAME = "mod_config.json"
 DATA_WIN_FILENAME = "data.win"
 META_JSON_FILENAME = "meta.json"
 ICON_PNG_FILENAME = "icon.png"
-LEGACY_MOD_CONFIG_FILENAME = "config.json"
 LEGACY_META_JSON_FILENAME = "_deltamodInfo.json"
 MAX_PATCHING_ARCHIVES = 10
 MOD_TYPE_G3MPATCH = "g3mpatch"
@@ -310,9 +261,12 @@ MOD_TYPE_OVERRIDES_ONLY = "overrides_only"
 MOD_FILTER_TRUE_VALUES = (True, "true", "True", 1)
 MOD_FILTER_NSFW_TEXT_MARKERS = ("nsfw", "adult", "18+", "18plus", "explicit", "mature")
 
+"""Legacy mod config key constants for backward compatibility."""
+LEGACY_DESCRIPTION_KEY = "".join(("tag", "line"))
+LEGACY_ICON_KEY = "_".join(("icon", "url"))
+
 
 SKIP_FILES = (
-    "config.json",
     "mod_config.json",
     "_icon.png",
     "icon.png",

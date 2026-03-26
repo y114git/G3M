@@ -121,6 +121,10 @@ class SettingsUiController:
             self.app.disable_animations_checkbox.setChecked(
                 config.get("disable_animations", False)
             )
+        if hasattr(self.app, "disable_startup_sound_checkbox"):
+            self.app.disable_startup_sound_checkbox.setChecked(
+                config.get("disable_startup_sound", False)
+            )
         if hasattr(self.app, "show_reset_buttons_checkbox"):
             self.app.show_reset_buttons_checkbox.setChecked(
                 config.get("show_reset_buttons", False)
@@ -281,6 +285,9 @@ class SettingsUiController:
         self.settings_service.on_toggle_disable_background(bool(state))
         if hasattr(self.app, "theme"):
             self.app.theme.update_background_button_state()
+
+    def on_toggle_disable_startup_sound(self, state):
+        self.settings_service.on_toggle_disable_startup_sound(bool(state))
 
     def on_toggle_skip_patching_warnings(self, state):
         self.settings_service.on_toggle_skip_patching_warnings(bool(state))

@@ -69,7 +69,7 @@ class TestProfileMigration:
         assert "some_other_setting" not in data
         assert app_state.mods_dir == _profile_dir(profiles_dir, "Default")
         assert app_state.mods_metadata_path == os.path.join(
-            _profile_dir(profiles_dir, "Default"), "metadata.json"
+            _profile_dir(profiles_dir, "Default"), "mods_data.json"
         )
 
     def test_migrate_moves_legacy_mods_into_default_profile(
@@ -77,7 +77,7 @@ class TestProfileMigration:
     ):
         os.makedirs(os.path.join(legacy_mods_dir, "legacy_mod"), exist_ok=True)
         with open(
-            os.path.join(legacy_mods_dir, "metadata.json"), "w", encoding="utf-8"
+            os.path.join(legacy_mods_dir, "mods_data.json"), "w", encoding="utf-8"
         ) as f:
             json.dump({"legacy": True}, f)
         profile_service.initialize()
@@ -86,7 +86,7 @@ class TestProfileMigration:
             os.path.join(_profile_dir(profiles_dir, "Default"), "legacy_mod")
         )
         with open(
-            os.path.join(_profile_dir(profiles_dir, "Default"), "metadata.json"),
+            os.path.join(_profile_dir(profiles_dir, "Default"), "mods_data.json"),
             encoding="utf-8",
         ) as f:
             assert json.load(f) == {"legacy": True}
@@ -236,7 +236,7 @@ class TestProfileSummary:
             with open(
                 os.path.join(folder, "mod_config.json"), "w", encoding="utf-8"
             ) as f:
-                json.dump({"key": name}, f)
+                json.dump({"id": name}, f)
         assert profile_service.get_profile_summary("Default")["profile_mod_count"] == 2
 
 
@@ -288,7 +288,7 @@ class TestImportExport:
         mod_dir = os.path.join(_profile_dir(profiles_dir, "Default"), "mod_a")
         os.makedirs(mod_dir, exist_ok=True)
         with open(os.path.join(mod_dir, "mod_config.json"), "w", encoding="utf-8") as f:
-            json.dump({"key": "mod_a"}, f)
+            json.dump({"id": "mod_a"}, f)
         export_path = os.path.join(temp_dir, "default.zip")
         assert profile_service.export("Default", export_path)
         imported = profile_service.import_profile(export_path)
@@ -304,7 +304,7 @@ class TestImportExport:
         profile_service.initialize()
         archive_path = os.path.join(temp_dir, "broken.zip")
         with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("mod_a/mod_config.json", json.dumps({"key": "mod_a"}))
+            zf.writestr("mod_a/mod_config.json", json.dumps({"id": "mod_a"}))
         imported = profile_service.import_profile(archive_path)
         assert imported == "Unnamed"
         with open(_profile_json(profiles_dir, "Unnamed"), encoding="utf-8") as f:
@@ -319,7 +319,7 @@ class TestImportExport:
             zf.writestr(
                 "Wrapped/Custom.json", json.dumps({"selected_game_type": "undertale"})
             )
-            zf.writestr("Wrapped/mod_a/mod_config.json", json.dumps({"key": "mod_a"}))
+            zf.writestr("Wrapped/mod_a/mod_config.json", json.dumps({"id": "mod_a"}))
         imported = profile_service.import_profile(archive_path)
         assert imported == "Custom"
         assert os.path.exists(_profile_json(profiles_dir, "Custom"))

@@ -2,6 +2,8 @@
 
 import os
 
+from config.config import LEGACY_ICON_KEY
+
 
 def _get_mod_field(mod_data, field, default=None):
     return (
@@ -11,15 +13,11 @@ def _get_mod_field(mod_data, field, default=None):
     )
 
 
-def get_mod_key(mod_data):
+def get_mod_id(mod_data):
     return (
         None
         if mod_data is None
-        else (
-            _get_mod_field(mod_data, "key")
-            or _get_mod_field(mod_data, "mod_key")
-            or _get_mod_field(mod_data, "name")
-        )
+        else (_get_mod_field(mod_data, "id") or _get_mod_field(mod_data, "name"))
     )
 
 
@@ -27,45 +25,45 @@ def get_mod_name(mod_data, default="Unknown"):
     return default if mod_data is None else _get_mod_field(mod_data, "name", default)
 
 
-def get_gamebanana_key(mod_data):
-    """Get GameBanana key if mod is from GameBanana."""
-    key = _get_mod_field(mod_data, "key") or _get_mod_field(mod_data, "mod_key")
+def get_gamebanana_id(mod_data):
+    """Get GameBanana id if mod is from GameBanana."""
+    mod_id = _get_mod_field(mod_data, "id")
     return (
-        key
-        if key
-        and isinstance(key, str)
-        and (key.startswith("gb_mod_") or key.startswith("gb_wip_"))
+        mod_id
+        if mod_id
+        and isinstance(mod_id, str)
+        and (mod_id.startswith("gb_mod_") or mod_id.startswith("gb_wip_"))
         else None
     )
 
 
-def parse_gamebanana_key(key):
-    """Parse gb_{type}_{id} key → (type_str, numeric_id_str) or (None, None)."""
-    if not key or not isinstance(key, str):
+def parse_gamebanana_mod_id(mod_id):
+    """Parse gb_{type}_{id} id -> (type_str, numeric_id_str) or (None, None)."""
+    if not mod_id or not isinstance(mod_id, str):
         return None, None
-    if key.startswith("gb_mod_"):
-        return "mod", key[7:]
-    if key.startswith("gb_wip_"):
-        return "wip", key[7:]
+    if mod_id.startswith("gb_mod_"):
+        return "mod", mod_id[7:]
+    if mod_id.startswith("gb_wip_"):
+        return "wip", mod_id[7:]
     return None, None
 
 
 def get_gamebanana_mod_id(mod_data):
     """Get GameBanana numeric ID string from mod data."""
-    _, mod_id = parse_gamebanana_key(get_gamebanana_key(mod_data))
+    _, mod_id = parse_gamebanana_mod_id(get_gamebanana_id(mod_data))
     return mod_id
 
 
 def get_gamebanana_item_type(mod_data):
-    """Get GB API item type ('Mod' or 'Wip') from mod data key.
+    """Get GB API item type ('Mod' or 'Wip') from mod data id.
 
     Returns 'Wip' if gb_type == 'wip', otherwise returns 'Mod' as default.
-    Falls back to 'Mod' when parse_gamebanana_key(get_gamebanana_key(mod_data))
-    yields gb_type == None (invalid/non-GameBanana key). Callers who need to
-    distinguish "actual Mod" vs "couldn't parse" should call parse_gamebanana_key
+    Falls back to 'Mod' when parse_gamebanana_mod_id(get_gamebanana_id(mod_data))
+    yields gb_type == None (invalid/non-GameBanana id). Callers who need to
+    distinguish "actual Mod" vs "couldn't parse" should call parse_gamebanana_mod_id
     directly and inspect its return value.
     """
-    gb_type, _ = parse_gamebanana_key(get_gamebanana_key(mod_data))
+    gb_type, _ = parse_gamebanana_mod_id(get_gamebanana_id(mod_data))
     return "Wip" if gb_type == "wip" else "Mod"
 
 
@@ -73,7 +71,7 @@ def resolve_mod_icon(config_data: dict, mod_folder_path: str):
     """Resolve path to mod's icon file."""
     if not mod_folder_path or not os.path.isdir(mod_folder_path):
         return None
-    icon_field = (config_data.get("icon") or config_data.get("icon_url") or "").strip()
+    icon_field = (config_data.get("icon") or config_data.get(LEGACY_ICON_KEY) or "").strip()
     if icon_field:
         if icon_field.startswith(("http://", "https://")):
             return icon_field

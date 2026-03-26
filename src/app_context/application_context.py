@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +15,10 @@ from services.game_versions_manager import GameVersionsManager
 from services.launch_service import GameLauncher
 from services.localization_service import localization_service
 from services.mod_service import ModManager
+from services.plugin_catalog_service import PluginCatalogService
+from services.plugin_install_service import PluginInstallService
+from services.plugin_runtime_service import PluginRuntimeService
+from services.plugin_state_service import PluginStateService
 from services.profile_service import ProfileService
 from services.settings_service import SettingsManager
 from services.updatecheck_service import UpdateChecker
@@ -68,16 +71,6 @@ class ApplicationContext:
         )
 
 
-def _migrate_settings_config_file(config_dir: str) -> None:
-    old_config_path = os.path.join(config_dir, "config.json")
-    new_config_path = os.path.join(config_dir, "settings.json")
-    if os.path.exists(old_config_path) and not os.path.exists(new_config_path):
-        try:
-            shutil.move(old_config_path, new_config_path)
-        except OSError as e:
-            logger.debug("Failed to migrate config.json to settings.json: %s", e)
-
-
 def build_application_context(parent=None) -> ApplicationContext:
     app_state = AppState()
     GameBananaAPI.set_app_state(app_state)
@@ -89,7 +82,6 @@ def build_application_context(parent=None) -> ApplicationContext:
     app_state.mods_metadata_path = ""
     os.makedirs(app_state.config_dir, exist_ok=True)
     app_state.config_path = os.path.join(app_state.config_dir, "settings.json")
-    _migrate_settings_config_file(app_state.config_dir)
     feedback_service = FeedbackManager(parent)
     feedback_service.app_state = app_state
     settings_service = SettingsManager(
@@ -123,10 +115,43 @@ def build_application_context(parent=None) -> ApplicationContext:
         parent,
     )
     user_root = get_user_data_root()
+    plugins_dir = os.path.join(user_root, "plugins")
+    os.makedirs(plugins_dir, exist_ok=True)
     downloads_manager = DownloadsManager(
         user_root, lambda: app_state.local_config, parent
     )
-    downloads_manager.set_app_context(mods_dir=app_state.mods_dir)
+
+    plugin_state_service: PluginStateService | None = None
+    plugin_catalog_service: PluginCatalogService | None = None
+    plugin_runtime_service: PluginRuntimeService | None = None
+    plugin_install_service: PluginInstallService | None = None
+
+    try:
+        plugin_state_service = PluginStateService(settings_service, plugins_dir)
+        plugin_catalog_service = PluginCatalogService(
+            app_state, settings_service, plugins_dir
+        )
+        plugin_runtime_service = PluginRuntimeService(
+            app_state,
+            feedback_service,
+            settings_service,
+            profile_service,
+            game_registry_service,
+            customization_service,
+            downloads_manager,
+            plugin_state_service,
+            plugin_catalog_service,
+            plugins_dir,
+        )
+        plugin_install_service = PluginInstallService(
+            plugin_state_service, plugin_runtime_service, plugins_dir
+        )
+        plugin_runtime_service.scan_installed_plugins()
+    except Exception as e:
+        logger.error("Failed to initialize plugin services: %s", e, exc_info=True)
+    downloads_manager.set_app_context(
+        mods_dir=app_state.mods_dir, plugin_install_service=plugin_install_service
+    )
     downloads_manager.startup()
     game_versions_manager = GameVersionsManager(
         user_root, lambda: app_state.local_config, parent
@@ -144,6 +169,10 @@ def build_application_context(parent=None) -> ApplicationContext:
         used_mods_service=used_mods_service,
         downloads_manager=downloads_manager,
         game_versions_manager=game_versions_manager,
+        plugin_state_service=plugin_state_service,
+        plugin_catalog_service=plugin_catalog_service,
+        plugin_runtime_service=plugin_runtime_service,
+        plugin_install_service=plugin_install_service,
     )
     return ApplicationContext(
         app_state=app_state,

@@ -22,7 +22,7 @@ from ui.common.styling import (
     get_theme_color,
 )
 from ui.utils.ui_utils import UIAnimator
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 from utils.path_utils import colored_icon, resource_path
 
 from .base_mod_widget import BaseModWidget
@@ -127,7 +127,7 @@ class InstalledModWidget(BaseModWidget):
         )
         self.checkmark_button.setVisible(False)
         config = self._resolve_theme_config()
-        checkmark_color = get_theme_color(config, "text") if config else "#039d5b"
+        checkmark_color = get_theme_color(config, "main_text") if config else "#039d5b"
         self.checkmark_button.setIcon(
             self._checkmark_icons.setdefault(
                 (24, checkmark_color), colored_icon("checkmark", checkmark_color)
@@ -168,7 +168,7 @@ class InstalledModWidget(BaseModWidget):
         super()._update_style()
         config = self._resolve_theme_config()
         if config:
-            text_color = get_theme_color(config, "text")
+            text_color = get_theme_color(config, "main_text")
             label = getattr(self, "game_version_label_title", None)
             if label:
                 apply_stylesheet_if_changed(
@@ -178,7 +178,7 @@ class InstalledModWidget(BaseModWidget):
                 )
             if hasattr(self, "checkmark_button") and self.checkmark_button:
                 icon_size = max(18, round(24 * self._layout_scale()))
-                checkmark_color = get_theme_color(config, "text")
+                checkmark_color = get_theme_color(config, "main_text")
                 self.checkmark_button.setIcon(
                     self._checkmark_icons.setdefault(
                         (icon_size, checkmark_color), colored_icon("checkmark", checkmark_color)
@@ -238,7 +238,7 @@ class InstalledModWidget(BaseModWidget):
             if not self.mod_data:
                 self._is_broken_cache = True
                 return True
-            key = get_mod_key(self.mod_data)
+            key = get_mod_id(self.mod_data)
             if not key:
                 self._is_broken_cache = True
                 return True
@@ -291,7 +291,7 @@ class InstalledModWidget(BaseModWidget):
             return True
 
     def _is_gamebanana_linked(self) -> bool:
-        key = get_mod_key(self.mod_data)
+        key = get_mod_id(self.mod_data)
         if not key:
             return False
         return isinstance(key, str) and key.startswith("gb_")

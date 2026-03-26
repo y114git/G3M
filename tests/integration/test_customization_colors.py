@@ -43,7 +43,10 @@ def _build_theme_test_window():
     app_window.background_movie = None
     app_window.background_pixmap = None
     app_window.size.return_value = Mock(width=800, height=600)
-    app_window.color_widgets = {"button_hover": Mock(text=lambda: "")}
+    app_window.color_widgets = {
+        "hover": Mock(text=lambda: ""),
+        "select": Mock(text=lambda: ""),
+    }
     app_window.custom_font_family = None
     app_window.status_label = Mock()
     app_window.status_label.setFont = Mock()
@@ -66,43 +69,74 @@ def _build_theme_test_window():
 
 class TestCustomizationColors:
     def test_get_theme_color_with_custom(self):
-        config = {"custom_color_text": "#FF0000"}
-        result = get_theme_color(config, "text", "#FFFFFF")
+        config = {"custom_main_text_color": "#FF0000"}
+        result = get_theme_color(config, "main_text", "#FFFFFF")
         assert result == "#FF0000"
 
     def test_get_theme_color_without_custom(self):
         config = {}
-        result = get_theme_color(config, "text", "#FFFFFF")
+        result = get_theme_color(config, "main_text", "#FFFFFF")
         assert result == "#FFFFFF"
 
     def test_get_theme_color_with_empty_custom(self):
-        config = {"custom_color_text": ""}
-        result = get_theme_color(config, "text", "#FFFFFF")
+        config = {"custom_main_text_color": ""}
+        result = get_theme_color(config, "main_text", "#FFFFFF")
         assert result == "#FFFFFF"
 
     def test_get_theme_color_with_custom_alpha(self):
-        config = {"custom_color_text": "#80FF0000"}
-        result = get_theme_color(config, "text", "#FFFFFF")
+        config = {"custom_main_text_color": "#80FF0000"}
+        result = get_theme_color(config, "main_text", "#FFFFFF")
         assert result == "#80FF0000"
 
     def test_customizable_color_keys(self):
         config = {
-            "custom_color_text": "#AAAAAA",
-            "custom_color_background": "#BBBBBB",
-            "custom_color_button": "#CCCCCC",
-            "custom_color_border": "#DDDDDD",
-            "custom_color_button_hover": "#EEEEEE",
-            "custom_color_secondary_text": "#FF00FF",
+            "custom_main_text_color": "#AAAAAA",
+            "custom_background_color": "#BBBBBB",
+            "custom_elements_color": "#CCCCCC",
+            "custom_border_color": "#DDDDDD",
+            "custom_hover_color": "#EEEEEE",
+            "custom_select_color": "#ABABAB",
+            "custom_secondary_text_color": "#FF00FF",
         }
-        assert get_theme_color(config, "text", "#FFFFFF") == "#AAAAAA"
+        assert get_theme_color(config, "main_text", "#FFFFFF") == "#AAAAAA"
         assert get_theme_color(config, "background", "#000000") == "#BBBBBB"
-        assert get_theme_color(config, "button", "#000000") == "#CCCCCC"
+        assert get_theme_color(config, "elements", "#000000") == "#CCCCCC"
         assert get_theme_color(config, "border", "#FFFFFF") == "#DDDDDD"
-        assert get_theme_color(config, "button_hover", "#333333") == "#EEEEEE"
+        assert get_theme_color(config, "hover", "#333333") == "#EEEEEE"
+        assert get_theme_color(config, "select", "#444444") == "#ABABAB"
         assert get_theme_color(config, "secondary_text", "#888888") == "#FF00FF"
 
     def test_rgba_from_color_preserves_explicit_alpha(self):
         assert rgba_from_color("#8000FF00") == "rgba(0, 255, 0, 128)"
+
+    def test_generate_widget_style_uses_hover_for_hover_border_and_select_for_selected_border(
+        self,
+    ):
+        from ui.common.styling import generate_widget_style
+
+        normal = generate_widget_style(
+            "frame",
+            "#111111",
+            "#222222",
+            "#333333",
+            "#444444",
+            "#EEEEEE",
+            "#AAAAAA",
+        )
+        selected = generate_widget_style(
+            "frame",
+            "#111111",
+            "#222222",
+            "#333333",
+            "#444444",
+            "#EEEEEE",
+            "#AAAAAA",
+            is_selected=True,
+        )
+
+        assert "QFrame#frame:hover" in normal
+        assert "border-color: #333333;" in normal
+        assert "border: 2px solid #444444;" in selected
 
 
 class TestColorHexDisplayConversion:
@@ -138,7 +172,7 @@ class TestColorValidation:
         color_widget = Mock()
         color_widget.text.return_value = "#00FF0080"
         manager.on_custom_style_edited({"background": color_widget})
-        assert app_state.local_config["custom_color_background"] == "#8000FF00"
+        assert app_state.local_config["custom_background_color"] == "#8000FF00"
 
 
 class TestColorWidgetLoading:
@@ -148,7 +182,7 @@ class TestColorWidgetLoading:
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
-        app_state.local_config["custom_color_background"] = "#8000FF00"
+        app_state.local_config["custom_background_color"] = "#8000FF00"
         widget = Mock()
         manager.load_custom_style_settings({"background": widget})
         widget.setText.assert_called_once_with("#00FF0080")
@@ -314,14 +348,14 @@ def _build_test_stylesheet(custom_border_radius="7px", **extra):
     invalidate_stylesheet_cache()
     return build_stylesheet(
         frame_bg_color="rgba(40,40,40,150)",
-        button_color="#222",
+        elements_color="#222",
         border_color="#039d5b",
-        button_hover_color="#616b78",
+        hover_color="#616b78",
+        select_color="#ecedef",
         main_text_color="#e8e9eb",
         font_family_main="Arial",
         font_size_main=16,
         font_size_small=12,
-        checkbox_checked_color="#fff",
         scroll_handle_color="#e8e9eb",
         custom_border_radius=custom_border_radius,
         **extra,
@@ -479,7 +513,7 @@ class TestBorderRadius:
         cs = CustomizationManager(app_state)
         container = Mock()
         container.objectName.return_value = "mods_browser_background"
-        app_state.local_config["custom_color_background"] = "#8000FF00"
+        app_state.local_config["custom_background_color"] = "#8000FF00"
         cs.update_translucent_backgrounds(container)
         call_args = container.setStyleSheet.call_args[0][0]
         assert "background-color: rgba(0, 255, 0, 128);" in call_args
@@ -496,29 +530,28 @@ class TestThemeApplication:
         app_window = _build_theme_test_window()
         app_window.app_state = app_state
         app_state.local_config = {
-            "custom_color_text": "#FF0000",
-            "custom_color_background": "#00FF00",
-            "custom_color_button": "#0000FF",
-            "custom_color_border": "#FFFF00",
+            "custom_main_text_color": "#FF0000",
+            "custom_background_color": "#00FF00",
+            "custom_elements_color": "#0000FF",
+            "custom_border_color": "#FFFF00",
             "ui_scale": 1.0,
         }
         with (
             patch(
-                "controllers.theme_controller.THEMES",
+                "controllers.theme_controller.DEFAULT_THEME",
                 {
-                    "default": {
-                        "background": "images/background.png",
-                        "colors": {
-                            "text": "#FFFFFF",
-                            "background": "#000000",
-                            "button": "#333333",
-                            "border": "#444444",
-                            "button_hover": "#555555",
-                        },
-                        "font_family": "Arial",
-                        "font_size_main": 12,
-                        "font_size_small": 10,
-                    }
+                    "background": "images/background.png",
+                    "colors": {
+                        "main_text": "#FFFFFF",
+                        "background": "#000000",
+                        "elements": "#333333",
+                        "border": "#444444",
+                        "hover": "#555555",
+                        "select": "#666666",
+                    },
+                    "font_family": "Arial",
+                    "font_size_main": 12,
+                    "font_size_small": 10,
                 },
             ),
             patch("controllers.theme_controller.BgLoader"),
@@ -551,26 +584,25 @@ class TestThemeApplication:
         app_window = _build_theme_test_window()
         app_window.app_state = app_state
         app_state.local_config = {
-            "custom_color_background": "#8000FF00",
+            "custom_background_color": "#8000FF00",
             "ui_scale": 1.0,
         }
         with (
             patch(
-                "controllers.theme_controller.THEMES",
+                "controllers.theme_controller.DEFAULT_THEME",
                 {
-                    "default": {
-                        "background": "images/background.png",
-                        "colors": {
-                            "text": "#FFFFFF",
-                            "background": "#000000",
-                            "button": "#333333",
-                            "border": "#444444",
-                            "button_hover": "#555555",
-                        },
-                        "font_family": "Arial",
-                        "font_size_main": 12,
-                        "font_size_small": 10,
-                    }
+                    "background": "images/background.png",
+                    "colors": {
+                        "main_text": "#FFFFFF",
+                        "background": "#000000",
+                        "elements": "#333333",
+                        "border": "#444444",
+                        "hover": "#555555",
+                        "select": "#666666",
+                    },
+                    "font_family": "Arial",
+                    "font_size_main": 12,
+                    "font_size_small": 10,
                 },
             ),
             patch("controllers.theme_controller.BgLoader"),
@@ -632,21 +664,20 @@ class TestThemeApplication:
 
         with (
             patch(
-                "controllers.theme_controller.THEMES",
+                "controllers.theme_controller.DEFAULT_THEME",
                 {
-                    "default": {
-                        "background": "images/background.png",
-                        "colors": {
-                            "text": "#FFFFFF",
-                            "background": "#000000",
-                            "button": "#333333",
-                            "border": "#444444",
-                            "button_hover": "#555555",
-                        },
-                        "font_family": "Arial",
-                        "font_size_main": 12,
-                        "font_size_small": 10,
-                    }
+                    "background": "images/background.png",
+                    "colors": {
+                        "main_text": "#FFFFFF",
+                        "background": "#000000",
+                        "elements": "#333333",
+                        "border": "#444444",
+                        "hover": "#555555",
+                        "select": "#666666",
+                    },
+                    "font_family": "Arial",
+                    "font_size_main": 12,
+                    "font_size_small": 10,
                 },
             ),
             patch("controllers.theme_controller.BgLoader"),

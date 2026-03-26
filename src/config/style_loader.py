@@ -114,14 +114,17 @@ def _scale_px(value: int, zoom_factor: float) -> int:
 
 def build_stylesheet(
     frame_bg_color: str,
-    button_color: str,
+    elements_color: str,
     border_color: str,
-    button_hover_color: str,
+    hover_color: str,
+    select_color: str,
     main_text_color: str,
+    disabled_bg: str,
+    disabled_text: str,
+    disabled_border: str,
     font_family_main: str,
     font_size_main: int,
     font_size_small: int,
-    checkbox_checked_color: str,
     scroll_handle_color: str,
     tooltip_bg_color: str = FALLBACK_TOOLTIP_BG,
     scroll_groove_color: str = FALLBACK_SCROLL_GROOVE,
@@ -130,14 +133,17 @@ def build_stylesheet(
 ) -> str:
     cache_key = (
         frame_bg_color,
-        button_color,
+        elements_color,
         border_color,
-        button_hover_color,
+        hover_color,
+        select_color,
         main_text_color,
+        disabled_bg,
+        disabled_text,
+        disabled_border,
         font_family_main,
         font_size_main,
         font_size_small,
-        checkbox_checked_color,
         scroll_handle_color,
         tooltip_bg_color,
         scroll_groove_color,
@@ -187,14 +193,17 @@ def build_stylesheet(
     )
     shared_replacements = {
         "%frame_bg_color%": frame_bg_color,
-        "%button_color%": button_color,
+        "%elements_color%": elements_color,
         "%border_color%": border_color,
-        "%button_hover_color%": button_hover_color,
+        "%hover_color%": hover_color,
+        "%select_color%": select_color,
         "%main_text_color%": main_text_color,
+        "%disabled_bg%": disabled_bg,
+        "%disabled_text%": disabled_text,
+        "%disabled_border%": disabled_border,
         "%font_family_main%": font_family_main,
         "%font_size_main%": str(font_size_main),
         "%font_size_small%": str(font_size_small),
-        "%checkbox_checked_color%": checkbox_checked_color,
         "%tooltip_bg_color%": tooltip_bg_color,
         "%custom_border_radius%": custom_border_radius,
         "%title_bar_radius%": title_bar_radius,
@@ -227,7 +236,7 @@ def build_stylesheet(
     combined = "".join(
         _apply_template_replacements(t, shared_replacements) for t in templates
     ) + _apply_template_replacements(scrollbar_template, scrollbar_replacements)
-    if zoom_factor != 1.0:
+    if abs(zoom_factor - 1.0) > 1e-9:
         combined = re.sub(
             r"(\d+)px",
             lambda m: f"{max(1, int(int(m.group(1)) * zoom_factor))}px",

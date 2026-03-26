@@ -98,12 +98,10 @@ class BlocklistManager:
                     mod_id
                 ).lower() == val:
                     return True
-                if (key := _getattr_first(mod, "key", "mod_key")) and key.startswith(
-                    "gb_"
-                ):
-                    from utils.mod_utils import parse_gamebanana_key
+                if (key := _getattr_first(mod, "id")) and key.startswith("gb_"):
+                    from utils.mod_utils import parse_gamebanana_mod_id
 
-                    _, gb_id = parse_gamebanana_key(key)
+                    _, gb_id = parse_gamebanana_mod_id(key)
                     if gb_id and gb_id.lower() == val:
                         return True
             elif pt == self.PREFIX_TYPE_NAME:

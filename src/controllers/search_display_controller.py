@@ -20,7 +20,7 @@ from ui.utils.ui_utils import DebounceTimer
 from ui.widgets.mod.mod_card_widget import ModCardWidget
 from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
 from ui.widgets.mod_details_overlay import show_mod_details_overlay
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 from utils.path_utils import colored_icon
 from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
 from workers.gamebanana.search_worker import SearchGameBananaModsThread
@@ -216,17 +216,17 @@ class SearchDisplayController(QObject):
             self.ui_widget_updates_enabled.emit("mod_list_widget", True)
             self._maybe_load_more_for_short_viewport()
 
-    def _get_installed_mod_keys(self) -> set:
+    def _get_installed_mod_ids(self) -> set:
         try:
             if self.mod_service:
                 return {
-                    k
+                    mod_id
                     for m in self.mod_service.get_installed_mods_list()
-                    if (k := m.get("key") or m.get("mod_key"))
+                    if (mod_id := m.get("id"))
                 }
         except Exception as e:
             logger.warning(
-                f"SearchDisplayController: Error getting installed mod keys: {e}",
+                f"SearchDisplayController: Error getting installed mod ids: {e}",
                 exc_info=True,
             )
         return set()
@@ -246,7 +246,7 @@ class SearchDisplayController(QObject):
         return False
 
     def _set_search_btn_icon(self, is_searching: bool):
-        tc = get_theme_color(self.app_state.local_config, "text")
+        tc = get_theme_color(self.app_state.local_config, "main_text")
         icon = colored_icon("reset", tc) if is_searching else colored_icon("search", tc)
         self.ui_button_icon_update.emit("search_button", icon)
         tooltip = (
@@ -313,12 +313,12 @@ class SearchDisplayController(QObject):
         self._show_bottom_loading_indicator()
         sort_param = self._get_selected_sort()
         start_page = max(1, last_page + 1)
-        _identity = (game_id, start_page, sort_param, "")
+        identity = (game_id, start_page, sort_param, "")
         load_thread = LoadMoreGameBananaModsThread(
             game_id, start_page, num_pages=1, sort=sort_param, parent=self.app
         )
 
-        def on_result(mods_list, _id=_identity, _thread=load_thread):
+        def on_result(mods_list, request_id=identity, thread=load_thread):
             try:
                 current_game_id = get_gamebanana_game_ids().get(
                     self._get_selected_gamebanana_game()
@@ -326,16 +326,17 @@ class SearchDisplayController(QObject):
                 current_search = (self.app_state.search_text or "").strip()
                 current_sort = self._get_selected_sort()
                 current_page = max(
-                    1, self.app_state.gamebanana_loaded_pages.get(_id[0], 0) + 1
+                    1,
+                    self.app_state.gamebanana_loaded_pages.get(request_id[0], 0) + 1,
                 )
                 if (
-                    current_game_id != _id[0]
-                    or current_search != _id[3]
-                    or current_sort != _id[2]
-                    or current_page != _id[1]
+                    current_game_id != request_id[0]
+                    or current_search != request_id[3]
+                    or current_sort != request_id[2]
+                    or current_page != request_id[1]
                 ):
                     self.app_state.gamebanana_loading = False
-                    self._cleanup_load_thread(_thread)
+                    self._cleanup_load_thread(thread)
                     return
                 self.app_state.gamebanana_loading = False
                 if mods_list:
@@ -386,8 +387,8 @@ class SearchDisplayController(QObject):
         if last_page >= SEARCH_EXHAUSTED_PAGE_SENTINEL:
             return
         start_page = max(1, last_page + 1)
-        _s_sort = self._get_selected_sort()
-        _s_identity = (game_id, start_page, _s_sort, search_text)
+        search_sort = self._get_selected_sort()
+        search_identity = (game_id, start_page, search_sort, search_text)
         self.app_state.gamebanana_loading = True
         self._show_bottom_loading_indicator()
         search_thread = SearchGameBananaModsThread(
@@ -395,11 +396,11 @@ class SearchDisplayController(QObject):
             search_string=search_text,
             start_page=start_page,
             num_pages=1,
-            sort=_s_sort,
+            sort=search_sort,
             parent=self.app,
         )
 
-        def on_result(mods_list, _id=_s_identity, _thread=search_thread):
+        def on_result(mods_list, request_id=search_identity, thread=search_thread):
             try:
                 current_game_id = get_gamebanana_game_ids().get(
                     self._get_selected_gamebanana_game()
@@ -411,16 +412,17 @@ class SearchDisplayController(QObject):
                 )
                 current_page = max(
                     1,
-                    current_s_pages.get(current_search.lower(), {}).get(_id[0], 0) + 1,
+                    current_s_pages.get(current_search.lower(), {}).get(request_id[0], 0)
+                    + 1,
                 )
                 if (
-                    current_game_id != _id[0]
-                    or current_search != _id[3]
-                    or current_sort != _id[2]
-                    or current_page != _id[1]
+                    current_game_id != request_id[0]
+                    or current_search != request_id[3]
+                    or current_sort != request_id[2]
+                    or current_page != request_id[1]
                 ):
                     self.app_state.gamebanana_loading = False
-                    self._cleanup_load_thread(_thread)
+                    self._cleanup_load_thread(thread)
                     return
                 self.app_state.gamebanana_loading = False
                 if mods_list:
@@ -548,13 +550,13 @@ class SearchDisplayController(QObject):
                 self.update_display()
                 return
             filters, sort_config = self._build_filters_and_sort()
-            installed_keys = self._get_installed_mod_keys()
+            installed_ids = self._get_installed_mod_ids()
             self.app_state.filtered_mods = filter_and_sort_mods(
                 self.app_state.all_mods,
                 filters,
                 sort_config,
                 blocklist_service=self.blocklist_service,
-                installed_mod_keys=installed_keys,
+                installed_mod_ids=installed_ids,
             )
             if not preserve_page:
                 self.app_state.current_page = 1
@@ -647,7 +649,7 @@ class SearchDisplayController(QObject):
             _remove_loading_indicators()
 
             def get_mod_cache_key(mod):
-                key = get_mod_key(mod)
+                key = get_mod_id(mod)
                 if key and key.startswith("gb_"):
                     return key
                 if key:
@@ -918,9 +920,9 @@ class SearchDisplayController(QObject):
     def _append_unique_gamebanana_mods(self, mods_list):
         if not mods_list:
             return
-        existing_keys = {k for m in self.app_state.all_mods if (k := get_mod_key(m))}
+        existing_keys = {k for m in self.app_state.all_mods if (k := get_mod_id(m))}
         new_mods_to_add = [
-            m for m in mods_list if (k := get_mod_key(m)) and k not in existing_keys
+            m for m in mods_list if (k := get_mod_id(m)) and k not in existing_keys
         ]
         if new_mods_to_add:
             self.app_state.extend_all_mods(new_mods_to_add)

@@ -278,7 +278,7 @@ class GameVersionsDialog(QDialog):
         theme = get_dialog_theme_values(self._app_state)
         extra = f"""
             QFrame#game_versions_record {{
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
             }}
@@ -300,12 +300,12 @@ class GameVersionsDialog(QDialog):
             QPushButton#game_versions_add_btn {{
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 margin: 0px;
                 padding: 0px;
             }}
             QPushButton#game_versions_add_btn:hover:enabled {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
             }}
             QPushButton#game_versions_add_btn:disabled {{
                 background-color: {theme["background"]};
@@ -321,7 +321,7 @@ class GameVersionsDialog(QDialog):
                 border-radius: 4px;
                 text-align: center;
                 font-size: 10px;
-                color: {theme["text"]};
+                color: {theme["main_text"]};
             }}
             QProgressBar::chunk {{
                 background-color: {theme["secondary_text"]};
@@ -456,11 +456,11 @@ class GameVersionsDialog(QDialog):
         )
 
     def _resolve_profile_mods(self, profile_name, game_id, profile_service):
-        """Read profile JSON and resolve mod keys to mod objects for the given game.
+        """Read profile JSON and resolve mod ids to mod objects for the given game.
 
         NOTE: This method depends on private APIs:
         - profile_service._read_profile()
-        - used_mods_service._find_mod_by_key()
+        - used_mods_service._find_mod_by_id()
         These private methods can break on service refactors.
         """
         data = profile_service._read_profile(profile_name)
@@ -477,15 +477,15 @@ class GameVersionsDialog(QDialog):
             ):
                 continue
             for chapter_id_str, mod_data_raw in value.items():
-                mod_keys = (
+                mod_ids = (
                     [mod_data_raw]
                     if isinstance(mod_data_raw, str)
                     else (mod_data_raw if isinstance(mod_data_raw, list) else [])
                 )
                 mods_list = [
                     m
-                    for k in mod_keys
-                    if k and (m := used_mods_service._find_mod_by_key(k))
+                    for mod_id in mod_ids
+                    if mod_id and (m := used_mods_service._find_mod_by_id(mod_id))
                 ]
                 if mods_list and chapter_id_str not in chapter_mods:
                     chapter_mods[chapter_id_str] = mods_list

@@ -17,6 +17,11 @@ from PyQt6.QtWidgets import QFileDialog, QWidget
 from config.config import LAUNCHER_VERSION, UI_COLORS
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
+from services.migration_service import (
+    get_theme_color_setting,
+    migrate_settings_payload,
+    migrate_theme_settings,
+)
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
 
@@ -30,14 +35,19 @@ class SettingsManager(QObject):
     restart_required = pyqtSignal(str)
     status_changed = pyqtSignal(str, str)
     _THEME_COLOR_KEYS = (
-        "custom_color_background",
-        "custom_color_button",
-        "custom_color_border",
-        "custom_color_button_hover",
-        "custom_color_text",
-        "custom_color_secondary_text",
+        "custom_background_color",
+        "custom_elements_color",
+        "custom_border_color",
+        "custom_hover_color",
+        "custom_select_color",
+        "custom_main_text_color",
+        "custom_secondary_text_color",
     )
-    _THEME_FLAG_KEYS = ("background_disabled", "disable_animations")
+    _THEME_FLAG_KEYS = (
+        "background_disabled",
+        "disable_animations",
+        "disable_startup_sound",
+    )
     _IMAGE_EXTENSIONS = (
         ".png",
         ".jpg",
@@ -77,7 +87,7 @@ class SettingsManager(QObject):
     def read_json(self, path: str):
         from utils.file_utils import load_json
 
-        data = load_json(path, migrate_config=True)
+        data = load_json(path)
         if not data and os.path.exists(path):
             backup_path = f"{path}.invalid.bak"
             if os.path.exists(backup_path):
@@ -141,48 +151,7 @@ class SettingsManager(QObject):
             self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def migrate_config_if_needed(self):
-        self.app_state.local_config["cache_format_version"] = LAUNCHER_VERSION
-        defaults = {
-            "game_path": "",
-            "last_selected": {},
-            "use_custom_executable": False,
-            "demo_game_path": "",
-            "launch_via_steam": False,
-            "use_portproton": False,
-            "portproton_path": "",
-            "demo_mode_enabled": False,
-            "custom_background_path": "",
-            "custom_executable_path": "",
-            "background_disabled": False,
-            "custom_color_background": "",
-            "custom_color_button": "",
-            "custom_color_border": "",
-            "custom_color_button_hover": "",
-            "custom_color_text": "",
-            "custom_color_secondary_text": "",
-            "beta_updates_enabled": False,
-            "pizzatower_game_path": "",
-            "pizzatower_custom_executable_path": "",
-            "skip_patching_warnings": False,
-            "merge_properties": False,
-            "merge_code": False,
-            "hide_mods_browser_tab": False,
-            "hide_library_tab": False,
-            "hide_library_filters": False,
-            "show_reset_buttons": False,
-            "custom_border_radius": 7,
-            "downloads_no_auto_use": False,
-            "downloads_delete_after_use": False,
-            "downloads_save_local_imports": False,
-        }
-        for key, value in defaults.items():
-            self.app_state.local_config.setdefault(key, value)
-        if "custom_color_version_text" in self.app_state.local_config:
-            old_val = self.app_state.local_config.pop("custom_color_version_text")
-            if old_val and not self.app_state.local_config.get(
-                "custom_color_secondary_text"
-            ):
-                self.app_state.local_config["custom_color_secondary_text"] = old_val
+        migrate_settings_payload(self.app_state.local_config, LAUNCHER_VERSION)
         self.write_local_config()
 
     def on_language_changed(self, language_code: str):
@@ -225,6 +194,9 @@ class SettingsManager(QObject):
     def on_toggle_disable_background(self, enabled: bool):
         self._toggle_setting("background_disabled", enabled, "theme_changed")
 
+    def on_toggle_disable_startup_sound(self, enabled: bool):
+        self._toggle_setting("disable_startup_sound", enabled, None)
+
     def on_toggle_skip_patching_warnings(self, enabled: bool):
         self._toggle_setting("skip_patching_warnings", enabled)
 
@@ -260,6 +232,13 @@ class SettingsManager(QObject):
             self._toggle_setting("portproton_path", filepath)
             return filepath
         return None
+
+    def pick_directory(self, title: str, start_dir: str = "") -> str:
+        return QFileDialog.getExistingDirectory(
+            self.parent_widget,
+            title,
+            start_dir or os.path.expanduser("~"),
+        )
 
     def prompt_for_game_path(self, is_initial=False) -> bool:
         game = self.app_state.game_mode
@@ -558,6 +537,7 @@ class SettingsManager(QObject):
         return bool(re.fullmatch(r"#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", s or ""))
 
     def on_custom_style_edited(self, color_widgets: dict):
+        changed = False
         for key, widget in color_widgets.items():
             color = widget.text().strip().upper()
             default_display_hex = (
@@ -567,12 +547,14 @@ class SettingsManager(QObject):
                 stored_color = (
                     "" if color == default_display_hex else display_hex_to_qt_hex(color)
                 )
-                self.app_state.local_config[f"custom_color_{key}"] = stored_color
+                config_key = get_theme_color_setting(key)
+                if self.app_state.local_config.get(config_key, "") != stored_color:
+                    self.app_state.local_config[config_key] = stored_color
+                    changed = True
                 widget.setProperty("last_valid_display_hex", color)
-            else:
-                self.app_state.local_config[f"custom_color_{key}"] = ""
-        self.write_local_config()
-        self.theme_changed.emit()
+        if changed:
+            self.write_local_config()
+            self.theme_changed.emit()
 
     def build_theme_export_settings(self) -> dict:
         settings = {
@@ -694,10 +676,7 @@ class SettingsManager(QObject):
                         )
                 with open(theme_json_path, encoding="utf-8") as f:
                     theme_settings = json.load(f)
-                if "custom_color_version_text" in theme_settings:
-                    theme_settings["custom_color_secondary_text"] = theme_settings.pop(
-                        "custom_color_version_text"
-                    )
+                migrate_theme_settings(theme_settings)
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value
 
@@ -707,7 +686,7 @@ class SettingsManager(QObject):
                 self._remove_font_files()
                 self.app_state.local_config["custom_background_path"] = ""
 
-                _asset_prefixes = {
+                asset_prefixes = {
                     "background.": "custom_background",
                     "background_music.": "custom_background_music",
                     "startup_sound.": "custom_startup_sound",
@@ -716,7 +695,7 @@ class SettingsManager(QObject):
                 }
 
                 for filename in os.listdir(temp_dir):
-                    for prefix, dest_name in _asset_prefixes.items():
+                    for prefix, dest_name in asset_prefixes.items():
                         if filename.startswith(prefix):
                             ext = os.path.splitext(filename)[1]
                             dest_path = os.path.join(

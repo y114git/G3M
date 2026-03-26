@@ -19,7 +19,7 @@ from app.game_ui import full_install_tooltip
 from config.config import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 from workers.install.full_install_worker import FullInstallThread
 
 
@@ -209,6 +209,15 @@ class GameLaunchController(QObject):
         self.launch_game()
 
     def launch_game(self):
+        runtime_service = getattr(self.app, "plugin_runtime_service", None)
+        if runtime_service and any(
+            result is False for result in runtime_service.execute_hook("before_mod_apply")
+        ):
+            self.feedback_service.update_status(
+                tr("plugins.launch_blocked"), UI_COLORS["status_warning"]
+            )
+            self.update_button_state()
+            return
         self.game_launcher.launch_game_with_all_mods(
             restore_window_callback=self.app.restore_window_signal.emit,
         )
@@ -359,11 +368,11 @@ class GameLaunchController(QObject):
         for chapter_id, mod_data in list(self.used_mods_service.used_mods.items()):
             if not mod_data:
                 continue
-            key = get_mod_key(mod_data)
+            key = get_mod_id(mod_data)
             if not key:
                 continue
             updated_mod = next(
-                (mod for mod in self.app_state.all_mods if get_mod_key(mod) == key),
+                (mod for mod in self.app_state.all_mods if get_mod_id(mod) == key),
                 None,
             )
             if not updated_mod:

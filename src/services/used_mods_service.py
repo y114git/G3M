@@ -14,11 +14,12 @@ from app.game_ui import update_chapter_tabs_style, update_steam_launch_checkbox_
 from models.app_state import AppState
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
+from services.migration_service import migrate_legacy_chapter_id
 from services.mod_service import ModManager
 from services.settings_service import SettingsManager
 from ui.common.feedback import FeedbackManager
 from utils.file_utils import sanitize_filename
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_id, get_mod_name
 
 
 class UsedModsManager(QObject):
@@ -49,14 +50,14 @@ class UsedModsManager(QObject):
     def set_used_mod(
         self, chapter_id: str, mod_data: Any | None, save_state: bool = True
     ) -> None:
-        key = get_mod_key(mod_data) if mod_data else None
+        mod_id = get_mod_id(mod_data) if mod_data else None
         current_mods = self.used_mods.get(chapter_id, [])
         if mod_data is None:
             if chapter_id in self.used_mods:
                 del self.used_mods[chapter_id]
-        elif key:
+        elif mod_id:
             found_index = next(
-                (i for i, m in enumerate(current_mods) if get_mod_key(m) == key), None
+                (i for i, m in enumerate(current_mods) if get_mod_id(m) == mod_id), None
             )
             if found_index is not None:
                 current_mods.pop(found_index)
@@ -94,17 +95,17 @@ class UsedModsManager(QObject):
                 )
 
     def is_mod_used_for_chapter(self, mod_data, chapter_id: str) -> bool:
-        if not mod_data or not (key := get_mod_key(mod_data)):
+        if not mod_data or not (mod_id := get_mod_id(mod_data)):
             return False
-        return any(get_mod_key(m) == key for m in self.used_mods.get(chapter_id, []))
+        return any(get_mod_id(m) == mod_id for m in self.used_mods.get(chapter_id, []))
 
     def remove_mod_from_all_chapters(self, mod_data):
-        key = get_mod_key(mod_data)
-        if not key:
+        mod_id = get_mod_id(mod_data)
+        if not mod_id:
             return
         chapters_changed = []
         for chapter_id, used_mods_list in list(self.used_mods.items()):
-            updated_list = [m for m in used_mods_list if get_mod_key(m) != key]
+            updated_list = [m for m in used_mods_list if get_mod_id(m) != mod_id]
             if len(updated_list) != len(used_mods_list):
                 chapters_changed.append(chapter_id)
                 if updated_list:
@@ -115,10 +116,10 @@ class UsedModsManager(QObject):
             self.save_used_mods_state()
             for chapter_id in chapters_changed:
                 self.used_mod_changed.emit(chapter_id)
-        self._cleanup_mod_from_all_config_keys(key)
+        self._cleanup_mod_from_all_config_entries(mod_id)
 
-    def _cleanup_mod_from_all_config_keys(self, mod_key: str):
-        if not mod_key:
+    def _cleanup_mod_from_all_config_entries(self, mod_id: str):
+        if not mod_id:
             return
         config_keys = [
             config_key
@@ -133,10 +134,10 @@ class UsedModsManager(QObject):
             chapters_to_clear = []
             for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
                 if isinstance(mod_data_raw, str):
-                    if mod_data_raw == mod_key:
+                    if mod_data_raw == mod_id:
                         chapters_to_clear.append(chapter_id_str)
-                elif isinstance(mod_data_raw, list) and mod_key in mod_data_raw:
-                    updated_list = [k for k in mod_data_raw if k != mod_key]
+                elif isinstance(mod_data_raw, list) and mod_id in mod_data_raw:
+                    updated_list = [k for k in mod_data_raw if k != mod_id]
                     if updated_list:
                         used_mods_data[chapter_id_str] = updated_list
                         config_updated = True
@@ -160,9 +161,9 @@ class UsedModsManager(QObject):
             if is_chapter_mode is not None
             else self.app_state.current_mode == "chapter"
         )
-        key = getattr(game_mode, "used_mods_config_key", "")
-        if key:
-            return key
+        config_id = getattr(game_mode, "used_mods_config_key", "")
+        if config_id:
+            return config_id
         return "used_mods_deltarune_chapter" if is_chapter else "used_mods_deltarune"
 
     def save_used_mods_state(self):
@@ -182,48 +183,53 @@ class UsedModsManager(QObject):
         for chapter_id, mods_list in self.used_mods.items():
             if chapter_id not in active_ids:
                 continue
-            mod_keys = []
+            mod_ids = []
             for mod_data in mods_list:
                 try:
-                    if isinstance(mod_data, dict):
-                        key = mod_data.get("key") or mod_data.get("mod_key")
-                    else:
-                        key = get_mod_key(mod_data)
+                    mod_id = (
+                        mod_data.get("id")
+                        if isinstance(mod_data, dict)
+                        else get_mod_id(mod_data)
+                    )
                     mod_name = get_mod_name(mod_data, "")
-                    if not key or (key == mod_name and mod_name):
+                    if not mod_id or (mod_id == mod_name and mod_name):
                         if mod_name and isinstance(mod_name, str):
                             sanitized = sanitize_filename(mod_name)
                             if sanitized:
-                                key = f"local_{sanitized.lower().replace(' ', '_')}"
+                                mod_id = f"local_{sanitized.lower().replace(' ', '_')}"
                             else:
-                                key = None
+                                mod_id = None
                         else:
-                            key = None
-                    if key:
-                        mod_keys.append(key)
+                            mod_id = None
+                    if mod_id:
+                        mod_ids.append(mod_id)
                 except Exception as e:
                     logging.error(
-                        f"save_used_mods_state: Failed to extract mod key from {mod_data!r}: {e}",
+                        f"save_used_mods_state: Failed to extract mod id from {mod_data!r}: {e}",
                         exc_info=True,
                     )
                     continue
-            if mod_keys:
-                if len(mod_keys) == 1:
-                    used_mods_data[str(chapter_id)] = mod_keys[0]
+            if mod_ids:
+                if len(mod_ids) == 1:
+                    used_mods_data[str(chapter_id)] = mod_ids[0]
                 else:
-                    used_mods_data[str(chapter_id)] = mod_keys
-        for ch_id, keys in getattr(self, "_pending_mod_keys", {}).items():
+                    used_mods_data[str(chapter_id)] = mod_ids
+        for ch_id, pending_mod_ids in getattr(self, "_pending_mod_ids", {}).items():
             ch_str = str(ch_id)
             if ch_id not in active_ids:
                 continue
             if ch_str not in used_mods_data:
-                used_mods_data[ch_str] = keys if len(keys) > 1 else keys[0]
+                used_mods_data[ch_str] = (
+                    pending_mod_ids
+                    if len(pending_mod_ids) > 1
+                    else pending_mod_ids[0]
+                )
             else:
                 existing = used_mods_data[ch_str]
                 merged = [existing] if isinstance(existing, str) else list(existing)
-                for k in keys:
-                    if k not in merged:
-                        merged.append(k)
+                for mod_id in pending_mod_ids:
+                    if mod_id not in merged:
+                        merged.append(mod_id)
                 used_mods_data[ch_str] = merged if len(merged) > 1 else merged[0]
         self.app_state.local_config[config_key] = {
             str(k): v
@@ -264,8 +270,13 @@ class UsedModsManager(QObject):
             gm = self.app_state.game_mode
             valid_tab_ids = {tab.tab_id for tab in gm.tabs}
             expected_id = get_chapter_id_for_game_mode(gm)
+
+            migrations_needed = []
             for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
-                chapter_id = self._migrate_legacy_id(chapter_id_str)
+                chapter_id = migrate_legacy_chapter_id(chapter_id_str)
+                if chapter_id != chapter_id_str:
+                    migrations_needed.append((chapter_id_str, chapter_id, mod_data_raw))
+
                 if (
                     not chapter_mode
                     and expected_id != gm.game_id
@@ -280,46 +291,57 @@ class UsedModsManager(QObject):
                     and chapter_id != expected_id
                 ):
                     continue
-                mod_keys = (
+                mod_ids = (
                     [mod_data_raw]
                     if isinstance(mod_data_raw, str)
                     else (mod_data_raw if isinstance(mod_data_raw, list) else [])
                 )
                 if isinstance(mod_data_raw, str):
                     needs_save = True
-                if not mod_keys:
+                if not mod_ids:
                     continue
-                mods_list, missing_keys = [], []
-                for key in mod_keys:
-                    if not key:
+                mods_list, missing_mod_ids = [], []
+                for mod_id in mod_ids:
+                    if not mod_id:
                         continue
-                    if mod_data := self._find_mod_by_key(key):
+                    if mod_data := self._find_mod_by_id(mod_id):
                         mods_list.append(mod_data)
                     else:
-                        missing_keys.append(key)
+                        missing_mod_ids.append(mod_id)
                 if mods_list:
                     self.used_mods[chapter_id] = mods_list
-                if missing_keys:
-                    if not hasattr(self, "_pending_mod_keys"):
-                        self._pending_mod_keys = {}
-                    self._pending_mod_keys[chapter_id] = missing_keys
+                if missing_mod_ids:
+                    if not hasattr(self, "_pending_mod_ids"):
+                        self._pending_mod_ids = {}
+                    self._pending_mod_ids[chapter_id] = missing_mod_ids
                 else:
                     if (
-                        hasattr(self, "_pending_mod_keys")
-                        and chapter_id in self._pending_mod_keys
+                        hasattr(self, "_pending_mod_ids")
+                        and chapter_id in self._pending_mod_ids
                     ):
-                        del self._pending_mod_keys[chapter_id]
+                        del self._pending_mod_ids[chapter_id]
                 if (
-                    not missing_keys
+                    not missing_mod_ids
                     and not mods_list
                     and chapter_id_str in used_mods_data
                     and not (
-                        hasattr(self, "_pending_mod_keys")
-                        and chapter_id in self._pending_mod_keys
+                        hasattr(self, "_pending_mod_ids")
+                        and chapter_id in self._pending_mod_ids
                     )
                 ):
                     del used_mods_data[chapter_id_str]
                     needs_save = True
+
+            if migrations_needed:
+                current_keys = set(used_mods_data.keys())
+                for old_chapter_id, new_chapter_id, mod_data in migrations_needed:
+                    if old_chapter_id not in current_keys:
+                        continue
+                    used_mods_data[new_chapter_id] = mod_data
+                    if old_chapter_id in used_mods_data:
+                        del used_mods_data[old_chapter_id]
+                self.app_state.local_config[config_key] = used_mods_data
+                needs_save = True
         if did_process or (
             hasattr(self.app_state, "all_mods") and self.app_state.all_mods
         ):
@@ -330,31 +352,30 @@ class UsedModsManager(QObject):
         self.mod_widgets_update_needed.emit()
         self.action_button_update_needed.emit()
 
-    def _find_mod_by_key(self, key: str):
-        """Find mod by key from all_mods, installed mods, or config."""
+    def _find_mod_by_id(self, mod_id: str, use_legacy_name_lookup: bool = False):
+        """Find mod by id from all_mods, installed mods, or config."""
         if hasattr(self.app_state, "all_mods") and self.app_state.all_mods:
             for mod in self.app_state.all_mods:
-                if get_mod_key(mod) == key:
+                if get_mod_id(mod) == mod_id:
                     return mod
         if self.parent_widget:
             for im in self.mod_service.get_installed_mods_list():
-                im_key = im.get("mod_key") or im.get("key") or im.get("name")
-                if im_key == key or (
-                    key.startswith("gb_")
-                    and (im.get("key") or im.get("mod_key")) == key
-                ):
+                installed_mod_id = im.get("id")
+                if use_legacy_name_lookup and not installed_mod_id:
+                    installed_mod_id = im.get("name")
+                if installed_mod_id == mod_id:
                     return self.mod_service.create_mod_object_from_info(
                         im, getattr(self.app_state, "all_mods", None)
                     )
-            if mod_config := self.mod_service.get_mod_config(key):
+            if mod_config := self.mod_service.get_mod_config(mod_id):
                 return self.mod_service.create_mod_object_from_info(
                     mod_config, getattr(self.app_state, "all_mods", None)
                 )
         return None
 
     def _is_local_mod(self, mod_data):
-        key = get_mod_key(mod_data)
-        return key and isinstance(key, str) and key.startswith("local_")
+        mod_id = get_mod_id(mod_data)
+        return mod_id and isinstance(mod_id, str) and mod_id.startswith("local_")
 
     def check_used_mods_need_updates(self) -> bool:
         return any(
@@ -450,22 +471,20 @@ class UsedModsManager(QObject):
             return
         update_steam_launch_checkbox_state(self.parent_widget)
 
-    @staticmethod
-    def _migrate_legacy_id(chapter_id_str: str) -> str:
-        """Convert old numeric chapter IDs to new string-based IDs."""
-        legacy_map = {
-            "-1": "deltarune",
-            "0": "deltarune_0",
-            "1": "deltarune_1",
-            "2": "deltarune_2",
-            "3": "deltarune_3",
-            "4": "deltarune_4",
-            "-10": "deltarunedemo",
-            "-20": "undertale",
-            "-30": "undertaleyellow",
-            "-40": "pizzatower",
-            "-50": "sugaryspire",
-        }
-        if chapter_id_str in legacy_map:
-            return legacy_map[chapter_id_str]
-        return chapter_id_str
+    def record_session_playtime(self, seconds: float) -> None:
+        if seconds <= 0:
+            return
+        mod_service = getattr(self.app_state, "mod_service", None)
+        if not mod_service:
+            return
+        active_mod_ids = []
+        seen = set()
+        for mods in self.used_mods.values():
+            for mod in mods:
+                mod_id = get_mod_id(mod)
+                if not mod_id or mod_id in seen or mod_id.startswith("local_"):
+                    continue
+                seen.add(mod_id)
+                active_mod_ids.append(mod_id)
+        if active_mod_ids:
+            mod_service.add_playtime_hours(active_mod_ids, seconds / 3600.0)

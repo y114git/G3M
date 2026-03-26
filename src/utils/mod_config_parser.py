@@ -2,8 +2,85 @@
 
 import os
 
+from config.config import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
 from models.mod_models import ModExtraFile
+from utils.file_utils import normalize_chapter_id
 from utils.mod_utils import resolve_mod_icon
+
+MOD_CONFIG_KEY_ORDER = (
+    "id",
+    "version",
+    "name",
+    "description",
+    "author",
+    "icon",
+    "external_url",
+    "game",
+    "game_version",
+    "tags",
+    "files",
+)
+
+
+def normalize_mod_config_data(config_data: dict) -> bool:
+    """Normalize config keys to the current schema."""
+    if not isinstance(config_data, dict):
+        return False
+    changed = False
+    description_value = config_data.get("description")
+    if description_value in (None, ""):
+        description_value = config_data.get(LEGACY_DESCRIPTION_KEY)
+        if LEGACY_DESCRIPTION_KEY in config_data:
+            changed = True
+    icon_value = config_data.get("icon")
+    if icon_value in (None, ""):
+        icon_value = config_data.get(LEGACY_ICON_KEY)
+        if LEGACY_ICON_KEY in config_data:
+            changed = True
+    normalized_items = []
+    seen_keys = set()
+    for key, value in config_data.items():
+        if key == LEGACY_DESCRIPTION_KEY:
+            key, value = "description", description_value
+        elif key == LEGACY_ICON_KEY:
+            key, value = "icon", icon_value
+        elif key == "description":
+            value = description_value
+        elif key == "icon":
+            value = icon_value
+        if key == "files" and isinstance(value, dict):
+            normalized_files = {
+                normalize_chapter_id(file_key, config_data.get("game")): file_info
+                for file_key, file_info in value.items()
+            }
+            changed = changed or normalized_files != value
+            value = normalized_files
+        if key in seen_keys:
+            changed = True
+            continue
+        seen_keys.add(key)
+        normalized_items.append((key, value))
+    changed = changed or list(config_data.items()) != normalized_items
+    if not changed:
+        return False
+    config_data.clear()
+    config_data.update(normalized_items)
+    return True
+
+
+def build_mod_config_data(config_data: dict) -> dict:
+    """Build an ordered mod config payload."""
+    normalized = dict(config_data or {})
+    normalize_mod_config_data(normalized)
+    ordered = {
+        key: normalized[key]
+        for key in MOD_CONFIG_KEY_ORDER
+        if key in normalized and normalized[key] not in (None, "")
+    }
+    for key, value in normalized.items():
+        if key not in ordered and value is not None:
+            ordered[key] = value
+    return ordered
 
 
 def parse_extra_files_raw(
@@ -99,49 +176,62 @@ def resolve_chapter_folder(
     return os.path.join(mod_folder_path, folder_name) if folder_name else None
 
 
-def resolve_local_icon_url(config_data: dict, mod_folder_path: str | None) -> str:
-    """Resolve a mod's icon URL from config data and folder path."""
+def resolve_local_icon_path(config_data: dict, mod_folder_path: str | None) -> str:
+    """Resolve a mod icon from config data and folder path."""
+    normalize_mod_config_data(config_data)
     if not mod_folder_path:
-        return config_data.get("icon_url", "")
-    icon_url_from_config = config_data.get("icon_url", "")
-    icon_url = ""
-    if icon_url_from_config and not icon_url_from_config.startswith(
+        return config_data.get("icon", "")
+    icon_from_config = config_data.get("icon", "")
+    icon_path = ""
+    if icon_from_config and not icon_from_config.startswith(
         ("http://", "https://")
     ):
-        if not os.path.isabs(icon_url_from_config):
+        if not os.path.isabs(icon_from_config):
             resolved = os.path.normpath(
-                os.path.join(mod_folder_path, icon_url_from_config)
+                os.path.join(mod_folder_path, icon_from_config)
             )
             if os.path.exists(resolved) and os.path.isfile(resolved):
-                icon_url = resolved
+                icon_path = resolved
         else:
-            icon_url = icon_url_from_config
-    if not icon_url:
+            icon_path = icon_from_config
+    if not icon_path:
         resolved_icon = resolve_mod_icon(config_data, mod_folder_path)
         if resolved_icon:
-            icon_url = resolved_icon
-    return icon_url
+            icon_path = resolved_icon
+    return icon_path
 
 
-def normalize_files_data(files_data: dict) -> dict:
+def normalize_files_data(files_data: dict, game: str | None = None) -> dict:
     """Normalize files_data dict for use with ModInfo.from_dict().
 
     Returns a dict where each chapter's extra_files are list-of-dicts
     and data_file_version is resolved.
     """
     normalized = {}
-    for file_key, ch_info in files_data.items():
+    for raw_file_key, ch_info in files_data.items():
         if not isinstance(ch_info, dict):
             continue
+        file_key = normalize_chapter_id(raw_file_key, game)
         extra_files_list = parse_extra_files_raw(
             ch_info.get("extra_files", []),
             ch_info,
             as_dicts=True,
         )
-        normalized[file_key] = {
-            "description": ch_info.get("description"),
-            "data_file_url": ch_info.get("data_file_url"),
-            "data_file_version": resolve_data_file_version(ch_info),
-            "extra_files": extra_files_list,
-        }
+        file_info = normalized.setdefault(
+            file_key,
+            {
+                "description": None,
+                "data_file_url": None,
+                "data_file_version": "1.0.0",
+                "extra_files": [],
+            },
+        )
+        if ch_info.get("description") not in (None, ""):
+            file_info["description"] = ch_info.get("description")
+        if ch_info.get("data_file_url"):
+            file_info["data_file_url"] = ch_info.get("data_file_url")
+        file_info["data_file_version"] = resolve_data_file_version(ch_info)
+        for extra_file in extra_files_list:
+            if extra_file not in file_info["extra_files"]:
+                file_info["extra_files"].append(extra_file)
     return normalized

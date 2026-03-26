@@ -113,7 +113,7 @@ def app_state(temp_dir, temp_mods_dir, temp_config_dir):
     state.config_dir = temp_config_dir
     state.mods_dir = temp_mods_dir
     state.config_path = os.path.join(temp_config_dir, 'settings.json')
-    state.mods_metadata_path = os.path.join(temp_mods_dir, 'metadata.json')
+    state.mods_metadata_path = os.path.join(temp_mods_dir, 'mods_data.json')
     return state
 
 
@@ -144,12 +144,12 @@ def mock_requests():
 
 @pytest.fixture
 def sample_mod_config():
-    return {'key': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'chapters': [1, 2], 'files': {}}
+    return {'id': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'files': {}}
 
 
 @pytest.fixture
 def sample_mod_folder(temp_mods_dir, sample_mod_config):
-    key = sample_mod_config.get('key') or sample_mod_config.get('mod_key', 'test_mod_001')
+    key = sample_mod_config.get('id', 'test_mod_001')
     mod_folder = os.path.join(temp_mods_dir, key)
     os.makedirs(mod_folder, exist_ok=True)
     import json

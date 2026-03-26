@@ -11,7 +11,7 @@ from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_game_ids
 from models.mod_models import ModInfo
 from services.localization_service import tr
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 
 logger = logging.getLogger(__name__)
 
@@ -184,9 +184,9 @@ class FetchModsThread(QThread):
             if mod_service:
                 try:
                     for installed_mod in mod_service.get_installed_mods_list():
-                        key = installed_mod.get("key") or installed_mod.get("mod_key")
-                        if key and installed_mod.get("files"):
-                            installed_mods_with_files[key] = installed_mod
+                        mod_id = installed_mod.get("id")
+                        if mod_id and installed_mod.get("files"):
+                            installed_mods_with_files[mod_id] = installed_mod
                 except Exception as e:
                     logger.warning(
                         f"FetchModsThread: Error getting installed mods: {e}"
@@ -195,25 +195,28 @@ class FetchModsThread(QThread):
             app_state = getattr(self.main_window, "app_state", None)
             if app_state and hasattr(app_state, "all_mods"):
                 for mod in app_state.all_mods:
-                    key = get_mod_key(mod)
-                    if key and hasattr(mod, "files") and mod.files:
-                        existing_mods_with_files[key] = mod
+                    mod_id = get_mod_id(mod)
+                    if mod_id and hasattr(mod, "files") and mod.files:
+                        existing_mods_with_files[mod_id] = mod
             all_mods_filtered = []
             for mod in all_mods:
-                key = get_mod_key(mod)
-                is_local_key = key and isinstance(key, str) and key.startswith("local_")
-                if is_local_key:
+                mod_id = get_mod_id(mod)
+                is_local_mod_id = (
+                    mod_id and isinstance(mod_id, str) and mod_id.startswith("local_")
+                )
+                if is_local_mod_id:
                     continue
-                is_gamebanana_mod = key and key.startswith("gb_")
+                is_gamebanana_mod = mod_id and mod_id.startswith("gb_")
                 if is_gamebanana_mod and (
-                    key in existing_mods_with_files or key in installed_mods_with_files
+                    mod_id in existing_mods_with_files
+                    or mod_id in installed_mods_with_files
                 ):
-                    if key in existing_mods_with_files:
-                        existing_mod = existing_mods_with_files[key]
+                    if mod_id in existing_mods_with_files:
+                        existing_mod = existing_mods_with_files[mod_id]
                         if hasattr(existing_mod, "files") and existing_mod.files:
                             mod.files = existing_mod.files
-                    elif key in installed_mods_with_files:
-                        installed_mod_config = installed_mods_with_files[key]
+                    elif mod_id in installed_mods_with_files:
+                        installed_mod_config = installed_mods_with_files[mod_id]
                         if installed_mod_config.get("files"):
                             mod_service = getattr(self.main_window, "mod_service", None)
                             if mod_service:
@@ -225,27 +228,27 @@ class FetchModsThread(QThread):
                                         mod.files = temp_mod.files
                                 except Exception as e:
                                     logger.debug(
-                                        f"Failed to load files for installed mod {key}: {e}"
+                                        f"Failed to load files for installed mod {mod_id}: {e}"
                                     )
                     all_mods_filtered.append(mod)
-                elif key and key in existing_mods_with_files:
-                    existing_mod = existing_mods_with_files[key]
+                elif mod_id and mod_id in existing_mods_with_files:
+                    existing_mod = existing_mods_with_files[mod_id]
                     for attr in [
                         "name",
                         "author",
-                        "tagline",
+                        "description",
                         "game_version",
                         "description_url",
                         "downloads",
-                        "icon_url",
+                        "icon",
                         "is_verified",
                         "is_nsfw",
                     ]:
                         if hasattr(mod, attr):
                             setattr(existing_mod, attr, getattr(mod, attr))
                     all_mods_filtered.append(existing_mod)
-                elif key and key in installed_mods_with_files:
-                    installed_mod_config = installed_mods_with_files[key]
+                elif mod_id and mod_id in installed_mods_with_files:
+                    installed_mod_config = installed_mods_with_files[mod_id]
                     mod_service = getattr(self.main_window, "mod_service", None)
                     if mod_service:
                         mod_with_files = mod_service.create_mod_object_from_info(
@@ -254,11 +257,11 @@ class FetchModsThread(QThread):
                         for attr in [
                             "name",
                             "author",
-                            "tagline",
+                            "description",
                             "game_version",
                             "description_url",
                             "downloads",
-                            "icon_url",
+                            "icon",
                             "is_verified",
                             "is_nsfw",
                         ]:
@@ -270,8 +273,8 @@ class FetchModsThread(QThread):
                 else:
                     all_mods_filtered.append(mod)
             for local_mod in local_mods:
-                key = get_mod_key(local_mod)
-                if key and key not in {get_mod_key(m) for m in all_mods_filtered}:
+                mod_id = get_mod_id(local_mod)
+                if mod_id and mod_id not in {get_mod_id(m) for m in all_mods_filtered}:
                     all_mods_filtered.append(local_mod)
             app_state = getattr(self.main_window, "app_state", None)
             if app_state:
@@ -289,9 +292,11 @@ class FetchModsThread(QThread):
         app_state = getattr(self.main_window, "app_state", None)
         if app_state and hasattr(app_state, "all_mods"):
             for mod in app_state.all_mods:
-                key = get_mod_key(mod)
-                is_local_key = key and isinstance(key, str) and key.startswith("local_")
-                if is_local_key:
+                mod_id = get_mod_id(mod)
+                is_local_mod_id = (
+                    mod_id and isinstance(mod_id, str) and mod_id.startswith("local_")
+                )
+                if is_local_mod_id:
                     local_mods.append(mod)
             logger.debug(
                 f"_get_local_mods: Found {len(local_mods)} local mods in app_state"
@@ -299,7 +304,6 @@ class FetchModsThread(QThread):
         return local_mods
 
     def _update_remote_exists_flags(self, all_mods: list[ModInfo]):
-        remote_mod_keys = {mod.key for mod in all_mods}
         app_state = getattr(self.main_window, "app_state", None)
         mod_service = getattr(self.main_window, "mod_service", None)
         settings_service = getattr(self.main_window, "settings_service", None)
@@ -312,13 +316,11 @@ class FetchModsThread(QThread):
         if not mod_service:
             return
         try:
-            mods_metadata = mod_service._read_metadata()
-            metadata_updated = False
             for folder_name in os.listdir(app_state.mods_dir):
                 folder_path = os.path.join(app_state.mods_dir, folder_name)
                 if not os.path.isdir(folder_path):
                     continue
-                config_path = os.path.join(folder_path, "config.json")
+                config_path = os.path.join(folder_path, "mod_config.json")
                 if not os.path.exists(config_path):
                     continue
                 try:
@@ -329,21 +331,13 @@ class FetchModsThread(QThread):
                             config_data = json.load(f)
                     if not config_data:
                         continue
-                    key = config_data.get("key") or config_data.get("mod_key")
-                    is_local_key = (
-                        key and isinstance(key, str) and key.startswith("local_")
+                    mod_id = config_data.get("id")
+                    is_local_mod_id = (
+                        mod_id and isinstance(mod_id, str) and mod_id.startswith("local_")
                     )
-                    if not key or is_local_key:
+                    if not mod_id or is_local_mod_id:
                         continue
-                    is_available_now = key in remote_mod_keys
-                    mod_meta = mods_metadata.get(key, {})
-                    if mod_meta.get("is_available_on_server") != is_available_now:
-                        mod_meta["is_available_on_server"] = is_available_now
-                        mods_metadata[key] = mod_meta
-                        metadata_updated = True
                 except OSError, json.JSONDecodeError:
                     continue
-            if metadata_updated:
-                mod_service._write_metadata(mods_metadata)
         except Exception as e:
             logging.warning(f"Failed to update remote exists flags in metadata: {e}")

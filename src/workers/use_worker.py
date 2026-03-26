@@ -22,6 +22,7 @@ class UseWorker(QThread):
         target_kind: TargetKind,
         mods_dir: str,
         metadata: dict,
+        plugin_install_service=None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -30,6 +31,7 @@ class UseWorker(QThread):
         self._target_kind = target_kind
         self._mods_dir = mods_dir
         self._metadata = metadata or {}
+        self._plugin_install_service = plugin_install_service
         self._cancelled = False
 
     def cancel(self):
@@ -39,6 +41,8 @@ class UseWorker(QThread):
         try:
             if self._target_kind == TargetKind.MOD:
                 self._use_mod()
+            elif self._target_kind == TargetKind.PLUGIN:
+                self._use_plugin()
             else:
                 self.use_finished.emit(
                     self._record_id,
@@ -87,6 +91,48 @@ class UseWorker(QThread):
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
+    def _use_plugin(self):
+        if not self._plugin_install_service:
+            self.use_finished.emit(
+                self._record_id, False, False, "Plugin installer is not available"
+            )
+            return
+        if not os.path.exists(self._file_path):
+            self.use_finished.emit(self._record_id, False, False, "File not found")
+            return
+        if self._cancelled:
+            self.use_finished.emit(self._record_id, False, True, "")
+            return
+        try:
+            plugin_id = self._plugin_install_service.install_archive(
+                self._file_path,
+                source=str(self._metadata.get("source", "catalog")),
+                catalog_plugin_version=str(
+                    self._metadata.get("catalog_plugin_version", "")
+                ),
+            )
+            try:
+                if os.path.exists(self._file_path):
+                    os.remove(self._file_path)
+            except Exception as cleanup_error:
+                logger.debug(
+                    "UseWorker: failed to remove consumed plugin archive %s: %s",
+                    self._file_path,
+                    cleanup_error,
+                    exc_info=True,
+                )
+            if self._cancelled:
+                try:
+                    self._plugin_install_service.delete_plugin(plugin_id)
+                except Exception as rollback_error:
+                    logger.error("UseWorker: failed to rollback cancelled install: %s", rollback_error, exc_info=True)
+                self.use_finished.emit(self._record_id, False, True, "")
+                return
+            self.use_finished.emit(self._record_id, True, False, "")
+        except Exception as e:
+            logger.error("UseWorker: plugin install failed: %s", e, exc_info=True)
+            self.use_finished.emit(self._record_id, False, False, str(e))
+
     def _extract(self, target_dir: str):
         from utils.archive_utils import extract_archive
 
@@ -108,7 +154,7 @@ class UseWorker(QThread):
             "mod_id": self._metadata["gb_mod_id"],
             "item_type": self._metadata.get("item_type", "mod"),
             "profile_url": self._metadata.get("profile_url"),
-            "icon_url": self._metadata.get("icon_url"),
+            "icon": self._metadata.get("icon"),
             "tags": self._metadata.get("tags") or [],
             "category": self._metadata.get("category"),
             "game": self._metadata.get("game", "deltarune"),
@@ -123,7 +169,7 @@ class UseWorker(QThread):
             )
             result = converter.convert()
             if result and gb_metadata and gb_metadata.get("mod_id"):
-                self._update_config_key(result, gb_metadata)
+                self._update_config_id(result, gb_metadata)
             return bool(result)
         except Exception as e:
             logger.error("UseWorker: deltamod conversion failed: %s", e, exc_info=True)
@@ -149,7 +195,7 @@ class UseWorker(QThread):
             from workers.install.helpers_install import (
                 find_mod_config,
                 load_mod_config,
-                normalize_mod_key,
+                normalize_mod_id,
                 save_mod_config,
             )
 
@@ -164,7 +210,7 @@ class UseWorker(QThread):
             if not config_data:
                 return False
 
-            normalize_mod_key(config_data)
+            normalize_mod_id(config_data)
             mod_name = config_data.get("name", "imported_mod")
             folder_name = sanitize_filename(mod_name)
             target_mod_dir = os.path.join(self._mods_dir, folder_name)
@@ -214,12 +260,11 @@ class UseWorker(QThread):
         mod_id = gb_metadata.get("mod_id")
         if mod_id:
             item_type = gb_metadata.get("item_type", "mod")
-            config_data["key"] = f"gb_{item_type}_{mod_id}"
-            config_data.pop("mod_key", None)
+            config_data["id"] = f"gb_{item_type}_{mod_id}"
         if gb_metadata.get("profile_url") and not config_data.get("external_url"):
             config_data["external_url"] = gb_metadata["profile_url"]
-        if gb_metadata.get("icon_url"):
-            config_data["icon_url"] = gb_metadata["icon_url"]
+        if gb_metadata.get("icon"):
+            config_data["icon"] = gb_metadata["icon"]
         tags = gb_metadata.get("tags") or []
         if tags:
             existing = config_data.get("tags", [])
@@ -231,7 +276,7 @@ class UseWorker(QThread):
             config_data["tags"] = existing
 
     @staticmethod
-    def _update_config_key(mod_dir: str, gb_metadata: dict) -> None:
+    def _update_config_id(mod_dir: str, gb_metadata: dict) -> None:
         from config.config import MOD_CONFIG_FILENAME
         from workers.install.helpers_install import load_mod_config, save_mod_config
 
@@ -244,4 +289,4 @@ class UseWorker(QThread):
                 UseWorker._apply_gb_metadata(data, gb_metadata)
                 save_mod_config(config_path, data, indent=4)
         except Exception as e:
-            logger.warning("UseWorker: failed to update config key: %s", e)
+            logger.warning("UseWorker: failed to update config id: %s", e)

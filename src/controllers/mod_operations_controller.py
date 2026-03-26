@@ -16,7 +16,7 @@ from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod_utils import (
     get_gamebanana_item_type,
     get_gamebanana_mod_id,
-    get_mod_key,
+    get_mod_id,
     get_mod_name,
     sort_gamebanana_files_by_priority,
 )
@@ -142,7 +142,7 @@ class ModOperationsController:
             "file_name": file_name,
             "compatibility": compatibility,
             "profile_url": getattr(mod, "external_url", None),
-            "icon_url": getattr(mod, "icon_url", None),
+            "icon": getattr(mod, "icon", None),
             "tags": getattr(mod, "tags", None) or [],
             "category": getattr(mod, "gamebanana_category", None),
             "game": getattr(mod, "game", "deltarune"),
@@ -337,24 +337,20 @@ class ModOperationsController:
                 )
                 return
             available_chapters = []
-            if mod.game == "undertale":
-                if mod.files.get("undertale"):
-                    available_chapters.append(0)
-            elif mod.game == "deltarunedemo":
-                if mod.files.get("demo"):
-                    available_chapters.append(-1)
-            else:
-                for chapter_id in range(0, 5):
-                    chapter_data = mod.get_chapter_data(chapter_id)
-                    if chapter_data:
-                        available_chapters.append(chapter_id)
+            from models.game_modes import get_game
+
+            game_def = get_game(mod.game)
+            tab_ids = [tab.tab_id for tab in game_def.tabs] if game_def else [mod.game]
+            for chapter_id in tab_ids:
+                if mod.get_chapter_data(chapter_id):
+                    available_chapters.append(chapter_id)
             if not available_chapters:
                 self.feedback_service.show_message(
                     "warning", "errors.mod_no_files", mod_name=mod.name
                 )
                 return
             was_installed_before = (
-                self.mod_service.is_mod_installed(mod.key) or is_update
+                self.mod_service.is_mod_installed(mod.id) or is_update
             )
             install_tasks = [(mod, chapter_id) for chapter_id in available_chapters]
             self._safe_execute(
@@ -377,7 +373,7 @@ class ModOperationsController:
         except (OSError, KeyError, Exception) as e:
             from models.exceptions import ModInstallationError
 
-            key = get_mod_key(mod)
+            mod_id = get_mod_id(mod)
             mod_name_str = get_mod_name(mod, "Unknown Mod")
             reason_map = {
                 IOError: "io_error",
@@ -386,7 +382,10 @@ class ModOperationsController:
             }
             reason = reason_map.get(type(e), "unknown")
             raise ModInstallationError(
-                f"{reason}: {e}", key=key, mod_name=mod_name_str, reason=reason
+                f"{reason}: {e}",
+                mod_id=mod_id,
+                mod_name=mod_name_str,
+                reason=reason,
             ) from e
 
     def on_install_progress_token(self, value: int, op_id: int):
@@ -473,9 +472,9 @@ class ModOperationsController:
                 "Failed to update search cards",
             )
             if installed_mod_info and hasattr(self.app_state, "all_mods"):
-                key = get_mod_key(installed_mod_info)
-                if key:
-                    self._sync_installed_mod_to_all_mods(key)
+                mod_id = get_mod_id(installed_mod_info)
+                if mod_id:
+                    self._sync_installed_mod_to_all_mods(mod_id)
         except Exception as e:
             logging.warning(
                 f"ModOperationsController: Failed to reload local mods: {e}",
@@ -489,18 +488,18 @@ class ModOperationsController:
                 self.app.search_display.update_filtered_mods(preserve_page=True)
                 if not (installed_mod_info and self.app_state.filtered_mods):
                     return
-                key = get_mod_key(installed_mod_info)
-                if not key:
+                mod_id = get_mod_id(installed_mod_info)
+                if not mod_id:
                     return
                 for _idx, mod in enumerate(self.app_state.filtered_mods):
-                    if get_mod_key(mod) == key:
+                    if get_mod_id(mod) == mod_id:
                         self._safe_execute(
                             lambda: self.app.search_display.update_display(),
                             "Failed to update display",
                         )
                         return
                 logging.debug(
-                    f"ModOperationsController: Installed mod {key} not found in filtered_mods"
+                    f"ModOperationsController: Installed mod {mod_id} not found in filtered_mods"
                 )
             except Exception as e:
                 logging.warning(
@@ -562,17 +561,17 @@ class ModOperationsController:
             QTimer.singleShot(0, lambda: self.mod_service.update_mod(next_mod))
         self.app.game_launch.update_button_state()
 
-    def _sync_installed_mod_to_all_mods(self, key: str):
+    def _sync_installed_mod_to_all_mods(self, mod_id: str):
         try:
             if not self.app_state.all_mods:
                 self.app_state.all_mods = []
             existing_mod = next(
-                (m for m in self.app_state.all_mods if get_mod_key(m) == key), None
+                (m for m in self.app_state.all_mods if get_mod_id(m) == mod_id), None
             )
             cache = self.mod_service._get_mods_cache()
-            if key not in cache:
+            if mod_id not in cache:
                 return
-            config_data = cache[key].config_data
+            config_data = cache[mod_id].config_data
             if not existing_mod:
                 mod_to_add = self.mod_service.create_mod_object_from_info(
                     config_data, self.app_state.all_mods
@@ -589,7 +588,7 @@ class ModOperationsController:
                     existing_mod.files = temp_mod.files
         except Exception as e:
             logging.debug(
-                f"ModOperationsController: _sync_installed_mod_to_all_mods failed for {key}: {e}"
+                f"ModOperationsController: _sync_installed_mod_to_all_mods failed for {mod_id}: {e}"
             )
 
     def refresh_specific_mod_widget_after_update(self, mod_info=None):
@@ -602,8 +601,8 @@ class ModOperationsController:
                 return
             mod_data_tuple = install_tasks[0]
             mod_to_update = mod_data_tuple[0]
-        key_to_find = get_mod_key(mod_to_update)
-        if not key_to_find:
+        mod_id_to_find = get_mod_id(mod_to_update)
+        if not mod_id_to_find:
             return
         if hasattr(self.app, "installed_mods_layout"):
             for i in range(self.app.installed_mods_layout.count()):
@@ -611,13 +610,13 @@ class ModOperationsController:
                 if item and item.widget():
                     widget = item.widget()
                     if isinstance(widget, InstalledModWidget):
-                        widget_key = get_mod_key(widget.mod_data)
-                        if widget_key == key_to_find:
+                        widget_key = get_mod_id(widget.mod_data)
+                        if widget_key == mod_id_to_find:
                             widget.update_status()
                             break
         if hasattr(self.app, "search_display"):
             for card in self.app.search_display.card_widget_cache.values():
-                if get_mod_key(card.mod_data) == key_to_find:
+                if get_mod_id(card.mod_data) == mod_id_to_find:
                     card.update_installation_status()
 
     def on_mod_uninstall_requested(self, mod):

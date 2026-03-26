@@ -358,7 +358,7 @@ class ChatWindow(QDialog):
                     Qt.TextInteractionFlag.TextSelectableByMouse
                 )
                 self._style_message_widget(
-                    msg_widget, theme["border_radius"], theme["text"]
+                    msg_widget, theme["border_radius"], theme["main_text"]
                 )
                 self.messages_layout.addWidget(msg_widget)
                 self._message_widgets[msg_id] = msg_widget
@@ -552,7 +552,7 @@ class ChatWindow(QDialog):
         theme = get_dialog_theme_values(self.app_state)
         self.setStyleSheet(
             build_dialog_theme_stylesheet(self.app_state)
-            + f"""\n            QPushButton:checked {{\n                background-color: {theme["button_hover"]};\n                border: 2px solid {theme["button_hover"]};\n            }}\n            QPushButton:disabled {{\n                background-color: #555;\n                color: #999;\n            }}\n            QSpinBox {{\n                background-color: {theme["background"]};\n                border: 2px solid {theme["border"]};\n                color: {theme["secondary_text"]};\n                padding: 2px;\n                font-size: 12px;\n                min-width: 60px;\n                max-width: 80px;\n            }}\n            QSpinBox:focus {{\n                border: 2px solid {theme["button_hover"]};\n            }}\n            QScrollArea {{\n                background-color: {theme["background"]};\n                border: 2px solid {theme["border"]};\n            }}\n        """
+            + f"""\n            QPushButton:checked {{\n                background-color: {theme["hover"]};\n                border: 2px solid {theme["hover"]};\n            }}\n            QPushButton:disabled {{\n                background-color: #555;\n                color: #999;\n            }}\n            QSpinBox {{\n                background-color: {theme["background"]};\n                border: 2px solid {theme["border"]};\n                color: {theme["secondary_text"]};\n                padding: 2px;\n                font-size: 12px;\n                min-width: 60px;\n                max-width: 80px;\n            }}\n            QSpinBox:focus {{\n                border: 2px solid {theme["hover"]};\n            }}\n            QScrollArea {{\n                background-color: {theme["background"]};\n                border: 2px solid {theme["border"]};\n            }}\n        """
         )
         self.select_channel_label.setStyleSheet(
             f"color: {theme['secondary_text']}; font-size: 16px; padding: 50px;"
@@ -566,7 +566,7 @@ class ChatWindow(QDialog):
         )
         for msg_widget in self._iter_message_widgets():
             self._style_message_widget(
-                msg_widget, theme["border_radius"], theme["text"]
+                msg_widget, theme["border_radius"], theme["main_text"]
             )
 
     def closeEvent(self, event):

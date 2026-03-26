@@ -6,7 +6,6 @@ import logging
 import os
 import shutil
 import threading
-import time
 import uuid
 from typing import Any
 
@@ -15,7 +14,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from adapters.g3mtool_adapter import G3MToolManager
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
-from utils.file_utils import chapter_id_to_file_key, get_chapter_folder_name
+from utils.file_utils import get_chapter_folder_name, normalize_chapter_id
+from utils.mod_config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
 
 
@@ -78,11 +78,11 @@ class CreateModpackThread(QThread):
             first_mod = mods_list[0]
             game = first_mod.game if hasattr(first_mod, "game") else None
             if not game:
-                game = first_mod.modgame if hasattr(first_mod, "modgame") else None
+                game = None
             if not game and hasattr(first_mod, "config_data"):
                 config = first_mod.config_data
                 if isinstance(config, dict):
-                    game = config.get("game") or config.get("modgame")
+                    game = config.get("game")
         return game
 
     def run(self):
@@ -268,7 +268,7 @@ class CreateModpackThread(QThread):
             files_data = {}
             detected_games = []
             for chapter_id, mods_list in self.chapter_mods.items():
-                chapter_key = chapter_id_to_file_key(chapter_id)
+                chapter_key = normalize_chapter_id(chapter_id)
                 game = self._get_mod_game(mods_list)
                 if game:
                     detected_games.append(game)
@@ -285,6 +285,7 @@ class CreateModpackThread(QThread):
                         for f in os.listdir(chapter_modpack_dir)
                         if f.lower().endswith(".xdelta")
                     ]
+                    xdelta_files.sort()
                     xdelta_patch = (
                         os.path.join(chapter_modpack_dir, xdelta_files[0])
                         if xdelta_files
@@ -304,26 +305,25 @@ class CreateModpackThread(QThread):
                 if file_info:
                     file_info["data_file_version"] = "1.0.0"
                     files_data[chapter_key] = file_info
-            key = f"local_{uuid.uuid4().hex[:12]}"
+            mod_id = f"local_{uuid.uuid4().hex[:12]}"
             detected_game = self._determine_primary_game_type(detected_games)
             config_data = {
-                "key": key,
-                "name": self.modpack_name,
-                "author": tr("defaults.multiple_authors"),
+                "id": mod_id,
                 "version": "1.0.0",
-                "tagline": tr("defaults.no_short_description"),
-                "game_version": tr("defaults.not_specified"),
+                "name": self.modpack_name,
+                "description": tr("defaults.no_description"),
+                "author": tr("defaults.multiple_authors"),
                 "game": detected_game,
+                "game_version": tr("defaults.not_specified"),
                 "files": files_data,
                 "tags": [],
-                "created_date": time.strftime("%d.%m.%y %H:%M"),
             }
             config_path = os.path.join(self.modpack_dir, "mod_config.json")
             self.progress_update.emit(
                 99, tr("status.finalizing_chapter", display=self.modpack_name)
             )
             with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
+                json.dump(build_mod_config_data(config_data), f, indent=4, ensure_ascii=False)
             logging.info(f"Created mod_config.json for modpack: {self.modpack_name}")
         except Exception as e:
             logging.error(f"Failed to create mod_config.json: {e}", exc_info=True)

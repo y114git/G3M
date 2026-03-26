@@ -7,13 +7,13 @@ import re
 import shutil
 import uuid
 import zipfile
-from datetime import datetime
 from typing import Any
 
 from defusedxml import ElementTree
 
 from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file, get_unique_mod_dir
+from utils.mod_config_parser import build_mod_config_data
 
 
 class DeltamodConverter:
@@ -65,14 +65,14 @@ class DeltamodConverter:
             if not os.path.exists(icon_path):
                 icon_path = os.path.join(target_mod_dir, "icon.png")
             if os.path.exists(icon_path):
-                config_data["icon_url"] = (
+                config_data["icon"] = (
                     "_icon.png"
                     if os.path.basename(icon_path) == "_icon.png"
                     else "icon.png"
                 )
             config_path = os.path.join(target_mod_dir, "mod_config.json")
             with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
+                json.dump(build_mod_config_data(config_data), f, indent=4, ensure_ascii=False)
             logging.info(
                 f"Deltamod converted: {config_data.get('name')} → {target_mod_dir}"
             )
@@ -133,7 +133,7 @@ class DeltamodConverter:
         if "demo" in to_path.lower():
             chapter_key = "demo"
         else:
-            match = re.search("chapter(\\d+)", to_path, re.IGNORECASE)
+            match = re.search(r"chapter(\d+)", to_path, re.IGNORECASE)
             if match:
                 chapter_num = int(match.group(1))
                 if chapter_num >= 0:
@@ -143,7 +143,7 @@ class DeltamodConverter:
         if not chapter_key:
             return (None, None, "")
         path_without_chapter = re.sub(
-            "chapter\\d+_windows?/", "", to_path, flags=re.IGNORECASE
+            r"chapter\d+_windows?/", "", to_path, flags=re.IGNORECASE
         )
         path_without_chapter = path_without_chapter.lstrip("./")
         dir_part = os.path.dirname(path_without_chapter)
@@ -210,41 +210,39 @@ class DeltamodConverter:
         meta = self.deltamod_info.get("metadata", {})
 
         if self.gamebanana_metadata and "mod_id" in self.gamebanana_metadata:
-            key = f"gb_{self.gamebanana_metadata['mod_id']}"
+            mod_id = f"gb_{self.gamebanana_metadata['mod_id']}"
         else:
             package_id = meta.get("packageID", "")
             if package_id and package_id != "und.und.und":
-                key = package_id.replace(".", "_")
+                mod_id = package_id.replace(".", "_")
             else:
-                key = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
+                mod_id = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
 
-        created_date = datetime.now().strftime("%d.%m.%y %H:%M")
         game_value = "deltarune"
         if self.gamebanana_metadata and self.gamebanana_metadata.get("game"):
             game_value = self.gamebanana_metadata["game"]
         elif meta.get("demoMod"):
             game_value = "deltarunedemo"
         config = {
-            "key": key,
-            "created_date": created_date,
-            "name": meta.get("name", tr("defaults.local_mod")),
+            "id": mod_id,
             "version": meta.get("version", "1.0.0"),
+            "name": meta.get("name", tr("defaults.local_mod")),
+            "description": meta.get("description", tr("defaults.no_description")),
             "author": ", ".join(meta.get("author", [tr("defaults.unknown")])),
-            "tagline": meta.get("description", tr("defaults.no_description")),
             "external_url": self.gamebanana_metadata.get("profile_url")
             if self.gamebanana_metadata.get("profile_url")
             else meta.get("url", ""),
+            "game": game_value,
             "game_version": self.deltamod_info.get(
                 "deltaruneTargetVersion", tr("defaults.not_specified")
             ),
-            "game": game_value,
             "files": self._generate_files_structure(patches),
             "tags": meta.get("tags", []),
         }
 
         if self.gamebanana_metadata:
-            if self.gamebanana_metadata.get("icon_url"):
-                config["icon_url"] = self.gamebanana_metadata["icon_url"]
+            if self.gamebanana_metadata.get("icon"):
+                config["icon"] = self.gamebanana_metadata["icon"]
             if self.gamebanana_metadata.get("tags"):
                 gb_tags = self.gamebanana_metadata["tags"]
                 if isinstance(gb_tags, list):
@@ -254,7 +252,7 @@ class DeltamodConverter:
                             existing_tags.append(tag)
                     config["tags"] = existing_tags
 
-        return config
+        return build_mod_config_data(config)
 
     def _generate_files_structure(self, patches: list) -> dict[str, Any]:
         files_structure = {}

@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.localization_service import tr
+from services.localization_service import localization_service, tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
@@ -58,12 +58,12 @@ def _looks_like_diff(lines):
     return False
 
 
-def _format_code_block(code_lines, lang, background_color):
+def _format_code_block(code_lines, lang, background_color, font_family):
     """Format a fenced code block with optional diff highlighting."""
     is_diff = lang == "diff" or (not lang and _looks_like_diff(code_lines))
     parts = [
         f'<pre style="background:{background_color};border-radius:4px;padding:8px;'
-        'font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap">'
+        f"font-family:'{font_family}';font-size:11px;white-space:pre-wrap\">"
     ]
     for raw in code_lines:
         e = _esc(raw)
@@ -88,6 +88,7 @@ def _md_to_html(
     quote_text_color: str,
     code_background_color: str,
     inline_code_background_color: str,
+    font_family: str,
 ) -> str:
     """Convert markdown body to styled HTML."""
     lines = []
@@ -99,7 +100,9 @@ def _md_to_html(
         if s.startswith("```"):
             if in_code:
                 lines.append(
-                    _format_code_block(code_lines, code_lang, code_background_color)
+                    _format_code_block(
+                        code_lines, code_lang, code_background_color, font_family
+                    )
                 )
                 code_lines, code_lang, in_code = [], "", False
             else:
@@ -178,7 +181,11 @@ def _md_to_html(
     if in_list:
         lines.append("</ul>")
     if in_code:
-        lines.append(_format_code_block(code_lines, code_lang, code_background_color))
+        lines.append(
+            _format_code_block(
+                code_lines, code_lang, code_background_color, font_family
+            )
+        )
     return "\n".join(lines)
 
 
@@ -194,12 +201,13 @@ def _inline(text: str, inline_code_background_color: str) -> str:
 
 
 def _get_app_font(app_state) -> str:
-    """Return the current DELTAHUB font family or fallback."""
+    """Return the current DELTAHUB font family."""
     parent = app_state
     while parent and not hasattr(parent, "custom_font_family"):
         parent = getattr(parent, "parent", None)
     ff = getattr(parent, "custom_font_family", None) if parent else None
-    return ff or "Segoe UI"
+    font_family = (ff or "").strip() or (localization_service.load_font() or "").strip()
+    return font_family or "sans-serif"
 
 
 class _CollapsibleSection(QWidget):
@@ -299,7 +307,7 @@ class DiffViewerDialog(QDialog):
         try:
             from utils.path_utils import colored_icon
 
-            tc = get_theme_color(self._app_state.local_config, "text")
+            tc = get_theme_color(self._app_state.local_config, "main_text")
             self._export_btn.setIcon(colored_icon("export", tc))
             self._export_btn.setIconSize(QSize(18, 18))
         except Exception:
@@ -323,12 +331,12 @@ class DiffViewerDialog(QDialog):
         font_family = _get_app_font(self._app_state)
         config = getattr(self._app_state, "local_config", None)
         quote_border_color = rgba_from_color(
-            get_theme_color(config, "text"),
+            get_theme_color(config, "main_text"),
             alpha=76,
             fallback="rgba(255, 255, 255, 76)",
         )
         quote_text_color = rgba_from_color(
-            get_theme_color(config, "text"),
+            get_theme_color(config, "main_text"),
             alpha=178,
             fallback="rgba(255, 255, 255, 178)",
         )
@@ -338,7 +346,7 @@ class DiffViewerDialog(QDialog):
             fallback="rgba(0, 0, 0, 76)",
         )
         inline_code_background_color = rgba_from_color(
-            get_theme_color(config, "text"),
+            get_theme_color(config, "main_text"),
             alpha=15,
             fallback="rgba(255, 255, 255, 15)",
         )
@@ -349,6 +357,7 @@ class DiffViewerDialog(QDialog):
                 quote_text_color,
                 code_background_color,
                 inline_code_background_color,
+                font_family,
             )
             sec = _CollapsibleSection(i, title, html, font_family)
             indent = (level - 1) * 16
@@ -383,10 +392,10 @@ class DiffViewerDialog(QDialog):
                 font-size: 16px;
             }}
             QPushButton#modding_tools_section_header {{
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
-                color: {theme["text"]};
+                color: {theme["main_text"]};
                 font-family: '{font_family}';
                 font-size: 13px;
                 font-weight: bold;
@@ -394,7 +403,7 @@ class DiffViewerDialog(QDialog):
                 text-align: left;
             }}
             QPushButton#modding_tools_section_header:hover {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
             }}
             QTextEdit#modding_tools_section_body {{
                 background-color: {theme["background"]};
@@ -402,7 +411,7 @@ class DiffViewerDialog(QDialog):
                 border-top: none;
                 border-bottom-left-radius: {theme["field_radius"]}px;
                 border-bottom-right-radius: {theme["field_radius"]}px;
-                color: {theme["text"]};
+                color: {theme["main_text"]};
                 font-family: '{font_family}';
                 font-size: 12px;
                 padding: 6px;
@@ -412,12 +421,12 @@ class DiffViewerDialog(QDialog):
                 background: transparent;
             }}
             QPushButton#modding_tools_export_btn {{
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
             }}
             QPushButton#modding_tools_export_btn:hover {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
             }}
         """
         self.setStyleSheet(base + extra)

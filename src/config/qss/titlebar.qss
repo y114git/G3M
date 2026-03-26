@@ -20,7 +20,7 @@ QToolButton#titleBarMenuButton {
     font-weight: bold;
 }
 QToolButton#titleBarMenuButton:hover, QToolButton#titleBarMenuButton:pressed {
-    background-color: %button_hover_color%;
+    background-color: %hover_color%;
     border: 2px solid %border_color%;
 }
 QToolButton#titleBarMenuButton::menu-indicator {
@@ -28,7 +28,7 @@ QToolButton#titleBarMenuButton::menu-indicator {
     width: 0px;
 }
 QMenu#titleBarPopupMenu {
-    background-color: %button_color%;
+    background-color: %elements_color%;
     border: 2px solid %border_color%;
     border-radius: %title_bar_popup_radius%;
     color: %main_text_color%;
@@ -41,10 +41,10 @@ QMenu#titleBarPopupMenu::item {
     font-size: %font_size_small%pt;
 }
 QMenu#titleBarPopupMenu::item:selected {
-    background-color: %button_hover_color%;
+    background-color: %hover_color%;
 }
 QPushButton#titleBarMinimizeButton, QPushButton#titleBarMaximizeButton, QPushButton#titleBarCloseButton {
-    background-color: %button_color%;
+    background-color: %elements_color%;
     border: 2px solid %border_color%;
     color: %main_text_color%;
     min-width: 26px;
@@ -57,11 +57,11 @@ QPushButton#titleBarMinimizeButton, QPushButton#titleBarMaximizeButton, QPushBut
     font-weight: bold;
 }
 QPushButton#titleBarMinimizeButton:hover, QPushButton#titleBarMaximizeButton:hover, QPushButton#titleBarCloseButton:hover {
-    background-color: %button_hover_color%;
+    background-color: %hover_color%;
     border: 2px solid %border_color%;
 }
 QPushButton#titleBarMinimizeButton:pressed, QPushButton#titleBarMaximizeButton:pressed, QPushButton#titleBarCloseButton:pressed {
-    background-color: %button_hover_color%;
+    background-color: %hover_color%;
     border: 2px solid %main_text_color%;
 }
 QPushButton#titleBarCloseButton {

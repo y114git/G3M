@@ -260,6 +260,7 @@ class GUIWindow(QMainWindow):
                     {'name': 'test_models.py', 'path': 'unit/test_models.py', 'description': 'Data models tests'},
                     {'name': 'test_controllers.py', 'path': 'unit/test_controllers.py', 'description': 'Controller classes tests'},
                     {'name': 'test_config.py', 'path': 'unit/test_config.py', 'description': 'Configuration tests'},
+                    {'name': 'test_plugin_services.py', 'path': 'unit/test_plugin_services.py', 'description': 'Plugin services tests'},
                 ]
             },
             {

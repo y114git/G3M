@@ -4,7 +4,7 @@
     background-color: %tooltip_bg_color% !important;
     border: 2px solid %border_color%;
     color: %main_text_color% !important;
-    font-family: "%font_family_main%", sans-serif;
+    font-family: "%font_family_main%";
     font-size: %font_size_small%pt;
     outline: none;
     border-radius: %custom_border_radius%;

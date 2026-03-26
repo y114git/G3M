@@ -3,45 +3,38 @@
 import json
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
 
-from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import MOD_CONFIG_FILENAME
+from utils.file_utils import load_json
 
 
+@dataclass(slots=True)
 class ModFolderInfo:
     """Information about a mod folder and its configuration."""
 
-    __slots__ = ("config_data", "config_mtime", "folder_name", "folder_path", "key")
-
-    def __init__(
-        self,
-        key: str,
-        folder_path: str,
-        folder_name: str,
-        config_data: dict,
-        config_mtime: float,
-    ) -> None:
-        self.key = key
-        self.folder_path = folder_path
-        self.folder_name = folder_name
-        self.config_data = config_data
-        self.config_mtime = config_mtime
+    id: str
+    folder_path: str
+    folder_name: str
+    config_data: dict
+    config_mtime: float
 
 
 def normalize_mod_cache(cache: dict[str, Any]) -> dict[str, ModFolderInfo]:
     """Convert any dict-based cache entries to ModFolderInfo instances."""
     normalized_cache: dict[str, ModFolderInfo] = {}
-    for key, value in cache.items():
+    for mod_id, value in cache.items():
         if isinstance(value, dict):
-            normalized_cache[key] = ModFolderInfo(
-                key=value.get("key") or value.get("mod_key", key),
+            normalized_cache[mod_id] = ModFolderInfo(
+                id=value.get("id", mod_id),
                 folder_path=value.get("folder_path", ""),
                 folder_name=value.get("folder_name", ""),
                 config_data=value.get("config_data", {}),
                 config_mtime=value.get("config_mtime", 0.0),
             )
         elif isinstance(value, ModFolderInfo):
-            normalized_cache[key] = value
+            normalized_cache[mod_id] = value
     return normalized_cache
 
 
@@ -58,11 +51,16 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         )
         return False
     has_name = bool(config_data.get("name"))
-    has_key = bool(config_data.get("key") or config_data.get("mod_key"))
-    if not has_name and (not has_key):
+    mod_id = config_data.get("id")
+    has_id = isinstance(mod_id, str) and bool(mod_id.strip())
+    if not has_id:
         logging.warning(
-            f"validate_mod_config: Config missing both name and key in {config_path}, skipping mod",
-            extra={"mod_folder": folder_name, "config_path": config_path},
+            f"validate_mod_config: Config missing usable id in {config_path}, skipping mod",
+            extra={
+                "mod_folder": folder_name,
+                "config_path": config_path,
+                "has_name": has_name,
+            },
         )
         return False
     if "name" in config_data and (not isinstance(config_data["name"], str)):
@@ -72,17 +70,6 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
                 "mod_folder": folder_name,
                 "config_path": config_path,
                 "name_type": type(config_data["name"]).__name__,
-            },
-        )
-        return False
-    key_value = config_data.get("key") or config_data.get("mod_key")
-    if key_value and (not isinstance(key_value, str)):
-        logging.warning(
-            f'validate_mod_config: Config field "key" has invalid type in {config_path}, expected string',
-            extra={
-                "mod_folder": folder_name,
-                "config_path": config_path,
-                "key_type": type(key_value).__name__,
             },
         )
         return False
@@ -117,7 +104,7 @@ def scan_mods_directory(
     """Scan the mods directory and return (cache, mods_by_name).
 
     Returns:
-        Tuple of (mod cache dict, mods_by_name dict mapping lowercase name -> key)
+        Tuple of (mod cache dict, mods_by_name dict mapping lowercase name -> id)
     """
     cache: dict[str, ModFolderInfo] = {}
     mods_by_name: dict[str, str] = {}
@@ -126,13 +113,11 @@ def scan_mods_directory(
 
     old_cache = normalize_mod_cache(old_cache)
 
-    _path_to_key: dict[str, str] = {
-        info.folder_path: key for key, info in old_cache.items()
+    path_to_id: dict[str, str] = {
+        info.folder_path: mod_id for mod_id, info in old_cache.items()
     }
     if not os.path.exists(mods_dir):
         return cache, mods_by_name
-    from utils.file_utils import migrate_mod_config
-
     try:
         with os.scandir(mods_dir) as entries:
             for entry in entries:
@@ -141,8 +126,6 @@ def scan_mods_directory(
                 folder_name = entry.name
                 folder_path = entry.path
                 config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
-                if not os.path.exists(config_path):
-                    migrate_mod_config(folder_path)
                 if not os.path.exists(config_path):
                     found_nested = False
                     try:
@@ -173,19 +156,18 @@ def scan_mods_directory(
                         )
                         continue
                     config_mtime = st.st_mtime
-                    key = _path_to_key.get(folder_path)
-                    if key is not None:
-                        old_info = old_cache[key]
+                    mod_id = path_to_id.get(folder_path)
+                    if mod_id is not None:
+                        old_info = old_cache[mod_id]
                         if config_mtime <= old_info.config_mtime:
-                            cache[key] = old_info
+                            cache[mod_id] = old_info
                             mod_name = old_info.config_data.get("name", "")
                             if mod_name:
-                                mods_by_name[mod_name.lower()] = key
+                                mods_by_name[mod_name.lower()] = mod_id
                             continue
 
                     try:
-                        with open(config_path, encoding="utf-8") as f:
-                            config_data = json.load(f)
+                        config_data = load_json(config_path)
                         if not config_data or not isinstance(config_data, dict):
                             logging.warning(
                                 f"scan_mods_directory: Empty config data in {config_path}, skipping mod",
@@ -213,10 +195,19 @@ def scan_mods_directory(
                             },
                         )
                         continue
-                    key = config_data.get("key") or config_data.get("mod_key") or ""
-                    cache_key = key if key else f"__no_key_{folder_path}"
+                    mod_id = (config_data.get("id") or "").strip()
+                    if not mod_id:
+                        logging.warning(
+                            f"scan_mods_directory: Config missing usable id in {config_path}, skipping mod",
+                            extra={
+                                "mod_folder": folder_name,
+                                "config_path": config_path,
+                            },
+                        )
+                        continue
+                    cache_key = mod_id
                     mod_info = ModFolderInfo(
-                        key=key,
+                        id=mod_id,
                         folder_path=folder_path,
                         folder_name=folder_name,
                         config_data=config_data,
@@ -247,7 +238,7 @@ def scan_mods_directory(
                     continue
                 except KeyError as e:
                     logging.debug(
-                        f"scan_mods_directory: missing key in {config_path}: {e}",
+                        f"scan_mods_directory: missing id in {config_path}: {e}",
                         extra={
                             "mod_folder": folder_name,
                             "config_path": config_path,
@@ -279,10 +270,22 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
                 config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                 is_corrupted = False
                 if not os.path.exists(config_path):
-                    legacy_config_path = os.path.join(
-                        folder_path, LEGACY_MOD_CONFIG_FILENAME
-                    )
-                    if not os.path.exists(legacy_config_path):
+                    nested_config_path = None
+                    try:
+                        child_dirs = [
+                            sub.path
+                            for sub in os.scandir(folder_path)
+                            if sub.is_dir(follow_symlinks=False)
+                        ]
+                    except (OSError, PermissionError):
+                        child_dirs = []
+                    if len(child_dirs) == 1:
+                        candidate = os.path.join(child_dirs[0], MOD_CONFIG_FILENAME)
+                        if os.path.exists(candidate):
+                            nested_config_path = candidate
+                    if nested_config_path:
+                        config_path = nested_config_path
+                    else:
                         is_corrupted = True
                         logging.warning(
                             f"cleanup_corrupted_mods: Missing mod_config.json in {folder_name}, marking as corrupted"
@@ -297,8 +300,7 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
                             )
                         else:
                             try:
-                                with open(config_path, encoding="utf-8") as f:
-                                    json.load(f)
+                                load_json(config_path)
                             except (
                                 json.JSONDecodeError,
                                 OSError,

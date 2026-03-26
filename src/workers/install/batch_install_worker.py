@@ -16,8 +16,9 @@ from config.config import (
 )
 from services.localization_service import tr
 from ui.utils.ui_utils import format_size_mb
-from utils.file_utils import chapter_id_to_file_key, get_unique_mod_dir
-from utils.mod_utils import get_mod_key
+from utils.file_utils import get_unique_mod_dir, normalize_chapter_id
+from utils.mod_config_parser import build_mod_config_data
+from utils.mod_utils import get_mod_id
 from utils.network_utils import download_file, get_session
 
 
@@ -103,7 +104,7 @@ class InstallModsThread(QThread):
         try:
             config_data = self.main_window.settings_service.read_json(config_path)
             local_versions = (
-                config_data.get("chapters", {}).get(chapter_id, {}).get("versions", {})
+                config_data.get("files", {}).get(chapter_id, {}).get("versions", {})
                 or {}
             )
             remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
@@ -242,7 +243,7 @@ class InstallModsThread(QThread):
             total_bytes = 0
             mod_folders = {}
             for mod, chapter_id in self.install_tasks:
-                key = get_mod_key(mod)
+                key = get_mod_id(mod)
                 if key not in mod_folders:
                     mod_folder_path = self.main_window.mod_service.get_mod_folder_path(
                         key
@@ -254,8 +255,8 @@ class InstallModsThread(QThread):
                         mod_folders[key] = get_unique_mod_dir(
                             self.main_window.app_state.mods_dir, mod.name
                         )
-                mod_key = get_mod_key(mod)
-                existing_folder = mod_folders.get(mod_key, "")
+                mod_id = get_mod_id(mod)
+                existing_folder = mod_folders.get(mod_id, "")
                 chapter_data = (
                     mod.get_chapter_data(chapter_id)
                     if chapter_id != "deltarunedemo"
@@ -373,9 +374,9 @@ class InstallModsThread(QThread):
                     return
                 mod = task.get("mod")
                 chapter_id = task.get("chapter_id")
-                mod_folder_name = mod_folders[mod.key]
+                mod_folder_name = mod_folders[mod.id]
                 mod_dir = os.path.join(self.temp_root, mod_folder_name)
-                game_value = getattr(mod, "game", None) or getattr(mod, "modgame", None)
+                game_value = getattr(mod, "game", None)
                 from utils.file_utils import get_chapter_folder_name
 
                 folder_name = get_chapter_folder_name(chapter_id, game=game_value)
@@ -492,7 +493,7 @@ class InstallModsThread(QThread):
                         downloaded_ref,
                         session,
                     )
-                key = get_mod_key(mod)
+                key = get_mod_id(mod)
                 if key not in installed_mods:
                     installed_mods[key] = {"mod": mod, "chapters": set()}
                 installed_mods[key]["chapters"].add(chapter_id)
@@ -546,10 +547,9 @@ class InstallModsThread(QThread):
                         file_info["data_file_version"] = mod.demo_version or "1.0.0"
                         file_info["versions"] = {"demo": mod.demo_version or "1.0.0"}
                     if file_info:
-                        file_key = chapter_id_to_file_key(chapter_id)
-                        files_data[file_key] = file_info
+                        files_data[normalize_chapter_id(chapter_id, mod.game)] = file_info
                 config_data = {
-                    "key": mod.key,
+                    "id": mod.id,
                     "name": mod.name,
                     "author": mod.author,
                     "version": mod.version,
@@ -558,9 +558,9 @@ class InstallModsThread(QThread):
                     "files": files_data,
                     "tags": mod.tags,
                 }
-                if hasattr(mod, "icon_url") and mod.icon_url:
-                    config_data["icon_url"] = mod.icon_url
-                mod_configs[mod.key] = {
+                if hasattr(mod, "icon") and mod.icon:
+                    config_data["icon"] = mod.icon
+                mod_configs[mod.id] = {
                     "folder_name": mod_folder_name,
                     "config": config_data,
                 }
@@ -604,12 +604,13 @@ class InstallModsThread(QThread):
                 config_data = info["config"]
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)
                 config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
-                self.main_window.settings_service.write_json(config_path, config_data)
+                self.main_window.settings_service.write_json(
+                    config_path, build_mod_config_data(config_data)
+                )
             metadata = self.main_window.mod_service._read_metadata()
             for key in installed_mods:
                 metadata[key] = {
                     "added_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "is_available_on_server": True,
                 }
             self.main_window.mod_service._write_metadata(metadata)
             if self._cancelled:

@@ -39,23 +39,8 @@ package-dir = { "" = "src" }
 include-package-data = true
 
 [tool.setuptools.packages.find]
-namespaces = true
 where = ["src"]
-include = [
-    "adapters*",
-    "app*",
-    "app_context*",
-    "bootstrap*",
-    "config*",
-    "controllers*",
-    "models*",
-    "presentation*",
-    "session*",
-    "services*",
-    "ui*",
-    "utils*",
-    "workers*",
-]
+namespaces = true
 
 [tool.pytest.ini_options]
 minversion = "7.4"

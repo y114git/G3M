@@ -48,7 +48,7 @@ class ModsBrowserTabBuilder(QObject):
             return
         config = getattr(self.app_state, "local_config", None)
         scale = get_ui_scale_factor(config)
-        text_color = get_theme_color(config, "text")
+        text_color = get_theme_color(config, "main_text")
         show_nsfw_checkbox.setStyleSheet(
             build_tag_checkbox_style(
                 text_color,
@@ -133,7 +133,7 @@ class ModsBrowserTabBuilder(QObject):
         w, layout = create_filters_frame()
         apply_filters_frame_style(w, self.app_state)
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        _vc = Qt.AlignmentFlag.AlignVCenter
+        align_vcenter = Qt.AlignmentFlag.AlignVCenter
         sort_combo, _ = create_sort_controls(
             self.app_state,
             [
@@ -144,32 +144,32 @@ class ModsBrowserTabBuilder(QObject):
             "search_sort_index",
             include_order_button=False,
         )
-        layout.addWidget(sort_combo, 0, _vc)
+        layout.addWidget(sort_combo, 0, align_vcenter)
         layout.addSpacing(20)
         modgame_combo = create_modgame_combo(
             self.app_state, get_search_game_entries(), "selected_search_game"
         )
-        layout.addWidget(modgame_combo, 0, _vc)
+        layout.addWidget(modgame_combo, 0, align_vcenter)
         layout.addSpacing(20)
         tags_label = QLabel(tr("ui.tags_label"))
-        layout.addWidget(tags_label, 0, _vc)
+        layout.addWidget(tags_label, 0, align_vcenter)
         tags = create_tag_checkboxes(self.app_state, BASE_TAG_NAMES)
         for t in tags.values():
-            layout.addWidget(t, 0, _vc)
+            layout.addWidget(t, 0, align_vcenter)
         show_nsfw_checkbox = QCheckBox(tr("ui.show_nsfw"))
         show_nsfw_checkbox.setChecked(
             bool(self.app_state.local_config.get("show_nsfw", False))
         )
-        layout.addWidget(show_nsfw_checkbox, 0, _vc)
+        layout.addWidget(show_nsfw_checkbox, 0, align_vcenter)
         layout.addStretch()
         blocklist_btn = create_blocklist_button(self.app_state)
-        layout.addWidget(blocklist_btn, 0, _vc)
+        layout.addWidget(blocklist_btn, 0, align_vcenter)
         layout.addSpacing(4)
         downloads_btn = create_downloads_button(self.app_state)
-        layout.addWidget(downloads_btn, 0, _vc)
+        layout.addWidget(downloads_btn, 0, align_vcenter)
         layout.addSpacing(4)
         search_btn = create_search_button(self.app_state)
-        layout.addWidget(search_btn, 0, _vc)
+        layout.addWidget(search_btn, 0, align_vcenter)
         self.widgets.update(
             {
                 "sort_combo": sort_combo,

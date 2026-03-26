@@ -210,7 +210,7 @@ class GameDefinition:
 
     def filter_mods_for_tab(self, tab: GameTab, all_mods: list) -> list:
         return self._filter_visible_mods(
-            all_mods, lambda m: m.game == self.game_id and m.files.get(tab.files_key)
+            all_mods, lambda m: m.game == self.game_id and m.get_chapter_data(tab.tab_id)
         )
 
     def filter_mods_for_ui(self, all_mods: list) -> dict[str, list]:
@@ -360,11 +360,7 @@ class PizzaTowerGame(GameDefinition):
 
     def filter_mods_for_tab(self, tab, all_mods):
         return self._filter_visible_mods(
-            all_mods,
-            lambda m: (
-                m.game == "pizzatower"
-                and (m.files.get("0") or m.files.get("pizzatower"))
-            ),
+            all_mods, lambda m, t=tab: m.game == "pizzatower" and m.get_chapter_data(t.tab_id)
         )
 
 

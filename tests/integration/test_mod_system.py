@@ -13,7 +13,7 @@ class TestModStructure:
             pytest.skip('mod_config.json not found. Please create test mod structure.')
         with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
-        assert 'key' in config or 'mod_key' in config
+        assert 'id' in config
         assert 'name' in config
         assert 'version' in config
         assert 'files' in config
@@ -96,9 +96,9 @@ class TestModManagerIntegration:
                 if os.path.exists(config_path):
                     with open(config_path, encoding='utf-8') as f:
                         config = json.load(f)
-                    key = config.get('key') or config.get('mod_key')
+                    key = config.get('id')
                     if key:
-                        assert key in cache or any(info.key == key for info in cache.values())
+                        assert key in cache or any(info.id == key for info in cache.values())
         finally:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
@@ -244,7 +244,7 @@ class TestModMetadata:
                 if os.path.exists(config_path):
                     with open(config_path, encoding='utf-8') as f:
                         config = json.load(f)
-                    key = config.get('key') or config.get('mod_key')
+                    key = config.get('id')
                     if key:
                         metadata = mod_service._read_metadata()
                         assert isinstance(metadata, dict)

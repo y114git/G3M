@@ -34,7 +34,6 @@ from app.game_ui import (
     update_games_manager_button_style,
 )
 from app.localization_utils import relocalize_ui
-from app.update_handler import check_and_show_announce, prompt_for_update
 from app_context.application_context import (
     ApplicationContext,
     build_application_context,
@@ -47,6 +46,11 @@ from config.config import (
     QSS_PADDING_LEFT_8,
     SOCIAL_LINKS,
     UI_COLORS,
+)
+from presentation.update_presenter import (
+    check_and_show_announce,
+    prompt_for_update,
+    reload_global_settings,
 )
 from presentation.window_composition import WindowComposition
 from presentation.window_state import initialize_window_runtime
@@ -441,7 +445,7 @@ class AppWindow(QWidget):
         )
         self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
         main_text_color = get_theme_color(
-            self.app_state.local_config, "text")
+            self.app_state.local_config, "main_text")
         self.top_refresh_button.setIcon(colored_icon("refresh", main_text_color))
         self.top_refresh_button.setIconSize(QSize(20, 20))
         self.top_refresh_button.setFixedSize(30, 30)
@@ -550,6 +554,8 @@ class AppWindow(QWidget):
         from app.settings_setup import setup_settings_tab
 
         setup_settings_tab(self)
+        if hasattr(self, "plugins_ui") and self.plugins_ui:
+            self.plugins_ui.refresh_main_tabs()
         self.search_display.update_filtered_mods()
         self.tab_widget = self.main_tab_widget
         self.tabs = {}
@@ -611,7 +617,7 @@ class AppWindow(QWidget):
             sort_button.setToolTip(
                 tr("ui.ascending") if is_ascending else tr("ui.descending")
             )
-            tc = get_theme_color(self.app_state.local_config, "text")
+            tc = get_theme_color(self.app_state.local_config, "main_text")
             sort_button.setIcon(
                 colored_icon("arrow_up" if is_ascending else "arrow_down", tc)
             )
@@ -799,7 +805,17 @@ class AppWindow(QWidget):
                     self.search_display, "refresh_visible_layout", None
                 )
                 if callable(refresh_visible_layout):
+                    if hasattr(self.search_display, "_last_grid_metrics_key"):
+                        self.search_display._last_grid_metrics_key = None
                     refresh_visible_layout()
+                    QTimer.singleShot(
+                        0,
+                        lambda: (
+                            hasattr(self, "search_display")
+                            and not sip.isdeleted(self)
+                            and refresh_visible_layout()
+                        ),
+                    )
                 else:
                     if hasattr(self.search_display, "_last_grid_metrics_key"):
                         self.search_display._last_grid_metrics_key = None
@@ -877,7 +893,7 @@ class AppWindow(QWidget):
             painter.drawPixmap(self.rect(), self.background_pixmap)
         else:
             bg_color_str = (
-                self.app_state.local_config.get("custom_color_background")
+                self.app_state.local_config.get("custom_background_color")
                 or FALLBACK_WINDOW_BG
             )
             try:
@@ -1048,6 +1064,8 @@ class AppWindow(QWidget):
         if app:
             with contextlib.suppress(Exception):
                 app.removeEventFilter(self)
+        if hasattr(self, 'plugins_ui') and self.plugins_ui:
+            self.plugins_ui.shutdown()
         from app.cleanup import perform_close_cleanup
 
         perform_close_cleanup(self)
@@ -1122,7 +1140,7 @@ class AppWindow(QWidget):
         self.context.update_qt_locale(language_code)
 
     def _set_lib_search_icon(self, is_searching: bool):
-        tc = get_theme_color(self.app_state.local_config, "text")
+        tc = get_theme_color(self.app_state.local_config, "main_text")
         self.library_search_button.setIcon(
             colored_icon("reset", tc) if is_searching else colored_icon("search", tc)
         )
@@ -1130,7 +1148,7 @@ class AppWindow(QWidget):
 
     def _refresh_themed_icons(self):
         """Re-read theme color and regenerate all SVG-based button icons."""
-        tc = get_theme_color(self.app_state.local_config, "text")
+        tc = get_theme_color(self.app_state.local_config, "main_text")
         if hasattr(self, "top_refresh_button"):
             self.top_refresh_button.setIcon(colored_icon("refresh", tc))
             self.top_refresh_button.setIconSize(QSize(20, 20))
@@ -1186,11 +1204,18 @@ class AppWindow(QWidget):
             self.search_display.update_search_cards()
 
     def _on_refresh_clicked(self, is_initial=False):
+        if (
+            hasattr(self, "plugins_ui")
+            and self.plugins_ui
+            and getattr(self.app_state, "is_settings_view", False)
+            and hasattr(self, "settings_tab_widget")
+            and hasattr(self, "plugins_tab")
+            and self.settings_tab_widget.currentWidget() is self.plugins_tab
+        ):
+            self.plugins_ui.ensure_loaded(force_refresh=True)
         if hasattr(self, "theme") and self.theme:
             self.theme.init_theme_list()
         if not is_initial and self.app_state.has_internet:
-            from app.update_handler import reload_global_settings
-
             reload_global_settings(
                 self,
                 callback=lambda success: (

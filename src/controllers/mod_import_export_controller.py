@@ -10,11 +10,11 @@ import zipfile
 
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QMessageBox, QPushButton, QVBoxLayout
 
-from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import MOD_CONFIG_FILENAME
 from services.localization_service import tr
 from utils.archive_utils import extract_archive
 from utils.file_utils import find_deltamod_info_file, save_json
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 
 
 class ModImportExportController:
@@ -62,47 +62,26 @@ class ModImportExportController:
         """Open the mod editor dialog in edit mode for the given mod."""
         import json
 
-        key = get_mod_key(mod_data)
-        if not key:
+        mod_id = get_mod_id(mod_data)
+        if not mod_id:
             return
-        mod_folder = self.mod_service.get_mod_folder_path(key)
+        mod_folder = self.mod_service.get_mod_folder_path(mod_id)
         if not mod_folder or not os.path.exists(mod_folder):
             mod_folder = self._find_mod_dir_by_config(mod_data)
         config_data = {}
         if mod_folder:
             config_path = os.path.join(mod_folder, MOD_CONFIG_FILENAME)
-            legacy_config_path = os.path.join(mod_folder, LEGACY_MOD_CONFIG_FILENAME)
-
             if os.path.exists(config_path):
                 try:
                     with open(config_path, encoding="utf-8") as f:
                         config_data = json.load(f)
                 except Exception as e:
-                    if os.path.exists(legacy_config_path):
-                        try:
-                            with open(legacy_config_path, encoding="utf-8") as f:
-                                config_data = json.load(f)
-                        except Exception as legacy_e:
-                            raise RuntimeError(
-                                f"Failed to load both {MOD_CONFIG_FILENAME} and {LEGACY_MOD_CONFIG_FILENAME}: {e}, {legacy_e}"
-                            ) from legacy_e
-                    else:
-                        raise RuntimeError(
-                            f"Failed to load {MOD_CONFIG_FILENAME}: {e}"
-                        ) from e
-            elif os.path.exists(legacy_config_path):
-                try:
-                    with open(legacy_config_path, encoding="utf-8") as f:
-                        config_data = json.load(f)
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to load {LEGACY_MOD_CONFIG_FILENAME}: {e}"
-                    ) from e
+                    raise RuntimeError(f"Failed to load {MOD_CONFIG_FILENAME}: {e}") from e
 
         if not config_data:
             raise RuntimeError(f"No valid config found in mod folder: {mod_folder}")
 
-        config_data["key"] = key
+        config_data["id"] = mod_id
         if mod_folder:
             config_data["folder_path"] = mod_folder
             config_data["folder_name"] = os.path.basename(mod_folder)
@@ -136,13 +115,7 @@ class ModImportExportController:
 
         try:
             with tempfile.TemporaryDirectory(prefix="deltahub_import_") as temp_dir:
-                extract_archive(file_path, temp_dir)
-                content_path = temp_dir
-                contents = os.listdir(temp_dir)
-                if len(contents) == 1 and os.path.isdir(
-                    os.path.join(temp_dir, contents[0])
-                ):
-                    content_path = os.path.join(temp_dir, contents[0])
+                content_path = self._materialize_local_import(file_path, temp_dir)
                 if find_deltamod_info_file(content_path):
                     from adapters.deltamod_adapter import DeltamodConverter
 
@@ -163,32 +136,25 @@ class ModImportExportController:
                         )
                     return
                 config_path_to_read = os.path.join(content_path, MOD_CONFIG_FILENAME)
-                if not os.path.exists(config_path_to_read):
-                    legacy_config_path = os.path.join(
-                        content_path, LEGACY_MOD_CONFIG_FILENAME
-                    )
-                    if os.path.exists(legacy_config_path):
-                        config_path_to_read = legacy_config_path
                 if os.path.exists(config_path_to_read):
                     with open(config_path_to_read, encoding="utf-8") as f:
                         config = json.load(f)
-                    key = config.get("key") or config.get("mod_key")
+                    mod_id = config.get("id")
                     mod_name = config.get("name", "Unknown")
 
-                    if not key:
-                        key = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-                        config["key"] = key
-                        config.pop("mod_key", None)
+                    if not mod_id:
+                        mod_id = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
+                        config["id"] = mod_id
                         save_json(config_path_to_read, config, indent=2)
 
-                    existing_keys = {
-                        get_mod_key(m)
+                    existing_mod_ids = {
+                        get_mod_id(m)
                         for m in self.app_state.all_mods
-                        if get_mod_key(m)
+                        if get_mod_id(m)
                     }
-                    if key in existing_keys:
+                    if mod_id in existing_mod_ids:
                         self._merge_into_existing_mod(
-                            key, content_path, file_path, mod_name
+                            mod_id, content_path, file_path, mod_name
                         )
                         return
 
@@ -207,44 +173,20 @@ class ModImportExportController:
                         target_config_path = os.path.join(
                             target_mod_dir, MOD_CONFIG_FILENAME
                         )
-                        target_old_config_path = os.path.join(
-                            target_mod_dir, LEGACY_MOD_CONFIG_FILENAME
-                        )
-                        if os.path.exists(target_old_config_path) and (
-                            not os.path.exists(target_config_path)
-                        ):
-                            try:
-                                shutil.move(target_old_config_path, target_config_path)
-                            except Exception as e:
-                                logging.warning(
-                                    f"Failed to migrate config during import: {e}"
-                                )
                         config_path = target_config_path
                         config_updated = False
                         if "files" in config:
                             for chapter_key, chapter_data in config["files"].items():
-                                if chapter_key == "demo":
-                                    chapter_folder = os.path.join(
-                                        target_mod_dir, "demo"
-                                    )
-                                elif chapter_key == "undertale":
-                                    chapter_folder = os.path.join(
-                                        target_mod_dir, "undertale"
-                                    )
-                                elif chapter_key in ["0", "1", "2", "3", "4"]:
-                                    chapter_id = int(chapter_key)
-                                    from utils.file_utils import get_chapter_folder_name
+                                from utils.file_utils import get_chapter_folder_name
 
-                                    folder_name = get_chapter_folder_name(
-                                        chapter_id,
-                                        game=config.get("game")
-                                        or config.get("modgame"),
-                                    )
-                                    chapter_folder = os.path.join(
-                                        target_mod_dir, folder_name
-                                    )
-                                else:
+                                folder_name = get_chapter_folder_name(
+                                    chapter_key, game=config.get("game")
+                                )
+                                if not folder_name:
                                     continue
+                                chapter_folder = os.path.join(
+                                    target_mod_dir, folder_name
+                                )
                                 if os.path.exists(
                                     chapter_folder
                                 ) and not chapter_data.get("data_file_url"):
@@ -262,13 +204,18 @@ class ModImportExportController:
                         icon_path = os.path.join(target_mod_dir, "_icon.png")
                         if not os.path.exists(icon_path):
                             icon_path = os.path.join(target_mod_dir, "icon.png")
-                        if os.path.exists(icon_path) and (not config.get("icon_url")):
-                            config["icon_url"] = (
+                        if os.path.exists(icon_path) and (not config.get("icon")):
+                            config["icon"] = (
                                 "_icon.png"
                                 if os.path.basename(icon_path) == "_icon.png"
                                 else "icon.png"
                             )
                             config_updated = True
+                        from utils.mod_config_parser import normalize_mod_config_data
+
+                        config_updated = (
+                            normalize_mod_config_data(config) or config_updated
+                        )
                         if config_updated:
                             save_json(config_path, config, indent=2)
                         self._refresh_mod_list()
@@ -297,16 +244,16 @@ class ModImportExportController:
             )
 
     def _merge_into_existing_mod(
-        self, key: str, content_path: str, file_path: str, mod_name: str
+        self, mod_id: str, content_path: str, file_path: str, mod_name: str
     ):
-        """Merge imported mod into mod_versions of existing mod with the same key."""
+        """Merge imported mod into mod_versions of existing mod with the same id."""
         try:
-            existing_mod_folder = self.mod_service.get_mod_folder_path(key)
+            existing_mod_folder = self.mod_service.get_mod_folder_path(mod_id)
             if not existing_mod_folder or not os.path.isdir(existing_mod_folder):
-                existing_mod_folder = self._find_mod_dir_by_key(key)
+                existing_mod_folder = self._find_mod_dir_by_id(mod_id)
             if not existing_mod_folder or not os.path.isdir(existing_mod_folder):
                 logging.error(
-                    f"[IMPORT MERGE] Could not find folder for existing mod key={key}"
+                    f"[IMPORT MERGE] Could not find folder for existing mod id={mod_id}"
                 )
                 QMessageBox.critical(
                     self.app_window,
@@ -351,8 +298,8 @@ class ModImportExportController:
                 tr("errors.mod_import_failed", error=str(e)),
             )
 
-    def _find_mod_dir_by_key(self, key: str):
-        """Find mod directory by key in mods_dir."""
+    def _find_mod_dir_by_id(self, mod_id: str):
+        """Find mod directory by id in mods_dir."""
         if not os.path.exists(self.app_state.mods_dir):
             return None
         for entry in os.scandir(self.app_state.mods_dir):
@@ -364,11 +311,11 @@ class ModImportExportController:
             try:
                 with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
-                if (config.get("key") or config.get("mod_key")) == key:
+                if config.get("id") == mod_id:
                     return entry.path
             except Exception as e:
                 logging.debug(
-                    f"_find_mod_dir_by_key: failed to read {config_path}: {e}",
+                    f"_find_mod_dir_by_id: failed to read {config_path}: {e}",
                     exc_info=True,
                 )
         return None
@@ -492,19 +439,33 @@ class ModImportExportController:
     def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
         temp_dir = tempfile.mkdtemp(prefix="deltahub_manual_install_")
         try:
-            extract_archive(file_path, temp_dir)
-            content_path = temp_dir
-            contents = os.listdir(temp_dir)
-            if len(contents) == 1 and os.path.isdir(
-                os.path.join(temp_dir, contents[0])
-            ):
-                content_path = os.path.join(temp_dir, contents[0])
-            return (content_path, temp_dir)
+            return (self._materialize_local_import(file_path, temp_dir), temp_dir)
         except Exception as e:
             logging.error(f"Failed to prepare local files: {e}", exc_info=True)
             with contextlib.suppress(Exception):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise
+
+    def _materialize_local_import(self, file_path: str, temp_dir: str) -> str:
+        if os.path.isdir(file_path):
+            content_path = file_path
+            contents = os.listdir(file_path)
+            if len(contents) == 1 and os.path.isdir(os.path.join(file_path, contents[0])):
+                content_path = os.path.join(file_path, contents[0])
+            return content_path
+        try:
+            extract_archive(file_path, temp_dir)
+        except shutil.ReadError:
+            return file_path
+        except Exception as exc:
+            raise ValueError(
+                f"_materialize_local_import failed to extract archive '{file_path}': {exc}"
+            ) from exc
+        content_path = temp_dir
+        contents = os.listdir(temp_dir)
+        if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
+            content_path = os.path.join(temp_dir, contents[0])
+        return content_path
 
     def _on_mod_install_finished(self, success: bool, message: str):
         self.app_state.reset_install_state()
@@ -524,28 +485,20 @@ class ModImportExportController:
     def _find_mod_dir_by_config(self, mod) -> str | None:
         if not os.path.exists(self.app_state.mods_dir):
             return None
-        mod_key_attr = get_mod_key(mod)
+        mod_id_attr = get_mod_id(mod)
         for entry in os.scandir(self.app_state.mods_dir):
             if not entry.is_dir():
                 continue
             config_path = os.path.join(entry.path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
-                old_config_path = os.path.join(entry.path, LEGACY_MOD_CONFIG_FILENAME)
-                if os.path.exists(old_config_path):
-                    try:
-                        shutil.move(old_config_path, config_path)
-                    except Exception as e:
-                        logging.warning(f"Error migrating config in {entry.path}: {e}")
-                        continue
-            if not os.path.exists(config_path):
                 continue
             try:
                 with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
-                config_key = config.get("key") or config.get("mod_key")
-                if config_key == mod_key_attr:
+                config_mod_id = config.get("id")
+                if config_mod_id == mod_id_attr:
                     return entry.path
-                if not config_key and config.get("name", "") == mod.name:
+                if not config_mod_id and config.get("name", "") == mod.name:
                     return entry.path
             except Exception as e:
                 logging.warning(f"Error reading config {config_path}: {e}")
@@ -578,13 +531,13 @@ class ModImportExportController:
     def export_mod_to_path(self, mod_data, export_path: str) -> bool:
         """Export a mod to a specific zip path (for drag & drop export)."""
         try:
-            key = get_mod_key(mod_data)
-            mod_dir = self.mod_service.get_mod_folder_path(key)
+            mod_id = get_mod_id(mod_data)
+            mod_dir = self.mod_service.get_mod_folder_path(mod_id)
             if not mod_dir or not os.path.exists(mod_dir):
                 mod_dir = self._find_mod_dir_by_config(mod_data)
             if not mod_dir or not os.path.exists(mod_dir):
                 logging.error(
-                    f"[DND EXPORT] Mod folder not found for: {getattr(mod_data, 'name', key)}"
+                    f"[DND EXPORT] Mod folder not found for: {getattr(mod_data, 'name', mod_id)}"
                 )
                 return False
             with zipfile.ZipFile(export_path, "w", zipfile.ZIP_DEFLATED) as zipf:

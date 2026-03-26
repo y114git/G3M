@@ -53,12 +53,13 @@ class ThemeManagementDialog(QDialog):
         ]
 
         color_map = {
-            "custom_color_background": "ui.background_color",
-            "custom_color_button": "ui.elements_color",
-            "custom_color_border": "ui.border_color",
-            "custom_color_button_hover": "ui.hover_color",
-            "custom_color_text": "ui.main_text_color",
-            "custom_color_secondary_text": "ui.secondary_text_color",
+            "custom_background_color": "ui.background_color",
+            "custom_elements_color": "ui.elements_color",
+            "custom_border_color": "ui.border_color",
+            "custom_hover_color": "ui.custom_hover_color",
+            "custom_select_color": "ui.custom_select_color",
+            "custom_main_text_color": "ui.main_text_color",
+            "custom_secondary_text_color": "ui.secondary_text_color",
         }
 
         changed_colors = [

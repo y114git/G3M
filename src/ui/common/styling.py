@@ -16,7 +16,8 @@ from config.config import (
     MOD_WIDGET_STYLE_TEMPLATE,
     UI_COLORS,
 )
-from utils.mod_utils import get_mod_key
+from services.migration_service import get_theme_color_setting
+from utils.mod_utils import get_mod_id
 
 
 class _WidgetUpdateFilter(QObject):
@@ -241,6 +242,7 @@ def generate_widget_style(
     bg_color,
     border_color,
     hover_border_color,
+    selected_border_color,
     text_color,
     secondary_text_color,
     is_selected=False,
@@ -255,7 +257,8 @@ def generate_widget_style(
     button_font_size=15,
 ):
     border_width = "2px"
-    current_border_color = hover_border_color if is_selected else border_color
+    current_border_color = selected_border_color if is_selected else border_color
+    hover_border_color = selected_border_color if is_selected else hover_border_color
     return MOD_WIDGET_STYLE_TEMPLATE.format(
         frame_selector=frame_selector,
         bg_color=bg_color,
@@ -300,14 +303,16 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
     if config:
         card_bg_color = get_theme_color(config, "background")
         border_color = get_theme_color(config, "border")
-        hover_border_color = get_theme_color(config, "button_hover")
-        text_color = get_theme_color(config, "text")
+        hover_border_color = get_theme_color(config, "hover")
+        selected_border_color = get_theme_color(config, "select")
+        text_color = get_theme_color(config, "main_text")
         secondary_text_color = get_theme_color(config, "secondary_text")
     else:
         card_bg_color = DEFAULT_COLORS["background"]
         border_color = DEFAULT_COLORS["border"]
-        hover_border_color = DEFAULT_COLORS["button_hover"]
-        text_color = DEFAULT_COLORS["text"]
+        hover_border_color = DEFAULT_COLORS["hover"]
+        selected_border_color = DEFAULT_COLORS["select"]
+        text_color = DEFAULT_COLORS["main_text"]
         secondary_text_color = DEFAULT_COLORS["secondary_text"]
     border_radius_val = get_border_radius(config)
     layout_scale = get_card_layout_scale(config)
@@ -329,6 +334,7 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
         card_bg_color,
         border_color,
         hover_border_color,
+        selected_border_color,
         text_color,
         secondary_text_color,
         is_selected,
@@ -374,9 +380,9 @@ _mod_icon_pixmap_cache: dict[tuple, QPixmap] = {}
 def get_theme_color(config, color_key, default_color=None):
     """Return themed color from config, falling back to DEFAULT_COLORS."""
     if default_color is None:
-        default_color = DEFAULT_COLORS.get(color_key, DEFAULT_COLORS["text"])
+        default_color = DEFAULT_COLORS.get(color_key, DEFAULT_COLORS["main_text"])
     if config and hasattr(config, "get"):
-        color_config_key = f"custom_color_{color_key}"
+        color_config_key = get_theme_color_setting(color_key)
         current_value = config.get(color_config_key)
         cache_key = (id(config), color_key, default_color, current_value)
         cached = _theme_color_cache.get(cache_key)
@@ -740,7 +746,7 @@ def build_scrollbar_qss(
 
 
 def get_section_line_color(config) -> str:
-    raw = get_theme_color(config, "button")
+    raw = get_theme_color(config, "elements")
     if components := get_color_components(raw):
         r, g, b, _, _ = components
         return f"rgba({r},{g},{b},0.45)"
@@ -766,7 +772,7 @@ def build_button_style(
     obj_name: str,
     bg_color: str,
     hover_color: str,
-    text_color: str = DEFAULT_COLORS["text"],
+    text_color: str = DEFAULT_COLORS["main_text"],
     border: str = DEFAULT_COLORS["border"],
     width: int | None = 110,
     height: int | None = 35,
@@ -1029,13 +1035,13 @@ def load_mod_icon_universal(
             else None
         )
         icon_path = getattr(mod_data, "icon_path", None)
-        icon_url = preferred_screenshot or getattr(mod_data, "icon_url", None)
+        icon_source = preferred_screenshot or getattr(mod_data, "icon", None)
         local_icon_to_load = None
-        if icon_url and (not icon_url.startswith(("http://", "https://"))):
-            if os.path.isabs(icon_url):
-                local_icon_to_load = icon_url
+        if icon_source and (not icon_source.startswith(("http://", "https://"))):
+            if os.path.isabs(icon_source):
+                local_icon_to_load = icon_source
             else:
-                key = get_mod_key(mod_data)
+                key = get_mod_id(mod_data)
                 is_local_key = key and isinstance(key, str) and key.startswith("local_")
                 if is_local_key:
                     mod_folder_path = None
@@ -1048,16 +1054,16 @@ def load_mod_icon_universal(
                         )
                     if mod_folder_path and os.path.isdir(mod_folder_path):
                         resolved_path = os.path.normpath(
-                            os.path.join(mod_folder_path, icon_url)
+                            os.path.join(mod_folder_path, icon_source)
                         )
                         if os.path.exists(resolved_path):
                             local_icon_to_load = resolved_path
                         else:
-                            local_icon_to_load = icon_url
+                            local_icon_to_load = icon_source
                     else:
-                        local_icon_to_load = icon_url
+                        local_icon_to_load = icon_source
                 else:
-                    local_icon_to_load = icon_url
+                    local_icon_to_load = icon_source
         elif icon_path:
             local_icon_to_load = icon_path
         if local_icon_to_load and os.path.exists(local_icon_to_load):
@@ -1071,9 +1077,9 @@ def load_mod_icon_universal(
                     f"load_mod_icon_universal: Error loading pixmap from {local_icon_to_load}: {e}"
                 )
         if (
-            icon_url
-            and isinstance(icon_url, str)
-            and icon_url.startswith(("http://", "https://"))
+            icon_source
+            and isinstance(icon_source, str)
+            and icon_source.startswith(("http://", "https://"))
         ):
             try:
                 from ui.utils.image_loader import ImageLoaderRunnable
@@ -1169,7 +1175,7 @@ def load_mod_icon_universal(
 
                 signals.result.connect(_on_loaded_image)
                 signals.error.connect(_on_error)
-                runnable = ImageLoaderRunnable(icon_url, signals)
+                runnable = ImageLoaderRunnable(icon_source, signals)
                 icon_label._icon_loader_signals = signals
                 icon_label._icon_loader_runnable = runnable
 
@@ -1208,7 +1214,7 @@ def load_mod_icon_universal(
                     pool.start(runnable)
             except Exception as e:
                 logging.debug(
-                    f"load_mod_icon_universal: Error setting up async icon loader for {icon_url}: {e}"
+                    f"load_mod_icon_universal: Error setting up async icon loader for {icon_source}: {e}"
                 )
     except Exception as e:
         logging.debug(f"load_mod_icon_universal: Unexpected error: {e}")

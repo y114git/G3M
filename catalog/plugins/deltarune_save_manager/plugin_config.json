@@ -1,0 +1,33 @@
+{
+  "config_version": 1,
+  "id": "deltarune_save_manager",
+  "name": "plugins.deltarune_save_manager.name",
+  "description": "plugins.deltarune_save_manager.description",
+  "author": "Y114",
+  "version": "1.0.0",
+  "api_version": ">=1.0.0",
+  "entry": "plugin.py",
+  "icon": "icon.png",
+  "external_link": "https://github.com/y114git/DELTAHUB/tree/stable/catalog/plugins/deltarune_save_manager",
+  "tags": [
+    "tool",
+    "game_experience"
+  ],
+  "relations": {},
+  "hooks": [
+    "settings_view",
+    "main_view",
+    "before_mod_apply",
+    "after_restore_after_exit"
+  ],
+  "settings_schema": {
+    "fields": [
+      {
+        "key": "save_path",
+        "label": "plugins.deltarune_save_manager.settings.save_path",
+        "type": "string",
+        "default": ""
+      }
+    ]
+  }
+}

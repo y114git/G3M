@@ -17,7 +17,7 @@ from workers.base_install_worker import BaseInstallWorker
 from workers.install.helpers_install import (
     find_mod_config,
     load_mod_config,
-    normalize_mod_key,
+    normalize_mod_id,
     save_mod_config,
 )
 
@@ -128,7 +128,7 @@ class UrlInstallThread(BaseInstallWorker):
         config_data = load_mod_config(mod_config_path)
         if not config_data:
             return None
-        key = normalize_mod_key(config_data)
+        mod_id = normalize_mod_id(config_data)
         mod_name = config_data.get("name", "imported_mod")
         target_mod_dir = self._create_unique_mod_dir(
             self.main_window.app_state.mods_dir, mod_name
@@ -138,7 +138,7 @@ class UrlInstallThread(BaseInstallWorker):
         try:
             save_mod_config(target_config_path, config_data)
             logging.info(
-                f"Installed DELTAHUB mod from URL: {target_mod_dir}, key={key}"
+                f"Installed DELTAHUB mod from URL: {target_mod_dir}, mod_id={mod_id}"
             )
         except Exception:
             return None

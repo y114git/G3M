@@ -3,6 +3,8 @@ import os
 import tempfile
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 class TestModInstallation:
@@ -14,7 +16,7 @@ class TestModInstallation:
             archive_path = tmp_archive.name
             with zipfile.ZipFile(archive_path, "w") as zf:
                 mod_config = {
-                    "key": "test_install_mod",
+                    "id": "test_install_mod",
                     "name": "Test Install Mod",
                     "version": "1.0.0",
                 }
@@ -36,7 +38,7 @@ class TestModInstallation:
         mod_folder = os.path.join(temp_mods_dir, key)
         os.makedirs(mod_folder, exist_ok=True)
         mod_config = {
-            "key": key,
+            "id": key,
             "name": "Test Mod with Files",
             "version": "1.0.0",
             "files": [
@@ -74,7 +76,7 @@ class TestModMerge:
             key = f"test_merge_mod_{i}"
             mod_folder = os.path.join(temp_mods_dir, key)
             os.makedirs(mod_folder, exist_ok=True)
-            mod_config = {"key": key, "name": f"Test Merge Mod {i}", "version": "1.0.0"}
+            mod_config = {"id": key, "name": f"Test Merge Mod {i}", "version": "1.0.0"}
             config_path = os.path.join(mod_folder, "mod_config.json")
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(mod_config, f)
@@ -174,3 +176,35 @@ class TestManualInstall:
                 called_url = open_url.call_args[0][0]
                 assert called_url.isLocalFile()
                 assert Path(called_url.toLocalFile()) == file_path
+
+    def test_create_mod_from_files_uses_chapter_ids_as_file_keys(self, tmp_path):
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        source_dir = tmp_path / "prepared"
+        source_dir.mkdir()
+        data_file = source_dir / "BOSSRUSH.win"
+        data_file.write_text("bossrush", encoding="utf-8")
+        with patch.object(
+            ManualModInstallDialog, "__init__", lambda self, *a, **kw: None
+        ):
+            dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)
+            dialog.app_state = SimpleNamespace(mods_dir=str(tmp_path / "mods"))
+            dialog.mod_service = object()
+            dialog.gamebanana_metadata = {}
+            dialog.source_file_path = None
+            dialog.game_combo = SimpleNamespace(currentData=lambda: "deltarune")
+            dialog.data_file_selections = {"deltarune_4": str(data_file)}
+            dialog.extra_files_mappings = {}
+            dialog.unused_files = set()
+            dialog.xdelta_patches_mappings = {}
+            dialog.all_files = [(str(data_file), "BOSSRUSH.win")]
+            os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
+
+            dialog._create_mod_from_files()
+
+        mod_folders = list(Path(dialog.app_state.mods_dir).iterdir())
+        assert len(mod_folders) == 1
+        config = json.loads((mod_folders[0] / "mod_config.json").read_text("utf-8"))
+        assert "deltarune_4" in config["files"]
+        assert "4" not in config["files"]
+        assert (mod_folders[0] / "chapter_4" / "BOSSRUSH.win").exists()

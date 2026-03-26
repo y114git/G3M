@@ -17,7 +17,6 @@ from PyQt6.QtWidgets import (
 
 from config.config import (
     BASE_TAG_NAMES,
-    LIBRARY_IMPORT_ARCHIVE_EXTENSIONS,
     QSS_TRANSPARENT_SCROLL,
 )
 from models.game_modes import get_visible_game_entries
@@ -58,25 +57,18 @@ class _DropAreaWidget(QWidget):
         self.setAcceptDrops(True)
 
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls() and any(
-            u.toLocalFile().lower().endswith(LIBRARY_IMPORT_ARCHIVE_EXTENSIONS)
-            for u in e.mimeData().urls()
-        ):
+        if e.mimeData().hasUrls() and any(u.isLocalFile() for u in e.mimeData().urls()):
             e.acceptProposedAction()
 
     def dragMoveEvent(self, e):
-        if e.mimeData().hasUrls():
+        if e.mimeData().hasUrls() and any(u.isLocalFile() for u in e.mimeData().urls()):
             e.acceptProposedAction()
         else:
             e.ignore()
 
     def dropEvent(self, e):
         if e.mimeData().hasUrls():
-            paths = [
-                u.toLocalFile()
-                for u in e.mimeData().urls()
-                if u.toLocalFile().lower().endswith(LIBRARY_IMPORT_ARCHIVE_EXTENSIONS)
-            ]
+            paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
             if paths:
                 e.acceptProposedAction()
                 self.files_dropped.emit(paths)
@@ -89,6 +81,18 @@ class LibraryTabBuilder(QObject):
 
     def _get_colors(self):
         return get_theme_colors(self.app_state.local_config)
+
+    @staticmethod
+    def _styled_label(text: str, bold: bool = False, color: str = "") -> QLabel:
+        label = QLabel(text)
+        style = []
+        if bold:
+            style.append("font-weight: bold")
+        if color:
+            style.append(f"color: {color}")
+        if style:
+            label.setStyleSheet("; ".join(style) + ";")
+        return label
 
     def build(self) -> QWidget:
         widget = QWidget()
@@ -115,6 +119,10 @@ class LibraryTabBuilder(QObject):
         profile_row = QHBoxLayout()
         profile_row.setContentsMargins(0, 2, 0, 2)
         profile_row.addStretch()
+        profile_label = self._styled_label(
+            tr("ui.profile_label"), bold=True, color=colors["main_text"]
+        )
+        profile_row.addWidget(profile_label)
         profile_combo = QComboBox()
         profile_combo.setObjectName("profile_combo")
         profile_combo.setMinimumWidth(180)
@@ -130,21 +138,17 @@ class LibraryTabBuilder(QObject):
         profile_row.addWidget(profile_settings_btn)
         profile_row.addStretch()
         layout.addLayout(profile_row)
+        self.widgets["library_profile_label"] = profile_label
         self.widgets["profile_combo"] = profile_combo
         self.widgets["profile_settings_button"] = profile_settings_btn
 
         ctrl = QHBoxLayout()
         ctrl.setContentsMargins(0, 5, 0, 5)
-        add_btn = QPushButton()
-        add_btn.setObjectName("add_mod_button")
-        self.widgets["add_mod_button"] = add_btn
-        add_btn.setIconSize(QSize(20, 20))
-        add_btn.setToolTip(tr("ui.add_mod"))
-        add_btn.setContentsMargins(0, 0, 0, 0)
-        add_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        game_label = self._styled_label(
+            tr("ui.game_label"), bold=True, color=colors["main_text"]
+        )
         ctrl.addStretch()
-        ctrl.addWidget(add_btn)
-        ctrl.addSpacing(20)
+        ctrl.addWidget(game_label)
         game_combo = create_modgame_combo(
             self.app_state, get_visible_game_entries(), "selected_game_type"
         )
@@ -160,7 +164,6 @@ class LibraryTabBuilder(QObject):
         ctrl.addStretch()
         layout.addLayout(ctrl)
 
-        self._update_add_mod_button_size_and_style(add_btn, game_combo, colors)
         self._update_profile_settings_button_style(
             profile_settings_btn, game_combo, colors
         )
@@ -190,9 +193,9 @@ class LibraryTabBuilder(QObject):
             btn.setStyleSheet(
                 build_button_style(
                     btn.objectName(),
-                    colors["button"],
-                    colors["button_hover"],
-                    colors["text"],
+                    colors["elements"],
+                    colors["hover"],
+                    colors["main_text"],
                     colors["border"],
                     width=None,
                     height=None,
@@ -202,7 +205,7 @@ class LibraryTabBuilder(QObject):
                         height=max(25, btn.sizeHint().height()),
                     ),
                     padding="5px",
-                    checked_bg_color=colors["button_hover"],
+                    checked_bg_color=colors["hover"],
                     checked_border_color=colors["border"],
                     checked_border_width=3,
                 )
@@ -227,21 +230,30 @@ class LibraryTabBuilder(QObject):
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
         header_row.setSpacing(10)
-        mods_lbl = QLabel(tr("ui.installed_mods_label"))
-        mods_lbl.setStyleSheet("font-weight: bold; font-size: 16px;")
-        mods_lbl.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        header_row.addWidget(mods_lbl)
-        header_row.addStretch()
         p_btn = QPushButton(tr("ui.priority"))
         m_btn = QPushButton(tr("ui.create_modpack_button"))
         for b, n in [(p_btn, "priority_button"), (m_btn, "create_modpack_button")]:
             b.setObjectName(n)
             b.setEnabled(False)
             self._update_priority_button_style(
-                b, colors["button"], colors["border"], colors["button_hover"]
+                b, colors["elements"], colors["border"], colors["hover"]
             )
+        add_btn = QPushButton(tr("ui.add_mod"))
+        add_btn.setObjectName("add_mod_button")
+        self.widgets["add_mod_button"] = add_btn
+        add_btn.setIconSize(QSize(20, 20))
+        add_btn.setToolTip(tr("ui.add_mod"))
+        add_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self._update_add_mod_button_style(add_btn, p_btn.sizeHint().height(), colors)
+        header_row.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        header_row.addStretch()
+        mods_lbl = QLabel(tr("ui.installed_mods_label"))
+        mods_lbl.setStyleSheet("font-weight: bold; font-size: 16px;")
+        mods_lbl.setAlignment(
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+        header_row.addWidget(mods_lbl)
+        header_row.addStretch()
         header_row.addWidget(p_btn)
         header_row.addWidget(m_btn)
         m_layout.addLayout(header_row)
@@ -267,7 +279,7 @@ class LibraryTabBuilder(QObject):
             viewport_inset = max(2, min(10, container_radius // 5))
             scrollbar_corner_inset = max(6, min(18, container_radius // 2))
             scrollbar_qss = build_scrollbar_qss(
-                colors["text"],
+                colors["main_text"],
                 get_border_radius(self.app_state.local_config),
                 vertical_margin=(scrollbar_corner_inset, 2, scrollbar_corner_inset, 0),
                 horizontal_margin=(
@@ -368,6 +380,7 @@ class LibraryTabBuilder(QObject):
                 "library_filters_widget": filters,
                 "add_mod_button": add_btn,
                 "game_type_combo": game_combo,
+                "library_game_label": game_label,
                 "chapter_mode_checkbox": ch_cb,
                 "full_install_checkbox": f_cb,
                 "chapter_tabs_widget": ch_tabs,
@@ -390,27 +403,27 @@ class LibraryTabBuilder(QObject):
         w, layout = create_filters_frame()
         apply_filters_frame_style(w, self.app_state)
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        _vc = Qt.AlignmentFlag.AlignVCenter
+        align_vcenter = Qt.AlignmentFlag.AlignVCenter
         sort_combo, sort_btn = create_sort_controls(
             self.app_state, [tr("ui.sort_by_name"), tr("ui.sort_by_date")]
         )
-        layout.addWidget(sort_combo, 0, _vc)
-        layout.addWidget(sort_btn, 0, _vc)
+        layout.addWidget(sort_combo, 0, align_vcenter)
+        layout.addWidget(sort_btn, 0, align_vcenter)
         layout.addSpacing(20)
         tags_lbl = QLabel(tr("ui.tags_label"))
-        layout.addWidget(tags_lbl, 0, _vc)
+        layout.addWidget(tags_lbl, 0, align_vcenter)
         tags = create_tag_checkboxes(self.app_state, (*BASE_TAG_NAMES, "gamebanana"))
         for t in tags.values():
-            layout.addWidget(t, 0, _vc)
+            layout.addWidget(t, 0, align_vcenter)
         layout.addStretch()
         modding_tools_btn = create_modding_tools_button(self.app_state)
-        layout.addWidget(modding_tools_btn, 0, _vc)
+        layout.addWidget(modding_tools_btn, 0, align_vcenter)
         layout.addSpacing(4)
         downloads_btn = create_downloads_button(self.app_state)
-        layout.addWidget(downloads_btn, 0, _vc)
+        layout.addWidget(downloads_btn, 0, align_vcenter)
         layout.addSpacing(4)
         search_btn = create_search_button(self.app_state)
-        layout.addWidget(search_btn, 0, _vc)
+        layout.addWidget(search_btn, 0, align_vcenter)
         self.widgets.update(
             {
                 "library_sort_combo": sort_combo,
@@ -433,17 +446,32 @@ class LibraryTabBuilder(QObject):
             height=combo_height,
             border_width=2,
         )
-        return f"QPushButton#{obj_name} {{ border: 2px solid {colors['border']}; border-radius: {br}px; background-color: {colors['button']}; color: {colors['text']}; margin: 0px; padding: 0px; }} QPushButton#{obj_name}:hover {{ background-color: {colors['button_hover']}; }}"
+        return f"QPushButton#{obj_name} {{ border: 2px solid {colors['border']}; border-radius: {br}px; background-color: {colors['elements']}; color: {colors['main_text']}; margin: 0px; padding: 0px; }} QPushButton#{obj_name}:hover {{ background-color: {colors['hover']}; }}"
 
-    def _update_add_mod_button_size_and_style(self, add_btn, game_combo, colors):
-        """Update add_mod_button to be square matching the combo height."""
+    def _update_add_mod_button_style(self, add_btn, button_height, colors):
+        """Rebuild add_mod_button to match the priority button."""
         from utils.path_utils import colored_icon
 
-        combo_height = game_combo.sizeHint().height()
-        add_btn.setFixedSize(combo_height, combo_height)
-        add_btn.setIcon(colored_icon("add", colors["text"]))
+        add_btn.setFixedHeight(button_height)
+        add_btn.setIcon(colored_icon("add", colors["main_text"]))
         add_btn.setStyleSheet(
-            self._square_btn_qss(add_btn.objectName(), combo_height, colors)
+            build_button_style(
+                add_btn.objectName(),
+                colors["elements"],
+                colors["hover"],
+                colors["main_text"],
+                colors["border"],
+                width=None,
+                height=None,
+                font_size=max(
+                    1, int(14 * self.app_state.local_config.get("ui_scale", 1.0))
+                ),
+                border_radius=clamp_border_radius(
+                    get_border_radius(self.app_state.local_config),
+                    height=max(30, button_height),
+                ),
+                padding="5px",
+            )
         )
 
     def _update_profile_settings_button_style(self, btn, game_combo, colors):
@@ -452,12 +480,12 @@ class LibraryTabBuilder(QObject):
 
         combo_height = game_combo.sizeHint().height()
         btn.setFixedSize(combo_height, combo_height)
-        btn.setIcon(colored_icon("settings", colors["text"]))
+        btn.setIcon(colored_icon("settings", colors["main_text"]))
         btn.setStyleSheet(self._square_btn_qss(btn.objectName(), combo_height, colors))
 
     def _update_priority_button_style(self, btn, btn_clr, brd_clr, hvr_clr):
         n = btn.objectName()
-        t = self._get_colors()["text"]
+        t = self._get_colors()["main_text"]
         fs = max(1, int(14 * self.app_state.local_config.get("ui_scale", 1.0)))
         btn.setStyleSheet(
             build_button_style(
@@ -483,15 +511,19 @@ class LibraryTabBuilder(QObject):
             if k in self.widgets:
                 self._update_priority_button_style(
                     self.widgets[k],
-                    colors["button"],
+                    colors["elements"],
                     colors["border"],
-                    colors["button_hover"],
+                    colors["hover"],
                 )
         game_combo = self.widgets.get("game_type_combo")
         if game_combo:
             if "add_mod_button" in self.widgets:
-                self._update_add_mod_button_size_and_style(
-                    self.widgets["add_mod_button"], game_combo, colors
+                self._update_add_mod_button_style(
+                    self.widgets["add_mod_button"],
+                    self.widgets["priority_button"].sizeHint().height()
+                    if "priority_button" in self.widgets
+                    else game_combo.sizeHint().height(),
+                    colors,
                 )
             if "profile_settings_button" in self.widgets:
                 self._update_profile_settings_button_style(
@@ -499,7 +531,13 @@ class LibraryTabBuilder(QObject):
                 )
         tag_lbl = self.widgets.get("library_tags_label")
         if tag_lbl:
-            tag_lbl.setStyleSheet(f"color: {colors['text']};")
+            tag_lbl.setStyleSheet(f"color: {colors['main_text']};")
+        for label_key in ("library_profile_label", "library_game_label"):
+            label = self.widgets.get(label_key)
+            if label:
+                label.setStyleSheet(
+                    f"font-weight: bold; color: {colors['main_text']};"
+                )
 
     def get_widgets(self) -> dict[str, Any]:
         return self.widgets

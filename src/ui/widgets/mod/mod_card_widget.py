@@ -20,7 +20,7 @@ from ui.common.styling import (
     get_widget_dimensions,
 )
 from ui.utils.ui_utils import UIAnimator
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 
 from .base_mod_widget import BaseModWidget
 
@@ -39,10 +39,10 @@ class CompatibilityCheckThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            from utils.mod_utils import parse_gamebanana_key
+            from utils.mod_utils import parse_gamebanana_mod_id
 
-            key = get_mod_key(self.mod_data)
-            gb_type, gb_id = parse_gamebanana_key(key)
+            key = get_mod_id(self.mod_data)
+            gb_type, gb_id = parse_gamebanana_mod_id(key)
             if not gb_id:
                 return
             from adapters.gamebanana_adapter import GameBananaAPI
@@ -86,7 +86,7 @@ class ModCardWidget(BaseModWidget):
                     break
                 current = current.parent() if hasattr(current, "parent") else None
         self.is_installed = False
-        self._last_icon_url = getattr(mod_data, "icon_url", None) or getattr(
+        self._last_icon = getattr(mod_data, "icon", None) or getattr(
             mod_data, "icon_path", None
         )
         self.frame_selector = "modCard"
@@ -147,7 +147,7 @@ class ModCardWidget(BaseModWidget):
 
     def _get_theme_text_color(self, fallback="#e8e9eb"):
         config = self._resolve_theme_config()
-        return get_theme_color(config, "text", fallback) if config else fallback
+        return get_theme_color(config, "main_text", fallback) if config else fallback
 
     def _get_theme_border_color(self, fallback="#039d5b"):
         config = self._resolve_theme_config()
@@ -165,7 +165,7 @@ class ModCardWidget(BaseModWidget):
 
     def _get_likes_text(self):
         try:
-            key = get_mod_key(self.mod_data)
+            key = get_mod_id(self.mod_data)
             likes_value = getattr(self.mod_data, "like_count", None)
             if key and key.startswith("gb_"):
                 has_full = getattr(self.mod_data, "has_full_metadata", True)
@@ -246,7 +246,7 @@ class ModCardWidget(BaseModWidget):
 
     def _check_installation_status(self):
         if self.parent_app and hasattr(self.parent_app, "mod_service"):
-            key = get_mod_key(self.mod_data) or ""
+            key = get_mod_id(self.mod_data) or ""
             try:
                 self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
             except Exception as e:
@@ -272,12 +272,12 @@ class ModCardWidget(BaseModWidget):
     def _start_compatibility_check(self):
         if getattr(self.mod_data, "gamebanana_compatibility_checked", False):
             return
-        key = get_mod_key(self.mod_data)
+        key = get_mod_id(self.mod_data)
         if key and key.startswith("gb_"):
             try:
-                from utils.mod_utils import parse_gamebanana_key
+                from utils.mod_utils import parse_gamebanana_mod_id
 
-                _, gb_id = parse_gamebanana_key(key)
+                _, gb_id = parse_gamebanana_mod_id(key)
                 if gb_id:
                     from adapters.gamebanana_adapter import GameBananaAPI
 
@@ -398,7 +398,7 @@ class ModCardWidget(BaseModWidget):
         if getattr(app_state, "is_installing", False):
             self.action_button.setEnabled(False)
             return
-        key = get_mod_key(self.mod_data)
+        key = get_mod_id(self.mod_data)
         if key and key.startswith("gb_"):
             dm = self._get_downloads_manager()
             if dm:
@@ -429,7 +429,7 @@ class ModCardWidget(BaseModWidget):
         was_installed = self.is_installed
         self._check_installation_status()
         if was_installed != self.is_installed:
-            key = get_mod_key(self.mod_data)
+            key = get_mod_id(self.mod_data)
             if key and key.startswith("gb_"):
                 if not self.is_installed:
                     for attr, val in [
@@ -443,11 +443,11 @@ class ModCardWidget(BaseModWidget):
     def update_mod_data(self):
         try:
             if hasattr(self, "icon_label"):
-                new_icon = getattr(self.mod_data, "icon_url", None) or getattr(
+                new_icon = getattr(self.mod_data, "icon", None) or getattr(
                     self.mod_data, "icon_path", None
                 )
-                if new_icon != getattr(self, "_last_icon_url", None):
-                    self._last_icon_url = new_icon
+                if new_icon != getattr(self, "_last_icon", None):
+                    self._last_icon = new_icon
                     from ui.common.styling import (
                         get_theme_color,
                         load_mod_icon_universal,
@@ -476,20 +476,20 @@ class ModCardWidget(BaseModWidget):
                     )
             if hasattr(self, "likes_label"):
                 self.likes_label.setText(self._get_likes_text())
-            if hasattr(self, "tagline_label"):
-                tagline = getattr(self.mod_data, "tagline", "") or tr(
+            if hasattr(self, "description_label"):
+                description = getattr(self.mod_data, "description", "") or tr(
                     "ui.no_description"
                 )
-                key = get_mod_key(self.mod_data)
+                key = get_mod_id(self.mod_data)
                 if (
                     key
                     and key.startswith("gb_")
                     and not getattr(self.mod_data, "has_full_metadata", True)
                 ):
-                    tagline = tr("ui.loading_placeholder")
-                if len(tagline) > 200:
-                    tagline = tagline[:197] + "..."
-                self.tagline_label.setText(tagline)
+                    description = tr("ui.loading_placeholder")
+                if len(description) > 200:
+                    description = description[:197] + "..."
+                self.description_label.setText(description)
             if not self.is_installed:
                 self._apply_download_style()
         except Exception as e:

@@ -20,7 +20,7 @@ from ui.common.styling import (
     get_theme_color,
     load_mod_icon_universal,
 )
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 from utils.path_utils import colored_icon
 
 from .mod_card_widget import ModCardWidget
@@ -32,6 +32,7 @@ class SearchModCardWidget(ModCardWidget):
     BASE_MEDIA_HEIGHT = 185
     BASE_SPACING = 22
     BASE_SIDE_PADDING = 14
+    METADATA_ICON_PADDING = 4
 
     @classmethod
     def layout_scale_for_config(cls, config) -> float:
@@ -83,7 +84,7 @@ class SearchModCardWidget(ModCardWidget):
         self._last_visual_source = self._get_visual_source_key()
         self._apply_metrics()
         self._update_name_text()
-        self._update_tagline_text()
+        self._update_description_text()
         self._update_updated_label()
         self._update_actions_visibility()
 
@@ -146,8 +147,8 @@ class SearchModCardWidget(ModCardWidget):
             self.metadata_widget.setMinimumHeight(max(16, round(20 * scale)))
         if hasattr(self, "expanded_widget"):
             self.expanded_widget.setMaximumWidth(content_width)
-        if hasattr(self, "tagline_label"):
-            self.tagline_label.setMaximumWidth(content_width)
+        if hasattr(self, "description_label"):
+            self.description_label.setMaximumWidth(content_width)
         self.setMinimumWidth(self._card_width)
         self.setMaximumWidth(self._card_width)
         self.setMinimumHeight(0)
@@ -210,11 +211,11 @@ class SearchModCardWidget(ModCardWidget):
         expanded_layout.setSpacing(8)
         expanded_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.expanded_layout = expanded_layout
-        self.tagline_label = QLabel(self.expanded_widget)
-        self.tagline_label.setObjectName("secondaryText")
-        self.tagline_label.setWordWrap(True)
-        self.tagline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        expanded_layout.addWidget(self.tagline_label)
+        self.description_label = QLabel(self.expanded_widget)
+        self.description_label.setObjectName("secondaryText")
+        self.description_label.setWordWrap(True)
+        self.description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        expanded_layout.addWidget(self.description_label)
         self.actions_widget = QWidget(self.expanded_widget)
         self.actions_widget.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
@@ -240,7 +241,7 @@ class SearchModCardWidget(ModCardWidget):
         self.main_layout.addWidget(self.expanded_widget)
         self.expanded_widget.setVisible(False)
         self.likes_label.setText(self._get_likes_text())
-        self._update_tagline_text()
+        self._update_description_text()
         self._update_updated_label()
         self._update_name_text()
 
@@ -251,18 +252,18 @@ class SearchModCardWidget(ModCardWidget):
         )
         return (
             primary_screenshot
-            or getattr(self.mod_data, "icon_url", None)
+            or getattr(self.mod_data, "icon", None)
             or getattr(self.mod_data, "icon_path", None)
         )
 
-    def _get_tagline_text(self):
-        key = get_mod_key(self.mod_data)
+    def _get_description_text(self):
+        key = get_mod_id(self.mod_data)
         if key and key.startswith("gb_"):
             return ""
-        tagline = getattr(self.mod_data, "tagline", "") or ""
-        if len(tagline) > 180:
-            tagline = tagline[:177] + "..."
-        return tagline
+        description = getattr(self.mod_data, "description", "") or ""
+        if len(description) > 180:
+            description = description[:177] + "..."
+        return description
 
     def _load_icon(self):
         config = self._resolve_theme_config()
@@ -383,8 +384,8 @@ class SearchModCardWidget(ModCardWidget):
             getattr(self.name_label, "maximumHeight", lambda: 0)()
             if hasattr(self, "name_label")
             else 0,
-            getattr(self.tagline_label, "maximumHeight", lambda: 0)()
-            if hasattr(self, "tagline_label")
+            getattr(self.description_label, "maximumHeight", lambda: 0)()
+            if hasattr(self, "description_label")
             else 0,
         )
         if (
@@ -415,11 +416,11 @@ class SearchModCardWidget(ModCardWidget):
             return True
         return False
 
-    def _update_tagline_text(self):
-        if hasattr(self, "tagline_label"):
-            text = self._get_tagline_text()
-            self.tagline_label.setVisible(bool(text))
-            if self._set_multiline_elided_text(self.tagline_label, text, 4):
+    def _update_description_text(self):
+        if hasattr(self, "description_label"):
+            text = self._get_description_text()
+            self.description_label.setVisible(bool(text))
+            if self._set_multiline_elided_text(self.description_label, text, 4):
                 self.updateGeometry()
                 return True
         return False
@@ -432,22 +433,26 @@ class SearchModCardWidget(ModCardWidget):
 
     def _update_metadata_icons(self, color: str, size: int):
         icon_size = max(12, size)
+        container_size = icon_size + self.METADATA_ICON_PADDING
+        render_size = max(10, icon_size - 2)
         if hasattr(self, "likes_icon_label"):
-            likes_pixmap = colored_icon("like", color).pixmap(icon_size, icon_size)
+            likes_pixmap = colored_icon("like", color).pixmap(render_size, render_size)
             if not likes_pixmap.isNull():
                 self.likes_icon_label.setPixmap(likes_pixmap)
-            self.likes_icon_label.setFixedSize(icon_size, icon_size)
+            self.likes_icon_label.setFixedSize(container_size, container_size)
         if hasattr(self, "updated_icon_label"):
-            updated_pixmap = colored_icon("update", color).pixmap(icon_size, icon_size)
+            updated_pixmap = colored_icon("update", color).pixmap(
+                render_size, render_size
+            )
             if not updated_pixmap.isNull():
                 self.updated_icon_label.setPixmap(updated_pixmap)
-            self.updated_icon_label.setFixedSize(icon_size, icon_size)
+            self.updated_icon_label.setFixedSize(container_size, container_size)
 
     def _update_style(self):
         super()._update_style()
         config = self._resolve_theme_config()
         scale = self.layout_scale_for_config(config)
-        text_color = get_theme_color(config, "text") if config else "#e8e9eb"
+        text_color = get_theme_color(config, "main_text") if config else "#e8e9eb"
         secondary = (
             get_theme_color(config, "secondary_text")
             if config
@@ -469,15 +474,15 @@ class SearchModCardWidget(ModCardWidget):
                     f"color: {secondary}; font-size: {max(12, round(14 * scale))}px;",
                     cache_attr=f"_{label}_stylesheet_cache",
                 )
-        if hasattr(self, "tagline_label"):
+        if hasattr(self, "description_label"):
             apply_stylesheet_if_changed(
-                self.tagline_label,
+                self.description_label,
                 f"color: {secondary}; font-size: {max(12, round(14 * scale))}px;",
-                cache_attr="_tagline_stylesheet_cache",
+                cache_attr="_description_stylesheet_cache",
             )
         name_changed = self._update_name_text()
-        tagline_changed = self._update_tagline_text()
-        if metrics_changed or name_changed or tagline_changed:
+        description_changed = self._update_description_text()
+        if metrics_changed or name_changed or description_changed:
             self._refresh_card_geometry(invalidate_parent=True, force=True)
 
     def _update_actions_visibility(self):
@@ -500,10 +505,10 @@ class SearchModCardWidget(ModCardWidget):
                 self.likes_label.setText(self._get_likes_text())
             if hasattr(self, "updated_label"):
                 self._update_updated_label()
-            tagline_changed = self._update_tagline_text()
+            description_changed = self._update_description_text()
             if not self.is_installed:
                 self._apply_download_style()
-            if metrics_changed or name_changed or tagline_changed:
+            if metrics_changed or name_changed or description_changed:
                 self._refresh_card_geometry(invalidate_parent=True, force=True)
         except Exception as e:
             logging.warning(
@@ -537,7 +542,7 @@ class SearchModCardWidget(ModCardWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_name_text()
-        self._update_tagline_text()
+        self._update_description_text()
 
     def _clear_selection_if_focus_is_outside(self):
         if sip.isdeleted(self):

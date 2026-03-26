@@ -5,14 +5,14 @@ QFrame#bottom_widget, QFrame#settings_widget {
     border-radius: %custom_border_radius%;
 }
 QWidget {
-    font-family: "%font_family_main%", sans-serif;
+    font-family: "%font_family_main%";
     outline: none;
     font-size: %font_size_main%pt;
     color: %main_text_color%;
     background-color: transparent;
 }
 QDialog, QMessageBox {
-    font-family: "%font_family_main%", sans-serif;
+    font-family: "%font_family_main%";
     font-size: %font_size_small%pt;
     color: %main_text_color%;
     background-color: %frame_bg_color%;
@@ -27,7 +27,8 @@ QDialog QPushButton, QMessageBox QPushButton {
     font-size: %font_size_small%pt;
 }
 QPushButton {
-    background-color: %button_color%;
+    font-family: "%font_family_main%";
+    background-color: %elements_color%;
     border: 2px solid %border_color%;
     color: %main_text_color%;
     padding: 6px 16px;
@@ -35,12 +36,12 @@ QPushButton {
     border-radius: %button_border_radius%;
 }
 QPushButton:hover {
-    background-color: %button_hover_color%;
+    background-color: %hover_color%;
 }
 QPushButton:disabled, QComboBox:disabled {
-    background-color: #333333;
-    color: #888888;
-    border: 2px solid #555555;
+    background-color: %disabled_bg%;
+    color: %disabled_text%;
+    border: 2px solid %disabled_border%;
 }
 QPushButton#addLocalizationButton {
     min-width: 33px;
@@ -49,7 +50,8 @@ QPushButton#addLocalizationButton {
     border-radius: %add_localization_button_radius%;
 }
 QComboBox {
-    background-color: %button_color%;
+    font-family: "%font_family_main%";
+    background-color: %elements_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     padding: 5px 10px;
@@ -70,13 +72,13 @@ QComboBox::down-arrow {
     height: 10px;
 }
 QComboBox QAbstractItemView {
-    background-color: %button_color%;
+    background-color: %elements_color%;
     border: 2px solid %border_color%;
     color: %main_text_color%;
-    selection-background-color: %button_hover_color%;
     border-radius: %custom_border_radius%;
 }
 QLineEdit {
+    font-family: "%font_family_main%";
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
@@ -85,6 +87,7 @@ QLineEdit {
     border-radius: %field_border_radius%;
 }
 QListWidget {
+    font-family: "%font_family_main%";
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
@@ -94,9 +97,10 @@ QListWidget::item {
     color: %main_text_color%;
 }
 QListWidget::item:selected {
-    background-color: %button_hover_color%;
+    background-color: %select_color%;
 }
 QSpinBox {
+    font-family: "%font_family_main%";
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
@@ -133,6 +137,7 @@ QSpinBox::down-arrow {
     height: 8px;
 }
 QTextEdit, QTextBrowser {
+    font-family: "%font_family_main%";
     background-color: %frame_bg_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
@@ -140,7 +145,8 @@ QTextEdit, QTextBrowser {
     border-radius: %editor_border_radius%;
 }
 QTabBar::tab {
-    background-color: %button_color%;
+    font-family: "%font_family_main%";
+    background-color: %elements_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     padding: 4px 12px;
@@ -148,36 +154,42 @@ QTabBar::tab {
     border-radius: %tab_border_radius%;
     margin-right: 4px;
 }
-QTabBar::tab:selected, QTabBar::tab:hover {
-    background-color: %button_hover_color%;
+QTabBar::tab:selected {
+    background-color: %hover_color%;
+}
+QTabBar::tab:hover {
+    background-color: %hover_color%;
 }
 QTabBar::tab:disabled {
-    background-color: #333333;
-    color: #888888;
-    border: 2px solid #555555;
+    background-color: %disabled_bg%;
+    color: %disabled_text%;
+    border: 2px solid %disabled_border%;
 }
 QTabWidget::pane {
     background: transparent;
     border: 0px;
 }
+QCheckBox {
+    font-family: "%font_family_main%";
+}
 QCheckBox:disabled {
-    color: #888888;
+    color: %disabled_text%;
 }
 QCheckBox::indicator {
     width: 18px;
     height: 18px;
-    background-color: %button_color%;
+    background-color: %elements_color%;
     border: 2px solid %border_color%;
     border-radius: %checkbox_indicator_radius%;
 }
 QCheckBox::indicator:checked {
-    background-color: %checkbox_checked_color%;
+    background-color: %select_color%;
 }
 QCheckBox::indicator:disabled {
-    background-color: #333333;
-    border: 2px solid #555555;
+    background-color: %disabled_bg%;
+    border: 2px solid %disabled_border%;
 }
 QPushButton:checked {
-    background-color: %button_hover_color%;
+    background-color: %hover_color%;
     border: 2px solid %main_text_color%;
 }

@@ -19,34 +19,34 @@ from models.mod_models import ModExtraFile, ModFileData, ModInfo
 class TestModInfo:
 
     def test_creation_minimal(self):
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False)
-        assert mod.key == 'k'
+        assert mod.id == 'k'
         assert mod.name == 'N'
         assert mod.game == 'deltarune'
 
     def test_from_dict_basic(self):
-        data = {'key': 'mod_a', 'name': 'Mod A', 'version': '2.0', 'author': 'Auth',
-                'tagline': 'Tag', 'game_version': '1.0', 'description_url': '',
+        data = {'id': 'mod_a', 'name': 'Mod A', 'version': '2.0', 'author': 'Auth',
+                'description': 'Tag', 'game_version': '1.0', 'description_url': '',
                 'downloads': 5, 'game': 'deltarune', 'is_verified': True}
         mod = ModInfo.from_dict(data)
-        assert mod.key == 'mod_a'
+        assert mod.id == 'mod_a'
         assert mod.version == '2.0'
         assert mod.downloads == 5
         assert mod.is_verified is True
 
     def test_from_dict_defaults(self):
         mod = ModInfo.from_dict({})
-        assert mod.key == ''
+        assert mod.id == ''
         assert mod.game == 'deltarune'
         assert mod.is_verified is False
         assert mod.downloads is None
 
     def test_from_dict_with_files(self):
         data = {
-            'key': 'mod_f', 'name': 'F', 'version': '1.0', 'author': 'A',
-            'tagline': 'T', 'game_version': '1.0', 'description_url': '',
+            'id': 'mod_f', 'name': 'F', 'version': '1.0', 'author': 'A',
+            'description': 'T', 'game_version': '1.0', 'description_url': '',
             'downloads': 0, 'game': 'deltarune', 'is_verified': False,
             'files': {
                 '1': {'data_file_url': 'http://example.com/data.win', 'data_file_version': '1.0'},
@@ -61,8 +61,8 @@ class TestModInfo:
 
     def test_from_dict_with_extra_files(self):
         data = {
-            'key': 'mod_e', 'name': 'E', 'version': '1.0', 'author': 'A',
-            'tagline': 'T', 'game_version': '1.0', 'description_url': '',
+            'id': 'mod_e', 'name': 'E', 'version': '1.0', 'author': 'A',
+            'description': 'T', 'game_version': '1.0', 'description_url': '',
             'downloads': 0, 'game': 'deltarune', 'is_verified': False,
             'files': {
                 '0': {
@@ -79,7 +79,7 @@ class TestModInfo:
         assert mod.files['0'].extra_files[0].key == 'music'
 
     def test_get_file_data_direct(self):
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False,
                       files={'1': ModFileData(data_file_url='url1')})
@@ -88,7 +88,7 @@ class TestModInfo:
         assert mod.get_file_data('nonexistent') is None
 
     def test_get_chapter_data_deltarune(self):
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False,
                       files={
@@ -103,7 +103,7 @@ class TestModInfo:
 
     def test_get_chapter_data_undertale(self):
         """Undertale mods use 'undertale' key, accessed via tab_id='undertale'."""
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='undertale', is_verified=False,
                       files={'undertale': ModFileData(data_file_url='ut_url')})
@@ -112,7 +112,7 @@ class TestModInfo:
         assert result.data_file_url == 'ut_url'
 
     def test_get_chapter_data_demo(self):
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarunedemo', is_verified=False,
                       files={'demo': ModFileData(data_file_url='demo_url')})
@@ -121,42 +121,42 @@ class TestModInfo:
         assert result.data_file_url == 'demo_url'
 
     def test_is_valid_for_demo(self):
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarunedemo', is_verified=False,
                       files={'demo': ModFileData(data_file_url='url')})
         assert mod.is_valid_for_demo() is True
 
     def test_is_valid_for_demo_wrong_game(self):
-        mod = ModInfo(key='k', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False,
                       files={'demo': ModFileData(data_file_url='url')})
         assert mod.is_valid_for_demo() is False
 
     def test_is_gamebanana_mod(self):
-        mod = ModInfo(key='gb_mod_12345', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='gb_mod_12345', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False)
         assert mod.is_gamebanana_mod() is True
         assert mod.get_gamebanana_mod_id() == '12345'
 
     def test_is_gamebanana_wip_mod(self):
-        mod = ModInfo(key='gb_wip_67890', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='gb_wip_67890', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False)
         assert mod.is_gamebanana_mod() is True
         assert mod.get_gamebanana_mod_id() == '67890'
 
     def test_legacy_gb_key_not_recognized(self):
-        mod = ModInfo(key='gb_12345', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='gb_12345', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False)
         assert mod.is_gamebanana_mod() is False
         assert mod.get_gamebanana_mod_id() is None
 
     def test_is_not_gamebanana_mod(self):
-        mod = ModInfo(key='local_mod', name='N', version='1.0', author='A', tagline='T',
+        mod = ModInfo(id='local_mod', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
                       game='deltarune', is_verified=False)
         assert mod.is_gamebanana_mod() is False
@@ -268,11 +268,11 @@ class TestDeltaruneGame:
 
     def test_filter_mods_for_ui(self):
         g = DeltaruneGame()
-        mod1 = ModInfo(key='m1', name='M1', version='1.0', author='A', tagline='T',
+        mod1 = ModInfo(id='m1', name='M1', version='1.0', author='A', description='T',
                        game_version='1.0', description_url='', downloads=0,
                        game='deltarune', is_verified=False,
                        files={'1': ModFileData(data_file_url='url')})
-        mod2 = ModInfo(key='m2', name='M2', version='1.0', author='A', tagline='T',
+        mod2 = ModInfo(id='m2', name='M2', version='1.0', author='A', description='T',
                        game_version='1.0', description_url='', downloads=0,
                        game='undertale', is_verified=False,
                        files={'undertale': ModFileData(data_file_url='url')})
@@ -283,7 +283,7 @@ class TestDeltaruneGame:
 
     def test_filter_hidden_mods_excluded(self):
         g = DeltaruneGame()
-        hidden = ModInfo(key='h', name='H', version='1.0', author='A', tagline='T',
+        hidden = ModInfo(id='h', name='H', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
                          game='deltarune', is_verified=False, hide_mod=True,
                          files={'0': ModFileData(data_file_url='url')})
@@ -292,7 +292,7 @@ class TestDeltaruneGame:
 
     def test_filter_banned_mods_excluded(self):
         g = DeltaruneGame()
-        banned = ModInfo(key='b', name='B', version='1.0', author='A', tagline='T',
+        banned = ModInfo(id='b', name='B', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
                          game='deltarune', is_verified=False, ban_status=True,
                          files={'0': ModFileData(data_file_url='url')})
@@ -316,11 +316,11 @@ class TestDeltaruneDemoGame:
 
     def test_filter_mods_demo(self):
         g = DeltaruneDemoGame()
-        valid_demo = ModInfo(key='d1', name='D1', version='1.0', author='A', tagline='T',
+        valid_demo = ModInfo(id='d1', name='D1', version='1.0', author='A', description='T',
                              game_version='1.0', description_url='', downloads=0,
                              game='deltarunedemo', is_verified=False,
                              files={'demo': ModFileData(data_file_url='url')})
-        wrong_game = ModInfo(key='d2', name='D2', version='1.0', author='A', tagline='T',
+        wrong_game = ModInfo(id='d2', name='D2', version='1.0', author='A', description='T',
                              game_version='1.0', description_url='', downloads=0,
                              game='deltarune', is_verified=False,
                              files={'demo': ModFileData(data_file_url='url')})
@@ -341,11 +341,11 @@ class TestUndertaleGame:
 
     def test_filter_mods(self):
         g = UndertaleGame()
-        ut_mod = ModInfo(key='u1', name='U1', version='1.0', author='A', tagline='T',
+        ut_mod = ModInfo(id='u1', name='U1', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
                          game='undertale', is_verified=False,
                          files={'undertale': ModFileData(data_file_url='url')})
-        dr_mod = ModInfo(key='d1', name='D1', version='1.0', author='A', tagline='T',
+        dr_mod = ModInfo(id='d1', name='D1', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
                          game='deltarune', is_verified=False,
                          files={'1': ModFileData(data_file_url='url')})
@@ -375,11 +375,11 @@ class TestPizzaTowerGame:
     def test_filter_accepts_legacy_key(self):
         """Pizza Tower accepts both '0' and 'pizzatower' as files keys."""
         g = PizzaTowerGame()
-        mod_legacy = ModInfo(key='p1', name='P1', version='1.0', author='A', tagline='T',
+        mod_legacy = ModInfo(id='p1', name='P1', version='1.0', author='A', description='T',
                              game_version='1.0', description_url='', downloads=0,
                              game='pizzatower', is_verified=False,
                              files={'0': ModFileData(data_file_url='url')})
-        mod_new = ModInfo(key='p2', name='P2', version='1.0', author='A', tagline='T',
+        mod_new = ModInfo(id='p2', name='P2', version='1.0', author='A', description='T',
                           game_version='1.0', description_url='', downloads=0,
                           game='pizzatower', is_verified=False,
                           files={'pizzatower': ModFileData(data_file_url='url')})

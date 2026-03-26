@@ -1,3 +1,5 @@
+import os
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -83,11 +85,27 @@ class TestLibraryDisplayController:
         controller.update_mod_widgets_active_status = Mock()
         controller._last_render_signature = (
             controller._current_view_signature(),
-            (("mod_key",),),
+            (("mod_id",),),
         )
         controller.update_display()
         controller.refresh_async.assert_not_called()
         controller.update_mod_widgets_active_status.assert_called_once()
+
+
+class TestModImportExportController:
+    def test_materialize_local_import_keeps_plain_files(self, temp_dir):
+        from controllers.mod_import_export_controller import ModImportExportController
+
+        source_file = os.path.join(temp_dir, "sample.png")
+        with open(source_file, "wb") as handle:
+            handle.write(b"png")
+
+        controller = ModImportExportController(Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock())
+
+        with tempfile.TemporaryDirectory() as extract_dir:
+            content_path = controller._materialize_local_import(source_file, extract_dir)
+            assert content_path == extract_dir
+            assert os.path.isfile(os.path.join(extract_dir, "sample.png"))
 
     def test_library_display_refreshes_when_installed_cache_is_invalid(
         self, app_state, feedback_service
@@ -118,7 +136,7 @@ class TestLibraryDisplayController:
         controller.refresh_async = Mock()
         controller._last_render_signature = (
             controller._current_view_signature(),
-            (("mod_key",),),
+            (("mod_id",),),
         )
         controller.update_display()
         controller.refresh_async.assert_called_once()
@@ -144,19 +162,19 @@ class TestLibraryDisplayController:
         mod_service = Mock()
         mod_service.get_installed_mods_list.return_value = [
             {
-                "key": "b",
+                "id": "b",
                 "name": "Beta",
                 "game": "deltarune",
                 "added_date": "2024-01-01 00:00:00",
             },
             {
-                "key": "a",
+                "id": "a",
                 "name": "Alpha",
                 "game": "deltarune",
                 "added_date": "2025-06-01 00:00:00",
             },
             {
-                "key": "c",
+                "id": "c",
                 "name": "Charlie",
                 "game": "deltarune",
                 "added_date": "2024-06-01 00:00:00",
@@ -347,7 +365,7 @@ class TestThemeController:
 
         from controllers.theme_controller import ThemeController
 
-        app_state.local_config = {"custom_color_text": "#FF0000"}
+        app_state.local_config = {"custom_main_text_color": "#FF0000"}
         settings_service = Mock()
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
@@ -355,7 +373,10 @@ class TestThemeController:
         app_window.custom_font_family = None
         app_window.palette.return_value = Mock()
         app_window.status_label = Mock()
-        app_window.color_widgets = {"button_hover": Mock(text=lambda: "")}
+        app_window.color_widgets = {
+            "hover": Mock(text=lambda: ""),
+            "select": Mock(text=lambda: ""),
+        }
         app_window.installed_mods_label = None
         app_window.title_bar = None
         app_window.top_panel_widget = Mock()
@@ -371,21 +392,20 @@ class TestThemeController:
         app_window.size.return_value = Mock()
         with (
             patch(
-                "controllers.theme_controller.THEMES",
+                "controllers.theme_controller.DEFAULT_THEME",
                 {
-                    "default": {
-                        "background": "images/background.png",
-                        "colors": {
-                            "text": "#FFFFFF",
-                            "background": "#000000",
-                            "button": "#333333",
-                            "border": "#444444",
-                            "button_hover": "#555555",
-                        },
-                        "font_family": "Arial",
-                        "font_size_main": 12,
-                        "font_size_small": 10,
-                    }
+                    "background": "images/background.png",
+                    "colors": {
+                        "main_text": "#FFFFFF",
+                        "background": "#000000",
+                        "elements": "#333333",
+                        "border": "#444444",
+                        "hover": "#555555",
+                        "select": "#666666",
+                    },
+                    "font_family": "Arial",
+                    "font_size_main": 12,
+                    "font_size_small": 10,
                 },
             ),
             patch("controllers.theme_controller.BgLoader"),
@@ -427,7 +447,10 @@ class TestThemeController:
         app_window.custom_font_family = None
         app_window.palette.return_value = Mock()
         app_window.status_label = Mock()
-        app_window.color_widgets = {"button_hover": Mock(text=lambda: "")}
+        app_window.color_widgets = {
+            "hover": Mock(text=lambda: ""),
+            "select": Mock(text=lambda: ""),
+        }
         app_window.installed_mods_label = None
         app_window.title_bar = None
         app_window.top_panel_widget = Mock()
@@ -444,21 +467,20 @@ class TestThemeController:
         app_window._last_tooltip_size_key = "tooltip-text"
         with (
             patch(
-                "controllers.theme_controller.THEMES",
+                "controllers.theme_controller.DEFAULT_THEME",
                 {
-                    "default": {
-                        "background": "images/background.png",
-                        "colors": {
-                            "text": "#FFFFFF",
-                            "background": "#000000",
-                            "button": "#333333",
-                            "border": "#444444",
-                            "button_hover": "#555555",
-                        },
-                        "font_family": "Arial",
-                        "font_size_main": 12,
-                        "font_size_small": 10,
-                    }
+                    "background": "images/background.png",
+                    "colors": {
+                        "main_text": "#FFFFFF",
+                        "background": "#000000",
+                        "elements": "#333333",
+                        "border": "#444444",
+                        "hover": "#555555",
+                        "select": "#666666",
+                    },
+                    "font_family": "Arial",
+                    "font_size_main": 12,
+                    "font_size_small": 10,
                 },
             ),
             patch("controllers.theme_controller.BgLoader"),
@@ -475,6 +497,39 @@ class TestThemeController:
             )
             controller.apply_theme(force=True)
         assert app_window._last_tooltip_size_key is None
+
+    def test_reload_custom_font_skips_reloading_unchanged_file(
+        self, app_state, feedback_service, tmp_path
+    ):
+        from controllers.theme_controller import ThemeController
+
+        font_path = tmp_path / "custom_font.ttf"
+        font_path.write_bytes(b"font")
+        settings_service = Mock()
+        customization_service = Mock()
+        customization_service.get_custom_font_path.return_value = str(font_path)
+        app_window = Mock()
+        app_window._custom_font_id = 7
+        app_window.custom_font_family = "Loaded Font"
+        app_window._custom_font_file_key = (
+            str(font_path),
+            font_path.stat().st_mtime_ns,
+            font_path.stat().st_size,
+        )
+        controller = ThemeController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=settings_service,
+            customization_service=customization_service,
+            app_window=app_window,
+        )
+        with (
+            patch("PyQt6.QtGui.QFontDatabase.removeApplicationFont") as remove_mock,
+            patch("PyQt6.QtGui.QFontDatabase.addApplicationFont") as add_mock,
+        ):
+            controller._reload_custom_font()
+        remove_mock.assert_not_called()
+        add_mock.assert_not_called()
 
 
 class TestGameLaunchController:
@@ -530,7 +585,7 @@ class TestGameLaunchController:
             initialization_completed=True,
             local_config={
                 "dont_hide_window_on_launch": True,
-                "custom_color_border": "#123456",
+                "custom_border_color": "#123456",
             },
             action_button_text=None,
             action_button_enabled=False,

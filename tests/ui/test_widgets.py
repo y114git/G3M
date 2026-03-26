@@ -1,5 +1,4 @@
 import contextlib
-import os
 import time
 from types import SimpleNamespace
 
@@ -29,7 +28,7 @@ class TestModWidgets:
         from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
         host = QWidget()
         host.app_state = SimpleNamespace(local_config={'ui_scale': 1.0})
-        mod_data = ModInfo(key='test_mod', name='Scaled Search Mod', version='1.0.0', author='Test Author', tagline='Search card scaling should remain stable across repeated UI scale changes.', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
+        mod_data = ModInfo(id='test_mod', name='Scaled Search Mod', version='1.0.0', author='Test Author', description='Search card scaling should remain stable across repeated UI scale changes.', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.search_mod_card_widget.load_mod_icon_universal'):
             widget = SearchModCardWidget(mod_data, parent=host)
@@ -59,7 +58,7 @@ class TestModWidgets:
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget
         host = QWidget()
         host.app_state = SimpleNamespace(local_config={'ui_scale': 1.5})
-        mod_data = ModInfo(key='test_mod', name='Scaled Installed Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Scaled Installed Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = InstalledModWidget(mod_data, parent=host, parent_app=host)
             assert widget.height() > 120
@@ -77,7 +76,7 @@ class TestModWidgets:
         from ui.widgets.mod.mod_card_widget import ModCardWidget
         host = QWidget()
         host.app_state = SimpleNamespace(local_config={'ui_scale': 1.5})
-        mod_data = ModInfo(key='test_mod', name='Scaled Mod', version='1.0.0', author='Test Author', tagline='Scaled tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Scaled Mod', version='1.0.0', author='Test Author', description='Scaled description', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = ModCardWidget(mod_data, parent=host)
@@ -96,7 +95,7 @@ class TestModWidgets:
         from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
         host = QWidget()
         other = QWidget(host)
-        mod_data = ModInfo(key='test_mod', name='Very Long Mod Name That Should Wrap Across Two Lines And Then Get Ellipsized At The End', version='1.0.0', author='Test Author', tagline='Test tagline for the search card.', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
+        mod_data = ModInfo(id='test_mod', name='Very Long Mod Name That Should Wrap Across Two Lines And Then Get Ellipsized At The End', version='1.0.0', author='Test Author', description='Test description for the search card.', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.search_mod_card_widget.load_mod_icon_universal'):
             widget = SearchModCardWidget(mod_data, parent=host)
@@ -125,6 +124,27 @@ class TestModWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_search_mod_card_widget_metadata_icons_keep_padding_when_scaled(self, qapp):
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
+
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={"ui_scale": 1.5})
+        mod_data = ModInfo(id='test_mod', name='Scaled Search Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, last_updated='2024-05-01')
+        mod_data.is_gamebanana_mod = False
+        with patch('ui.widgets.mod.search_mod_card_widget.load_mod_icon_universal'):
+            widget = SearchModCardWidget(mod_data, parent=host)
+            widget._update_style()
+            assert widget.updated_icon_label.width() > widget.updated_icon_label.pixmap().width()
+            assert widget.likes_icon_label.width() > widget.likes_icon_label.pixmap().width()
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
     def test_search_display_controller_does_not_reselect_already_selected_card(self):
         from unittest.mock import Mock
 
@@ -143,7 +163,7 @@ class TestModWidgets:
 
         from models.mod_models import ModInfo
         from ui.widgets.mod.mod_card_widget import ModCardWidget
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=42, like_count=123, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=42, like_count=123, game='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = ModCardWidget(mod_data, parent=None)
@@ -159,7 +179,7 @@ class TestModWidgets:
 
         from models.mod_models import ModInfo
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = InstalledModWidget(mod_data, parent=None)
             assert widget is not None
@@ -175,7 +195,7 @@ class TestModWidgets:
         from models.mod_models import ModInfo
         from ui.utils.ui_utils import safe_stop_thread
         from ui.widgets.mod.mod_card_widget import ModCardWidget
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         mod_data.is_gamebanana_mod = False
         with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
             widget = ModCardWidget(mod_data, parent=None)
@@ -199,6 +219,30 @@ class TestModWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_selected_mod_card_keeps_select_border_on_hover(self, qapp):
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.mod_card_widget import ModCardWidget
+
+        host = QWidget()
+        host.app_state = SimpleNamespace(
+            local_config={"custom_hover_color": "#111111", "custom_select_color": "#ABCDEF"}
+        )
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data.is_gamebanana_mod = False
+        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
+            widget = ModCardWidget(mod_data, parent=host)
+            widget.set_selected(True)
+            assert 'QFrame#modCard:hover {' in widget.styleSheet()
+            assert 'border-color: #ABCDEF;' in widget.styleSheet()
+            assert '#111111' not in widget.styleSheet()
+        widget.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
 
 class TestCommonWidgets:
 
@@ -215,7 +259,7 @@ class TestCommonWidgets:
     def test_mod_details_overlay_creation(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         overlay = ModDetailsOverlay(None, mod_data)
         assert overlay is not None
         assert isinstance(overlay, QWidget)
@@ -233,7 +277,7 @@ class TestCommonWidgets:
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         host = QWidget()
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, created_date='2024-01-01', tags=['gameplay'])
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=42, game='deltarune', is_verified=False, created_date='2024-01-01', tags=['gameplay'])
         overlay = ModDetailsOverlay(host, mod_data)
         assert not overlay.isVisible(), 'Overlay must be hidden after construction to prevent child widgets flashing'
         overlay.deleteLater()
@@ -247,7 +291,7 @@ class TestCommonWidgets:
 
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         overlay = ModDetailsOverlay(None, mod_data)
         overlay._ss_urls = ['https://a.com/1.png', 'https://a.com/2.png', 'https://a.com/3.png']
         overlay._ss_images = [None, None, None]
@@ -269,16 +313,16 @@ class TestCommonWidgets:
     def test_mod_details_overlay_metadata_order(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0', description_url='', downloads=42, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='1.0', description_url='', downloads=42, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
         overlay = ModDetailsOverlay(None, mod_data)
         meta_texts = [label.text() for label in overlay.findChildren(QLabel)]
 
         version_pos = None
         author_pos = None
         for i, text in enumerate(meta_texts):
-            if '>1.0.0</span>' in text:  # Version text
+            if '>1.0.0</span>' in text:
                 version_pos = i
-            if '>Test Author</span>' in text:  # Author text
+            if '>Test Author</span>' in text:
                 author_pos = i
 
         assert version_pos is not None, "Version not found in metadata"
@@ -294,7 +338,7 @@ class TestCommonWidgets:
     def test_mod_details_overlay_shows_downloads(self, qapp, downloads, expected):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='Test tagline', game_version='1.0', description_url='', downloads=downloads, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='1.0', description_url='', downloads=downloads, game='deltarune', is_verified=False, created_date='2024-01-01', gamebanana_category='Category')
         overlay = ModDetailsOverlay(None, mod_data)
         meta_texts = [label.text() for label in overlay.findChildren(QLabel)]
         assert any(f'>{expected}</span>' in text for text in meta_texts)
@@ -303,14 +347,28 @@ class TestCommonWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
-    def test_mod_details_overlay_uses_custom_button_hover_color(self, qapp):
+    def test_mod_details_overlay_uses_custom_hover_color(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         parent = QWidget()
-        parent.app_state = SimpleNamespace(local_config={'custom_color_button_hover': '#123456'})
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        parent.app_state = SimpleNamespace(local_config={'custom_hover_color': '#123456'})
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         overlay = ModDetailsOverlay(parent, mod_data)
         assert overlay._colors['btn_hover'] == '#123456'
+        overlay.deleteLater()
+        parent.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_details_overlay_uses_custom_select_color(self, qapp):
+        from models.mod_models import ModInfo
+        from ui.widgets.mod_details_overlay import ModDetailsOverlay
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={'custom_select_color': '#654321'})
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        overlay = ModDetailsOverlay(parent, mod_data)
+        assert overlay._colors['btn_select'] == '#654321'
         overlay.deleteLater()
         parent.deleteLater()
         for _ in range(3):
@@ -320,7 +378,7 @@ class TestCommonWidgets:
     def test_mod_details_overlay_update_screenshots(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         overlay = ModDetailsOverlay(None, mod_data)
         assert len(overlay._ss_urls) == 0
         overlay.update_screenshots(['https://example.com/1.png', 'https://example.com/2.png'])
@@ -337,7 +395,7 @@ class TestCommonWidgets:
     def test_mod_details_overlay_initializes_screenshots_from_mod_data(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False, screenshots_url=['https://example.com/1.png', 'https://example.com/2.png'])
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False, screenshots_url=['https://example.com/1.png', 'https://example.com/2.png'])
         overlay = ModDetailsOverlay(None, mod_data)
         assert overlay._ss_urls == ['https://example.com/1.png', 'https://example.com/2.png']
         overlay.deleteLater()
@@ -348,7 +406,7 @@ class TestCommonWidgets:
     def test_mod_details_overlay_nav(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         overlay = ModDetailsOverlay(None, mod_data)
         overlay._ss_urls = ['https://a.com/1.png', 'https://a.com/2.png', 'https://a.com/3.png']
         overlay._ss_images = [None, None, None]
@@ -370,7 +428,7 @@ class TestCommonWidgets:
     def test_mod_details_overlay_reuses_dot_labels_during_navigation(self, qapp):
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
-        mod_data = ModInfo(key='test_mod', name='Test Mod', version='1.0.0', author='Test Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
+        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)
         overlay = ModDetailsOverlay(None, mod_data)
         overlay.update_screenshots(['https://a.com/1.png', 'https://a.com/2.png', 'https://a.com/3.png'])
         original_dot_labels = list(overlay._dot_labels)
@@ -378,6 +436,39 @@ class TestCommonWidgets:
         assert overlay._dot_labels == original_dot_labels
         assert overlay._dot_labels[1].text() == '●'
         overlay.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_summary_panel_keeps_zero_playtime_visible(self, qapp):
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from services.localization_service import tr
+        from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
+
+        host = QWidget()
+        host.local_config = {}
+        mod_data = ModInfo(
+            id='test_mod',
+            name='Test Mod',
+            version='1.0.0',
+            author='Test Author',
+            description='Test description',
+            game_version='1.0',
+            description_url='',
+            downloads=0,
+            game='deltarune',
+            is_verified=False,
+            playtime_hours=0,
+        )
+        with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):
+            panel = ModSummaryPanel(host)
+            panel.show_mod(mod_data, is_active=False)
+            assert not panel._playtime_widget.isHidden()
+            assert panel._playtime_value.text() == f"0 {tr('ui.playtime_hours_suffix')}"
+        panel.deleteLater()
+        host.deleteLater()
         for _ in range(3):
             qapp.processEvents()
             time.sleep(0.05)

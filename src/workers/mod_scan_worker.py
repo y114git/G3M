@@ -1,12 +1,12 @@
 """Worker thread for scanning mod directories."""
 
-import json
 import logging
 import os
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from config.config import MOD_CONFIG_FILENAME
+from utils.file_utils import load_json
 
 
 class ModScanThread(QThread):
@@ -45,14 +45,6 @@ class ModScanThread(QThread):
                         continue
                     folder_name = entry.name
                     folder_path = entry.path
-                    try:
-                        from utils.file_utils import migrate_mod_config
-
-                        migrate_mod_config(folder_path)
-                    except Exception:
-                        logging.warning(
-                            f"ModScanThread: failed to migrate mod config in {folder_path}"
-                        )
                     config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
                     if not os.path.exists(config_path):
                         continue
@@ -64,17 +56,16 @@ class ModScanThread(QThread):
                             )
                             continue
                         config_mtime = os.path.getmtime(config_path)
-                        with open(config_path, encoding="utf-8") as f:
-                            config_data = json.load(f)
-                        key = config_data.get("key") or config_data.get("mod_key")
-                        if not key:
+                        config_data = load_json(config_path)
+                        mod_id = config_data.get("id")
+                        if not mod_id:
                             continue
-                        if key in result:
-                            existing_info = result[key]
+                        if mod_id in result:
+                            existing_info = result[mod_id]
                             if config_mtime <= existing_info.get("config_mtime", 0):
                                 continue
-                        result[key] = {
-                            "key": key,
+                        result[mod_id] = {
+                            "id": mod_id,
                             "folder_path": folder_path,
                             "folder_name": folder_name,
                             "config_data": config_data,
@@ -86,7 +77,7 @@ class ModScanThread(QThread):
                         )
                         continue
                     except KeyError:
-                        logging.debug(f"ModScanThread: missing key in {config_path}")
+                        logging.debug(f"ModScanThread: missing id in {config_path}")
                         continue
                     except Exception:
                         logging.error(

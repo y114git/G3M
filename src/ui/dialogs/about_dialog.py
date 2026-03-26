@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config.config import LAUNCHER_VERSION, SOCIAL_LINKS
+from models.plugin_models import PLUGIN_API_VERSION
 from services.localization_service import localization_service, tr
 from utils.path_utils import get_user_data_root
 
@@ -89,6 +90,11 @@ class AboutDialog(QDialog):
             info_layout,
             tr("ui.about_version_label", version="").rstrip(),
             LAUNCHER_VERSION,
+        )
+        self.plugin_api_label, self.plugin_api_value = self._add_info_row(
+            info_layout,
+            tr("ui.about_plugin_api_label", version="").rstrip(),
+            PLUGIN_API_VERSION,
         )
         self.language_label, self.language_value = self._add_info_row(
             info_layout,

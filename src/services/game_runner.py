@@ -50,18 +50,17 @@ def _configure_logging():
 
 def _load_config() -> dict:
     user_root = get_user_data_root()
-    for name in ("settings.json", "config.json"):
-        path = os.path.join(user_root, "settings", name)
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                cfg = json.load(f)
-            return cfg if isinstance(cfg, dict) else {}
+    path = os.path.join(user_root, "settings", "settings.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg if isinstance(cfg, dict) else {}
     return {}
 
 
-def _find_mod_source_dir(mod_key: str, local_config: dict) -> str | None:
-    """Resolve a mod key to its root directory on disk."""
-    from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+def _find_mod_source_dir(mod_id: str, local_config: dict) -> str | None:
+    """Resolve a mod id to its root directory on disk."""
+    from config.config import MOD_CONFIG_FILENAME
 
     mods_dir = get_profile_mods_root(local_config.get("active_profile", "Default"))
     if not os.path.isdir(mods_dir):
@@ -70,26 +69,21 @@ def _find_mod_source_dir(mod_key: str, local_config: dict) -> str | None:
         folder_path = os.path.join(mods_dir, folder_name)
         if not os.path.isdir(folder_path):
             continue
-        for config_name in (MOD_CONFIG_FILENAME, LEGACY_MOD_CONFIG_FILENAME):
-            config_path = os.path.join(folder_path, config_name)
-            if os.path.isfile(config_path):
-                try:
-                    with open(config_path, encoding="utf-8") as f:
-                        cfg = json.load(f)
-                    if (
-                        isinstance(cfg, dict)
-                        and (cfg.get("key") or cfg.get("mod_key")) == mod_key
-                    ):
-                        return folder_path
-                except Exception as e:
-                    logger.debug(
-                        f"_find_mod_source_dir: failed to inspect {config_path}: {e}",
-                        exc_info=True,
-                    )
-                break
+        config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+        if os.path.isfile(config_path):
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                if isinstance(cfg, dict) and cfg.get("id") == mod_id:
+                    return folder_path
+            except Exception as e:
+                logger.debug(
+                    f"_find_mod_source_dir: failed to inspect {config_path}: {e}",
+                    exc_info=True,
+                )
 
     for d in os.listdir(mods_dir):
-        if d == mod_key or d.lower() == mod_key.lower():
+        if d == mod_id or d.lower() == mod_id.lower():
             candidate = os.path.join(mods_dir, d)
             if os.path.isdir(candidate):
                 return candidate
@@ -267,7 +261,7 @@ def _patch_all_chapters(
 ) -> object | None:
     """Patch all chapters and return the BackupManager for later restore.
 
-    ``chapter_mods`` maps chapter_id -> mod_key.
+    ``chapter_mods`` maps chapter_id -> mod_id.
     Returns None on failure (backups already restored).
     """
     from adapters.g3mtool_adapter import G3MToolManager
@@ -284,13 +278,13 @@ def _patch_all_chapters(
     temp_dir = tempfile.mkdtemp(prefix="deltahub_shortcut_patch_")
 
     try:
-        for chapter_id, mod_key in sorted(chapter_mods.items()):
-            if not mod_key:
+        for chapter_id, mod_id in sorted(chapter_mods.items()):
+            if not mod_id:
                 continue
 
-            mod_source_dir = _find_mod_source_dir(mod_key, local_config)
+            mod_source_dir = _find_mod_source_dir(mod_id, local_config)
             if not mod_source_dir:
-                logger.error(f'Mod "{mod_key}" not found on disk')
+                logger.error(f'Mod "{mod_id}" not found on disk')
                 _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
                 return None
 
@@ -301,7 +295,7 @@ def _patch_all_chapters(
                 return None
 
             logger.info(
-                f'Patching chapter {chapter_id} with mod "{mod_key}" from {chapter_source_dir}'
+                f'Patching chapter {chapter_id} with mod "{mod_id}" from {chapter_source_dir}'
             )
 
             ok = _patch_chapter(
@@ -496,7 +490,7 @@ def run_shortcut(shortcut_arg: str):
         "launch_via_steam": false,
         "use_portproton": false,
         "direct_launch_chapter": "",
-        "chapter_mods": {"deltarune_0": "mod_key_1", "deltarune_2": "mod_key_2", ...}
+        "chapter_mods": {"deltarune_0": "mod_id_1", "deltarune_2": "mod_id_2", ...}
       }
     Chapters with null/empty values are vanilla (no patching).
     """
@@ -512,12 +506,6 @@ def run_shortcut(shortcut_arg: str):
     game_id = shortcut_config.get("game_id", "deltarune")
     chapter_mods_raw = shortcut_config.get("chapter_mods", {})
     is_chapter_mode = shortcut_config.get("chapter_mode", False)
-
-    if not chapter_mods_raw and shortcut_config.get("mod_key"):
-        chapter_id = shortcut_config.get("chapter_id", "")
-        chapter_mods_raw = (
-            {chapter_id: shortcut_config["mod_key"]} if chapter_id else {}
-        )
 
     chapter_mods = {cid: mk for cid, mk in chapter_mods_raw.items() if mk}
 

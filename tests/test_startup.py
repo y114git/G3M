@@ -12,6 +12,7 @@ import sys
 import tempfile
 import types
 import zipfile
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -20,7 +21,13 @@ TEST_TIMEOUT = 10
 
 def _contains_startup_errors(output: str) -> bool:
     """Check if output contains any startup error markers."""
-    error_markers = ["STARTUP ERROR", "CRITICAL ERROR", "Fatal error"]
+    error_markers = [
+        "STARTUP ERROR",
+        "CRITICAL ERROR",
+        "Fatal error",
+        "An error occurred during startup",
+        "Traceback (most recent call last):",
+    ]
     return any(marker in output for marker in error_markers)
 
 
@@ -39,6 +46,7 @@ def test_startup_from_environment():
             cwd=str(project_root),
         )
         output = (result.stdout or "") + (result.stderr or "")
+        assert result.returncode == 0, output
         assert not _contains_startup_errors(output), (
             "Application startup failed with startup error(s)"
         )
@@ -69,7 +77,7 @@ def test_startup_with_sample_archive(tmp_path):
         if src_dir.exists():
             for file_path in src_dir.rglob("*.py"):
                 if file_path.is_file():
-                    arc_path = file_path.relative_to(project_root)
+                    arc_path = file_path.relative_to(src_dir)
                     if file_path.samefile(main_py_path):
                         continue
                     archive.write(file_path, arc_path)
@@ -97,6 +105,7 @@ def test_local_startup():
         )
 
         output = (result.stdout or "") + (result.stderr or "")
+        assert result.returncode == 0, output
         assert not _contains_startup_errors(output), (
             "Application startup failed with startup error(s)"
         )
@@ -132,13 +141,11 @@ def test_run_app_startup_path_imports(monkeypatch):
         def launch(self):
             return None
 
-    monkeypatch.setattr(startup_module, "validate_config", lambda: None)
     monkeypatch.setattr(startup_module, "setup_app", lambda: _App())
     monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
     monkeypatch.setattr(startup_module.QLocalServer, "removeServer", lambda *_args: None)
     monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
     monkeypatch.setattr(startup_module, "register_url_protocol", lambda: None)
-    monkeypatch.setattr(startup_module, "_load_config_file", lambda: {})
     monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
     monkeypatch.setattr(startup_module, "get_user_data_root", lambda: "")
     monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "")
@@ -151,6 +158,180 @@ def test_run_app_startup_path_imports(monkeypatch):
         startup_module.run_app()
 
     assert exc.value.code == 0
+
+
+def test_close_splash_and_show_launcher_delays_splash_close():
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+
+    with (
+        patch.object(coordinator, "_show_launcher_window") as show_window,
+        patch("bootstrap.bootstrap_coordinator.QTimer.singleShot") as single_shot,
+    ):
+        coordinator._close_splash_and_show_launcher()
+
+    show_window.assert_called_once_with()
+    single_shot.assert_called_once_with(
+        coordinator._WINDOW_REVEAL_DELAY_MS, coordinator._finalize_window_reveal
+    )
+
+
+def test_finalize_window_reveal_closes_splash_after_front_refresh():
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+
+    with (
+        patch.object(coordinator, "_close_splash") as close_splash,
+        patch.object(coordinator, "_bring_launcher_to_front") as bring_to_front,
+    ):
+        coordinator._finalize_window_reveal()
+
+    close_splash.assert_called_once_with()
+    bring_to_front.assert_called_once_with()
+
+
+def test_play_startup_sound_skips_when_disabled():
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = Mock()
+    coordinator.instance.app_state.local_config = {"disable_startup_sound": True}
+
+    with patch("bootstrap.bootstrap_coordinator._audio_service.play_deltahub_sound") as play_sound:
+        coordinator._play_startup_sound()
+
+    play_sound.assert_not_called()
+
+
+def test_play_startup_sound_uses_enabled_flag():
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = Mock()
+    coordinator.instance.app_state.local_config = {"disable_startup_sound": False}
+
+    with patch("bootstrap.bootstrap_coordinator._audio_service.play_deltahub_sound") as play_sound:
+        coordinator._play_startup_sound()
+
+    play_sound.assert_called_once_with()
+
+
+def test_show_launcher_window_schedules_post_show_after_reveal_delay():
+    from PyQt6.QtCore import Qt
+
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    app = Mock()
+    instance = Mock()
+    instance.app_state = types.SimpleNamespace(game_is_running=False, is_shown_to_user=False)
+    instance.windowState.return_value = Qt.WindowState.WindowNoState
+    coordinator = BootstrapCoordinator(
+        app=app,
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = instance
+    order = []
+
+    with (
+        patch.object(coordinator, "restore_ui_state_from_config"),
+        patch.object(coordinator, "_play_startup_sound", side_effect=lambda: order.append("sound")) as play_sound,
+        patch.object(
+            coordinator,
+            "_bring_launcher_to_front",
+            side_effect=lambda: order.append("front"),
+        ) as bring_to_front,
+        patch("bootstrap.bootstrap_coordinator.QApplication.instance", return_value=app),
+        patch("bootstrap.bootstrap_coordinator.QTimer.singleShot") as single_shot,
+    ):
+        coordinator._show_launcher_window()
+
+    instance.show.assert_called_once_with()
+    play_sound.assert_called_once_with()
+    bring_to_front.assert_called_once_with()
+    assert order == ["sound", "front"]
+    assert single_shot.call_args_list == [
+        ((coordinator._WINDOW_REVEAL_DELAY_MS, instance._post_show_initialization),),
+        ((coordinator._WINDOW_REVEAL_DELAY_MS, bring_to_front),),
+    ]
+
+
+def test_startup_window_creation_smoke(qapp, tmp_path):
+    from app.window import AppWindow
+
+    user_root = tmp_path / "user"
+    mods_dir = tmp_path / "mods"
+    profiles_dir = tmp_path / "profiles"
+    themes_dir = tmp_path / "themes"
+    for path in (user_root, mods_dir, profiles_dir, themes_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    mock_presence_response = Mock()
+    mock_presence_response.status_code = 200
+    mock_presence_response.json.return_value = {"online": 0}
+    mock_presence_session = Mock()
+    mock_presence_session.post.return_value = mock_presence_response
+    with (
+        patch(
+            "app_context.application_context.get_user_data_root",
+            return_value=str(user_root),
+        ),
+        patch(
+            "app_context.application_context.get_launcher_dir",
+            return_value=str(tmp_path),
+        ),
+        patch(
+            "services.g3mtool_patching_service.get_user_data_root",
+            return_value=str(user_root),
+        ),
+        patch(
+            "services.blocklist_service.get_user_data_root",
+            return_value=str(user_root),
+        ),
+        patch("utils.path_utils.get_user_themes_dir", return_value=str(themes_dir)),
+        patch("services.profile_service.get_user_mods_dir", return_value=str(mods_dir)),
+        patch(
+            "services.profile_service.get_user_profiles_dir",
+            return_value=str(profiles_dir),
+        ),
+        patch(
+            "workers.presence_worker.get_session",
+            return_value=mock_presence_session,
+        ),
+    ):
+        window = AppWindow()
+        try:
+            assert window is not None
+            assert window.windowTitle() == "DELTAHUB"
+        finally:
+            window.close()
 
 
 def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) -> bool:
@@ -185,7 +366,7 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                     cwd=cwd,
                 )
             output = (result.stdout or "") + (result.stderr or "")
-            return not _contains_startup_errors(output)
+            return result.returncode == 0 and not _contains_startup_errors(output)
 
     except subprocess.TimeoutExpired:
         sys.stderr.write(

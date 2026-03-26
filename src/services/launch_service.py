@@ -5,10 +5,11 @@ import os
 import platform
 import shutil
 import subprocess
+import time
 import webbrowser
 from typing import Any
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QProcess, QThread, pyqtSignal
 
 from config.config import UI_COLORS
 from services.g3mtool_patching_service import G3MToolPatchingService
@@ -49,6 +50,8 @@ class GameLauncher(QObject):
         self.mod_patcher.progress_update.connect(self._on_patching_progress)
         self._patching_thread = None
         self.restore_window_callback = None
+        self._launch_started_at = None
+        self._launch_mod_ids: list[str] = []
 
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
@@ -102,6 +105,8 @@ class GameLauncher(QObject):
         selections: dict[str, Any],
         restore_window_callback=None,
     ):
+        self._launch_started_at = time.monotonic()
+        self._launch_mod_ids = self._collect_launch_mod_ids(selections)
         self.restore_window_callback = restore_window_callback
         self.status_changed.emit(
             tr("status.launching_game"), self._launch_status_color()
@@ -182,17 +187,21 @@ class GameLauncher(QObject):
                 self.monitor_thread.start()
                 system = platform.system()
                 if system == "Linux":
-                    try:
-                        subprocess.Popen(["steam", target_path])
-                    except FileNotFoundError:
-                        subprocess.Popen(["xdg-open", target_path])
+                    if not self._start_detached_command("steam", [target_path]):
+                        self._start_detached_command("xdg-open", [target_path])
                 elif system == "Darwin":
-                    subprocess.Popen(["open", target_path])
+                    self._start_detached_command("open", [target_path])
                 else:
                     webbrowser.open(target_path)
                 self.status_changed.emit(
                     tr("status.launching_via_steam"), self._launch_status_color()
                 )
+                parent = self.parent()
+                runtime_service = (
+                    getattr(parent, "plugin_runtime_service", None) if parent else None
+                )
+                if runtime_service:
+                    runtime_service.execute_hook("after_game_started", vanilla_mode)
                 return
             if not working_directory or not os.path.isdir(working_directory):
                 msg = tr("errors.working_directory_not_found", path=working_directory)
@@ -286,11 +295,32 @@ class GameLauncher(QObject):
             self.monitor_worker.finished.connect(self._on_game_process_finished)
             self.monitor_thread.started.connect(self.monitor_worker.run)
             self.monitor_thread.start()
+            self._execute_plugin_hook("after_game_started", vanilla_mode)
         except Exception as e:
             self.status_changed.emit(
                 tr("errors.game_launch_error", error=str(e)), "red"
             )
             self._handle_launch_failure()
+
+    @staticmethod
+    def _start_detached_command(program: str, arguments: list[str]) -> bool:
+        try:
+            started = QProcess.startDetached(program, arguments)
+            if isinstance(started, tuple):
+                return bool(started[0])
+            return bool(started)
+        except Exception:
+            try:
+                subprocess.Popen(
+                    [program, *arguments],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return True
+            except Exception:
+                return False
 
     def _on_game_process_finished(self, vanilla_mode: bool):
         self._check_game_running(vanilla_mode)
@@ -300,6 +330,8 @@ class GameLauncher(QObject):
             logging.debug("[LAUNCH] Game still running, cleanup deferred to monitor")
             return
         logging.info("[LAUNCH] Game is no longer running, starting cleanup")
+        self._record_launch_playtime()
+        self._execute_plugin_hook("before_restore_after_exit", vanilla_mode)
         self.status_changed.emit(
             tr("status.game_closed_restoring_files"), UI_COLORS["status_info"]
         )
@@ -310,7 +342,36 @@ class GameLauncher(QObject):
             if hasattr(self, "monitor_worker"):
                 self.monitor_worker = None
         self.game_launch_finished.emit()
+        self._execute_plugin_hook("after_restore_after_exit", vanilla_mode)
         logging.info("[LAUNCH] Cleanup completed, game launch finished")
+
+    def _record_launch_playtime(self) -> None:
+        if self._launch_started_at is None or not self._launch_mod_ids:
+            return
+        elapsed = time.monotonic() - self._launch_started_at
+        self._launch_started_at = None
+        if elapsed <= 0:
+            return
+        parent = self.parent()
+        mod_service = getattr(parent, "mod_service", None) if parent else None
+        if mod_service and hasattr(mod_service, "add_playtime_hours"):
+            mod_service.add_playtime_hours(self._launch_mod_ids, elapsed / 3600.0)
+
+    @staticmethod
+    def _collect_launch_mod_ids(selections: dict[str, Any]) -> list[str]:
+        from utils.mod_utils import get_mod_id
+
+        seen = set()
+        result = []
+        for mods in selections.values():
+            mod_list = mods if isinstance(mods, list) else [mods]
+            for mod in mod_list:
+                mod_id = get_mod_id(mod)
+                if not mod_id or mod_id in seen or mod_id.startswith("local_"):
+                    continue
+                seen.add(mod_id)
+                result.append(mod_id)
+        return result
 
     def _determine_launch_config(
         self, selections: dict[str, Any]
@@ -553,6 +614,19 @@ class GameLauncher(QObject):
             logging.error(f"{context}: Failed to restore backups: {e}", exc_info=True)
             return False
 
+    def _execute_plugin_hook(self, hook_name: str, *args):
+        """Execute a plugin hook if the runtime service is available.
+
+        Returns an iterable of hook results, or an empty iterable if no runtime service.
+        """
+        parent = self.parent()
+        runtime_service = (
+            getattr(parent, "plugin_runtime_service", None) if parent else None
+        )
+        if runtime_service:
+            return runtime_service.execute_hook(hook_name, *args)
+        return []
+
     def _continue_after_patching(
         self,
         selections: dict[int, Any],
@@ -560,6 +634,15 @@ class GameLauncher(QObject):
         needs_multi_mod: bool = False,
     ):
         if not patching_success:
+            return
+        if any(
+            result is False
+            for result in self._execute_plugin_hook(
+                "after_mod_apply_before_launch", selections, needs_multi_mod
+            )
+        ):
+            self._cleanup_direct_launch_files()
+            self._handle_launch_failure()
             return
         if needs_multi_mod:
             pass
@@ -582,6 +665,7 @@ class GameLauncher(QObject):
                         logging.info(
                             "Game launch cancelled: user declined Steam launch with mods warning"
                         )
+                        self._cleanup_direct_launch_files()
                         self._handle_launch_failure()
                         return
         launch_config = self._determine_launch_config(selections)

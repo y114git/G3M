@@ -66,6 +66,10 @@ class BlocklistDialog(QDialog):
         self.game_label.setFont(QFont("", 10, QFont.Weight.Bold))
         game_selector_layout.addWidget(self.game_label)
         self.game_combo = QComboBox()
+        combo_font = self.game_combo.font()
+        combo_font.setPointSize(16)
+        self.game_combo.setFont(combo_font)
+        self.game_combo.view().setFont(combo_font)
         self.game_combo.currentIndexChanged.connect(self.on_game_changed)
         game_selector_layout.addWidget(self.game_combo)
         main_layout.addLayout(game_selector_layout)
@@ -80,6 +84,10 @@ class BlocklistDialog(QDialog):
         self.prefix_label = QLabel(tr("blocklist.prefix"))
         prefix_layout.addWidget(self.prefix_label)
         self.prefix_combo = QComboBox()
+        prefix_font = self.prefix_combo.font()
+        prefix_font.setPointSize(16)
+        self.prefix_combo.setFont(prefix_font)
+        self.prefix_combo.view().setFont(prefix_font)
         self._populate_prefix_combo()
         prefix_layout.addWidget(self.prefix_combo)
         add_layout.addLayout(prefix_layout)
@@ -110,6 +118,9 @@ class BlocklistDialog(QDialog):
         self.list_group = QGroupBox(tr("blocklist.current_entries"))
         list_layout = QVBoxLayout(self.list_group)
         self.blocklist_list = QListWidget()
+        list_font = self.blocklist_list.font()
+        list_font.setPointSize(16)
+        self.blocklist_list.setFont(list_font)
         self.blocklist_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         list_layout.addWidget(self.blocklist_list)
         list_buttons_layout = QHBoxLayout()
@@ -139,8 +150,8 @@ class BlocklistDialog(QDialog):
             theme = get_dialog_theme_values(parent.app_state)
             bg_color = theme["background"]
             border_color = theme["border"]
-            text_color = theme["text"]
-            hover_color = theme["button_hover"]
+            text_color = theme["main_text"]
+            select_color = theme["hover"]
             br = theme["border_radius"]
             self.setStyleSheet(
                 build_dialog_theme_stylesheet(parent.app_state)
@@ -160,7 +171,7 @@ class BlocklistDialog(QDialog):
                     color: {text_color};
                 }}
                 QListWidget::item:selected {{
-                    background-color: {hover_color};
+                    background-color: {select_color};
                     color: {text_color};
                 }}
             """

@@ -169,19 +169,45 @@ def _pick_color_for_edit(w, target_edit):
         w.theme.on_custom_style_edited()
 
 
+def _reset_display_hex(le: QLineEdit, w):
+    """Reset line edit to default display hex and trigger theme update."""
+    default_hex = le.property("default_display_hex") or ""
+    le.setText(default_hex)
+    le.setProperty("last_valid_display_hex", default_hex)
+    w.theme.on_custom_style_edited()
+
+
 def _commit_color_edit(w, target_edit: QLineEdit):
     color_text = target_edit.text().strip().upper()
-    if w.settings_service.is_valid_hex_color(color_text):
+    if w.settings_service.is_valid_hex_color(color_text) and color_text != (
+        target_edit.property("last_valid_display_hex") or ""
+    ).strip().upper():
         target_edit.setText(color_text)
+        target_edit.setProperty("last_valid_display_hex", color_text)
         w.theme.on_custom_style_edited()
+
+
+def _schedule_color_edit_commit(w, target_edit: QLineEdit):
+    timer = getattr(target_edit, "_color_commit_timer", None)
+    if timer is None:
+        timer = QTimer(target_edit)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda le=target_edit: _commit_color_edit(w, le))
+        target_edit._color_commit_timer = timer
+    timer.start(300)
+
+
+def _guarded_trigger(widget, callback, cooldown_ms: int = 500):
+    if getattr(widget, "_click_guard_active", False):
         return
-    last_valid_display_hex = (
-        (target_edit.property("last_valid_display_hex") or "").strip().upper()
-    )
-    if last_valid_display_hex:
-        was_blocked = target_edit.blockSignals(True)
-        target_edit.setText(last_valid_display_hex)
-        target_edit.blockSignals(was_blocked)
+    widget._click_guard_active = True
+    try:
+        callback()
+    finally:
+        QTimer.singleShot(
+            cooldown_ms,
+            lambda w=widget: setattr(w, "_click_guard_active", False),
+        )
 
 
 def setup_settings_tab(w):
@@ -213,6 +239,7 @@ def setup_settings_tab(w):
             "fullscreen_checkbox",
             "disable_animations_checkbox",
             "disable_background_checkbox",
+            "disable_startup_sound_checkbox",
             "change_background_button",
             "change_logo_button",
             "change_font_button",
@@ -245,6 +272,8 @@ def setup_settings_tab(w):
             "ui_scale_spinbox",
             "border_radius_label",
             "border_radius_spinbox",
+            "plugins_layout",
+            "plugins_tab",
         ),
         optional=(
             "use_portproton_checkbox",
@@ -254,6 +283,13 @@ def setup_settings_tab(w):
             "downloads_no_auto_use_checkbox",
             "downloads_delete_after_use_checkbox",
             "downloads_save_local_imports_checkbox",
+            "plugins_installed_only_checkbox",
+            "plugins_tag_interface_checkbox",
+            "plugins_tag_game_experience_checkbox",
+            "plugins_tag_tool_checkbox",
+            "plugins_tag_other_checkbox",
+            "plugins_widget",
+            "plugins_container",
         ),
     )
     w._section_headers = settings_widgets.get("_section_headers", [])
@@ -274,41 +310,96 @@ def setup_settings_tab(w):
         timer_attr="_border_radius_timer",
         config_key="custom_border_radius",
     )
-    w.beta_updates_checkbox.stateChanged.connect(w.settings_ui.on_toggle_beta_updates)
+    w.beta_updates_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.beta_updates_checkbox,
+            lambda: w.settings_ui.on_toggle_beta_updates(bool(state)),
+        )
+    )
     for reset_btn, section_key, lang_key, content in w._section_reset_buttons:
         reset_btn.clicked.connect(
-            lambda _, section=section_key, lang=lang_key, section_content=content: (
-                w.settings_ui.reset_section(section, lang, section_content)
+            lambda _, section=section_key, lang=lang_key, section_content=content, b=reset_btn: _guarded_trigger(
+                b,
+                lambda: w.settings_ui.reset_section(section, lang, section_content),
             )
         )
     w.show_reset_buttons_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_show_reset_buttons
+        lambda state: _guarded_trigger(
+            w.show_reset_buttons_checkbox,
+            lambda: w.settings_ui.on_toggle_show_reset_buttons(bool(state)),
+        )
     )
-    w.fullscreen_checkbox.stateChanged.connect(w.settings_ui.on_toggle_fullscreen)
+    w.fullscreen_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.fullscreen_checkbox,
+            lambda: w.settings_ui.on_toggle_fullscreen(bool(state)),
+        )
+    )
     w.disable_animations_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_disable_animations
+        lambda state: _guarded_trigger(
+            w.disable_animations_checkbox,
+            lambda: w.settings_ui.on_toggle_disable_animations(bool(state)),
+        )
     )
     w.disable_background_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_disable_background
+        lambda state: _guarded_trigger(
+            w.disable_background_checkbox,
+            lambda: w.settings_ui.on_toggle_disable_background(bool(state)),
+        )
     )
-    w.change_background_button.clicked.connect(w.theme.on_background_button_click)
+    w.disable_startup_sound_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.disable_startup_sound_checkbox,
+            lambda: w.settings_ui.on_toggle_disable_startup_sound(bool(state)),
+        )
+    )
+    w.change_background_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.change_background_button, w.theme.on_background_button_click
+        )
+    )
     w.theme.update_background_button_state()
     w.change_logo_button.setText(w.customization_service.get_logo_button_text())
-    w.change_logo_button.clicked.connect(w.theme.on_logo_button_click)
+    w.change_logo_button.clicked.connect(
+        lambda: _guarded_trigger(w.change_logo_button, w.theme.on_logo_button_click)
+    )
     w.change_font_button.setText(w.customization_service.get_font_button_text())
-    w.change_font_button.clicked.connect(w.settings_service.on_font_button_click)
+    w.change_font_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.change_font_button, w.settings_service.on_font_button_click
+        )
+    )
     w.background_music_button.setText(
         w.customization_service.get_background_music_button_text()
     )
-    w.background_music_button.clicked.connect(w.theme.on_background_music_button_click)
+    w.background_music_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.background_music_button, w.theme.on_background_music_button_click
+        )
+    )
     w.startup_sound_button.setText(
         w.customization_service.get_startup_sound_button_text()
     )
-    w.startup_sound_button.clicked.connect(w.theme.on_startup_sound_button_click)
-    w.theme_button.clicked.connect(w.theme.on_theme_button_click)
-    w.theme_apply_btn.clicked.connect(w.theme.on_theme_apply_clicked)
-    w.theme_save_btn.clicked.connect(w.theme.on_theme_save_clicked)
-    w.theme_delete_btn.clicked.connect(w.theme.on_theme_delete_clicked)
+    w.startup_sound_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.startup_sound_button, w.theme.on_startup_sound_button_click
+        )
+    )
+    w.disable_startup_sound_checkbox.setChecked(
+        w.app_state.local_config.get("disable_startup_sound", False)
+    )
+    w.theme_button.clicked.connect(
+        lambda: _guarded_trigger(w.theme_button, w.theme.on_theme_button_click)
+    )
+    w.theme_apply_btn.clicked.connect(
+        lambda: _guarded_trigger(w.theme_apply_btn, w.theme.on_theme_apply_clicked)
+    )
+    w.theme_save_btn.clicked.connect(
+        lambda: _guarded_trigger(w.theme_save_btn, w.theme.on_theme_save_clicked)
+    )
+    w.theme_delete_btn.clicked.connect(
+        lambda: _guarded_trigger(w.theme_delete_btn, w.theme.on_theme_delete_clicked)
+    )
     w.theme.init_theme_list()
 
     w._color_btns = {}
@@ -317,60 +408,108 @@ def setup_settings_tab(w):
         btn = settings_widgets[f"color_btn_{key}"]
         w._color_btns[key] = btn
         reset_btn = settings_widgets[f"color_reset_{key}"]
-        line_edit.editingFinished.connect(
-            lambda le=line_edit: _commit_color_edit(w, le)
+        line_edit.textChanged.connect(
+            lambda _text, le=line_edit: _schedule_color_edit_commit(w, le)
         )
-        btn.clicked.connect(lambda _, le=line_edit: _pick_color_for_edit(w, le))
+        btn.clicked.connect(
+            lambda _, le=line_edit, b=btn: _guarded_trigger(
+                b, lambda: _pick_color_for_edit(w, le)
+            )
+        )
         reset_btn.clicked.connect(
-            lambda _, le=line_edit: (
-                le.clear(),
-                w.theme.on_custom_style_edited(),
+            lambda _, le=line_edit, b=reset_btn: _guarded_trigger(
+                b, lambda le=le: _reset_display_hex(le, w)
             )
         )
     w.hide_library_filters_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_hide_library_filters
+        lambda state: _guarded_trigger(
+            w.hide_library_filters_checkbox,
+            lambda: w.settings_ui.on_toggle_hide_library_filters(bool(state)),
+        )
     )
     w.settings_game_combo.currentIndexChanged.connect(
         lambda index: on_settings_game_combo_changed(w, index)
     )
-    w.games_manager_button.clicked.connect(lambda: open_game_manager(w))
-    w.settings_change_path_button.clicked.connect(w._prompt_for_game_path)
+    w.games_manager_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.games_manager_button, lambda: open_game_manager(w)
+        )
+    )
+    w.settings_change_path_button.clicked.connect(
+        lambda: _guarded_trigger(w.settings_change_path_button, w._prompt_for_game_path)
+    )
     w.settings_custom_executable_button.clicked.connect(
-        lambda: select_custom_executable_file(w)
+        lambda: _guarded_trigger(
+            w.settings_custom_executable_button,
+            lambda: select_custom_executable_file(w),
+        )
     )
     w.settings_reset_custom_exe_button.clicked.connect(
-        lambda: reset_custom_executable(w)
+        lambda: _guarded_trigger(
+            w.settings_reset_custom_exe_button,
+            lambda: reset_custom_executable(w),
+        )
     )
     update_settings_library_tab(w)
     w.skip_patching_warnings_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_skip_patching_warnings
+        lambda state: _guarded_trigger(
+            w.skip_patching_warnings_checkbox,
+            lambda: w.settings_ui.on_toggle_skip_patching_warnings(bool(state)),
+        )
     )
     w.launch_via_steam_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_steam_launch
+        lambda state: _guarded_trigger(
+            w.launch_via_steam_checkbox,
+            lambda: w.settings_ui.on_toggle_steam_launch(bool(state)),
+        )
     )
     w.dont_hide_window_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_dont_hide_window_on_launch
+        lambda state: _guarded_trigger(
+            w.dont_hide_window_checkbox,
+            lambda: w.settings_ui.on_toggle_dont_hide_window_on_launch(bool(state)),
+        )
     )
     if w.use_portproton_checkbox:
         w.use_portproton_checkbox.stateChanged.connect(
-            w.settings_ui.on_toggle_portproton
+            lambda state: _guarded_trigger(
+                w.use_portproton_checkbox,
+                lambda: (
+                    w.settings_ui.on_toggle_portproton(bool(state)),
+                    update_portproton_ui(w),
+                ),
+            )
         )
-        w.use_portproton_checkbox.stateChanged.connect(lambda: update_portproton_ui(w))
     if w.select_portproton_path_button:
         w.select_portproton_path_button.clicked.connect(
-            lambda: select_portproton_path(w)
+            lambda: _guarded_trigger(
+                w.select_portproton_path_button, lambda: select_portproton_path(w)
+            )
         )
     w.hide_mods_browser_tab_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_hide_mods_browser_tab
+        lambda state: _guarded_trigger(
+            w.hide_mods_browser_tab_checkbox,
+            lambda: w.settings_ui.on_toggle_hide_mods_browser_tab(bool(state)),
+        )
     )
     refresh_game_lists(w)
     w.hide_library_tab_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_hide_library_tab
+        lambda state: _guarded_trigger(
+            w.hide_library_tab_checkbox,
+            lambda: w.settings_ui.on_toggle_hide_library_tab(bool(state)),
+        )
     )
     w.merge_properties_checkbox.stateChanged.connect(
-        w.settings_ui.on_toggle_merge_properties
+        lambda state: _guarded_trigger(
+            w.merge_properties_checkbox,
+            lambda: w.settings_ui.on_toggle_merge_properties(bool(state)),
+        )
     )
-    w.merge_code_checkbox.stateChanged.connect(w.settings_ui.on_toggle_merge_code)
+    w.merge_code_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.merge_code_checkbox,
+            lambda: w.settings_ui.on_toggle_merge_code(bool(state)),
+        )
+    )
     w.show_reset_buttons_checkbox.setChecked(
         w.app_state.local_config.get("show_reset_buttons", False)
     )
@@ -385,20 +524,43 @@ def setup_settings_tab(w):
             w.app_state.local_config.get("downloads_no_auto_use", False)
         )
         w.downloads_no_auto_use_checkbox.stateChanged.connect(
-            lambda s: w.settings_service.on_toggle_downloads_no_auto_use(bool(s))
+            lambda s: _guarded_trigger(
+                w.downloads_no_auto_use_checkbox,
+                lambda: w.settings_service.on_toggle_downloads_no_auto_use(bool(s)),
+            )
         )
     if w.downloads_delete_after_use_checkbox:
         w.downloads_delete_after_use_checkbox.setChecked(
             w.app_state.local_config.get("downloads_delete_after_use", False)
         )
         w.downloads_delete_after_use_checkbox.stateChanged.connect(
-            lambda s: w.settings_service.on_toggle_downloads_delete_after_use(bool(s))
+            lambda s: _guarded_trigger(
+                w.downloads_delete_after_use_checkbox,
+                lambda: w.settings_service.on_toggle_downloads_delete_after_use(bool(s)),
+            )
         )
     if w.downloads_save_local_imports_checkbox:
         w.downloads_save_local_imports_checkbox.setChecked(
             w.app_state.local_config.get("downloads_save_local_imports", False)
         )
         w.downloads_save_local_imports_checkbox.stateChanged.connect(
-            lambda s: w.settings_service.on_toggle_downloads_save_local_imports(bool(s))
+            lambda s: _guarded_trigger(
+                w.downloads_save_local_imports_checkbox,
+                lambda: w.settings_service.on_toggle_downloads_save_local_imports(bool(s)),
+            )
         )
+    if hasattr(w, "plugins_ui") and w.plugins_ui:
+        w.settings_tab_widget.currentChanged.connect(w.plugins_ui.on_tab_changed)
+        if hasattr(w, "plugins_widget") and hasattr(w.plugins_widget, "files_dropped"):
+            w.plugins_widget.files_dropped.connect(w.plugins_ui.import_paths)
+        for checkbox in (
+            w.plugins_installed_only_checkbox,
+            w.plugins_tag_interface_checkbox,
+            w.plugins_tag_game_experience_checkbox,
+            w.plugins_tag_tool_checkbox,
+            w.plugins_tag_other_checkbox,
+        ):
+            if checkbox:
+                checkbox.stateChanged.connect(w.plugins_ui.on_filters_changed)
+        w.plugins_ui.restore_filter_state()
     w._update_section_reset_buttons_visibility()

@@ -55,7 +55,11 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     config_path = mod_folder / "mod_config.json"
     config_path.write_text(
         json.dumps(
-            {"version": "1.2.3", "files": {"1": {"data_file_url": "data.xdelta"}}}
+            {
+                "version": "1.2.3",
+                "game": "deltarune",
+                "files": {"deltarune_1": {"data_file_url": "data.xdelta"}},
+            }
         ),
         encoding="utf-8",
     )
@@ -82,7 +86,11 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     worker = _DataConvertWorkerThread(
         _FakeG3M(),
         str(mod_folder),
-        {"version": "1.2.3", "files": {"1": {"data_file_url": "data.xdelta"}}},
+        {
+            "version": "1.2.3",
+            "game": "deltarune",
+            "files": {"deltarune_1": {"data_file_url": "data.xdelta"}},
+        },
         str(tmp_path / "game_root"),
         False,
     )
@@ -95,7 +103,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     assert result[0][0] is True, f"Conversion failed: {result[0][1]}"
     assert patch_path.read_text(encoding="utf-8") == "old patch"
     assert (
-        json.loads(config_path.read_text(encoding="utf-8"))["files"]["1"][
+        json.loads(config_path.read_text(encoding="utf-8"))["files"]["deltarune_1"][
             "data_file_url"
         ]
         == "data.xdelta"
@@ -106,4 +114,4 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     with zipfile.ZipFile(version_zip) as zf:
         assert "chapter1/data.g3mpatch" in zf.namelist()
         converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
-    assert converted_config["files"]["1"]["data_file_url"] == "data.g3mpatch"
+    assert converted_config["files"]["deltarune_1"]["data_file_url"] == "data.g3mpatch"

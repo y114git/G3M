@@ -59,7 +59,7 @@ class ModSummaryPanel(QFrame):
         self._current_mod_folder = None
         self._cached_metadata = None
         self._cached_file_info = None
-        self._cached_mod_key = None
+        self._cached_mod_id = None
         self._mod_size_cache = {}
         self._size_threads = {}
         self._cache_lock = threading.Lock()
@@ -137,6 +137,26 @@ class ModSummaryPanel(QFrame):
         self._use_button.setObjectName("summaryUseButton")
         self._use_button.clicked.connect(self._on_use_clicked)
         top_row.addWidget(self._use_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self._playtime_widget = QWidget()
+        playtime_layout = QHBoxLayout(self._playtime_widget)
+        playtime_layout.setContentsMargins(0, 0, 0, 0)
+        playtime_layout.setSpacing(4)
+        playtime_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self._playtime_icon = QLabel()
+        self._playtime_icon.setFixedSize(16, 16)
+        self._playtime_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._playtime_value = QLabel()
+        self._playtime_value.setObjectName("summaryPlaytime")
+        self._playtime_value.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        playtime_layout.addWidget(self._playtime_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        playtime_layout.addWidget(self._playtime_value, 0, Qt.AlignmentFlag.AlignVCenter)
+        top_row.addWidget(
+            self._playtime_widget,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
         top_row.addStretch()
         actions = QHBoxLayout()
         actions.setSpacing(4)
@@ -169,10 +189,10 @@ class ModSummaryPanel(QFrame):
         self._name_label.setObjectName("summaryModName")
         self._name_label.setWordWrap(True)
         right_col.addWidget(self._name_label)
-        self._tagline_label = QLabel()
-        self._tagline_label.setObjectName("summaryTagline")
-        self._tagline_label.setWordWrap(True)
-        right_col.addWidget(self._tagline_label)
+        self._description_label = QLabel()
+        self._description_label.setObjectName("summaryDescription")
+        self._description_label.setWordWrap(True)
+        right_col.addWidget(self._description_label)
         right_col.addStretch()
         hero.addLayout(right_col, 1)
         cl.addLayout(hero)
@@ -214,9 +234,10 @@ class ModSummaryPanel(QFrame):
     def show_empty(self):
         self._current_mod = None
         self._current_mod_folder = None
-        self._cached_mod_key = None
+        self._cached_mod_id = None
         self._cached_metadata = None
         self._cached_file_info = None
+        self._playtime_widget.hide()
         with self._cache_lock:
             self._mod_size_cache.clear()
             self._size_threads.clear()
@@ -224,20 +245,20 @@ class ModSummaryPanel(QFrame):
         self._scroll.hide()
 
     def show_mod(self, mod_data, mod_folder=None, is_active=False):
-        from utils.patching.mod_resolve_utils import get_mod_key
+        from utils.patching.mod_resolve_utils import get_mod_id
 
         self._current_mod = mod_data
         self._current_mod_folder = mod_folder
-        self._cached_mod_key = get_mod_key(mod_data) if mod_data else None
+        self._cached_mod_id = get_mod_id(mod_data) if mod_data else None
         self._cached_metadata = None
         self._cached_file_info = None
         self._empty_label.hide()
         self._scroll.show()
         self._name_label.setText(getattr(mod_data, "name", "") or "")
-        tagline = getattr(mod_data, "tagline", "") or tr("ui.no_description")
-        if len(tagline) > 300:
-            tagline = tagline[:297] + "..."
-        self._tagline_label.setText(tagline)
+        description = getattr(mod_data, "description", "") or tr("ui.no_description")
+        if len(description) > 300:
+            description = description[:297] + "..."
+        self._description_label.setText(description)
         config = self._get_config()
         br = get_border_radius(config) if config else 0
         bc = get_theme_color(config, "border") if config else None
@@ -251,6 +272,7 @@ class ModSummaryPanel(QFrame):
         )
         self._update_metadata(mod_data, mod_folder)
         self._populate_file_info(mod_data, mod_folder)
+        self._update_playtime(mod_data)
         ext_url = getattr(mod_data, "external_url", None) or getattr(
             mod_data, "description_url", None
         )
@@ -261,7 +283,7 @@ class ModSummaryPanel(QFrame):
 
     def _update_metadata(self, mod_data, mod_folder, cache_result=False):
         config = self._get_config()
-        tc = get_theme_color(config, "text") if config else DEFAULT_COLORS["text"]
+        tc = get_theme_color(config, "main_text") if config else DEFAULT_COLORS["main_text"]
         sc = (
             get_theme_color(config, "secondary_text")
             if config
@@ -285,9 +307,7 @@ class ModSummaryPanel(QFrame):
             parts.append(
                 f"<span style='color:{tc}'>{tr('ui.game_version_label')}</span> <span style='color:{sc}'>{game_version}</span>"
             )
-        added = getattr(mod_data, "added_date", None) or getattr(
-            mod_data, "created_date", None
-        )
+        added = getattr(mod_data, "added_date", None)
         if added:
             parts.append(
                 f"<span style='color:{tc}'>{tr('ui.added_label')}</span> <span style='color:{sc}'>{added}</span>"
@@ -335,7 +355,7 @@ class ModSummaryPanel(QFrame):
             self._extra_label.hide()
             return
         config = self._get_config()
-        tc = get_theme_color(config, "text") if config else DEFAULT_COLORS["text"]
+        tc = get_theme_color(config, "main_text") if config else DEFAULT_COLORS["main_text"]
         sc = (
             get_theme_color(config, "secondary_text")
             if config
@@ -425,6 +445,27 @@ class ModSummaryPanel(QFrame):
                 )
 
     @staticmethod
+    def _format_playtime_hours(hours: float) -> str:
+        try:
+            value = max(0.0, float(hours))
+        except (TypeError, ValueError):
+            return "0"
+        if value <= 0:
+            return "0"
+        text = f"{value:.1f}"
+        return text[:-2] if text.endswith(".0") else text
+
+    def _update_playtime(self, mod_data) -> None:
+        text = self._format_playtime_hours(getattr(mod_data, "playtime_hours", 0.0))
+        self._playtime_icon.setPixmap(
+            colored_icon("time", get_theme_color(self._get_config(), "main_text")).pixmap(
+                16, 16
+            )
+        )
+        self._playtime_value.setText(f"{text} {tr('ui.playtime_hours_suffix')}")
+        self._playtime_widget.show()
+
+    @staticmethod
     def _get_extra_file_key(ef) -> str:
         if hasattr(ef, "key"):
             return ef.key
@@ -503,10 +544,10 @@ class ModSummaryPanel(QFrame):
         config = self._get_config()
         if not config:
             return
-        text_color = get_theme_color(config, "text")
+        text_color = get_theme_color(config, "main_text")
         secondary = get_theme_color(config, "secondary_text")
         border = get_theme_color(config, "border")
-        button_hover = get_theme_color(config, "button_hover")
+        button_hover = get_theme_color(config, "hover")
         br = get_border_radius(config)
         title_fs = max(14, round(16 * self._layout_scale()))
         for name, btn in self._action_buttons.items():
@@ -534,19 +575,26 @@ class ModSummaryPanel(QFrame):
             cache_attr="_name_ss_cache",
         )
         apply_stylesheet_if_changed(
-            self._tagline_label, f"color: {secondary};", cache_attr="_tagline_ss_cache"
+            self._description_label,
+            f"color: {secondary};",
+            cache_attr="_description_ss_cache",
+        )
+        apply_stylesheet_if_changed(
+            self._playtime_value,
+            f"color: {text_color}; font-weight: 600;",
+            cache_attr="_playtime_ss_cache",
         )
         meta_bg = get_theme_color(config, "card_background", "#202326")
         apply_stylesheet_if_changed(
             self._meta_label,
             f"""
-            background: {meta_bg}; border: 1px solid {border};
+            background: {meta_bg}; border: 2px solid {border};
             border-radius: {min(br, 10)}px; padding: 8px 10px;
         """,
             cache_attr="_meta_ss_cache",
         )
         block_ss = f"""
-            background: {meta_bg}; border: 1px solid {border};
+            background: {meta_bg}; border: 2px solid {border};
             border-radius: {min(br, 14)}px; padding: 14px 16px;
         """
         apply_stylesheet_if_changed(
@@ -558,7 +606,7 @@ class ModSummaryPanel(QFrame):
         apply_stylesheet_if_changed(
             self._mod_icon,
             f"""
-            background: {meta_bg}; border: 1px solid {border};
+            background: {meta_bg}; border: 2px solid {border};
             border-radius: {min(br, 18)}px;
         """,
             cache_attr="_icon_ss_cache",
@@ -591,6 +639,7 @@ class ModSummaryPanel(QFrame):
                 self._populate_file_info(
                     self._current_mod, self._current_mod_folder, cache_result=True
                 )
+            self._update_playtime(self._current_mod)
         self.update_use_button_state(self._use_button.text() == tr("ui.remove_button"))
 
     def update_labels_text(self):
@@ -599,3 +648,5 @@ class ModSummaryPanel(QFrame):
         for icon_name, tooltip_key, _ in self._ACTION_DEFS:
             if icon_name in self._action_buttons:
                 self._action_buttons[icon_name].setToolTip(tr(tooltip_key))
+        if self._current_mod:
+            self._update_playtime(self._current_mod)

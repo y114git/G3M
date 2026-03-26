@@ -23,14 +23,20 @@ class AudioManager:
 
     def play_deltahub_sound(self) -> None:
         app_support_path = os.path.join(get_user_data_root(), "settings")
-        config_mp3 = os.path.join(app_support_path, "custom_startup_sound.mp3")
-        config_wav = os.path.join(app_support_path, "custom_startup_sound.wav")
         asset_wav = os.path.join(
-            os.path.dirname(__file__), "..", "..", "assets", "audio", "deltahub.wav"
+            os.path.dirname(__file__), "..", "..", "assets", "audio", "G3M.wav"
         )
-        sound_path = next(
-            (p for p in (config_mp3, config_wav, asset_wav) if os.path.exists(p)), None
-        )
+        extensions = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
+        candidates = [
+            os.path.join(app_support_path, f"custom_startup_sound{ext}")
+            for ext in extensions
+        ]
+        candidates.append(asset_wav)
+        sound_path = None
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                sound_path = candidate
+                break
         if not sound_path:
             return
         try:

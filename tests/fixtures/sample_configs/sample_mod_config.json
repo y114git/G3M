@@ -1,22 +1,11 @@
 {
-  "key": "test_mod_001",
+  "id": "test_mod_001",
   "name": "Test Mod",
   "version": "1.0.0",
   "author": "Test Author",
   "description": "A test mod for unit testing",
   "game": "deltarune",
-  "chapters": [1, 2],
-  "files": [
-    {
-      "path": "file1.txt",
-      "chapter": 1,
-      "version": "1.0.0"
-    },
-    {
-      "path": "file2.txt",
-      "chapter": 2,
-      "version": "1.0.0"
-    }
-  ]
+  "files": {}
 }
+
 

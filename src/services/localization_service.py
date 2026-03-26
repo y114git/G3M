@@ -27,6 +27,7 @@ class LocalizationManager:
         self.fallback_strings = {}
         self.available_languages = {}
         self.current_language = "en"
+        self._plugin_strings: dict[str, dict[str, dict]] = {}
         self._load_available_languages()
         self._load_fallback_strings()
 
@@ -266,6 +267,9 @@ class LocalizationManager:
             return None
 
     def get_text(self, key: str, **kwargs) -> str:
+        plugin_result = self._resolve_plugin_text(key, **kwargs)
+        if plugin_result is not None:
+            return plugin_result
         result = self._resolve_key(self.strings, key, **kwargs)
         if result is not None:
             return result
@@ -296,6 +300,45 @@ class LocalizationManager:
     def get_current_language(self) -> str:
         return self.current_language
 
+    def merge_plugin_strings(
+        self, plugin_id: str, language_code: str, strings: dict | None
+    ) -> None:
+        if not plugin_id or not isinstance(strings, dict):
+            return
+        self._plugin_strings.setdefault(plugin_id, {})[language_code] = strings
+
+    def clear_plugin_strings(self, plugin_id: str | None = None) -> None:
+        if plugin_id:
+            self._plugin_strings.pop(plugin_id, None)
+            return
+        self._plugin_strings.clear()
+
+    def get_plugin_tr(self, plugin_id: str):
+        prefix = f"plugins.{plugin_id}."
+
+        def _tr(key: str, **kwargs):
+            return self.get_text(
+                key if key.startswith(prefix) else f"{prefix}{key}",
+                **kwargs,
+            )
+
+        return _tr
+
+    def _resolve_plugin_text(self, key: str, **kwargs) -> str | None:
+        if not key.startswith("plugins."):
+            return None
+        parts = key.split(".", 2)
+        if len(parts) < 3:
+            return None
+        plugin_id = parts[1]
+        nested_key = parts[2]
+        localized = self._plugin_strings.get(plugin_id, {}).get(self.current_language)
+        result = self._resolve_key(localized or {}, nested_key, **kwargs)
+        if result is not None:
+            return result
+        fallback = self._plugin_strings.get(plugin_id, {}).get("en")
+        return self._resolve_key(fallback or {}, nested_key, **kwargs)
+
     def load_font(self) -> str | None:
         language = self.get_current_language()
         font_path = self.get_font_path(language)
@@ -304,7 +347,15 @@ class LocalizationManager:
             if font_id != -1:
                 families = QFontDatabase.applicationFontFamilies(font_id)
                 if families:
-                    return families[0]
+                    family_name = families[0]
+                    logging.debug(f"Loaded font {font_path} as family: {family_name}")
+                    return family_name
+                else:
+                    logging.warning(f"No font families found for {font_path}")
+            else:
+                logging.warning(f"Failed to load font {font_path}, addApplicationFont returned -1")
+        else:
+            logging.debug(f"Font path not found or doesn't exist: {font_path}")
         return None
 
     def update_qt_locale(self, language_code: str, qt_translator_holder: dict) -> bool:

@@ -58,9 +58,11 @@ class DownloadsManager(QObject):
         self._settings = settings_getter
         self._workers = {}
         self._mods_dir: str | None = None
+        self._plugin_install_service = None
 
-    def set_app_context(self, *, mods_dir: str):
+    def set_app_context(self, *, mods_dir: str, plugin_install_service=None):
         self._mods_dir = mods_dir
+        self._plugin_install_service = plugin_install_service
 
     @property
     def store(self) -> DownloadsStore:
@@ -212,7 +214,15 @@ class DownloadsManager(QObject):
         record = self._store.find(record_id)
         if not record or not record.file_exists or not record.file_path:
             return
-        if not self._mods_dir:
+        if record.target_kind == TargetKind.PLUGIN and not self._plugin_install_service:
+            logger.warning("DownloadsManager: plugin_install_service not set")
+            record.use_status = UseStatus.FAILED
+            record.error_message = "Plugin installer not available"
+            self._store.update(record)
+            self.record_updated.emit(record)
+            self._emit_badge()
+            return
+        if record.target_kind == TargetKind.MOD and not self._mods_dir:
             logger.warning("DownloadsManager: mods_dir not set, cannot run Use")
             record.use_status = UseStatus.FAILED
             record.error_message = "Application context not ready"
@@ -231,8 +241,9 @@ class DownloadsManager(QObject):
             record_id=record.id,
             file_path=record.file_path,
             target_kind=record.target_kind,
-            mods_dir=self._mods_dir,
+            mods_dir=self._mods_dir or "",
             metadata=record.metadata,
+            plugin_install_service=self._plugin_install_service,
             parent=self,
         )
         worker.use_finished.connect(self._on_use_finished)
@@ -342,7 +353,11 @@ class DownloadsManager(QObject):
 
     def action_continue_setup(self, record_id: str, parent_widget=None):
         record = self._store.find(record_id)
-        if not record or record.use_status != UseStatus.NEEDS_MANUAL:
+        if (
+            not record
+            or record.target_kind != TargetKind.MOD
+            or record.use_status != UseStatus.NEEDS_MANUAL
+        ):
             return
         self._open_manual_install_dialog(record, parent_widget)
 
@@ -413,7 +428,7 @@ class DownloadsManager(QObject):
             "author": m.get("author"),
             "profile_url": m.get("profile_url"),
             "external_url": m.get("profile_url"),
-            "icon_url": m.get("icon_url"),
+            "icon": m.get("icon"),
             "tags": m.get("tags") or [],
             "category": m.get("category"),
             "game": m.get("game", "deltarune"),

@@ -53,8 +53,7 @@ def mock_app_state(game_mode, temp_dir):
 @pytest.fixture
 def mock_mod_data():
     mod = MagicMock()
-    mod.key = "test_mod_001"
-    mod.mod_key = "test_mod_001"
+    mod.id = "test_mod_001"
     mod.name = "Test Mod"
     mod.game = "deltarune"
     return mod
@@ -86,7 +85,7 @@ def mod_on_disk(shortcut_temp_dir):
     """Create a mod folder with mod_config.json on disk."""
     mod_dir = os.path.join(shortcut_temp_dir, "profiles", "Default", "test_mod_001")
     os.makedirs(mod_dir, exist_ok=True)
-    config = {"key": "test_mod_001", "name": "Test Mod", "game": "deltarune"}
+    config = {"id": "test_mod_001", "name": "Test Mod", "game": "deltarune"}
     with open(os.path.join(mod_dir, "mod_config.json"), "w", encoding="utf-8") as f:
         json.dump(config, f)
     chapter_dir = os.path.join(mod_dir, "chapter_2")
@@ -126,17 +125,6 @@ class TestParseShortcutArg:
         result = _parse_shortcut_arg(b64)
         assert result == cfg
 
-    def test_backward_compat_single_mod_key(self):
-        """Old format with mod_key + chapter_id should still parse."""
-        cfg = {
-            "game_id": "deltarune",
-            "mod_key": "old_mod",
-            "chapter_id": "deltarune_2",
-        }
-        b64 = base64.b64encode(json.dumps(cfg).encode()).decode()
-        result = _parse_shortcut_arg(b64)
-        assert result["mod_key"] == "old_mod"
-
 
 class TestFindModSourceDir:
     PATCH_TARGET = "services.game_runner.get_profile_mods_root"
@@ -169,18 +157,6 @@ class TestFindModSourceDir:
         with patch(self.PATCH_TARGET, return_value=profile_dir):
             result = _find_mod_source_dir("my_cool_mod", {})
             assert result == folder
-
-    def test_find_mod_with_legacy_config(self, shortcut_temp_dir):
-        """Find mod using legacy config.json filename."""
-        profile_dir = os.path.join(shortcut_temp_dir, "profiles", "Default")
-        mod_dir = os.path.join(profile_dir, "legacy_mod")
-        os.makedirs(mod_dir, exist_ok=True)
-        config = {"key": "legacy_key", "name": "Legacy Mod"}
-        with open(os.path.join(mod_dir, "config.json"), "w", encoding="utf-8") as f:
-            json.dump(config, f)
-        with patch(self.PATCH_TARGET, return_value=profile_dir):
-            result = _find_mod_source_dir("legacy_key", {})
-            assert result == mod_dir
 
 
 class TestResolveChapterSourceDir:
@@ -249,8 +225,7 @@ class TestCollectChapterData:
     def test_non_chapter_mode_expands_to_chapters_with_data(self, mock_app_state):
         mock_app_state.current_mode = "full"
         mod = MagicMock()
-        mod.key = "test_mod_001"
-        mod.mod_key = "test_mod_001"
+        mod.id = "test_mod_001"
         mod.name = "Test Mod"
         mod.get_chapter_data = lambda tab_id: tab_id in ("deltarune_1", "deltarune_2")
         svc = MagicMock()

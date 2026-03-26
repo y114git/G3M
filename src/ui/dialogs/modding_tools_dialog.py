@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.localization_service import tr
+from services.localization_service import localization_service, tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
@@ -42,12 +42,14 @@ _ALL_FILTER = "All Files (*)"
 
 
 def _get_app_font(app_state) -> str:
-    """Return the current DELTAHUB font family or fallback."""
-    ff = app_state.local_config.get("custom_font_family")
+    """Return the current DELTAHUB font family."""
+    ff = (app_state.local_config.get("custom_font_family") or "").strip()
     if not ff:
         parent = getattr(app_state, "_app_window", None)
-        ff = getattr(parent, "custom_font_family", None) if parent else None
-    return f"'{ff}'" if ff else "'Segoe UI', sans-serif"
+        ff = (getattr(parent, "custom_font_family", None) or "").strip() if parent else ""
+    if not ff:
+        ff = (localization_service.load_font() or "").strip()
+    return f"'{ff}'" if ff else ""
 
 
 class _WorkerThread(QThread):
@@ -172,6 +174,10 @@ class _PatchTab(QWidget):
         mode_row.addWidget(self._mode_label)
         self._mode_combo = QComboBox()
         self._mode_combo.addItems(["g3mpatch", "xdelta"])
+        mode_font = self._mode_combo.font()
+        mode_font.setPointSize(16)
+        self._mode_combo.setFont(mode_font)
+        self._mode_combo.view().setFont(mode_font)
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_row.addWidget(self._mode_combo)
         mode_row.addSpacing(20)
@@ -185,6 +191,10 @@ class _PatchTab(QWidget):
                 tr("modding_tools.action_convert"),
             ]
         )
+        action_font = self._action_combo.font()
+        action_font.setPointSize(16)
+        self._action_combo.setFont(action_font)
+        self._action_combo.view().setFont(action_font)
         self._action_combo.currentIndexChanged.connect(self._on_action_changed)
         mode_row.addWidget(self._action_combo)
         mode_row.addStretch()
@@ -328,7 +338,6 @@ class _DataConvertWorkerThread(QThread):
 
     def run(self):
         try:
-            from config.config import LEGACY_MOD_CONFIG_FILENAME
             from models.game_modes import get_game
             from utils.mod_config_parser import resolve_chapter_folder
             from utils.mod_version_utils import (
@@ -339,7 +348,7 @@ class _DataConvertWorkerThread(QThread):
             from utils.path_utils import find_chapter_resource_dir
 
             files_data = self._config_data.get("files", {})
-            game = self._config_data.get("game") or self._config_data.get("modgame")
+            game = self._config_data.get("game")
             game_def = get_game(game) if game else None
             items = []
             for file_key, ch_info in files_data.items():
@@ -448,13 +457,16 @@ class _DataConvertWorkerThread(QThread):
                     ch_info["data_file_url"] = new_name
                     converted += 1
 
+                from utils.mod_config_parser import build_mod_config_data
+
                 config_path = os.path.join(converted_mod_folder, "mod_config.json")
-                if not os.path.isfile(config_path):
-                    config_path = os.path.join(
-                        converted_mod_folder, LEGACY_MOD_CONFIG_FILENAME
-                    )
                 with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(self._config_data, f, indent=2, ensure_ascii=False)
+                    json.dump(
+                        build_mod_config_data(self._config_data),
+                        f,
+                        indent=2,
+                        ensure_ascii=False,
+                    )
                 create_version_zip(
                     converted_mod_folder,
                     self._mod_folder,
@@ -493,6 +505,10 @@ class _DataConvertTab(QWidget):
         profile_row.addWidget(self._profile_label)
         self._profile_combo = QComboBox()
         self._profile_combo.setMinimumWidth(200)
+        profile_font = self._profile_combo.font()
+        profile_font.setPointSize(16)
+        self._profile_combo.setFont(profile_font)
+        self._profile_combo.view().setFont(profile_font)
         self._profile_combo.currentIndexChanged.connect(self._scan_mods)
         profile_row.addWidget(self._profile_combo)
         profile_row.addStretch()
@@ -504,6 +520,10 @@ class _DataConvertTab(QWidget):
         fmt_row.addWidget(self._fmt_label)
         self._fmt_combo = QComboBox()
         self._fmt_combo.addItems(["g3mpatch", "xdelta"])
+        fmt_font = self._fmt_combo.font()
+        fmt_font.setPointSize(16)
+        self._fmt_combo.setFont(fmt_font)
+        self._fmt_combo.view().setFont(fmt_font)
         self._fmt_combo.currentIndexChanged.connect(self._scan_mods)
         fmt_row.addWidget(self._fmt_combo)
         fmt_row.addStretch()
@@ -512,6 +532,9 @@ class _DataConvertTab(QWidget):
         self._mod_label = QLabel(tr("modding_tools.convert_select_mod"))
         lay.addWidget(self._mod_label)
         self._mod_list = QListWidget()
+        mod_list_font = self._mod_list.font()
+        mod_list_font.setPointSize(16)
+        self._mod_list.setFont(mod_list_font)
         self._mod_list.setMinimumHeight(150)
         lay.addWidget(self._mod_list, 1)
 
@@ -560,7 +583,7 @@ class _DataConvertTab(QWidget):
             self._profile_combo.addItem(name)
 
     def _scan_mods(self, _idx=0):
-        from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+        from config.config import MOD_CONFIG_FILENAME
         from utils.path_utils import get_profile_mods_root
 
         self._mod_list.clear()
@@ -581,9 +604,7 @@ class _DataConvertTab(QWidget):
                 continue
             config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
             if not os.path.isfile(config_path):
-                config_path = os.path.join(folder_path, LEGACY_MOD_CONFIG_FILENAME)
-                if not os.path.isfile(config_path):
-                    continue
+                continue
             try:
                 with open(config_path, encoding="utf-8") as f:
                     config_data = json.load(f)
@@ -638,10 +659,6 @@ class _DataConvertTab(QWidget):
             return
         mod_folder = item.data(Qt.ItemDataRole.UserRole)
         config_path = os.path.join(mod_folder, "mod_config.json")
-        if not os.path.isfile(config_path):
-            from config.config import LEGACY_MOD_CONFIG_FILENAME
-
-            config_path = os.path.join(mod_folder, LEGACY_MOD_CONFIG_FILENAME)
         try:
             with open(config_path, encoding="utf-8") as f:
                 config_data = json.load(f)
@@ -651,7 +668,7 @@ class _DataConvertTab(QWidget):
             )
             return
 
-        game = config_data.get("game") or config_data.get("modgame", "deltarune")
+        game = config_data.get("game", "deltarune")
         from models.game_modes import get_game
 
         game_def = get_game(game)
@@ -724,6 +741,9 @@ class _MergeTab(QWidget):
         self._list_label = list_label
 
         self._file_list = QListWidget()
+        file_list_font = self._file_list.font()
+        file_list_font.setPointSize(16)
+        self._file_list.setFont(file_list_font)
         self._file_list.setMinimumHeight(100)
         lay.addWidget(self._file_list, 1)
 
@@ -1097,7 +1117,7 @@ class ModdingToolsDialog(QDialog):
                 background-color: {theme["background"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["field_radius"]}px;
-                color: {theme["text"]};
+                color: {theme["main_text"]};
                 font-family: {font_family};
                 font-size: 12px;
                 padding: 6px;
@@ -1108,8 +1128,8 @@ class ModdingToolsDialog(QDialog):
                 background-color: {theme["background"]};
             }}
             QTabBar::tab {{
-                background-color: {theme["button"]};
-                color: {theme["text"]};
+                background-color: {theme["elements"]};
+                color: {theme["main_text"]};
                 border: 2px solid {theme["border"]};
                 border-bottom: none;
                 padding: 6px 14px;
@@ -1118,32 +1138,39 @@ class ModdingToolsDialog(QDialog):
                 border-top-right-radius: {theme["button_radius"]}px;
             }}
             QTabBar::tab:selected {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
                 border-bottom: 2px solid {theme["background"]};
             }}
             QTabBar::tab:hover {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
             }}
             QComboBox {{
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["field_radius"]}px;
-                color: {theme["text"]};
-                padding: 4px 8px;
+                color: {theme["main_text"]};
+                padding: 6px 10px;
+                font-size: 16px;
+                min-height: 36px;
             }}
             QComboBox QAbstractItemView {{
                 background-color: {theme["background"]};
-                color: {theme["text"]};
-                selection-background-color: {theme["button_hover"]};
+                color: {theme["main_text"]};
+                selection-background-color: {theme["hover"]};
+                font-size: 16px;
             }}
             QListWidget {{
                 background-color: {theme["background"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["field_radius"]}px;
-                color: {theme["text"]};
+                color: {theme["main_text"]};
+                font-size: 16px;
+            }}
+            QListWidget::item {{
+                padding: 10px 8px;
             }}
             QListWidget::item:selected {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
             }}
         """
         self.setStyleSheet(base + extra)

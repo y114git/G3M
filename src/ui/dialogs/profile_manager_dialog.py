@@ -289,7 +289,7 @@ class ProfileManagerDialog(QDialog):
     def _apply_theme(self):
         apply_dialog_theme(self, self.app_state)
         theme = get_dialog_theme_values(self.app_state)
-        icon_color = theme["text"]
+        icon_color = theme["main_text"]
         br = clamp_border_radius(
             get_border_radius(self.app_state.local_config),
             width=38,
@@ -300,13 +300,13 @@ class ProfileManagerDialog(QDialog):
             QPushButton {{
                 border: 2px solid {theme["border"]};
                 border-radius: {br}px;
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 padding: 0px;
                 min-width: 38px; max-width: 38px;
                 min-height: 38px; max-height: 38px;
             }}
             QPushButton:hover {{
-                background-color: {theme["button_hover"]};
+                background-color: {theme["hover"]};
             }}
         """
         for attr, icon_name in (

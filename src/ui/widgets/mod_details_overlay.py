@@ -37,7 +37,7 @@ from ui.common.styling import (
 )
 from ui.utils.image_loader import ImageLoaderRunnable
 from ui.utils.ui_utils import UIAnimator
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 from workers import WorkerSignals
 
 
@@ -72,9 +72,9 @@ class LoadModDetailsThread(QThread):
         self.mod_data = mod_data
 
     def _get_mod_id(self):
-        from utils.mod_utils import parse_gamebanana_key
+        from utils.mod_utils import parse_gamebanana_mod_id
 
-        _gb_type, gb_id = parse_gamebanana_key(get_mod_key(self.mod_data) or "")
+        _gb_type, gb_id = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")
         if not gb_id:
             return None
         try:
@@ -83,9 +83,9 @@ class LoadModDetailsThread(QThread):
             return None
 
     def _is_wip(self):
-        from utils.mod_utils import parse_gamebanana_key
+        from utils.mod_utils import parse_gamebanana_mod_id
 
-        gb_type, _ = parse_gamebanana_key(get_mod_key(self.mod_data) or "")
+        gb_type, _ = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")
         return gb_type == "wip"
 
     def _coerce_text(self, text_field):
@@ -159,7 +159,7 @@ class LoadModDetailsThread(QThread):
             details = api.get_mod_full_details_for_display(mod_id, itemtype=itemtype)
             if details and (not self.isInterruptionRequested()):
                 full_description = self._coerce_text(details.get("text"))
-                tagline = self._coerce_text(details.get("description"))
+                description = self._coerce_text(details.get("description"))
                 downloads_value = api._safe_int(
                     details.get("_nDownloadCount")
                     if isinstance(details, dict)
@@ -172,8 +172,8 @@ class LoadModDetailsThread(QThread):
                 }
                 if full_description:
                     result["text"] = full_description
-                if tagline:
-                    result["tagline"] = tagline.strip()
+                if description:
+                    result["description"] = description.strip()
                 result["screenshots"] = screenshots
                 if not self.isInterruptionRequested():
                     self.details_loaded.emit(result)
@@ -237,7 +237,8 @@ class ModDetailsOverlay(QWidget):
             getattr(self._app_state, "local_config", None) if self._app_state else None
         )
         self._colors = get_theme_colors(local_cfg)
-        self._colors["btn_hover"] = self._colors["button_hover"]
+        self._colors["btn_hover"] = self._colors["hover"]
+        self._colors["btn_select"] = self._colors["select"]
         self._border_radius = get_border_radius(local_cfg)
 
     @staticmethod
@@ -329,9 +330,9 @@ class ModDetailsOverlay(QWidget):
     ) -> str:
         return build_button_style(
             obj_name,
-            bg or self._colors["button"],
-            hover or self._colors["button_hover"],
-            text_color or self._colors["text"],
+            bg or self._colors["elements"],
+            hover or self._colors["hover"],
+            text_color or self._colors["main_text"],
             self._colors["border"],
             width,
             height,
@@ -342,7 +343,7 @@ class ModDetailsOverlay(QWidget):
 
     def _scrollbar_qss(self, corner_inset: int) -> str:
         return build_scrollbar_qss(
-            self._colors["text"],
+            self._colors["main_text"],
             self._border_radius,
             vertical_margin=(corner_inset, 4, corner_inset, 2),
             horizontal_margin=(2, corner_inset, 4, corner_inset),
@@ -509,7 +510,9 @@ class ModDetailsOverlay(QWidget):
         )
 
     def _meta_row_html(self, key: str, value: str) -> str:
-        return f'<span style="color:{self._colors["text"]};font-weight:bold;font-size:13px;">{tr(key)}</span> <span style="color:{self._colors["secondary_text"]};font-size:13px;">{value}</span>'
+        title = html.escape(str(tr(key)))
+        text = html.escape(str(value))
+        return f'<span style="color:{self._colors["main_text"]};font-weight:bold;font-size:13px;">{title}</span> <span style="color:{self._colors["secondary_text"]};font-size:13px;">{text}</span>'
 
     def _translated_tags(self) -> str:
         tags = getattr(self.mod_data, "tags", None)
@@ -517,7 +520,6 @@ class ModDetailsOverlay(QWidget):
             return ""
         tag_map = {
             "textedit": tr("tags.textedit"),
-            "translation": tr("tags.textedit"),
             "customization": tr("tags.customization"),
             "gameplay": tr("tags.gameplay"),
             "other": tr("tags.other"),
@@ -584,7 +586,7 @@ class ModDetailsOverlay(QWidget):
             ),
             ("ui.author_label", self.mod_data.author),
             ("ui.updated_label", getattr(self.mod_data, "last_updated", None) or "N/A"),
-            ("ui.created_label", self.mod_data.created_date or "N/A"),
+            ("ui.created_label", getattr(self.mod_data, "created_date", None)),
             (
                 "ui.downloads_label",
                 "0" if downloads_value is None else str(downloads_value),
@@ -635,7 +637,7 @@ class ModDetailsOverlay(QWidget):
                 Qt.AlignmentFlag.AlignCenter,
             )
         self.title_label = QLabel(
-            f'<h2 style="color:{self._colors["text"]};margin:8px 0;font-size:18px;">{html.escape(self.mod_data.name or "")}</h2>'
+            f'<h2 style="color:{self._colors["main_text"]};margin:8px 0;font-size:18px;">{html.escape(self.mod_data.name or "")}</h2>'
         )
         self.title_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
@@ -644,15 +646,15 @@ class ModDetailsOverlay(QWidget):
         self.title_label.setWordWrap(True)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left.addWidget(self.title_label)
-        self.tagline_label = QLabel("")
-        self.tagline_label.setTextInteractionFlags(
+        self.description_label = QLabel("")
+        self.description_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
-        self.tagline_label.setWordWrap(True)
-        self.tagline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left.addWidget(self.tagline_label)
-        self._update_tagline_label(getattr(self.mod_data, "tagline", None))
+        self.description_label.setWordWrap(True)
+        self.description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left.addWidget(self.description_label)
+        self._update_description_label(getattr(self.mod_data, "description", None))
         left.addLayout(self._build_carousel_layout())
         left.addLayout(self._build_metadata_layout())
         left.addStretch()
@@ -706,7 +708,7 @@ class ModDetailsOverlay(QWidget):
         right = self._layout(QVBoxLayout, spacing=15)
         right.addWidget(
             self._html_label(
-                f"<b style='color:{self._colors['text']};'>{tr('ui.full_description_label')}</b>"
+                f"<b style='color:{self._colors['main_text']};'>{tr('ui.full_description_label')}</b>"
             )
         )
         self.desc_text = QTextBrowser()
@@ -724,11 +726,11 @@ class ModDetailsOverlay(QWidget):
             clip_prefix="overlay_description",
             content_padding_min=14,
             content_padding_factor=4,
-            text_color=self._colors["text"],
+            text_color=self._colors["main_text"],
             font_size=16,
             document_margin=True,
         )
-        self._desc_default_color = self._colors["text"]
+        self._desc_default_color = self._colors["main_text"]
         right.addWidget(self.desc_text)
         right.addLayout(self._build_action_buttons())
         container = QWidget()
@@ -772,19 +774,19 @@ class ModDetailsOverlay(QWidget):
             return
         self._set_action_button_style(border)
 
-    def _update_tagline_label(self, tagline):
-        if not hasattr(self, "tagline_label"):
+    def _update_description_label(self, description):
+        if not hasattr(self, "description_label"):
             return
-        clean_tagline = (tagline or "").strip()
-        if clean_tagline:
-            self.tagline_label.setText(
-                f'<p style="color:{self._colors["secondary_text"]};margin:0 0 15px 0;font-size:14px;font-style:italic;">{html.escape(clean_tagline)}</p>'
+        clean_description = (description or "").strip()
+        if clean_description:
+            self.description_label.setText(
+                f'<p style="color:{self._colors["secondary_text"]};margin:0 0 15px 0;font-size:14px;font-style:italic;">{html.escape(clean_description)}</p>'
             )
-            if self.tagline_label.parent() is not None:
-                self.tagline_label.setVisible(True)
+            if self.description_label.parent() is not None:
+                self.description_label.setVisible(True)
         else:
-            self.tagline_label.clear()
-            self.tagline_label.setVisible(False)
+            self.description_label.clear()
+            self.description_label.setVisible(False)
 
     def _update_meta_row(self, key: str, value: str, *, wrap: bool = False):
         if not value:
@@ -1200,9 +1202,9 @@ class ModDetailsOverlay(QWidget):
             else:
                 self.mod_data.full_description = ""
                 self._set_description_html("")
-            if "tagline" in details:
-                self.mod_data.tagline = details["tagline"]
-                self._update_tagline_label(details["tagline"])
+            if "description" in details:
+                self.mod_data.description = details["description"]
+                self._update_description_label(details["description"])
             if "downloads" in details:
                 self.mod_data.downloads = details["downloads"]
                 self._update_meta_row("ui.downloads_label", str(details["downloads"]))

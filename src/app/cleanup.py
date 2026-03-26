@@ -14,6 +14,8 @@ def perform_close_cleanup(w):
     """Perform cleanup during closeEvent. `w` is the AppWindow instance."""
     try:
         w.customization_service.stop_background_music()
+        if hasattr(w, "plugin_runtime_service"):
+            w.plugin_runtime_service.execute_hook("app_shutdown")
         if hasattr(w, "session_manager"):
             w.session_manager.stop()
         threads_to_stop = []

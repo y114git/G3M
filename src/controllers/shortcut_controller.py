@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
 from ui.common.styling import get_border_radius
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_id, get_mod_name
 
 
 def _get_platform_extension() -> str:
@@ -41,7 +41,7 @@ def _collect_chapter_data(
             if len(mods) > 1:
                 return None
             chapter_objs[tab.tab_id] = mods[0] if mods else None
-            chapter_mods[tab.tab_id] = get_mod_key(mods[0]) if mods else None
+            chapter_mods[tab.tab_id] = get_mod_id(mods[0]) if mods else None
     elif not is_chapter_mode and game_mode.is_multi_tab:
         default_id = get_chapter_id_for_game_mode(game_mode)
         mods = used_mods_service.get_used_mods_list(default_id)
@@ -55,14 +55,14 @@ def _collect_chapter_data(
                 and mod.get_chapter_data(tab.tab_id)
             )
             chapter_objs[tab.tab_id] = mod if has_data else None
-            chapter_mods[tab.tab_id] = get_mod_key(mod) if has_data else None
+            chapter_mods[tab.tab_id] = get_mod_id(mod) if has_data else None
     else:
         default_id = get_chapter_id_for_game_mode(game_mode)
         mods = used_mods_service.get_used_mods_list(default_id)
         if len(mods) > 1:
             return None
         chapter_objs[default_id] = mods[0] if mods else None
-        chapter_mods[default_id] = get_mod_key(mods[0]) if mods else None
+        chapter_mods[default_id] = get_mod_id(mods[0]) if mods else None
 
     return chapter_mods, chapter_objs
 

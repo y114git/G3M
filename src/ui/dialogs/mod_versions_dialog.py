@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.config import MOD_VERSIONS_DIR
 from services.localization_service import tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
@@ -36,8 +37,6 @@ from utils.mod_version_utils import (
 from utils.path_utils import colored_icon
 
 logger = logging.getLogger(__name__)
-
-MOD_VERSIONS_DIR = "mod_versions"
 
 
 def _list_local_versions(mod_folder: str) -> list[dict]:
@@ -304,9 +303,9 @@ class ModVersionsDialog(QDialog):
         ):
             return self._mod_data.is_gamebanana_mod()
         key = (
-            self._mod_data.get("key")
+            self._mod_data.get("id")
             if isinstance(self._mod_data, dict)
-            else getattr(self._mod_data, "key", None)
+            else getattr(self._mod_data, "id", None)
         )
         return bool(
             key
@@ -381,7 +380,7 @@ class ModVersionsDialog(QDialog):
         theme = get_dialog_theme_values(self._app_state)
         extra = f"""
             QFrame#mod_version_record {{
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
             }}
@@ -406,7 +405,7 @@ class ModVersionsDialog(QDialog):
                 border-radius: 4px;
                 text-align: center;
                 font-size: 10px;
-                color: {theme["text"]};
+                color: {theme["main_text"]};
             }}
             QProgressBar::chunk {{
                 background-color: {theme["secondary_text"]};

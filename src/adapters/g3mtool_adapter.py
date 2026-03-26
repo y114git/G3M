@@ -275,8 +275,12 @@ class G3MToolManager:
                 if process in self._active_processes:
                     self._active_processes.remove(process)
             logging.info(f"G3MTool completed with return code {returncode}")
+            stderr_text = stderr.strip()
             if returncode != 0:
-                logging.warning(f"G3MTool stderr: {stderr[:500]}")
+                if stderr_text:
+                    logging.warning(f"G3MTool stderr: {stderr_text[:500]}")
+            elif stderr_text:
+                logging.debug(f"G3MTool stderr (non-fatal): {stderr_text[:500]}")
             return (returncode, stdout, stderr)
         except Exception as e:
             logging.error(f"Error executing G3MTool: {e}", exc_info=True)

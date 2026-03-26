@@ -88,6 +88,10 @@ def get_user_lang_dir():
     return os.path.join(get_user_data_root(), "lang")
 
 
+def get_user_plugins_dir():
+    return os.path.join(get_user_data_root(), "plugins")
+
+
 def get_user_themes_dir():
     return os.path.join(get_user_data_root(), "themes")
 

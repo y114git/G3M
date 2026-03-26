@@ -32,9 +32,8 @@ def _get_mod_tags(mod, is_gamebanana: bool = False):
 def _build_searchable_text(mod, is_gamebanana: bool = False) -> str:
     search_values = [
         _get_mod_attr(mod, "name", ""),
-        _get_mod_attr(mod, "tagline", ""),
+        _get_mod_attr(mod, "description", ""),
         _get_mod_attr(mod, "author", ""),
-        _get_mod_attr(mod, "created_date", ""),
         _get_mod_attr(mod, "last_updated", ""),
         _get_mod_attr(mod, "updated_date", ""),
         _get_mod_attr(mod, "added_date", ""),
@@ -75,8 +74,8 @@ def _is_nsfw_mod(mod):
         )
     ):
         return True
-    key = _get_mod_key(mod)
-    is_gamebanana = _is_prefixed_key(key, "gb_")
+    mod_id = _get_mod_id(mod)
+    is_gamebanana = _is_prefixed_id(mod_id, "gb_")
     if any(
         _contains_nsfw_text(_get_mod_attr(mod, attr, ""))
         for attr in (
@@ -91,12 +90,12 @@ def _is_nsfw_mod(mod):
     return any(_contains_nsfw_text(tag) for tag in _get_mod_tags(mod, is_gamebanana))
 
 
-def _get_mod_key(mod):
-    return _get_mod_attr(mod, "key") or _get_mod_attr(mod, "mod_key")
+def _get_mod_id(mod):
+    return _get_mod_attr(mod, "id")
 
 
-def _is_prefixed_key(key, prefix: str) -> bool:
-    return isinstance(key, str) and key.startswith(prefix)
+def _is_prefixed_id(mod_id, prefix: str) -> bool:
+    return isinstance(mod_id, str) and mod_id.startswith(prefix)
 
 
 def _int_value(value, default=0):
@@ -114,11 +113,7 @@ def _sort_date_value(mod, sort_type: int) -> int:
             or "0"
         )
     else:
-        date_str = (
-            _get_mod_attr(mod, "created_date")
-            or _get_mod_attr(mod, "added_date")
-            or "0"
-        )
+        date_str = _get_mod_attr(mod, "added_date") or "0"
     return _date_tuple_to_sortable(parse_mod_date(date_str))
 
 
@@ -137,13 +132,13 @@ def filter_and_sort_mods(
     sort_config=None,
     mod_accessor=None,
     blocklist_service=None,
-    installed_mod_keys=None,
+    installed_mod_ids=None,
 ):
     if not mods_list:
         return []
     selected_tags, selected_game = (
         filters.get("tags", []),
-        filters.get("game") or filters.get("modgame", ""),
+        filters.get("game", ""),
     )
     search_text, hide_banned = (
         filters.get("search_text", ""),
@@ -157,7 +152,7 @@ def filter_and_sort_mods(
     hide_local = filters.get("hide_local", False)
     show_nsfw = filters.get("show_nsfw", False)
     search_terms = [term for term in str(search_text).casefold().split() if term]
-    installed_keys = set(installed_mod_keys or ())
+    installed_ids = set(installed_mod_ids or ())
     filtered_list = []
     for item in mods_list:
         mod = mod_accessor(item) if mod_accessor else item
@@ -165,15 +160,15 @@ def filter_and_sort_mods(
             continue
         if not isinstance(mod, dict) and _get_mod_bool_attr(mod, "hide_mod"):
             continue
-        key = _get_mod_key(mod)
-        if hide_local and _is_prefixed_key(key, "local_"):
+        mod_id = _get_mod_id(mod)
+        if hide_local and _is_prefixed_id(mod_id, "local_"):
             continue
-        is_gb = _is_prefixed_key(key, "gb_")
+        is_gb = _is_prefixed_id(mod_id, "gb_")
         if (not show_nsfw) and _is_nsfw_mod(mod):
             continue
         if only_gamebanana and not is_gb:
             continue
-        if exclude_installed and key in installed_keys:
+        if exclude_installed and mod_id in installed_ids:
             continue
         if _get_mod_attr(mod, "status", "approved") not in status_filter:
             continue
@@ -187,13 +182,7 @@ def filter_and_sort_mods(
             mod_tags = _get_mod_tags(mod, is_gb)
             if not all(tag in mod_tags for tag in selected_tags):
                 continue
-        if (
-            selected_game
-            and (
-                _get_mod_attr(mod, "game") or _get_mod_attr(mod, "modgame", "deltarune")
-            )
-            != selected_game
-        ):
+        if selected_game and _get_mod_attr(mod, "game", "deltarune") != selected_game:
             continue
         if search_terms:
             searchable_text = _build_searchable_text(mod, is_gb)

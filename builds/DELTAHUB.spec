@@ -25,9 +25,9 @@ try:
 except NameError:
     spec_dir = os.path.join(os.getcwd(), 'builds')
 project_root = os.path.dirname(spec_dir)
-secrets_embed_path = os.path.join(project_root, 'secrets_embed.py')
-if os.path.exists(secrets_embed_path):
-    datas_extra.append((secrets_embed_path, '.'))
+env_path = os.path.join(project_root, '.env')
+if os.path.exists(env_path):
+    datas_extra.append((env_path, '.'))
 
 a = Analysis(
     ['../src/main.py'],
@@ -45,7 +45,6 @@ a = Analysis(
         'PyQt6.QtWidgets',
         'PyQt6.QtNetwork',
         'playsound3',
-        'secrets_embed',
         'rarfile',
         'dotenv',
         'py7zr',
@@ -70,7 +69,6 @@ a = Analysis(
         'PyQt6.QtMultimediaWidgets',
         'PyQt6.QtPrintSupport',
         'PyQt6.QtSql',
-        'PyQt6.QtSvg',
         'PyQt6.QtSvgWidgets',
         'PyQt6.QtXml',
         'PyQt6.QtXmlPatterns',

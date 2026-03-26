@@ -1,6 +1,3 @@
-from unittest.mock import patch
-
-import pytest
 
 
 class TestConstants:
@@ -48,27 +45,10 @@ class TestConstants:
         assert GAMEBANANA_TOOL_ID_DELTAHUB is not None
         assert GAMEBANANA_TOOL_ID_DELTAMOD is not None
 
-    def test_validate_config_raises_for_missing_required_urls(self):
-        from config import config_loader as config_loader_module
+    def test_env_config_loading(self):
+        from config.config import CLOUD_FUNCTIONS_BASE_URL, DATA_FIREBASE_URL
 
-        with (
-            patch.object(config_loader_module, "get_config_value", side_effect=lambda key, default="": {"DATA_FIREBASE_URL": "", "CLOUD_FUNCTIONS_BASE_URL": "  "}.get(key, default)),
-            pytest.raises(RuntimeError, match="Missing required config DATA_FIREBASE_URL, CLOUD_FUNCTIONS_BASE_URL"),
-        ):
-            config_loader_module.validate_config()
-
-
-class TestConfigLoader:
-    def test_config_loader_import(self):
-        from config.config_loader import ConfigLoader, get_config_value
-
-        assert callable(get_config_value)
-        assert ConfigLoader is not None
-
-    @patch("config.config_loader.get_config_value")
-    def test_get_config_value(self, mock_get_value):
-        from config.config_loader import get_config_value
-
-        mock_get_value.return_value = "test_value"
-        assert callable(get_config_value)
-        assert get_config_value("TEST_KEY", "default") == "test_value"
+        assert isinstance(DATA_FIREBASE_URL, str)
+        assert isinstance(CLOUD_FUNCTIONS_BASE_URL, str)
+        assert DATA_FIREBASE_URL, "DATA_FIREBASE_URL should not be empty"
+        assert CLOUD_FUNCTIONS_BASE_URL, "CLOUD_FUNCTIONS_BASE_URL should not be empty"

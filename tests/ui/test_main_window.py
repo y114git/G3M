@@ -48,6 +48,8 @@ class TestAppWindow:
                 assert hasattr(window, "mod_service")
                 assert hasattr(window, "game_launch")
                 assert hasattr(window, "session_manager")
+                assert hasattr(window, "plugins_widget")
+                assert hasattr(window, "plugins_container")
                 assert window.windowTitle() == "DELTAHUB"
             finally:
                 window.close()
@@ -130,10 +132,22 @@ class TestAppWindow:
 
 class TestTabBuilders:
     def test_library_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from services.localization_service import tr
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
         builder = LibraryTabBuilder(app_state, None)
         assert builder is not None
+        widget = builder.build()
+        widgets = builder.get_widgets()
+        assert widgets["add_mod_button"].text() == tr("ui.add_mod")
+        assert (
+            widgets["add_mod_button"].minimumHeight()
+            == widgets["priority_button"].sizeHint().height()
+        )
+        assert widgets["library_profile_label"].text() == tr("ui.profile_label")
+        assert widgets["library_game_label"].text() == tr("ui.game_label")
+        assert widgets["installed_mods_label"].text() == tr("ui.installed_mods_label")
+        widget.deleteLater()
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
         from PyQt6.QtWidgets import QGridLayout
@@ -175,3 +189,5 @@ class TestTabBuilders:
         assert builder is not None
         builder.build()
         assert "games_manager_button" in builder.get_widgets()
+        assert "plugins_layout" in builder.get_widgets()
+        assert "plugins_widget" in builder.get_widgets()

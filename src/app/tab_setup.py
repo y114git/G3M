@@ -137,6 +137,8 @@ def setup_library_tab(w):
             "library_tag_gamebanana",
             "library_tag_widgets",
             "library_search_button",
+            "library_profile_label",
+            "library_game_label",
             "profile_combo",
             "profile_settings_button",
         ),

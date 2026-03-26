@@ -21,10 +21,10 @@ class ModError(DELTAHUBError):
     """Base exception for mod-related errors."""
 
     def __init__(
-        self, message: str, key: str | None = None, mod_name: str | None = None
+        self, message: str, mod_id: str | None = None, mod_name: str | None = None
     ) -> None:
         super().__init__(message)
-        self.key, self.mod_name = key, mod_name
+        self.mod_id, self.mod_name = mod_id, mod_name
 
 
 class ModInstallationError(ModError):
@@ -33,11 +33,11 @@ class ModInstallationError(ModError):
     def __init__(
         self,
         message: str,
-        key: str | None = None,
+        mod_id: str | None = None,
         mod_name: str | None = None,
         reason: str | None = None,
     ) -> None:
-        super().__init__(message, key, mod_name)
+        super().__init__(message, mod_id, mod_name)
         self.reason = reason
 
 
@@ -47,9 +47,9 @@ class ModUninstallationError(ModError):
     def __init__(
         self,
         message: str,
-        key: str | None = None,
+        mod_id: str | None = None,
         mod_name: str | None = None,
         reason: str | None = None,
     ) -> None:
-        super().__init__(message, key, mod_name)
+        super().__init__(message, mod_id, mod_name)
         self.reason = reason

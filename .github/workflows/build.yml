@@ -174,20 +174,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path src\assets\bin\unrar | Out-Null
           Copy-Item "builds\assets\bin\UnRAR.exe" "src\assets\bin\unrar\UnRAR.exe"
 
-      - name: Generate secrets_embed.py
+      - name: Generate .env file
         shell: pwsh
         run: |
-          $vals = @{
-            'DATA_FIREBASE_URL' = "$env:DATA_FIREBASE_URL"
-            'CLOUD_FUNCTIONS_BASE_URL' = "$env:CLOUD_FUNCTIONS_BASE_URL"
-          }
-          $py = @('import base64', "def d(s): return base64.b64decode(s).decode('utf-8')")
-          foreach ($k in $vals.Keys) {
-            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($vals[$k]))
-            $py += "$k=d('$b64')"
-          }
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllLines('secrets_embed.py', $py, $utf8NoBom)
+          $envContent = "DATA_FIREBASE_URL=$env:DATA_FIREBASE_URL`nCLOUD_FUNCTIONS_BASE_URL=$env:CLOUD_FUNCTIONS_BASE_URL"
+          [System.IO.File]::WriteAllText('.env', $envContent)
 
       - name: Build via spec
         run: pyinstaller -y builds/DELTAHUB.spec
@@ -201,11 +192,6 @@ jobs:
       - name: Codesign macOS app
         if: runner.os == 'macOS'
         run: codesign --force --deep --sign - "dist/DELTAHUB.app"
-
-      - name: Cleanup secrets
-        if: always()
-        shell: pwsh
-        run: Remove-Item secrets_embed.py -ErrorAction SilentlyContinue
 
       - name: Create archive (Linux)
         if: runner.os == 'Linux'

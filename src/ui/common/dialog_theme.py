@@ -31,30 +31,31 @@ def build_dialog_theme_stylesheet(app_state):
     return f"""
         QDialog {{
             background-color: {theme["background"]};
-            color: {theme["text"]};
+            color: {theme["main_text"]};
             border-radius: {theme["border_radius"]}px;
         }}
         QLineEdit {{
             background-color: {theme["background"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["field_radius"]}px;
-            color: {theme["text"]};
+            color: {theme["main_text"]};
             padding: 8px;
-            font-size: 13px;
+            font-size: 16px;
         }}
         QComboBox {{
             background-color: {theme["background"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["field_radius"]}px;
-            color: {theme["text"]};
-            padding: 6px 8px;
-            font-size: 13px;
+            color: {theme["main_text"]};
+            padding: 7px 10px;
+            font-size: 16px;
+            min-height: 36px;
         }}
         QLineEdit:focus {{
-            border: 2px solid {theme["button_hover"]};
+            border: 2px solid {theme["hover"]};
         }}
         QComboBox:hover, QComboBox:focus {{
-            border: 2px solid {theme["button_hover"]};
+            border: 2px solid {theme["hover"]};
         }}
         QLineEdit:disabled, QComboBox:disabled {{
             color: #8f8f8f;
@@ -64,26 +65,37 @@ def build_dialog_theme_stylesheet(app_state):
             background-color: {theme["background"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["border_radius"]}px;
-            color: {theme["text"]};
-            padding: 5px;
+            color: {theme["main_text"]};
+            padding: 6px;
+            font-size: 16px;
         }}
         QListWidget::item {{
-            padding: 8px;
+            padding: 11px 8px;
             border-bottom: 2px solid {theme["border"]};
         }}
         QListWidget::item:selected {{
-            background-color: {theme["button_hover"]};
+            background-color: {theme["hover"]};
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {theme["background"]};
+            color: {theme["main_text"]};
+            selection-background-color: {theme["hover"]};
+            font-size: 16px;
+            padding: 4px;
         }}
         QPushButton {{
-            background-color: {theme["button"]};
+            background-color: {theme["elements"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["button_radius"]}px;
-            color: {theme["text"]};
+            color: {theme["main_text"]};
             padding: 8px 15px;
             font-weight: bold;
         }}
-        QPushButton:hover:enabled, QPushButton:pressed:enabled {{
-            background-color: {theme["button_hover"]};
+        QPushButton:hover:enabled {{
+            background-color: {theme["hover"]};
+        }}
+        QPushButton:pressed:enabled {{
+            background-color: {theme["hover"]};
         }}
         QPushButton:disabled {{
             background-color: {theme["background"]};
@@ -91,11 +103,11 @@ def build_dialog_theme_stylesheet(app_state):
             border-color: #6f6f6f;
         }}
         QLabel {{
-            color: {theme["text"]};
+            color: {theme["main_text"]};
         }}
         QCheckBox {{
-            color: {theme["text"]};
-            font-size: 13px;
+            color: {theme["main_text"]};
+            font-size: 16px;
         }}
         QCheckBox:disabled {{
             color: #8f8f8f;
@@ -107,7 +119,7 @@ def get_dialog_text_color(app_state) -> str:
     """Return themed text color for dialogs."""
     from ui.common.styling import get_theme_color
 
-    return get_theme_color(app_state.local_config, "text") if app_state else "#e8e9eb"
+    return get_theme_color(app_state.local_config, "main_text") if app_state else "#e8e9eb"
 
 
 def apply_dialog_theme(dialog, app_state):

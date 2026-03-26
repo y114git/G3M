@@ -3,7 +3,7 @@
 import os
 import zipfile
 
-MOD_VERSIONS_DIR = "mod_versions"
+from config.config import MOD_VERSIONS_DIR
 
 
 def ensure_versions_dir(mod_folder: str) -> str:

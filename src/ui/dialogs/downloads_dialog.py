@@ -242,7 +242,7 @@ class DownloadsDialog(QDialog):
         theme = get_dialog_theme_values(self._app_state)
         extra = f"""
             QFrame#downloads_record {{
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
             }}

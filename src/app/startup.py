@@ -17,10 +17,8 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 from config.config import SINGLE_INSTANCE_KEY
-from config.config_loader import validate_config
 from models.game_modes import get_all_process_names
 from services.localization_service import localization_service, tr
-from ui.utils.audio_utils import _audio_service
 from utils.path_utils import get_launcher_dir, get_user_data_root, resource_path
 
 if platform.system() == "Windows":
@@ -222,41 +220,6 @@ def cleanup_old_temp_directories():
         )
 
 
-def _load_config_file() -> dict:
-    user_root = get_user_data_root()
-    settings_path = os.path.join(user_root, "settings", "settings.json")
-    old_config_path = os.path.join(user_root, "settings", "config.json")
-    config_path = settings_path if os.path.exists(settings_path) else old_config_path
-    if not os.path.exists(config_path):
-        return {}
-    try:
-        import json
-
-        with open(config_path, encoding="utf-8") as f:
-            config = json.load(f)
-        if not isinstance(config, dict):
-            logging.warning("Config file is not a dict, returning empty config")
-            return {}
-        if config_path == old_config_path and (not os.path.exists(settings_path)):
-            shutil.move(old_config_path, settings_path)
-        return config
-    except json.JSONDecodeError, ValueError:
-        backup_path = f"{config_path}.invalid.bak"
-        try:
-            shutil.copy2(config_path, backup_path)
-            os.remove(config_path)
-            logging.warning(f"Invalid/corrupted config backed up to {backup_path}")
-        except Exception as e:
-            logging.warning(f"Failed to backup config file: {e}")
-        return {}
-    except (PermissionError, OSError) as e:
-        logging.warning(f"Permission or OS error loading config file: {e}")
-        return {}
-    except Exception as e:
-        logging.warning(f"Unexpected error loading config file: {e}", exc_info=True)
-        return {}
-
-
 def run_app():
     try:
         user_root = get_user_data_root()
@@ -277,7 +240,6 @@ def run_app():
     url_arg = next((arg for arg in sys.argv[1:] if arg.startswith("deltahub://")), None)
     if platform.system() == "Linux":
         os.environ.setdefault("NO_AT_BRIDGE", "1")
-    validate_config()
     app = setup_app()
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
@@ -302,7 +264,6 @@ def run_app():
         logging.warning(
             f"Failed to register URL protocol during startup: {e}", exc_info=True
         )
-    _audio_service.play_deltahub_sound()
     from app.window import AppWindow
 
     coordinator = BootstrapCoordinator(

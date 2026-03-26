@@ -5,7 +5,7 @@ import os
 from typing import Any
 
 from utils.file_utils import get_chapter_folder_name, load_json, sanitize_filename
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_id, get_mod_name
 from utils.patching import mod_content_utils as mod_content
 from utils.path_utils import find_chapter_resource_dir
 
@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 def resolve_mod_game(mod_data, source_dir=None):
     """Resolve the game type from mod_data attributes and optional source directory."""
-    game = getattr(mod_data, "game", None) or getattr(mod_data, "modgame", None)
+    game = getattr(mod_data, "game", None)
     if not game and hasattr(mod_data, "config_data"):
         config = mod_data.config_data
         if isinstance(config, dict):
-            game = config.get("game") or config.get("modgame")
+            game = config.get("game")
     if not game and source_dir:
         config_path = os.path.join(source_dir, "mod_config.json")
         if os.path.exists(config_path):
             try:
-                config_data = load_json(config_path, migrate_config=True)
-                game = config_data.get("game") or config_data.get("modgame")
+                config_data = load_json(config_path)
+                game = config_data.get("game")
             except Exception as e:
                 logger.debug(
                     f"resolve_mod_game: failed to read config from {config_path}: {e}",
@@ -37,15 +37,15 @@ def get_mod_source_dir(
     mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
 ) -> str | None:
     """Resolve the source directory for a mod's chapter content."""
-    key = get_mod_key(mod_data)
-    if not key:
-        caller_logger.warning("_get_mod_source_dir: mod_data has no key")
+    mod_id = get_mod_id(mod_data)
+    if not mod_id:
+        caller_logger.warning("_get_mod_source_dir: mod_data has no id")
         return None
-    mod_folder_path = mod_service.get_mod_folder_path(key)
+    mod_folder_path = mod_service.get_mod_folder_path(mod_id)
     if mod_folder_path and os.path.isdir(mod_folder_path):
         source_dir = mod_folder_path
     else:
-        mod_name = get_mod_name(mod_data, key)
+        mod_name = get_mod_name(mod_data, mod_id)
         folder_name = sanitize_filename(mod_name)
         source_dir = os.path.join(app_state.mods_dir, folder_name)
         if not os.path.isdir(source_dir):
@@ -58,10 +58,8 @@ def get_mod_source_dir(
                     config_path = os.path.join(folder_path, "mod_config.json")
                     if os.path.exists(config_path):
                         try:
-                            config_data = load_json(config_path, migrate_config=True)
-                            if (
-                                config_data.get("key") or config_data.get("mod_key")
-                            ) == key:
+                            config_data = load_json(config_path)
+                            if config_data.get("id") == mod_id:
                                 source_dir = folder_path
                                 break
                         except Exception as e:

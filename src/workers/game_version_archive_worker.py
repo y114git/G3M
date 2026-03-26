@@ -8,11 +8,10 @@ import zipfile
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from config.config import GAME_VERSION_MANIFEST_FILENAME
 from utils.network_utils import get_session
 
 logger = logging.getLogger(__name__)
-
-MANIFEST_FILENAME = "game_version_data.json"
 
 
 class CreateVersionWorker(QThread):
@@ -286,7 +285,7 @@ class GameExportVersionWorker(QThread):
                         dst_zf.writestr(info, src_zf.read(info.filename))
                         self.progress.emit(int((i + 1) * 100 / total))
                     dst_zf.writestr(
-                        MANIFEST_FILENAME,
+                        GAME_VERSION_MANIFEST_FILENAME,
                         json.dumps(self._manifest, ensure_ascii=False, indent=2),
                     )
             self.finished.emit(True, "")
@@ -319,19 +318,20 @@ class GameImportVersionWorker(QThread):
                 self.finished.emit(False, "Source file not found", {})
                 return
             with zipfile.ZipFile(self._source, "r") as zf:
-                if MANIFEST_FILENAME not in zf.namelist():
+                if GAME_VERSION_MANIFEST_FILENAME not in zf.namelist():
                     self.finished.emit(
-                        False, "Missing game_version_data.json manifest", {}
+                        False, f"Missing {GAME_VERSION_MANIFEST_FILENAME} manifest", {}
                     )
                     return
-                manifest = json.loads(zf.read(MANIFEST_FILENAME))
+                manifest = json.loads(zf.read(GAME_VERSION_MANIFEST_FILENAME))
                 if not isinstance(manifest, dict):
                     self.finished.emit(False, "Invalid manifest type", {})
                     return
                 entries = [
                     info
                     for info in zf.infolist()
-                    if not info.is_dir() and info.filename != MANIFEST_FILENAME
+                    if not info.is_dir()
+                    and info.filename != GAME_VERSION_MANIFEST_FILENAME
                 ]
                 total = len(entries) or 1
                 with zipfile.ZipFile(

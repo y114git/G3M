@@ -71,6 +71,10 @@ def relocalize_texts(w):
         w.settings_tab_widget.setTabText(2, tr("ui.settings_tab_game"))
         w.settings_tab_widget.setTabText(3, tr("ui.settings_tab_mods_browser"))
         w.settings_tab_widget.setTabText(4, tr("ui.settings_tab_library"))
+        if hasattr(w, "plugins_tab"):
+            plugins_index = w.settings_tab_widget.indexOf(w.plugins_tab)
+            if plugins_index >= 0:
+                w.settings_tab_widget.setTabText(plugins_index, tr("ui.settings_tab_plugins"))
     update_settings_library_tab(w)
     if hasattr(w, "_section_headers"):
         for lbl, key in w._section_headers:
@@ -164,6 +168,8 @@ def relocalize_texts(w):
     summary = getattr(w, "mod_summary_panel", None)
     if summary and hasattr(summary, "update_labels_text"):
         summary.update_labels_text()
+    if hasattr(w, "plugins_ui") and w.plugins_ui:
+        w.plugins_ui.relocalize_ui()
 
 
 def relocalize_ui(w):
@@ -175,6 +181,8 @@ def relocalize_ui(w):
         )
         language_code = w.app_state.local_config.get("language", "en")
         localization_service.load_language(language_code)
+        if hasattr(w, "plugin_runtime_service"):
+            w.plugin_runtime_service.reload_plugin_localizations()
         w._update_qt_locale(language_code)
         w.custom_font_family = localization_service.load_font()
         cs = getattr(w, "customization_service", None)
@@ -188,7 +196,11 @@ def relocalize_ui(w):
                 )
                 if families:
                     w.custom_font_family = families[0]
-        if hasattr(w, "main_tab_widget") and current_index >= 0 and current_index < w.main_tab_widget.count():
+        if (
+            hasattr(w, "main_tab_widget")
+            and current_index >= 0
+            and current_index < w.main_tab_widget.count()
+        ):
             w.main_tab_widget.setCurrentIndex(current_index)
         relocalize_texts(w)
         w.theme.apply_theme()

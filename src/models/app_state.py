@@ -8,7 +8,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from models.game_modes import DeltaruneGame, GameDefinition
 from models.mod_models import ModInfo
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 
 
 class AppState(QObject):
@@ -121,9 +121,9 @@ class AppState(QObject):
 
     def extend_all_mods(self, mods: list[ModInfo]) -> None:
         with self._mods_metadata_lock:
-            existing_keys = {get_mod_key(m) for m in self._all_mods}
+            existing_keys = {get_mod_id(m) for m in self._all_mods}
             for mod in mods:
-                key = get_mod_key(mod)
+                key = get_mod_id(mod)
                 if key and key not in existing_keys:
                     self._all_mods.append(mod)
                     existing_keys.add(key)

@@ -21,11 +21,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.config import GAME_DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
-from models.game_modes import get_game, get_visible_game_entries
+from config.config import DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
+from models.game_modes import get_all_game_entries, get_game
 from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values
-from utils.file_utils import get_chapter_folder_name, get_unique_mod_dir, save_json
+from utils.file_utils import (
+    get_chapter_folder_name,
+    get_unique_mod_dir,
+    save_json,
+)
+from utils.mod_config_parser import build_mod_config_data
 
 
 class ManualModInstallDialog(QDialog):
@@ -103,7 +108,7 @@ class ManualModInstallDialog(QDialog):
         game_layout.addStretch()
         game_layout.addWidget(QLabel(tr("ui.mod_type_label")))
         self.game_combo = QComboBox()
-        for entry in get_visible_game_entries():
+        for entry in get_all_game_entries():
             self.game_combo.addItem(entry.display_name, entry.id)
         game_value = self.initial_game_type or self.gamebanana_metadata.get("game")
         if not game_value and self.app_state and hasattr(self.app_state, "game_mode"):
@@ -253,6 +258,16 @@ class ManualModInstallDialog(QDialog):
         layout = QVBoxLayout(file_dialog)
         layout.addWidget(QLabel(label_text))
         list_widget = QListWidget()
+        theme = get_dialog_theme_values(self.app_state) if self.app_state else {}
+        if theme:
+            list_widget.setStyleSheet(
+                f"""
+                QListWidget::item:selected {{
+                    background-color: {theme["hover"]};
+                    color: {theme["main_text"]};
+                }}
+                """
+            )
         for file_path, rel_path in files:
             item_text = f"{os.path.basename(file_path)} ({rel_path})"
             list_widget.addItem(item_text)
@@ -325,7 +340,7 @@ class ManualModInstallDialog(QDialog):
             (fp, rp)
             for fp, rp in self.all_files
             if fp not in excluded
-            and os.path.splitext(fp)[1].lower() in GAME_DATA_FILE_EXTENSIONS
+            and os.path.splitext(fp)[1].lower() in DATA_FILE_EXTENSIONS
         ]
         if not found_files:
             QMessageBox.information(
@@ -763,8 +778,8 @@ class ManualModInstallDialog(QDialog):
                 self, tr("errors.error"), tr("dialogs.no_data_file_selected")
             )
             return
-        for patches in self.xdelta_patches_mappings.items():
-            for target_path in patches.items():
+        for patches in self.xdelta_patches_mappings.values():
+            for target_path in patches.values():
                 if not target_path or not target_path.strip():
                     QMessageBox.warning(
                         self,
@@ -811,11 +826,11 @@ class ManualModInstallDialog(QDialog):
             raise ValueError("app_state or mod_service not available")
         if self.gamebanana_metadata.get("mod_id"):
             item_type = self.gamebanana_metadata.get("item_type", "mod").lower()
-            mod_key = f"gb_{item_type}_{self.gamebanana_metadata['mod_id']}"
+            mod_id = f"gb_{item_type}_{self.gamebanana_metadata['mod_id']}"
         else:
             import time
 
-            mod_key = f"local_manual_{int(time.time())}"
+            mod_id = f"local_manual_{int(time.time())}"
         if self.gamebanana_metadata.get("name"):
             mod_name = self.gamebanana_metadata["name"]
         elif self.source_file_path:
@@ -923,7 +938,7 @@ class ManualModInstallDialog(QDialog):
                 raise
             files_structure[chapter_id]["extra_files"][archive_key].append(archive_name)
         config_data = {
-            "key": mod_key,
+            "id": mod_id,
             "name": mod_name,
             "game": game,
             "files": files_structure,
@@ -931,8 +946,8 @@ class ManualModInstallDialog(QDialog):
         if self.gamebanana_metadata:
             for field in (
                 "author",
-                "tagline",
-                "icon_url",
+                "description",
+                "icon",
                 "external_url",
                 "tags",
                 "version",
@@ -944,5 +959,5 @@ class ManualModInstallDialog(QDialog):
             config_data["author"] = "Unknown"
             config_data["version"] = "1.0.0"
         config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
-        save_json(config_path, config_data, indent=2)
+        save_json(config_path, build_mod_config_data(config_data), indent=2)
         logging.info(f"Manual mod created: {target_mod_dir}")

@@ -1,6 +1,5 @@
 """Library profiles management with per-profile mod storage."""
 
-import contextlib
 import json
 import logging
 import os
@@ -13,8 +12,18 @@ from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from config.config import LEGACY_MOD_CONFIG_FILENAME, MOD_CONFIG_FILENAME
+from config.config import (
+    DEFAULT_PROFILE,
+    MOD_CONFIG_FILENAME,
+    PROFILE_STATIC_KEYS,
+    UNNAMED_PROFILE,
+)
 from models.game_modes import get_first_visible_game_id, get_game, get_game_entry
+from services.migration_service import (
+    find_imported_profile_json,
+    migrate_legacy_profile_mods,
+    migrate_profile_settings,
+)
 from utils.path_utils import (
     get_user_mods_dir,
     get_user_profiles_dir,
@@ -24,17 +33,6 @@ from utils.path_utils import (
 logger = logging.getLogger(__name__)
 
 _SAFE_RE = re.compile(r"[^\w\- ]+")
-DEFAULT_PROFILE = "Default"
-UNNAMED_PROFILE = "Unnamed"
-
-PROFILE_STATIC_KEYS = frozenset(
-    {
-        "selected_game_type",
-        "chapter_mode_enabled",
-        "full_install_enabled",
-        "direct_launch_chapter",
-    }
-)
 
 
 def is_profile_key(key: str) -> bool:
@@ -73,39 +71,18 @@ class ProfileService(QObject):
 
     def _migrate_from_settings(self):
         """One-time: move profile keys from settings.json and legacy mods to Default."""
-        if not self._profile_path(DEFAULT_PROFILE).exists():
-            profile_data = {}
-            for key in list(self.app_state.local_config.keys()):
-                if is_profile_key(key):
-                    profile_data[key] = self.app_state.local_config.pop(key)
-            self._write_profile(DEFAULT_PROFILE, profile_data)
-        self._migrate_legacy_mods()
-
-    def _migrate_legacy_mods(self):
-        legacy_dir = Path(get_user_mods_dir())
-        if not legacy_dir.exists() or not legacy_dir.is_dir():
-            return
-        target_dir = self._profile_dir(DEFAULT_PROFILE)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        for source in list(legacy_dir.iterdir()):
-            target = target_dir / source.name
-            try:
-                if target.exists():
-                    if source.name == "metadata.json":
-                        self._merge_json_file(source, target)
-                    else:
-                        shutil.move(str(source), self._unique_child_path(target))
-                else:
-                    shutil.move(str(source), str(target))
-            except Exception as e:
-                logger.error(
-                    "ProfileService: failed to migrate %s -> %s: %s",
-                    source,
-                    target,
-                    e,
-                )
-        with contextlib.suppress(OSError):
-            legacy_dir.rmdir()
+        migrate_profile_settings(
+            self.app_state.local_config,
+            self._profile_path(DEFAULT_PROFILE),
+            is_profile_key,
+            lambda data: self._write_profile(DEFAULT_PROFILE, data),
+        )
+        migrate_legacy_profile_mods(
+            Path(get_user_mods_dir()),
+            self._profile_dir(DEFAULT_PROFILE),
+            self._unique_child_path,
+            logger,
+        )
 
     def _ensure_default_exists(self):
         if not self._profile_path(DEFAULT_PROFILE).exists():
@@ -117,7 +94,7 @@ class ProfileService(QObject):
         profile_dir = self._profile_dir(name)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self.app_state.mods_dir = str(profile_dir)
-        self.app_state.mods_metadata_path = os.path.join(profile_dir, "metadata.json")
+        self.app_state.mods_metadata_path = os.path.join(profile_dir, "mods_data.json")
 
     def _profile_dir(self, name: str) -> Path:
         return Path(self.profiles_dir) / safe_profile_name(name)
@@ -420,10 +397,7 @@ class ProfileService(QObject):
             1
             for child in profile_dir.iterdir()
             if child.is_dir()
-            and (
-                (child / MOD_CONFIG_FILENAME).exists()
-                or (child / LEGACY_MOD_CONFIG_FILENAME).exists()
-            )
+            and (child / MOD_CONFIG_FILENAME).exists()
         )
 
     def _append_to_order(self, name: str):
@@ -472,20 +446,9 @@ class ProfileService(QObject):
 
     @staticmethod
     def _find_profile_json(directory: Path) -> Path | None:
-        return next(
-            (
-                path
-                for path in directory.iterdir()
-                if path.is_file()
-                and path.suffix.lower() == ".json"
-                and path.name.lower()
-                not in {
-                    "metadata.json",
-                    MOD_CONFIG_FILENAME.lower(),
-                    LEGACY_MOD_CONFIG_FILENAME.lower(),
-                }
-            ),
-            None,
+        return find_imported_profile_json(
+            directory,
+            {"mods_data.json", MOD_CONFIG_FILENAME.lower()},
         )
 
     @staticmethod
@@ -504,21 +467,3 @@ class ProfileService(QObject):
             candidate = path.with_name(f"{stem}_{counter}{suffix}")
             counter += 1
         return str(candidate)
-
-    @staticmethod
-    def _merge_json_file(source: Path, target: Path) -> None:
-        try:
-            source_data = json.loads(source.read_text("utf-8")) or {}
-            target_data = json.loads(target.read_text("utf-8")) or {}
-            if isinstance(source_data, dict) and isinstance(target_data, dict):
-                target.write_text(
-                    json.dumps(target_data | source_data, indent=2, ensure_ascii=False),
-                    "utf-8",
-                )
-                source.unlink(missing_ok=True)
-                return
-        except Exception as e:
-            logger.warning(
-                "ProfileService: failed to merge %s into %s: %s", source, target, e
-            )
-        shutil.move(str(source), ProfileService._unique_child_path(target))

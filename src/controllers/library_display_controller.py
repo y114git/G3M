@@ -16,7 +16,7 @@ from services.mod_filter_service import filter_and_sort_mods
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 
 
 class LibraryDisplayController:
@@ -94,11 +94,11 @@ class LibraryDisplayController:
     def _installed_mods_signature(installed_mods) -> tuple:
         return tuple(
             (
-                mod.get("key") or mod.get("mod_key") or "",
+                mod.get("id") or "",
                 mod.get("added_date") or "",
                 mod.get("name") or "",
                 mod.get("version") or "",
-                mod.get("game") or mod.get("modgame") or "",
+                mod.get("game") or "",
                 mod.get("folder_name") or "",
             )
             for mod in installed_mods
@@ -500,15 +500,15 @@ class LibraryDisplayController:
 
     def on_mod_clicked(self, mod_data):
         target_widget = None
-        mod_data_key = get_mod_key(mod_data)
+        mod_data_key = get_mod_id(mod_data)
         for i in range(self.app.installed_mods_layout.count() - 1):
             try:
                 item = self.app.installed_mods_layout.itemAt(i)
                 if item:
                     widget = item.widget()
                     if isinstance(widget, InstalledModWidget):
-                        widget_mod_key = get_mod_key(widget.mod_data)
-                        if widget_mod_key == mod_data_key:
+                        widget_mod_id = get_mod_id(widget.mod_data)
+                        if widget_mod_id == mod_data_key:
                             target_widget = widget
                             break
             except Exception as e:
@@ -526,7 +526,7 @@ class LibraryDisplayController:
         summary = getattr(self.app, "mod_summary_panel", None)
         if not summary:
             return
-        key = get_mod_key(mod_data)
+        key = get_mod_id(mod_data)
         mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
         is_chapter_mode = (
             hasattr(self.app, "chapter_mode_checkbox")
@@ -594,7 +594,7 @@ class LibraryDisplayController:
 
     def _on_summary_folder(self, mod_data):
         try:
-            key = get_mod_key(mod_data)
+            key = get_mod_id(mod_data)
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if mod_folder and os.path.isdir(mod_folder):
                 QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.normpath(mod_folder)))
@@ -603,7 +603,7 @@ class LibraryDisplayController:
 
     def _on_summary_versions(self, mod_data):
         try:
-            key = get_mod_key(mod_data)
+            key = get_mod_id(mod_data)
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if not mod_folder or not os.path.isdir(mod_folder):
                 return
@@ -679,10 +679,10 @@ class LibraryDisplayController:
                     expected_mods.append(mod_data)
 
             current_keys = {
-                get_mod_key(mod) for mod in current_mods if get_mod_key(mod)
+                get_mod_id(mod) for mod in current_mods if get_mod_id(mod)
             }
             expected_keys = {
-                get_mod_key(mod) for mod in expected_mods if get_mod_key(mod)
+                get_mod_id(mod) for mod in expected_mods if get_mod_id(mod)
             }
 
             keys_to_add = expected_keys - current_keys
@@ -694,8 +694,8 @@ class LibraryDisplayController:
                 if item and item.widget():
                     widget = item.widget()
                     if hasattr(widget, "mod_data"):
-                        mod_key = get_mod_key(widget.mod_data)
-                        if mod_key in keys_to_remove:
+                        mod_id = get_mod_id(widget.mod_data)
+                        if mod_id in keys_to_remove:
                             widgets_to_remove.append(widget)
 
             for widget in widgets_to_remove:
@@ -703,8 +703,8 @@ class LibraryDisplayController:
                 widget.deleteLater()
 
             for mod_data in expected_mods:
-                mod_key = get_mod_key(mod_data)
-                if mod_key in keys_to_add:
+                mod_id = get_mod_id(mod_data)
+                if mod_id in keys_to_add:
                     cards_parent = getattr(
                         self.app, "installed_mods_widget", None
                     ) or getattr(self.app, "installed_mods_scroll", None)
@@ -719,7 +719,7 @@ class LibraryDisplayController:
 
                     insert_index = 0
                     for i, expected_mod in enumerate(expected_mods):
-                        if get_mod_key(expected_mod) == mod_key:
+                        if get_mod_id(expected_mod) == mod_id:
                             insert_index = i
                             break
 
@@ -774,9 +774,9 @@ class LibraryDisplayController:
                 if hasattr(widget, "mod_data") and hasattr(widget, "use_button"):
                     widget_mod_data = getattr(widget, "mod_data", None)
                     if widget_mod_data:
-                        widget_mod_key = get_mod_key(widget_mod_data)
-                        current_mod_key = get_mod_key(mod_data)
-                        if widget_mod_key == current_mod_key:
+                        widget_mod_id = get_mod_id(widget_mod_data)
+                        current_mod_id = get_mod_id(mod_data)
+                        if widget_mod_id == current_mod_id:
                             mod_widget = widget
                             break
         self.used_mods_service.set_used_mod(chapter_id, mod_data)

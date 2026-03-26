@@ -14,7 +14,7 @@ from ui.common.styling import (
     load_mod_icon_universal,
     update_mod_widget_style,
 )
-from utils.mod_utils import get_mod_key
+from utils.mod_utils import get_mod_id
 
 
 class BaseModWidget(QFrame):
@@ -143,25 +143,25 @@ class BaseModWidget(QFrame):
         self.category_container = category_container
         self.metadata_layout = metadata_layout
         info_layout.addLayout(metadata_layout)
-        tagline_text = self.mod_data.tagline or tr("ui.no_description")
+        description_text = self.mod_data.description or tr("ui.no_description")
         try:
-            mod_key = get_mod_key(self.mod_data)
-            if mod_key and mod_key.startswith("gb_"):
+            mod_id = get_mod_id(self.mod_data)
+            if mod_id and mod_id.startswith("gb_"):
                 has_full = getattr(self.mod_data, "has_full_metadata", True)
                 if not has_full:
                     placeholder = tr("ui.loading_placeholder")
-                    tagline_text = placeholder
+                    description_text = placeholder
         except Exception as e:
             logging.debug(
-                f"BaseModWidget: failed to resolve tagline placeholder state: {e}",
+                f"BaseModWidget: failed to resolve description placeholder state: {e}",
                 exc_info=True,
             )
-        if len(tagline_text) > 200:
-            tagline_text = tagline_text[:197] + "..."
-        self.tagline_label = QLabel(tagline_text, self)
-        self.tagline_label.setWordWrap(True)
-        self.tagline_label.setObjectName("secondaryText")
-        info_layout.addWidget(self.tagline_label)
+        if len(description_text) > 200:
+            description_text = description_text[:197] + "..."
+        self.description_label = QLabel(description_text, self)
+        self.description_label.setWordWrap(True)
+        self.description_label.setObjectName("secondaryText")
+        info_layout.addWidget(self.description_label)
         self._create_tags_layout_if_needed(info_layout)
         info_layout.addStretch()
         main_layout.addLayout(info_layout, 1)
@@ -171,7 +171,7 @@ class BaseModWidget(QFrame):
         pass
 
     def _resolve_local_icon_fallback(self):
-        key = get_mod_key(self.mod_data)
+        key = get_mod_id(self.mod_data)
         if not key or not key.startswith("gb_"):
             return None
         app = self.parent_app
@@ -200,8 +200,8 @@ class BaseModWidget(QFrame):
             getattr(self, "icon_label", None)
         )
         icon_key = (
-            get_mod_key(self.mod_data),
-            getattr(self.mod_data, "icon_url", None),
+            get_mod_id(self.mod_data),
+            getattr(self.mod_data, "icon", None),
             getattr(self.mod_data, "icon_path", None),
             icon_width or self._icon_size(),
             icon_height or self._icon_size(),
@@ -246,7 +246,7 @@ class BaseModWidget(QFrame):
             self._load_icon()
         config = self._resolve_theme_config()
         if config:
-            text_color = get_theme_color(config, "text")
+            text_color = get_theme_color(config, "main_text")
             secondary_text_color = get_theme_color(config, "secondary_text")
             title_font_size = self._title_font_size()
             if hasattr(self, "name_label") and self.name_label:

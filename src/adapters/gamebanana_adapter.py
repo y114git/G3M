@@ -470,7 +470,7 @@ class GameBananaAPI:
             return []
 
     @staticmethod
-    def extract_icon_url(preview_media) -> str | None:
+    def extract_icon(preview_media) -> str | None:
         if not preview_media:
             return None
         images = preview_media.get("_aImages", [])
@@ -511,7 +511,7 @@ class GameBananaAPI:
     _TAG_MAP = [
         (
             "textedit",
-            ["translation", "text", "text changes", "translations", "text edits"],
+            ["text", "text changes", "translations", "text edits"],
         ),
         (
             "gameplay",
@@ -577,7 +577,7 @@ class GameBananaAPI:
             return None
         submitter = gb_data.get("_aSubmitter", {})
         desc = (gb_data.get("_sDescription", "") or "").strip()
-        tagline = desc[:200] if desc else "No description"
+        description = desc[:200] if desc else "No description"
         raw_downloads = gb_data.get("_nDownloadCount")
         try:
             downloads = None if raw_downloads is None else max(int(raw_downloads), 0)
@@ -650,20 +650,20 @@ class GameBananaAPI:
         raw_has_files = gb_data.get("_bHasFiles", True)
         has_files = raw_has_files not in (False, 0, "0", "false", "False", None)
         return ModInfo(
-            key=f"gb_{'wip' if is_wip else 'mod'}_{mod_id}",
+            id=f"gb_{'wip' if is_wip else 'mod'}_{mod_id}",
             name=gb_data.get("_sName", "Unknown Mod"),
             version=gb_data.get("_sVersion", "") or "1.0.0",
             author=submitter.get("_sName", "Unknown")
             if isinstance(submitter, dict)
             else "Unknown",
-            tagline=tagline,
+            description=description,
             game_version="Not specified",
             description_url=gb_data.get("_sTextUrl", ""),
             downloads=downloads,
             game=game_name,
             is_verified=gb_data.get("_bIsVerified", False),
             like_count=like_count,
-            icon_url=self.extract_icon_url(preview_media),
+            icon=self.extract_icon(preview_media),
             tags=tags,
             hide_mod=False,
             ban_status=False,

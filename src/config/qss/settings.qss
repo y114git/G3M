@@ -7,8 +7,6 @@ QLineEdit#color_display {
     background-color: %frame_bg_color% !important;
     color: %main_text_color% !important;
     qproperty-alignment: 'AlignCenter';
-    selection-background-color: %button_hover_color% !important;
-    selection-color: %main_text_color% !important;
     border: 2px solid %border_color%;
     border-radius: %field_border_radius%;
 }

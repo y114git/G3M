@@ -2,12 +2,15 @@
 
 import contextlib
 import glob
+import hashlib
+import json
 import logging
 import os
 import re
 import shutil
 import tempfile
 import time
+import zipfile
 from collections.abc import Callable
 from typing import Any
 
@@ -159,6 +162,71 @@ class G3MToolPatchingService(QObject):
     @staticmethod
     def _missing_output_error(output_path: str) -> str:
         return f"Patched output file was not created: {output_path}"
+
+    @staticmethod
+    def _hash_file_md5(path: str) -> str | None:
+        try:
+            digest = hashlib.md5()  # noqa: S324
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+        except Exception as e:
+            logging.debug("Failed to compute MD5 for %s: %s", path, e)
+            return None
+
+    def _check_g3mpatch_validate_warning(
+        self, patch_path: str, data_win_path: str
+    ) -> bool:
+        if not patch_path.lower().endswith((".g3mpatch", ".zip")):
+            return True
+        try:
+            with zipfile.ZipFile(patch_path) as archive:
+                manifest_entry = archive.getinfo("g3mpatch.json")
+                with archive.open(manifest_entry) as handle:
+                    manifest = json.loads(handle.read().decode("utf-8"))
+        except Exception as e:
+            self.patching_logger.debug(
+                "G3MPatch validation skipped for %s: %s", patch_path, e
+            )
+            return True
+
+        expected_md5 = (
+            (manifest.get("original") or {}).get("md5")
+            if isinstance(manifest, dict)
+            else None
+        )
+        if not expected_md5:
+            return True
+        actual_md5 = self._hash_file_md5(data_win_path)
+        if not actual_md5 or actual_md5 == expected_md5:
+            return True
+        expected_name = (
+            (manifest.get("original") or {}).get("filename")
+            if isinstance(manifest, dict)
+            else None
+        ) or os.path.basename(data_win_path)
+        actual_name = os.path.basename(data_win_path)
+        should_continue = self._request_warning(
+            tr("dialogs.patching_warning.g3mpatch_validate_title"),
+            tr(
+                "dialogs.patching_warning.g3mpatch_validate_body",
+                patch_name=os.path.basename(patch_path),
+                expected_file=expected_name,
+                actual_file=actual_name,
+                expected_md5=expected_md5,
+                actual_md5=actual_md5,
+            ),
+        )
+        if not should_continue:
+            return False
+        self.patching_logger.warning(
+            "G3MPatch validate mismatch for %s: expected %s, got %s",
+            patch_path,
+            expected_md5,
+            actual_md5,
+        )
+        return True
 
     def set_override_game_path(self, path: str | None) -> None:
         """Set override game path for patching operations."""
@@ -392,13 +460,12 @@ class G3MToolPatchingService(QObject):
                 tr("errors.backup_failed", path=data_win_path), "error"
             )
             return False
-        if not is_modpack:
-            self._emit_chapter_progress(
-                chapter_start,
-                chapter_end,
-                0.18,
-                tr("status.backing_up_original_files", display=display_name),
-            )
+
+        for patch_file, mod_type, _mod_source_dir in data_mod_infos:
+            if mod_type == MOD_TYPE_G3MPATCH and not self._check_g3mpatch_validate_warning(
+                patch_file or "", data_win_path
+            ):
+                return False
 
         final_output_path = data_win_path
         if is_modpack and modpack_dir:
@@ -419,6 +486,13 @@ class G3MToolPatchingService(QObject):
         )
 
         success = False
+        if not is_modpack:
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.18,
+                tr("status.patching_chapter", chapter=display_name, current=1, total=1),
+            )
         if len(data_mod_infos) == 1:
             success = self._apply_single_mod(
                 data_win_path,

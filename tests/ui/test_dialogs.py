@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from PyQt6.QtWidgets import QDialog
+from PyQt6.QtWidgets import QDialog, QWidget
 
 
 class TestImportDialog:
@@ -49,7 +49,7 @@ class TestModPriorityDialog:
     def test_mod_priority_dialog_creation(self, qapp, app_state):
         from models.mod_models import ModInfo
         from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-        mods_list = [ModInfo(key='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', tagline='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)]
+        mods_list = [ModInfo(id='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)]
         dialog = ModPriorityDialog(mods_list, 1, app_state, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
@@ -73,6 +73,7 @@ class TestReportBugDialog:
 class TestAboutDialog:
 
     def test_about_dialog_creation(self, qapp, app_state, temp_dir):
+        from models.plugin_models import PLUGIN_API_VERSION
         from ui.dialogs.about_dialog import AboutDialog
         callback = Mock()
         dialog = AboutDialog(None, app_state, on_report_bug=callback)
@@ -80,6 +81,7 @@ class TestAboutDialog:
         assert isinstance(dialog, QDialog)
         assert dialog.title_label.text() == 'DELTAHUB'
         assert dialog.data_path_edit.text() == temp_dir
+        assert dialog.plugin_api_value.text() == PLUGIN_API_VERSION
         assert dialog.report_bug_button.isEnabled()
         assert dialog.os_value.text()
         assert dialog.python_value.text()
@@ -135,8 +137,72 @@ class TestThemeManagementDialog:
         assert dialog is not None
         assert isinstance(dialog, QDialog)
 
-        # Test that _build_settings_text generates some text without exceptions
         settings_text = dialog._build_settings_text()
         assert isinstance(settings_text, str)
         assert 'themes.no_customizations' in settings_text or len(settings_text) > 0
         dialog.close()
+
+
+class TestDialogTheme:
+
+    def test_dialog_theme_uses_hover_color_for_selection(self, app_state):
+        from ui.common.dialog_theme import build_dialog_theme_stylesheet
+
+        app_state.local_config = {
+            'custom_hover_color': '#112233',
+            'custom_select_color': '#445566',
+        }
+        stylesheet = build_dialog_theme_stylesheet(app_state)
+
+        assert 'background-color: #112233;' in stylesheet
+        assert 'selection-background-color: #112233;' in stylesheet
+        assert '#445566' not in stylesheet
+
+
+class TestModEditorDialog:
+
+    def test_mod_editor_populates_saved_files_as_relative_paths(self, qapp, tmp_path):
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / 'bossrush_mod'
+        chapter_folder = mod_folder / 'chapter_4'
+        chapter_folder.mkdir(parents=True)
+        (chapter_folder / 'BOSSRUSH.win').write_text('data', encoding='utf-8')
+        (chapter_folder / 'bonus.zip').write_text('extra', encoding='utf-8')
+        (mod_folder / 'icon.png').write_text('icon', encoding='utf-8')
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                'id': 'local_manual_bossrush',
+                'name': 'BOSSRUSH',
+                'author': 'Unknown',
+                'description': 'Desc',
+                'version': '1.0.0',
+                'game': 'deltarune',
+                'icon': 'icon.png',
+                'files': {
+                    'deltarune_4': {
+                        'data_file_url': 'BOSSRUSH.win',
+                        'extra_files': {'extras': ['bonus.zip']},
+                    }
+                },
+            },
+        )
+
+        collected = dialog._collect_files()
+
+        assert dialog.icon_edit.text() == 'icon.png'
+        assert collected['deltarune_4']['data_file_url'] == 'BOSSRUSH.win'
+        assert collected['deltarune_4']['extra_files']['extras'] == ['bonus.zip']
+        assert dialog._resolve_file_path('BOSSRUSH.win') == str(
+            chapter_folder / 'BOSSRUSH.win'
+        )
+        dialog.close()
+        parent.deleteLater()

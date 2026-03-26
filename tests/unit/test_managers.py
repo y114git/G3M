@@ -41,7 +41,7 @@ class TestModManager:
         from utils.mod_scan_utils import validate_mod_config
 
         valid_config = {
-            "key": "test_mod",
+            "id": "test_mod",
             "name": "Test Mod",
             "version": "1.0.0",
             "files": {},
@@ -55,7 +55,7 @@ class TestModManager:
     ):
         from utils.mod_scan_utils import validate_mod_config
 
-        invalid_config = ["key", "name"]
+        invalid_config = ["id", "name"]
         result = validate_mod_config(invalid_config, "/fake/path", "test_mod")
         assert result is False
 
@@ -73,15 +73,15 @@ class TestModManager:
     ):
         from utils.mod_scan_utils import validate_mod_config
 
-        invalid_config = {"key": "test", "name": 123}
+        invalid_config = {"id": "test", "name": 123}
         result = validate_mod_config(invalid_config, "/fake/path", "test_mod")
         assert result is False
 
-        invalid_config2 = {"key": "test", "name": "Test", "files": []}
+        invalid_config2 = {"id": "test", "name": "Test", "files": []}
         result2 = validate_mod_config(invalid_config2, "/fake/path", "test_mod")
         assert result2 is False
 
-        invalid_config3 = {"key": "test", "name": "Test", "tags": {}}
+        invalid_config3 = {"id": "test", "name": "Test", "tags": {}}
         result3 = validate_mod_config(invalid_config3, "/fake/path", "test_mod")
         assert result3 is False
 
@@ -162,7 +162,7 @@ class TestLocalizationManager:
     def test_localization_service_tr(self):
         from services.localization_service import tr
 
-        result = tr("test.key")
+        result = tr("test.id")
         assert isinstance(result, str)
 
     def test_localization_service_detect_language(self):
@@ -191,7 +191,7 @@ class TestLaunchManager:
         from services.launch_service import GameLauncher
         from services.localization_service import tr
 
-        app_state.local_config = {"custom_color_border": "#123456"}
+        app_state.local_config = {"custom_border_color": "#123456"}
         launcher = GameLauncher(
             app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
         )
@@ -213,7 +213,7 @@ class TestLaunchManager:
         from services.launch_service import GameLauncher
         from services.localization_service import tr
 
-        app_state.local_config = {"custom_color_border": "#654321"}
+        app_state.local_config = {"custom_border_color": "#654321"}
         launcher = GameLauncher(
             app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
         )
@@ -249,6 +249,61 @@ class TestLaunchManager:
 
         launcher.restore_window_callback.assert_called_once()
         parent.game_launch.update_button_state.assert_called_once()
+
+    def test_execute_game_uses_detached_steam_launch_on_linux(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        launcher._execute_plugin_hook = Mock()
+
+        with (
+            patch("services.launch_service.platform.system", return_value="Linux"),
+            patch("services.launch_service.QThread", return_value=Mock()),
+            patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
+            patch.object(
+                launcher, "_start_detached_command", return_value=True
+            ) as start_detached,
+            patch("services.launch_service.webbrowser.open") as web_open,
+        ):
+            launcher._execute_game(
+                {"target": "steam://rungameid/1690940", "cwd": None, "type": "webbrowser"}
+            )
+
+        start_detached.assert_called_once_with(
+            "steam", ["steam://rungameid/1690940"]
+        )
+        web_open.assert_not_called()
+
+    def test_execute_game_falls_back_to_xdg_open_when_steam_detach_fails_on_linux(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        launcher._execute_plugin_hook = Mock()
+
+        with (
+            patch("services.launch_service.platform.system", return_value="Linux"),
+            patch("services.launch_service.QThread", return_value=Mock()),
+            patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
+            patch.object(
+                launcher, "_start_detached_command", side_effect=[False, True]
+            ) as start_detached,
+        ):
+            launcher._execute_game(
+                {"target": "steam://rungameid/1690940", "cwd": None, "type": "webbrowser"}
+            )
+
+        assert start_detached.call_args_list == [
+            (("steam", ["steam://rungameid/1690940"]),),
+            (("xdg-open", ["steam://rungameid/1690940"]),),
+        ]
 
 
 class TestUpdateCheckManager:
@@ -421,3 +476,15 @@ class TestExpandedFormats:
         paths = manager._get_audio_paths("background_music")
         assert any(p.endswith(".ogg") for p in paths)
         assert any(p.endswith(".flac") for p in paths)
+
+    def test_settings_manager_migrates_disable_startup_sound(
+        self, app_state, feedback_service, qapp
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state, feedback_service, localization_service, parent=qapp
+        )
+        manager.migrate_config_if_needed()
+        assert app_state.local_config["disable_startup_sound"] is False

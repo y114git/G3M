@@ -270,14 +270,14 @@ class GameManagerDialog(QDialog):
             QPushButton#gameManagerActionButton {{
                 border: 2px solid {theme["border"]};
                 border-radius: {br}px;
-                background-color: {theme["button"]};
+                background-color: {theme["elements"]};
                 min-width: 38px;
                 max-width: 38px;
                 min-height: 38px;
                 max-height: 38px;
                 padding: 0px;
             }}
-            QPushButton#gameManagerActionButton:hover:enabled {{ background-color: {theme["button_hover"]}; }}
+            QPushButton#gameManagerActionButton:hover:enabled {{ background-color: {theme["hover"]}; }}
             QPushButton#gameManagerActionButton:disabled {{
                 background-color: {theme["background"]};
                 border-color: #6f6f6f;
@@ -286,4 +286,4 @@ class GameManagerDialog(QDialog):
         """
         self.setStyleSheet(self.styleSheet() + btn_qss)
         for btn, icon_name in self._action_btns:
-            btn.setIcon(colored_icon(icon_name, theme["text"]))
+            btn.setIcon(colored_icon(icon_name, theme["main_text"]))

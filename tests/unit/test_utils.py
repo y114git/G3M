@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from utils.file_utils import has_deltamod_info_file, sanitize_filename
-from utils.mod_utils import get_mod_key, get_mod_name
+from utils.mod_utils import get_mod_id, get_mod_name
 
 
 class TestUiUtils:
@@ -25,32 +25,32 @@ class TestUiUtils:
 
 class TestModUtils:
 
-    def test_get_mod_key_from_dict(self):
-        mod_data = {'key': 'test_key_001'}
-        assert get_mod_key(mod_data) == 'test_key_001'
-        mod_data = {'key': 'test_mod_002'}
-        assert get_mod_key(mod_data) == 'test_mod_002'
+    def test_get_mod_id_from_dict(self):
+        mod_data = {'id': 'test_key_001'}
+        assert get_mod_id(mod_data) == 'test_key_001'
+        mod_data = {'id': 'test_mod_002'}
+        assert get_mod_id(mod_data) == 'test_mod_002'
         mod_data = {'name': 'test_mod_003'}
-        assert get_mod_key(mod_data) == 'test_mod_003'
+        assert get_mod_id(mod_data) == 'test_mod_003'
 
-    def test_get_mod_key_from_object(self):
+    def test_get_mod_id_from_object(self):
 
         class ModObject:
 
             def __init__(self) -> None:
-                self.key = 'test_key_004'
+                self.id = 'test_key_004'
         mod_obj = ModObject()
-        assert get_mod_key(mod_obj) == 'test_key_004'
+        assert get_mod_id(mod_obj) == 'test_key_004'
 
         class ModObject2:
 
             def __init__(self) -> None:
-                self.key = 'test_key_005'
+                self.id = 'test_key_005'
         mod_obj2 = ModObject2()
-        assert get_mod_key(mod_obj2) == 'test_key_005'
+        assert get_mod_id(mod_obj2) == 'test_key_005'
 
-    def test_get_mod_key_none(self):
-        assert get_mod_key(None) is None
+    def test_get_mod_id_none(self):
+        assert get_mod_id(None) is None
 
     def test_get_mod_name_from_dict(self):
         mod_data = {'name': 'Test Mod'}
@@ -113,7 +113,7 @@ class TestFileUtils:
         assert has_deltamod_info_file(file_list) is True
         file_list = ['file1.txt', 'meta.json', 'file2.txt']
         assert has_deltamod_info_file(file_list) is True
-        file_list = ['file1.txt', 'file2.txt', 'config.json']
+        file_list = ['file1.txt', 'file2.txt', 'mod_config.json']
         assert has_deltamod_info_file(file_list) is False
         assert has_deltamod_info_file([]) is False
 

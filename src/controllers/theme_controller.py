@@ -6,9 +6,9 @@ from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 
 from app.game_ui import update_chapter_tabs_style
-from config.config import DEFAULT_COLORS, QSS_TRANSPARENT_NOPAD, THEMES
+from config.config import DEFAULT_COLORS, DEFAULT_THEME, QSS_TRANSPARENT_NOPAD
 from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-from services.localization_service import tr
+from services.localization_service import localization_service, tr
 from ui.common.styling import get_border_radius, rgba_from_color
 from ui.utils.ui_utils import DebounceTimer
 from utils.path_utils import resource_path
@@ -33,9 +33,11 @@ class ThemeController:
         self.app = app_window
         self._debounce_timer = DebounceTimer(delay_ms=150)
         self._last_theme_params = {}
+        self._theme_update_in_progress = False
+        self._pending_theme_update = False
 
     def apply_theme(self, force=False):
-        theme = THEMES["default"]
+        theme = DEFAULT_THEME
         background_disabled = self.app_state.local_config.get(
             "background_disabled", False
         )
@@ -48,7 +50,7 @@ class ThemeController:
             )
         )
 
-        user_bg_hex = self.app_state.local_config.get("custom_color_background")
+        user_bg_hex = self.app_state.local_config.get("custom_background_color")
         if user_bg_hex and self.settings_service.is_valid_hex_color(user_bg_hex):
             frame_bg_color = rgba_from_color(
                 user_bg_hex, alpha=150, fallback="rgba(40, 40, 40, 150)"
@@ -62,37 +64,56 @@ class ThemeController:
                 "rgba(40, 40, 40, 230)",
             )
 
-        button_color = (
-            self.app_state.local_config.get("custom_color_button")
-            or theme["colors"]["button"]
+        elements_color = (
+            self.app_state.local_config.get("custom_elements_color")
+            or theme["colors"]["elements"]
         )
         border_color = (
-            self.app_state.local_config.get("custom_color_border")
+            self.app_state.local_config.get("custom_border_color")
             or theme["colors"]["border"]
         )
-        button_hover_color = (
-            self.app_state.local_config.get("custom_color_button_hover")
-            or theme["colors"]["button_hover"]
+        hover_color = (
+            self.app_state.local_config.get("custom_hover_color")
+            or theme["colors"]["hover"]
+        )
+        select_color = (
+            self.app_state.local_config.get("custom_select_color")
+            or theme["colors"]["select"]
         )
         main_text_color = (
-            self.app_state.local_config.get("custom_color_text")
-            or theme["colors"]["text"]
+            self.app_state.local_config.get("custom_main_text_color")
+            or theme["colors"]["main_text"]
         )
-        font_family_main = self.app.custom_font_family or theme["font_family"]
+        disabled_bg = (
+            self.app_state.local_config.get("custom_disabled_bg")
+            or theme["colors"].get("disabled_bg", "#333333")
+        )
+        disabled_text = (
+            self.app_state.local_config.get("custom_disabled_text")
+            or theme["colors"].get("disabled_text", "#888888")
+        )
+        disabled_border = (
+            self.app_state.local_config.get("custom_disabled_border")
+            or theme["colors"].get("disabled_border", "#555555")
+        )
+        font_family_main = (
+            self.app.custom_font_family
+            or localization_service.load_font()
+            or theme["font_family"]
+        )
         zoom_factor = self.app_state.local_config.get("ui_scale", 1.0)
 
-        secondary_text_color = self.app_state.local_config.get(
-            "custom_color_secondary_text"
-        )
+        secondary_text_color = self.app_state.local_config.get("custom_secondary_text_color")
         border_radius_value = get_border_radius(self.app_state.local_config)
         custom_border_radius = f"{border_radius_value}px"
         params = {
             "bg": frame_bg_color,
-            "btn": button_color,
+            "elements": elements_color,
             "border": border_color,
-            "hover": button_hover_color,
-            "text": main_text_color,
-            "sec_text": secondary_text_color,
+            "hover": hover_color,
+            "select": select_color,
+            "main_text": main_text_color,
+            "secondary_text": secondary_text_color,
             "font": font_family_main,
             "bg_path": new_background_path,
             "bg_disabled": background_disabled,
@@ -149,24 +170,22 @@ class ThemeController:
             palette.setColor(role, txt_col)
         (QApplication.instance() or self.app).setPalette(palette)
         scroll_handle_color = (
-            self.app_state.local_config.get("custom_color_button")
-            or DEFAULT_COLORS["text"]
-        )
-        checkbox_checked_color = (
-            "#ffffff"
-            if not self.app.color_widgets["button_hover"].text()
-            else button_hover_color
+            self.app_state.local_config.get("custom_elements_color")
+            or DEFAULT_COLORS["main_text"]
         )
         style_sheet = build_stylesheet(
             frame_bg_color=frame_bg_color,
-            button_color=button_color,
+            elements_color=elements_color,
             border_color=border_color,
-            button_hover_color=button_hover_color,
+            hover_color=hover_color,
+            select_color=select_color,
             main_text_color=main_text_color,
+            disabled_bg=disabled_bg,
+            disabled_text=disabled_text,
+            disabled_border=disabled_border,
             font_family_main=font_family_main,
             font_size_main=font_size_main,
             font_size_small=font_size_small,
-            checkbox_checked_color=checkbox_checked_color,
             scroll_handle_color=scroll_handle_color,
             tooltip_bg_color=tooltip_bg_color,
             zoom_factor=zoom_factor,
@@ -183,7 +202,7 @@ class ThemeController:
 
         from ui.common.styling import get_theme_color
 
-        text_color = get_theme_color(self.app_state.local_config, "text")
+        text_color = get_theme_color(self.app_state.local_config, "main_text")
         bold_label_style = (
             f"font-weight: bold; font-size: {scale(16)}px; color: {text_color};"
         )
@@ -505,39 +524,58 @@ class ThemeController:
                 logging.error(f"Failed to delete theme: {e}")
 
     def on_theme_changed_by_service(self):
-        self._reload_custom_font()
-        if hasattr(self.app, "change_font_button"):
-            self.app.change_font_button.setText(
-                self.customization_service.get_font_button_text()
-            )
-        self.customization_service.load_custom_style_settings(
-            self.app.color_widgets, self.apply_theme
-        )
-        self.app.disable_background_checkbox.setChecked(
-            self.app_state.local_config.get("background_disabled", False)
-        )
-        if hasattr(self.app, "disable_animations_checkbox"):
-            self.app.disable_animations_checkbox.setChecked(
-                self.app_state.local_config.get("disable_animations", False)
-            )
-        if hasattr(self.app, "border_radius_spinbox"):
-            self.app.border_radius_spinbox.blockSignals(True)
-            self.app.border_radius_spinbox.setValue(
-                int(get_border_radius(self.app_state.local_config))
-            )
-            self.app.border_radius_spinbox.blockSignals(False)
-        self.app.background_music_button.setText(
-            self.customization_service.get_background_music_button_text()
-        )
-        self.app.startup_sound_button.setText(
-            self.customization_service.get_startup_sound_button_text()
-        )
-        self.update_background_button_state()
-        self.update_logo_button_state()
-        if hasattr(self.app, "launcher_icon_label"):
-            self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
+        self._debounce_timer.call(self._apply_theme_change)
 
-        self._handle_music_after_theme_change()
+    def _apply_theme_change(self):
+        if self._theme_update_in_progress:
+            self._pending_theme_update = True
+            return
+        self._theme_update_in_progress = True
+        self._pending_theme_update = False
+        try:
+            self._reload_custom_font()
+            if hasattr(self.app, "change_font_button"):
+                self.app.change_font_button.setText(
+                    self.customization_service.get_font_button_text()
+                )
+            self.customization_service.load_custom_style_settings(
+                self.app.color_widgets, self.apply_theme
+            )
+            self.app.disable_background_checkbox.setChecked(
+                self.app_state.local_config.get("background_disabled", False)
+            )
+            if hasattr(self.app, "disable_startup_sound_checkbox"):
+                self.app.disable_startup_sound_checkbox.setChecked(
+                    self.app_state.local_config.get("disable_startup_sound", False)
+                )
+            if hasattr(self.app, "disable_animations_checkbox"):
+                self.app.disable_animations_checkbox.setChecked(
+                    self.app_state.local_config.get("disable_animations", False)
+                )
+            if hasattr(self.app, "border_radius_spinbox"):
+                self.app.border_radius_spinbox.blockSignals(True)
+                self.app.border_radius_spinbox.setValue(
+                    int(get_border_radius(self.app_state.local_config))
+                )
+                self.app.border_radius_spinbox.blockSignals(False)
+            self.app.background_music_button.setText(
+                self.customization_service.get_background_music_button_text()
+            )
+            self.app.startup_sound_button.setText(
+                self.customization_service.get_startup_sound_button_text()
+            )
+            self.update_background_button_state()
+            self.update_logo_button_state()
+            if hasattr(self.app, "launcher_icon_label"):
+                self.customization_service.load_launcher_icon(
+                    self.app.launcher_icon_label
+                )
+            self._handle_music_after_theme_change()
+        finally:
+            self._theme_update_in_progress = False
+            if self._pending_theme_update:
+                self._pending_theme_update = False
+                self._debounce_timer.call(self._apply_theme_change)
 
     def _is_current_bg_music_running(self, current_music_path: str) -> bool:
         """Check if the same background music is currently running."""
@@ -571,7 +609,6 @@ class ThemeController:
 
     def on_custom_style_edited(self):
         self.settings_service.on_custom_style_edited(self.app.color_widgets)
-        self._debounce_timer.call(self.apply_theme)
 
     def update_dynamic_elements(self):
         from ui.builders.shared_filters_builder import apply_filters_frame_style
@@ -653,13 +690,28 @@ class ThemeController:
         from services.localization_service import localization_service
 
         custom_f_path = self.customization_service.get_custom_font_path()
-        if custom_f_path and os.path.exists(custom_f_path):
+        font_file_key = None
+        custom_font_exists = custom_f_path and os.path.exists(custom_f_path)
+        if custom_font_exists:
+            stat_result = os.stat(custom_f_path)
+            font_file_key = (
+                custom_f_path,
+                stat_result.st_mtime_ns,
+                stat_result.st_size,
+            )
+            if (
+                getattr(self.app, "_custom_font_file_key", None) == font_file_key
+                and getattr(self.app, "custom_font_family", None)
+            ):
+                return
+        if custom_font_exists:
             old_id = getattr(self.app, "_custom_font_id", None)
             if old_id is not None and old_id != -1:
                 QFontDatabase.removeApplicationFont(old_id)
             f_id = QFontDatabase.addApplicationFont(custom_f_path)
             if f_id != -1:
                 self.app._custom_font_id = f_id
+                self.app._custom_font_file_key = font_file_key
                 families = QFontDatabase.applicationFontFamilies(f_id)
                 if families:
                     self.app.custom_font_family = families[0]
@@ -673,9 +725,11 @@ class ThemeController:
                     self.app.custom_font_family = localization_service.load_font()
             else:
                 self.app._custom_font_id = -1
+                self.app._custom_font_file_key = None
                 logging.error(
                     f"Failed to load font from {custom_f_path}, using default"
                 )
                 self.app.custom_font_family = localization_service.load_font()
         else:
+            self.app._custom_font_file_key = None
             self.app.custom_font_family = localization_service.load_font()

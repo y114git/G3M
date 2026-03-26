@@ -18,7 +18,6 @@ from config.config import (
     ICON_PNG_FILENAME,
     IS_WINDOWS_PLATFORM,
     LEGACY_META_JSON_FILENAME,
-    LEGACY_MOD_CONFIG_FILENAME,
     META_JSON_FILENAME,
     MOD_CONFIG_FILENAME,
 )
@@ -240,16 +239,11 @@ def save_json(
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
     to_save = data.copy() if isinstance(data, dict) else data
-    if isinstance(to_save, dict) and (
-        path.endswith("mod_config.json")
-        or (path.endswith("config.json") and ("mod_key" in to_save or "key" in to_save))
+    if (
+        isinstance(to_save, dict)
+        and os.path.basename(path).lower() == MOD_CONFIG_FILENAME.lower()
     ):
-        if "mod_key" in to_save:
-            if "key" not in to_save:
-                to_save["key"] = to_save["mod_key"]
-            del to_save["mod_key"]
-        if "modgame" in to_save and "game" in to_save:
-            del to_save["modgame"]
+        to_save, _ = migrate_mod_config_id(to_save)
     tmp = os.path.join(
         dir_path or ".",
         f"{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp",
@@ -277,55 +271,19 @@ def save_json(
             raise ValueError(f"Data is not JSON-serializable: {e}") from e
 
 
-def load_json(path: str, migrate_config: bool = True) -> dict:
-    """Load JSON file with optional config migration."""
+def load_json(path: str) -> dict:
+    """Load JSON file."""
     try:
-        if (
-            migrate_config
-            and path.endswith("mod_config.json")
-            and not os.path.exists(path)
-        ):
-            l_path = path.replace("mod_config.json", "config.json")
-            if os.path.exists(l_path):
-                path = l_path
         if not os.path.exists(path):
             return {}
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        if migrate_config and isinstance(data, dict):
-            m = False
-            is_cfg = path.endswith("mod_config.json") or (
-                path.endswith("config.json") and ("mod_key" in data or "key" in data)
-            )
-            if is_cfg:
-                for k, nk in [
-                    ("mod_key", "key"),
-                    ("modgame", "game"),
-                    ("chapters", "files"),
-                ]:
-                    if k in data:
-                        if nk not in data:
-                            data[nk] = data.pop(k)
-                        else:
-                            del data[k]
-                        m = True
-                if "is_demo_mod" in data and "game" not in data:
-                    data["game"] = (
-                        "deltarunedemo" if data.get("is_demo_mod") else "deltarune"
-                    )
-                    m = True
-                    del data["is_demo_mod"]
-                if "tags" in data:
-                    t = data["tags"]
-                    if isinstance(t, list) and "translation" in t:
-                        data["tags"] = [
-                            ("textedit" if x == "translation" else x) for x in t
-                        ]
-                        m = True
-                    elif t == "translation":
-                        data["tags"] = "textedit"
-                        m = True
-            if m:
+        if (
+            isinstance(data, dict)
+            and os.path.basename(path).lower() == MOD_CONFIG_FILENAME.lower()
+        ):
+            data, changed = migrate_mod_config_id(data)
+            if changed:
                 save_json(path, data)
         return data
     except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError) as e:
@@ -340,6 +298,32 @@ def load_json(path: str, migrate_config: bool = True) -> dict:
     except Exception as e:
         logging.error(f"Error loading JSON {path}: {e}", exc_info=True)
         return {}
+
+
+def migrate_mod_config_id(config_data: dict) -> tuple[dict, bool]:
+    """Normalize mod_config identity fields to id only."""
+    if not isinstance(config_data, dict):
+        return config_data, False
+    changed = False
+    mod_id = next(
+        (
+            str(config_data[field]).strip()
+            for field in ("id", "key", "mod_key")
+            if isinstance(config_data.get(field), str) and config_data.get(field).strip()
+        ),
+        "",
+    )
+    if config_data.get("id") != mod_id:
+        if mod_id:
+            config_data["id"] = mod_id
+        elif "id" in config_data:
+            config_data.pop("id", None)
+        changed = True
+    for legacy_field in ("key", "mod_key"):
+        if legacy_field in config_data:
+            config_data.pop(legacy_field, None)
+            changed = True
+    return config_data, changed
 
 
 def remove_archive_extension(filename: str) -> str:
@@ -372,21 +356,24 @@ def get_chapter_folder_name(chapter_id, game=None) -> str:
     return cid
 
 
-def chapter_id_to_file_key(chapter_id) -> str:
-    """Convert chapter_id to the file key used in mod config 'files' dict."""
+def normalize_chapter_id(chapter_id, game: str | None = None) -> str:
+    """Normalize chapter/file keys to the config-facing tab_id/game_id form."""
     cid = str(chapter_id)
     from models.game_modes import get_game
+    from services.migration_service import migrate_legacy_chapter_id
 
+    game_def = get_game(game) if game else None
+    if game_def and (tab := game_def.get_tab(cid)):
+        return tab.tab_id
     for lookup in (cid, cid.rsplit("_", 1)[0] if "_" in cid else None):
         if lookup:
-            game_def = get_game(lookup)
-            if game_def:
-                tab = game_def.get_tab(cid)
-                if tab:
-                    return tab.files_key
-    if "_" in cid:
-        return cid.rsplit("_", 1)[1]
-    return cid
+            lookup_game = get_game(lookup)
+            if lookup_game and (tab := lookup_game.get_tab(cid)):
+                return tab.tab_id
+    migrated = migrate_legacy_chapter_id(cid)
+    if game_def and (tab := game_def.get_tab(migrated)):
+        return tab.tab_id
+    return migrated
 
 
 def get_unique_mod_dir(mods_dir, mod_name):
@@ -597,20 +584,3 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
                     exc_info=True,
                 )
         return False
-
-
-def migrate_mod_config(mod_dir: str) -> bool:
-    old_config_path = os.path.join(mod_dir, LEGACY_MOD_CONFIG_FILENAME)
-    config_path = os.path.join(mod_dir, MOD_CONFIG_FILENAME)
-    if os.path.exists(old_config_path) and (not os.path.exists(config_path)):
-        success = safe_move(old_config_path, config_path)
-        if success:
-            logging.info(
-                f"Successfully migrated mod config.json to mod_config.json in {os.path.basename(mod_dir)}"
-            )
-        else:
-            logging.error(
-                f"Failed to migrate mod config.json to mod_config.json in {os.path.basename(mod_dir)}"
-            )
-        return success
-    return True

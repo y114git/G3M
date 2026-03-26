@@ -12,16 +12,17 @@ from app.game_ui import (
     update_portproton_ui,
     update_steam_launch_checkbox_state,
 )
-from app.update_handler import check_and_show_announce
 from config.config import (
     CLOUD_FUNCTIONS_BASE_URL,
     SINGLE_INSTANCE_KEY,
     SPLASH_WATCHDOG_TIMEOUT,
     UI_COLORS,
 )
+from presentation.update_presenter import check_and_show_announce
 from services.game_detection_service import is_game_running
 from services.localization_service import tr
 from ui.splash import create_png_splash
+from ui.utils.audio_utils import _audio_service
 from utils.network_utils import check_internet_connection, get_session
 
 
@@ -50,6 +51,8 @@ class _NetworkInitThread(QThread):
 
 
 class BootstrapCoordinator:
+    _WINDOW_REVEAL_DELAY_MS = 50
+
     def __init__(
         self,
         app,
@@ -67,6 +70,7 @@ class BootstrapCoordinator:
         self.splash = None
         self.window_shown = False
         self.init_ready = False
+        self._network_started = False
 
     def launch(self) -> None:
         config_dir = os.path.join(self.user_root, "settings")
@@ -93,6 +97,7 @@ class BootstrapCoordinator:
             )
             if getattr(self.instance.app_state, "initialization_completed", False):
                 self._on_initialization_finished()
+            self._start_network_initialization()
             QTimer.singleShot(0, self._fallback_show_window)
         except Exception as error:
             self.splash.close()
@@ -140,30 +145,42 @@ class BootstrapCoordinator:
                 self.instance.windowState() & ~Qt.WindowState.WindowMinimized
             )
             self.instance.show()
-            self.instance.raise_()
-            self.instance.activateWindow()
-            self.instance.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-            self.instance.show()
-
-            def _remove_stay_on_top() -> None:
-                self.instance.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
-                self.instance.show()
-
-            QTimer.singleShot(0, _remove_stay_on_top)
+            self._play_startup_sound()
             self.instance.is_shown_to_user = True
             self.instance.app_state.is_shown_to_user = True
             if qapp := QApplication.instance():
                 qapp.processEvents()
-            QTimer.singleShot(0, self.instance._post_show_initialization)
+            QTimer.singleShot(
+                self._WINDOW_REVEAL_DELAY_MS, self.instance._post_show_initialization
+            )
         except Exception as error:
             logging.error(f"Error showing launcher window: {error}", exc_info=True)
+
+    def _bring_launcher_to_front(self) -> None:
+        if not self.instance:
+            return
+        try:
+            self.instance.raise_()
+            self.instance.activateWindow()
+        except Exception as error:
+            logging.debug(f"Failed to bring launcher to front: {error}")
 
     def _close_splash(self) -> None:
         self.splash.close()
 
     def _close_splash_and_show_launcher(self) -> None:
         self._show_launcher_window()
+        QTimer.singleShot(self._WINDOW_REVEAL_DELAY_MS, self._finalize_window_reveal)
+
+    def _finalize_window_reveal(self) -> None:
         self._close_splash()
+        self._bring_launcher_to_front()
+
+    def _play_startup_sound(self) -> None:
+        if getattr(self.instance, "app_state", None) and not self.instance.app_state.local_config.get(
+            "disable_startup_sound", False
+        ):
+            _audio_service.play_deltahub_sound()
 
     @staticmethod
     def post_show_initialization(window) -> None:
@@ -174,18 +191,29 @@ class BootstrapCoordinator:
             window.feedback_service.update_status(
                 tr("status.deltarune_already_running"), UI_COLORS["status_error"]
             )
-        window.app_state.has_internet = False
-        window._network_init_thread = _NetworkInitThread(window.app_state, parent=window)
+
+    def _start_network_initialization(self) -> None:
+        if self._network_started or not self.instance:
+            return
+        self._network_started = True
+        self.instance.app_state.has_internet = False
+        self.instance._network_init_thread = _NetworkInitThread(
+            self.instance.app_state,
+            parent=self.instance,
+        )
 
         def _on_network_done(has_internet: bool, global_settings: dict) -> None:
+            window = self.instance
+            if window is None:
+                return
             window.app_state.has_internet = has_internet
             window.app_state.global_settings = global_settings
-            if not has_internet:
+            if not has_internet and self.window_shown:
                 window.feedback_service.update_status(
                     tr("status.global_settings_load_failed"),
                     UI_COLORS["status_warning"],
                 )
-            else:
+            elif has_internet:
                 window.app_state.pending_announce_check = True
                 if (
                     window.app_state.initialization_completed
@@ -194,11 +222,11 @@ class BootstrapCoordinator:
                     check_and_show_announce(window)
             window.session_manager.start()
 
-        window._network_init_thread.done.connect(_on_network_done)
-        window._network_init_thread.finished.connect(
-            window._network_init_thread.deleteLater
+        self.instance._network_init_thread.done.connect(_on_network_done)
+        self.instance._network_init_thread.finished.connect(
+            self.instance._network_init_thread.deleteLater
         )
-        window._network_init_thread.start()
+        self.instance._network_init_thread.start()
 
     @staticmethod
     def _finish_local_init(window) -> None:

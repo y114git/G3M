@@ -1,7 +1,7 @@
 import platform
 from typing import Any
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -28,6 +28,7 @@ from config.config import (
 )
 from models.game_modes import get_visible_game_entries
 from services.localization_service import localization_service, tr
+from services.migration_service import get_theme_color_setting
 from ui.common.styling import (
     get_border_radius,
     get_theme_color,
@@ -36,6 +37,31 @@ from ui.common.styling import (
 from ui.utils.ui_utils import UIAnimator
 from ui.widgets.shared.custom_controls import NoScrollComboBox
 from utils.path_utils import colored_icon
+
+
+class _FilesDropWidget(QWidget):
+    files_dropped = pyqtSignal(list)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls() and any(u.isLocalFile() for u in event.mimeData().urls()):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls() and any(u.isLocalFile() for u in event.mimeData().urls()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            paths = [u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()]
+            if paths:
+                event.acceptProposedAction()
+                self.files_dropped.emit(paths)
 
 
 class SettingsViewBuilder:
@@ -66,6 +92,11 @@ class SettingsViewBuilder:
         tab_widget.addTab(
             self._build_library_tab(tab_widget), tr("ui.settings_tab_library")
         )
+        plugins_tab = self._build_plugins_tab(tab_widget)
+        tab_widget.addTab(
+            plugins_tab, tr("ui.settings_tab_plugins")
+        )
+        self.widgets["plugins_tab"] = plugins_tab
         settings_layout.addWidget(tab_widget, stretch=1)
 
         settings_layout.addStretch()
@@ -79,7 +110,7 @@ class SettingsViewBuilder:
         return settings_widget
 
     def refresh_dynamic_styles(self) -> None:
-        tc = get_theme_color(self.app_state.local_config, "text")
+        tc = get_theme_color(self.app_state.local_config, "main_text")
         seen = set()
         for btn in self.widgets.values():
             icon_name = getattr(btn, "_themed_icon_name", None) if btn else None
@@ -271,7 +302,7 @@ class SettingsViewBuilder:
 
             def _apply_icon(b=btn, i=icon_name, s=app_state):
                 b.setIcon(
-                    colored_icon(i, get_theme_color(s.local_config, "text"))
+                    colored_icon(i, get_theme_color(s.local_config, "main_text"))
                 )
                 b.setIconSize(QSize(20, 20))
 
@@ -431,6 +462,10 @@ class SettingsViewBuilder:
         disable_background_checkbox = self._styled_checkbox(
             tr("checkboxes.disable_background"), config_key="background_disabled"
         )
+        disable_startup_sound_checkbox = self._styled_checkbox(
+            tr("checkboxes.disable_startup_sound"),
+            config_key="disable_startup_sound",
+        )
         background_buttons_layout = QHBoxLayout()
         background_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         background_buttons_layout.setSpacing(10)
@@ -510,7 +545,7 @@ class SettingsViewBuilder:
             row_layout, line_edit, btn, reset_btn, label_widget = (
                 self._create_color_row(tr(lang_key))
             )
-            self._mark_reset(line_edit, config_key=f"custom_color_{key}")
+            self._mark_reset(line_edit, config_key=get_theme_color_setting(key))
             color_widgets[key], color_labels[key] = line_edit, label_widget
             self.widgets[f"color_btn_{key}"], self.widgets[f"color_reset_{key}"] = (
                 btn,
@@ -531,6 +566,7 @@ class SettingsViewBuilder:
         checkboxes_layout.setSpacing(20)
         checkboxes_layout.addWidget(disable_animations_checkbox)
         checkboxes_layout.addWidget(disable_background_checkbox)
+        checkboxes_layout.addWidget(disable_startup_sound_checkbox)
         cl_adv.addLayout(checkboxes_layout)
         layout.addWidget(sec_adv)
 
@@ -538,6 +574,9 @@ class SettingsViewBuilder:
 
         self.widgets["disable_animations_checkbox"] = disable_animations_checkbox
         self.widgets["disable_background_checkbox"] = disable_background_checkbox
+        self.widgets["disable_startup_sound_checkbox"] = (
+            disable_startup_sound_checkbox
+        )
         self.widgets["change_background_button"] = change_background_button
         self.widgets["change_logo_button"] = change_logo_button
         self.widgets["change_font_button"] = change_font_button
@@ -826,6 +865,68 @@ class SettingsViewBuilder:
         self.widgets["portproton_frame"] = portproton_frame
         self.widgets["settings_custom_executable_button"] = custom_executable_button
         self.widgets["settings_reset_custom_exe_button"] = reset_custom_exe_button
+        return self._wrap_in_scroll(page, parent)
+
+    def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:
+        page, layout = self._build_simple_tab_page()
+
+        filters = QWidget(page)
+        filters_layout = QHBoxLayout(filters)
+        filters_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        filters_layout.setSpacing(12)
+        installed_only_checkbox = self._styled_checkbox(
+            tr("plugins.filters_installed_only")
+        )
+        plugins_tag_interface = self._styled_checkbox(tr("plugins.tag_interface"))
+        plugins_tag_game_experience = self._styled_checkbox(
+            tr("plugins.tag_game_experience")
+        )
+        plugins_tag_tool = self._styled_checkbox(tr("plugins.tag_tool"))
+        plugins_tag_other = self._styled_checkbox(tr("plugins.tag_other"))
+        for checkbox in (
+            installed_only_checkbox,
+            plugins_tag_interface,
+            plugins_tag_game_experience,
+            plugins_tag_tool,
+            plugins_tag_other,
+        ):
+            filters_layout.addWidget(checkbox)
+        layout.addWidget(filters)
+
+        plugins_container = QFrame(page)
+        plugins_container.setObjectName("plugins_settings_container")
+        plugins_container.setMinimumHeight(600)
+        plugins_container.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
+        )
+        plugins_container_layout = QVBoxLayout(plugins_container)
+        plugins_container_layout.setContentsMargins(12, 12, 12, 12)
+        plugins_scroll = QScrollArea(plugins_container)
+        plugins_scroll.setWidgetResizable(True)
+        plugins_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        plugins_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        plugins_widget = _FilesDropWidget(plugins_scroll)
+        plugins_layout = QVBoxLayout(plugins_widget)
+        plugins_layout.setContentsMargins(8, 8, 8, 8)
+        plugins_layout.setSpacing(12)
+        plugins_layout.addStretch()
+        plugins_scroll.setWidget(plugins_widget)
+        plugins_scroll.viewport().setAcceptDrops(True)
+        plugins_container_layout.addWidget(plugins_scroll)
+        layout.addWidget(plugins_container)
+        layout.addStretch()
+
+        self.widgets["plugins_installed_only_checkbox"] = installed_only_checkbox
+        self.widgets["plugins_tag_interface_checkbox"] = plugins_tag_interface
+        self.widgets["plugins_tag_game_experience_checkbox"] = (
+            plugins_tag_game_experience
+        )
+        self.widgets["plugins_tag_tool_checkbox"] = plugins_tag_tool
+        self.widgets["plugins_tag_other_checkbox"] = plugins_tag_other
+        self.widgets["plugins_scroll"] = plugins_scroll
+        self.widgets["plugins_widget"] = plugins_widget
+        self.widgets["plugins_layout"] = plugins_layout
+        self.widgets["plugins_container"] = plugins_container
         return self._wrap_in_scroll(page, parent)
 
     def get_widgets(self) -> dict[str, Any]:
