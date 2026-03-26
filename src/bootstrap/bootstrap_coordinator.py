@@ -146,12 +146,16 @@ class BootstrapCoordinator:
             )
             self.instance.show()
             self._play_startup_sound()
+            self._bring_launcher_to_front()
             self.instance.is_shown_to_user = True
             self.instance.app_state.is_shown_to_user = True
             if qapp := QApplication.instance():
                 qapp.processEvents()
             QTimer.singleShot(
                 self._WINDOW_REVEAL_DELAY_MS, self.instance._post_show_initialization
+            )
+            QTimer.singleShot(
+                self._WINDOW_REVEAL_DELAY_MS, self._bring_launcher_to_front
             )
         except Exception as error:
             logging.error(f"Error showing launcher window: {error}", exc_info=True)
