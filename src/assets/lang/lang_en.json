@@ -358,6 +358,7 @@
     "mod_editor_add_extra": "Add archives or folders with extra files for this tab.",
     "mod_editor_selected_file": "The selected file or folder that will be included in the mod.",
     "mod_editor_data_version": "Version label for this DATA file entry.",
+    "save_mod": "Save Mod",
     "delete_mod": "Delete this local mod and all files inside its folder.",
     "export_mod": "Export this local mod into an archive you can share or back up.",
     "mod_versions": "Open the version manager for this mod.",

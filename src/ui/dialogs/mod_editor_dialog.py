@@ -114,7 +114,7 @@ class ModEditorDialog(QDialog):
         color = QColor(color_value)
         if not color.isValid():
             return color_value
-        base = QColor("#000000")
+        base = QColor(0, 0, 0)
         mixed = QColor(
             round(color.red() * (1 - factor) + base.red() * factor),
             round(color.green() * (1 - factor) + base.green() * factor),

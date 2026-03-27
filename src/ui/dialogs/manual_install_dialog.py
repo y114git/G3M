@@ -117,7 +117,7 @@ class ManualModInstallDialog(QDialog):
         color = QColor(color_value)
         if not color.isValid():
             return color_value
-        base = QColor("#000000")
+        base = QColor(0, 0, 0)
         mixed = QColor(
             round(color.red() * (1 - factor) + base.red() * factor),
             round(color.green() * (1 - factor) + base.green() * factor),
@@ -127,11 +127,8 @@ class ManualModInstallDialog(QDialog):
         return mixed.name(QColor.NameFormat.HexArgb)
 
     def _theme_value(self, key: str, fallback: str) -> str:
-        theme = (
-            get_dialog_theme_values(self._app_state or self.app_state)
-            if (self._app_state or self.app_state)
-            else {}
-        )
+        app_state = self.app_state
+        theme = get_dialog_theme_values(app_state) if app_state else {}
         return theme.get(key, fallback)
 
     @staticmethod

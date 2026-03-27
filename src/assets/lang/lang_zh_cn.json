@@ -358,6 +358,7 @@
     "mod_editor_add_extra": "为这个标签页添加额外文件归档或文件夹。",
     "mod_editor_selected_file": "将被包含进模组的已选文件或文件夹。",
     "mod_editor_data_version": "这个 DATA 文件条目的版本标签。",
+    "save_mod": "保存模组",
     "delete_mod": "删除这个本地模组以及其文件夹中的全部文件。",
     "export_mod": "把这个本地模组导出为可分享或备份的压缩包。",
     "mod_versions": "打开这个模组的版本管理器。",
