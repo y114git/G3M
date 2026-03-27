@@ -66,7 +66,6 @@ class CatalogPluginEntry:
     download_link: str = ""
     tags: list[str] = field(default_factory=list)
     relations: dict[str, str] = field(default_factory=dict)
-    updated_at: str = ""
 
 
 @dataclass(slots=True)

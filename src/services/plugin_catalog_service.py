@@ -69,7 +69,6 @@ class PluginCatalogService:
                         for key, value in (item.get("relations", {}) or {}).items()
                         if str(key).strip() and str(value).strip()
                     },
-                    updated_at=str(item.get("updated_at", "")).strip(),
                 )
                 for item in catalog.get("plugins", [])
                 if str(item.get("id", "")).strip()
