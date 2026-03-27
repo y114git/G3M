@@ -175,9 +175,8 @@ def setup_app():
         if _translator.load(qt_locale_file, path):
             app.installTranslator(_translator)
     app.setApplicationName("DELTAHUB")
-    from config.config import LAUNCHER_VERSION
-
-    app.setApplicationVersion(LAUNCHER_VERSION)
+    from config.config import APP_VERSION
+    app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName("deltahub")
     from PyQt6.QtGui import QIcon
 

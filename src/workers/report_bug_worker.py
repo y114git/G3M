@@ -15,8 +15,8 @@ from datetime import datetime
 from PyQt6.QtCore import PYQT_VERSION_STR, QObject, pyqtSignal
 
 from config.config import (
+    APP_VERSION,
     CLOUD_FUNCTIONS_BASE_URL,
-    LAUNCHER_VERSION,
     NETWORK_TIMEOUT_LONG,
 )
 from services.localization_service import tr
@@ -55,7 +55,7 @@ class ReportBugWorker(QObject):
                 "",
                 f"Python Version: {sys.version.split()[0]}",
                 f"PyQt6 Version: {PYQT_VERSION_STR}",
-                f"DELTAHUB Version: {LAUNCHER_VERSION}",
+                f"DELTAHUB Version: {APP_VERSION}",
                 "",
                 "=" * 60,
                 "USER REPORT",

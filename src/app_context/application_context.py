@@ -8,6 +8,7 @@ from typing import Any
 from adapters.gamebanana_adapter import GameBananaAPI
 from app_context.service_container import ServiceContainer
 from models.app_state import AppState
+from services.announce_service import AnnounceService
 from services.customization_service import CustomizationManager
 from services.downloads_manager import DownloadsManager
 from services.game_registry_service import GameRegistryService
@@ -97,6 +98,7 @@ def build_application_context(parent=None) -> ApplicationContext:
     )
     localization_service.update_qt_locale(saved_language, qt_translator_holder)
     settings_service.migrate_config_if_needed()
+    announce_service = AnnounceService(app_state, settings_service)
     game_registry_service = GameRegistryService(app_state, settings_service, parent)
     game_registry_service.load()
     profile_service = ProfileService(app_state, settings_service, parent)
@@ -160,6 +162,7 @@ def build_application_context(parent=None) -> ApplicationContext:
     services = ServiceContainer(
         feedback_service=feedback_service,
         settings_service=settings_service,
+        announce_service=announce_service,
         game_registry_service=game_registry_service,
         profile_service=profile_service,
         mod_service=mod_service,

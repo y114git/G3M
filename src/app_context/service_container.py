@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from services.announce_service import AnnounceService
 from services.customization_service import CustomizationManager
 from services.downloads_manager import DownloadsManager
 from services.game_registry_service import GameRegistryService
@@ -23,6 +24,7 @@ from ui.common.feedback import FeedbackManager
 class ServiceContainer:
     feedback_service: FeedbackManager
     settings_service: SettingsManager
+    announce_service: AnnounceService
     game_registry_service: GameRegistryService
     profile_service: ProfileService
     mod_service: ModManager

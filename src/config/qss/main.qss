@@ -76,6 +76,24 @@ QComboBox QAbstractItemView {
     border: 2px solid %border_color%;
     color: %main_text_color%;
     border-radius: %custom_border_radius%;
+    selection-background-color: %hover_color%;
+    selection-color: %main_text_color%;
+}
+QComboBox QAbstractItemView::item {
+    border: 2px solid transparent;
+    border-radius: %field_border_radius%;
+}
+QComboBox QAbstractItemView::item:hover {
+    background-color: %hover_color%;
+    color: %main_text_color%;
+    border: 2px solid transparent;
+    border-radius: %field_border_radius%;
+}
+QComboBox QAbstractItemView::item:selected {
+    background-color: %hover_color%;
+    color: %main_text_color%;
+    border: 2px solid %select_color%;
+    border-radius: %field_border_radius%;
 }
 QLineEdit {
     font-family: "%font_family_main%";
@@ -95,9 +113,20 @@ QListWidget {
 }
 QListWidget::item {
     color: %main_text_color%;
+    border: 2px solid transparent;
+    border-radius: %field_border_radius%;
+}
+QListWidget::item:hover {
+    background-color: %hover_color%;
+    color: %main_text_color%;
+    border: 2px solid transparent;
+    border-radius: %field_border_radius%;
 }
 QListWidget::item:selected {
-    background-color: %select_color%;
+    background-color: %hover_color%;
+    color: %main_text_color%;
+    border: 2px solid %select_color%;
+    border-radius: %field_border_radius%;
 }
 QSpinBox {
     font-family: "%font_family_main%";
@@ -191,5 +220,5 @@ QCheckBox::indicator:disabled {
 }
 QPushButton:checked {
     background-color: %hover_color%;
-    border: 2px solid %main_text_color%;
+    border: 2px solid %select_color%;
 }

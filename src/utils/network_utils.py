@@ -43,13 +43,13 @@ def get_session(app_state=None):
 
 
 def _build_session():
-    from config.config import BROWSER_HEADERS, LAUNCHER_VERSION
+    from config.config import APP_VERSION, BROWSER_HEADERS
 
     for n in ("urllib3.connectionpool", "requests"):
         logging.getLogger(n).setLevel(logging.ERROR)
     s = requests.Session()
     h = dict(BROWSER_HEADERS or {})
-    h.setdefault("User-Agent", f"DELTAHUB/{LAUNCHER_VERSION}")
+    h.setdefault("User-Agent", f"DELTAHUB/{APP_VERSION}")
     s.headers.update(h)
     r = Retry(
         total=3,

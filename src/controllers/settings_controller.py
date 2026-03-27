@@ -233,8 +233,8 @@ class SettingsUiController:
         )
         self.app.update_checker.check_for_updates()
 
-    def on_toggle_fullscreen(self):
-        fs = self.app.fullscreen_checkbox.isChecked()
+    def on_toggle_fullscreen(self, enabled=None):
+        fs = self.app.fullscreen_checkbox.isChecked() if enabled is None else bool(enabled)
         self.settings_service.on_toggle_fullscreen(fs)
         (self.app.showFullScreen if fs else self.app.showNormal)()
         self.settings_service.save_window_geometry(self.app)

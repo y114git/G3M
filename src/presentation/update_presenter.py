@@ -3,6 +3,7 @@
 import logging
 
 from PyQt6.QtCore import QThread, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QMessageBox
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL
 from services.localization_service import tr
@@ -91,11 +92,16 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
             )
         return
     announce = (app.app_state.global_settings or {}).get("announce", {})
+    announce_messages = announce.get("messages", {})
+    if not isinstance(announce_messages, dict):
+        return
     announce_version = announce.get("version", 0)
     saved_version = app.app_state.local_config.get("announce_version", 0)
     if not announce_version or saved_version == -1 or announce_version == saved_version:
         return
-    announce_message = app._localized_value(announce, "message_ru", "message_en")
+    announce_message = app._localized_value(
+        announce_messages, "message_ru", "message_en"
+    )
     if not announce_message:
         save_announce(app, announce_version)
         return
@@ -103,7 +109,28 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
         app.app_state.is_shown_to_user = True
     from ui.dialogs.announce_dialog import AnnounceDialog
 
-    dialog = AnnounceDialog(announce_message, announce.get("link", ""), app)
+    localized_announce = dict(announce)
+    localized_announce["messages"] = announce_messages
+    localized_announce["message"] = announce_message
+
+    def _submit_poll(selected_options: list[str]) -> bool:
+        success, error_message = app.announce_service.submit_poll_vote(
+            localized_announce, selected_options
+        )
+        if success:
+            return True
+        QMessageBox.warning(
+            app,
+            tr("dialogs.warning"),
+            error_message or tr("dialogs.failed_submit_poll"),
+        )
+        return False
+
+    dialog = AnnounceDialog(
+        localized_announce,
+        app,
+        on_submit_poll=_submit_poll,
+    )
     dialog.accepted_with_ok.connect(lambda: save_announce(app, announce_version))
     dialog.exec()
     app.app_state.pending_announce_check = False
@@ -115,7 +142,7 @@ def save_announce(app, version: int):
 
 
 def prompt_for_update(app, update_info):
-    from config.config import LAUNCHER_VERSION, UI_COLORS
+    from config.config import APP_VERSION, UI_COLORS
 
     if app.app_state.update_in_progress:
         return
@@ -125,7 +152,7 @@ def prompt_for_update(app, update_info):
     app.app_state.update_in_progress = True
     update_message = (
         f"<b>{tr('dialogs.new_version_banner', version=update_info['version']).replace('<br>', '')}</b><br>"
-        + tr("dialogs.current_version_banner", current_version=LAUNCHER_VERSION).replace(
+        + tr("dialogs.current_version_banner", current_version=APP_VERSION).replace(
             "<br><br>", ""
         )
         + "<br><br>"

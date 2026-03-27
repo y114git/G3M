@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from config.config import LAUNCHER_VERSION
+from config.config import APP_VERSION
 
 
 def test_get_update_info_returns_platform_specific_payload(app_state):
@@ -37,7 +37,7 @@ def test_get_update_info_skips_current_version(app_state):
     feedback_service = Mock()
     app_state.global_settings = {
         "launcher_files": {
-            "version": LAUNCHER_VERSION,
+            "version": APP_VERSION,
             "urls": {"linux": "https://example.com/deltahub.tar.gz"},
         }
     }

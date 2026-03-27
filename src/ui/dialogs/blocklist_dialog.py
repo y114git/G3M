@@ -173,6 +173,8 @@ class BlocklistDialog(QDialog):
                 QListWidget::item:selected {{
                     background-color: {select_color};
                     color: {text_color};
+                    border: 2px solid {theme["select"]};
+                    border-radius: {theme["field_radius"]}px;
                 }}
             """
             )

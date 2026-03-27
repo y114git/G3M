@@ -14,7 +14,7 @@ from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
 from PyQt6.QtWidgets import QFileDialog, QWidget
 
-from config.config import LAUNCHER_VERSION, UI_COLORS
+from config.config import APP_VERSION, UI_COLORS
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
 from services.migration_service import (
@@ -151,7 +151,7 @@ class SettingsManager(QObject):
             self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def migrate_config_if_needed(self):
-        migrate_settings_payload(self.app_state.local_config, LAUNCHER_VERSION)
+        migrate_settings_payload(self.app_state.local_config, APP_VERSION)
         self.write_local_config()
 
     def on_language_changed(self, language_code: str):

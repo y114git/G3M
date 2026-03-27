@@ -15,7 +15,7 @@ from subprocess import DEVNULL, Popen, run
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from config.config import ARCH, LAUNCHER_VERSION, UI_COLORS
+from config.config import APP_VERSION, ARCH, UI_COLORS
 from models.app_state import AppState
 from models.exceptions import AppError
 from services.localization_service import tr
@@ -92,10 +92,10 @@ class UpdateChecker(QObject):
             return None
         remote_version = str(launcher_files.get("version", "")).strip()
         if not remote_version or version_sort_key(remote_version) <= version_sort_key(
-            LAUNCHER_VERSION
+            APP_VERSION
         ):
             self.feedback_service.update_status(
-                tr("status.launcher_version_up_to_date"), UI_COLORS["status_success"]
+                tr("status.app_version_up_to_date"), UI_COLORS["status_success"]
             )
             return None
         platform_key = self._get_platform_key(system)

@@ -215,20 +215,8 @@ class ModOperationsController:
             )
             if files:
                 mod.gamebanana_supported_files = files
-                mod.gamebanana_is_tool_compatible = compat.get(
-                    "has_supported_files", False
-                )
                 mod.gamebanana_compatibility_checked = compat.get(
                     "compatibility_checked", False
-                )
-                mod.gamebanana_preferred_format = (
-                    "deltahub"
-                    if any((f.get("compatibility") == "deltahub") for f in files)
-                    else (
-                        "deltamod"
-                        if any((f.get("compatibility") == "deltamod") for f in files)
-                        else None
-                    )
                 )
                 self._notify_gamebanana_card_refresh()
             return files

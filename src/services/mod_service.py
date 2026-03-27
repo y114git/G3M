@@ -717,20 +717,8 @@ class ModManager(QObject):
             )
             if files:
                 mod_info.gamebanana_supported_files = files
-                mod_info.gamebanana_is_tool_compatible = compat.get(
-                    "has_supported_files", False
-                )
                 mod_info.gamebanana_compatibility_checked = compat.get(
                     "compatibility_checked", False
-                )
-                mod_info.gamebanana_preferred_format = (
-                    "deltahub"
-                    if any((f.get("compatibility") == "deltahub") for f in files)
-                    else (
-                        "deltamod"
-                        if any((f.get("compatibility") == "deltamod") for f in files)
-                        else None
-                    )
                 )
                 return files[0]
         except Exception as e:

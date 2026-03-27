@@ -1171,6 +1171,9 @@ class ModdingToolsDialog(QDialog):
             }}
             QListWidget::item:selected {{
                 background-color: {theme["hover"]};
+                color: {theme["main_text"]};
+                border: 2px solid {theme["select"]};
+                border-radius: {theme["field_radius"]}px;
             }}
         """
         self.setStyleSheet(base + extra)

@@ -6,7 +6,7 @@ import logging
 import requests
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
+from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_SHORT
 from utils.network_utils import get_session
 
 
@@ -38,7 +38,7 @@ class PresenceWorker(QObject):
             resp = get_session().post(
                 f"{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat",
                 json={"sessionId": self.session_id},
-                timeout=NETWORK_TIMEOUT_MEDIUM,
+                timeout=NETWORK_TIMEOUT_SHORT,
             )
             if resp.status_code == 200:
                 try:

@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from config.config import LAUNCHER_VERSION, SOCIAL_LINKS
+from config.config import APP_VERSION, SOCIAL_LINKS
 from models.plugin_models import PLUGIN_API_VERSION
 from services.localization_service import localization_service, tr
 from utils.path_utils import get_user_data_root
@@ -89,7 +89,7 @@ class AboutDialog(QDialog):
         self.version_label, self.version_value = self._add_info_row(
             info_layout,
             tr("ui.about_version_label", version="").rstrip(),
-            LAUNCHER_VERSION,
+            APP_VERSION,
         )
         self.plugin_api_label, self.plugin_api_value = self._add_info_row(
             info_layout,

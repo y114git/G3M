@@ -691,10 +691,24 @@ class AppWindow(QWidget):
 
     @staticmethod
     def _localized_value(data, ru_key, en_key, fallback_key=None) -> str:
-        return data.get(
-            ru_key if localization_service.get_current_language() == "ru" else en_key,
-            "",
-        ) or (data.get(fallback_key, "") if fallback_key else "")
+        language_code = localization_service.get_current_language()
+        localized_key_map = {
+            "ru": ru_key,
+            "en": en_key,
+            "es": en_key.replace("_en", "_es"),
+            "zh_cn": en_key.replace("_en", "_zh_cn"),
+            "zh_tw": en_key.replace("_en", "_zh_tw"),
+        }
+        preferred_keys = [
+            localized_key_map.get(language_code, en_key),
+            ru_key if language_code == "ru" else en_key,
+            en_key,
+            ru_key,
+        ]
+        for key in preferred_keys:
+            if value := data.get(key, ""):
+                return value
+        return data.get(fallback_key, "") if fallback_key else ""
 
     def _set_checkbox_checked_silently(self, checkbox, checked):
         checkbox.blockSignals(True)

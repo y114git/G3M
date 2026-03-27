@@ -262,9 +262,17 @@ class ManualModInstallDialog(QDialog):
         if theme:
             list_widget.setStyleSheet(
                 f"""
+                QListWidget::item:hover {{
+                    background-color: {theme["hover"]};
+                    color: {theme["main_text"]};
+                    border: 2px solid transparent;
+                    border-radius: {theme["field_radius"]}px;
+                }}
                 QListWidget::item:selected {{
                     background-color: {theme["hover"]};
                     color: {theme["main_text"]};
+                    border: 2px solid {theme["select"]};
+                    border-radius: {theme["field_radius"]}px;
                 }}
                 """
             )

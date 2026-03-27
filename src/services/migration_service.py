@@ -73,9 +73,9 @@ def migrate_theme_settings(settings: dict[str, Any]) -> bool:
 
 def migrate_settings_payload(
     local_config: dict[str, Any],
-    launcher_version: str,
+    app_version: str,
 ) -> None:
-    local_config["cache_format_version"] = launcher_version
+    local_config["cache_format_version"] = app_version
     migrate_theme_settings(local_config)
     defaults = {
         "game_path": "",

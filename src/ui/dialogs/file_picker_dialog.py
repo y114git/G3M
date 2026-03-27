@@ -91,7 +91,7 @@ class GameBananaFilePickerDialog(QDialog):
             size=self._format_size(file_data.get("size_bytes")),
             updated=self._format_timestamp(file_data.get("timestamp")),
             downloads=file_data.get("download_count", 0),
-            format=self._format_gamebanana_format(file_data.get("compatibility")),
+            auto_install=self._format_auto_install(file_data.get("compatibility")),
             security=self._format_security(file_data),
             description=description.strip(),
             md5=file_data.get("md5") or "-",
@@ -126,16 +126,15 @@ class GameBananaFilePickerDialog(QDialog):
         try:
             dt = datetime.fromtimestamp(timestamp)
             return dt.strftime("%d.%m.%Y %H:%M")
-        except (ValueError, OSError):
+        except (ValueError, OSError, OverflowError):
             return tr("defaults.not_specified")
 
     @staticmethod
-    def _format_gamebanana_format(format_key: str | None) -> str:
-        if format_key == "deltahub":
-            return tr("ui.gamebanana_format_deltahub")
-        if format_key == "deltamod":
-            return tr("ui.gamebanana_format_deltamod")
-        return tr("defaults.not_specified")
+    def _format_auto_install(format_key: str | None) -> str:
+        key = (format_key or "").strip().lower()
+        if key in {"deltahub", "deltamod"}:
+            return tr("dialogs.gamebanana_picker_auto_install_yes")
+        return tr("dialogs.gamebanana_picker_auto_install_no")
 
     def _open_external_page(self):
         if self.external_url:

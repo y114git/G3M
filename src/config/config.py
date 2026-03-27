@@ -14,14 +14,12 @@ from . import styles as shared_styles
 load_dotenv()
 
 """Application identity and external service configuration."""
-LAUNCHER_VERSION = "2.4.7stable"
-APP_ID = "deltahub.y.114"
-SINGLE_INSTANCE_KEY = "deltahub.y.114.single-instance-lock"
-DATA_FIREBASE_URL = os.getenv("DATA_FIREBASE_URL") or ""
-CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL") or ""
+APP_VERSION = "2.4.7stable"
+SINGLE_INSTANCE_KEY = "g3m.single-instance-lock"
+CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL", "")
 SOCIAL_LINKS = {
     "telegram": "https://t.me/y_maintg",
-    "discord": "https://discord.gg/T7hyqxmSjf",
+    "discord": "https://discord.gg/2MFdvFfD9a",
 }
 BROWSER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -209,7 +207,7 @@ NETWORK_TIMEOUT_MEDIUM = 15
 NETWORK_TIMEOUT_LONG = 45
 NETWORK_TIMEOUT_HEAD = 15
 INITIALIZATION_TIMEOUT = 5000
-ONLINE_UPDATE_INTERVAL = 60000
+ONLINE_UPDATE_INTERVAL = 600000
 LAUNCHER_FALLBACK_TIMEOUT = 8000
 SPLASH_WATCHDOG_TIMEOUT = 15000
 SPLASH_RETRY_DELAY = 100
@@ -219,9 +217,7 @@ THREAD_WAIT_TIMEOUT = 2000
 DOWNLOAD_CHUNK_SIZE = 262144
 MAX_DOWNLOAD_RETRIES = 5
 SEARCH_TIMEOUT_SECONDS = 10
-ASYNC_METADATA_MIN_REQUEST_INTERVAL = 0.2
 SEARCH_EXHAUSTED_PAGE_SENTINEL = 100
-PRESENCE_THREAD_WAIT_TIMEOUT = 2000
 
 """GameBanana integration constants."""
 GAMEBANANA_API_BASE = "https://gamebanana.com/apiv11"
@@ -262,8 +258,8 @@ MOD_FILTER_TRUE_VALUES = (True, "true", "True", 1)
 MOD_FILTER_NSFW_TEXT_MARKERS = ("nsfw", "adult", "18+", "18plus", "explicit", "mature")
 
 """Legacy mod config key constants for backward compatibility."""
-LEGACY_DESCRIPTION_KEY = "".join(("tag", "line"))
-LEGACY_ICON_KEY = "_".join(("icon", "url"))
+LEGACY_DESCRIPTION_KEY = "tagline"
+LEGACY_ICON_KEY = "icon_url"
 
 
 SKIP_FILES = (

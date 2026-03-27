@@ -329,12 +329,7 @@ class ModCardWidget(BaseModWidget):
 
     _COMPAT_ATTR_MAP = {
         "gamebanana_supported_files": ("supported_files", []),
-        "gamebanana_has_compatible_file": ("has_supported_files", False),
-        "gamebanana_is_tool_compatible": ("has_supported_files", False),
         "gamebanana_compatibility_checked": ("compatibility_checked", False),
-        "gamebanana_preferred_format": ("preferred_format", None),
-        "gamebanana_has_deltahub_file": ("has_deltahub_file", False),
-        "gamebanana_has_deltamod_file": ("has_deltamod_file", False),
     }
 
     def _on_compatibility_checked(self, mod_data, compat_info):
@@ -434,7 +429,6 @@ class ModCardWidget(BaseModWidget):
                 if not self.is_installed:
                     for attr, val in [
                         ("gamebanana_compatibility_checked", False),
-                        ("gamebanana_is_tool_compatible", False),
                         ("gamebanana_supported_files", []),
                     ]:
                         setattr(self.mod_data, attr, val)

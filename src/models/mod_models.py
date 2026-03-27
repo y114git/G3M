@@ -58,14 +58,8 @@ class ModInfo:
     external_url: str | None = None
     screenshots_url: list[str] = field(default_factory=list)
     full_description: str | None = None
-    gamebanana_has_compatible_file: bool | None = None
     gamebanana_category: str | None = None
-    gamebanana_is_tool_compatible: bool = False
     gamebanana_supported_files: list[dict[str, Any]] = field(default_factory=list)
-    gamebanana_supported_tool_ids: list[int] = field(default_factory=list)
-    gamebanana_preferred_format: str | None = None
-    gamebanana_has_deltahub_file: bool = False
-    gamebanana_has_deltamod_file: bool = False
     gamebanana_compatibility_checked: bool = False
     has_full_metadata: bool = False
     playtime_hours: float = 0.0
@@ -169,25 +163,9 @@ class ModInfo:
             "external_url": data_dict.get("external_url"),
             "screenshots_url": data_dict.get("screenshots_url", []),
             "full_description": data_dict.get("full_description"),
-            "gamebanana_has_compatible_file": data_dict.get(
-                "gamebanana_has_compatible_file"
-            ),
             "gamebanana_category": data_dict.get("gamebanana_category"),
-            "gamebanana_is_tool_compatible": data_dict.get(
-                "gamebanana_is_tool_compatible", False
-            ),
             "gamebanana_supported_files": data_dict.get(
                 "gamebanana_supported_files", []
-            ),
-            "gamebanana_supported_tool_ids": data_dict.get(
-                "gamebanana_supported_tool_ids", []
-            ),
-            "gamebanana_preferred_format": data_dict.get("gamebanana_preferred_format"),
-            "gamebanana_has_deltahub_file": data_dict.get(
-                "gamebanana_has_deltahub_file", False
-            ),
-            "gamebanana_has_deltamod_file": data_dict.get(
-                "gamebanana_has_deltamod_file", False
             ),
             "gamebanana_compatibility_checked": data_dict.get(
                 "gamebanana_compatibility_checked", False

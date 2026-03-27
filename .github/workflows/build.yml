@@ -45,7 +45,6 @@ env:
   RELEASE_VERSION: ${{ inputs.version_and_tag || 'dev' }}
   RELEASE_TAG_FINAL: ${{ inputs.version_and_tag }}
   RELEASE_NAME_FINAL: ${{ inputs.release_name }}
-  DATA_FIREBASE_URL: ${{ secrets.DATA_FIREBASE_URL }}
   CLOUD_FUNCTIONS_BASE_URL: ${{ secrets.CLOUD_FUNCTIONS_BASE_URL }}
 
 jobs:
@@ -177,7 +176,7 @@ jobs:
       - name: Generate .env file
         shell: pwsh
         run: |
-          $envContent = "DATA_FIREBASE_URL=$env:DATA_FIREBASE_URL`nCLOUD_FUNCTIONS_BASE_URL=$env:CLOUD_FUNCTIONS_BASE_URL"
+          $envContent = "CLOUD_FUNCTIONS_BASE_URL=$env:CLOUD_FUNCTIONS_BASE_URL"
           [System.IO.File]::WriteAllText('.env', $envContent)
 
       - name: Build via spec
