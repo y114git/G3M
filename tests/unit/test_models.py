@@ -49,7 +49,7 @@ class TestModInfo:
             'description': 'T', 'game_version': '1.0', 'description_url': '',
             'downloads': 0, 'game': 'deltarune', 'is_verified': False,
             'files': {
-                '1': {'data_file_url': 'http://example.com/data.win', 'data_file_version': '1.0'},
+                '1': {'data_file_url': 'http://example.com/data.win'},
                 '2': {'data_file_url': 'http://example.com/ch2.win'},
             }
         }
@@ -166,15 +166,14 @@ class TestModInfo:
 class TestModFileData:
 
     def test_creation(self):
-        fd = ModFileData(description='Test', data_file_url='data.win', data_file_version='1.0')
+        fd = ModFileData(description='Test', data_file_url='data.win')
         assert fd.description == 'Test'
         assert fd.data_file_url == 'data.win'
-        assert fd.data_file_version == '1.0'
         assert fd.extra_files == []
 
     def test_with_extra_files(self):
-        ef1 = ModExtraFile(key='f1', version='1.0', url='f1.zip')
-        ef2 = ModExtraFile(key='f2', version='2.0', url='f2.zip')
+        ef1 = ModExtraFile(key='f1', url='f1.zip')
+        ef2 = ModExtraFile(key='f2', url='f2.zip')
         fd = ModFileData(extra_files=[ef1, ef2])
         assert len(fd.extra_files) == 2
         assert fd.extra_files[0].key == 'f1'
@@ -183,7 +182,7 @@ class TestModFileData:
         assert ModFileData(data_file_url='url').is_valid() is True
 
     def test_is_valid_with_extra_files(self):
-        assert ModFileData(extra_files=[ModExtraFile(key='k', version='v', url='u')]).is_valid() is True
+        assert ModFileData(extra_files=[ModExtraFile(key='k', url='u')]).is_valid() is True
 
     def test_is_valid_empty(self):
         assert ModFileData().is_valid() is False

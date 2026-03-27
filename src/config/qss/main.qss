@@ -97,7 +97,7 @@ QComboBox QAbstractItemView::item:selected {
 }
 QLineEdit {
     font-family: "%font_family_main%";
-    background-color: %frame_bg_color%;
+    background-color: %elements_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     padding: 5px 10px;
@@ -106,7 +106,7 @@ QLineEdit {
 }
 QListWidget {
     font-family: "%font_family_main%";
-    background-color: %frame_bg_color%;
+    background-color: %elements_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     border-radius: %custom_border_radius%;
@@ -130,7 +130,7 @@ QListWidget::item:selected {
 }
 QSpinBox {
     font-family: "%font_family_main%";
-    background-color: %frame_bg_color%;
+    background-color: %elements_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     padding: 5px 10px;
@@ -167,7 +167,7 @@ QSpinBox::down-arrow {
 }
 QTextEdit, QTextBrowser {
     font-family: "%font_family_main%";
-    background-color: %frame_bg_color%;
+    background-color: %elements_color%;
     color: %main_text_color%;
     border: 2px solid %border_color%;
     min-height: 100px;

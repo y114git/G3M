@@ -279,9 +279,6 @@ class DeltamodConverter:
                 files_structure[chapter_key]["data_file_url"] = os.path.basename(
                     patch_file
                 )
-                files_structure[chapter_key]["data_file_version"] = (
-                    self.deltamod_info.get("metadata", {}).get("version", "1.0.0")
-                )
             elif patch_type == "override":
                 if "extra_files" not in files_structure[chapter_key]:
                     files_structure[chapter_key]["extra_files"] = {}

@@ -75,6 +75,7 @@ class ModsBrowserTabBuilder(QObject):
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
         f_scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        f_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         f_scroll.setMinimumWidth(200)
         f_widget = self._create_filters_widget()
         f_scroll.setWidget(f_widget)
@@ -134,7 +135,7 @@ class ModsBrowserTabBuilder(QObject):
         apply_filters_frame_style(w, self.app_state)
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         align_vcenter = Qt.AlignmentFlag.AlignVCenter
-        sort_combo, _ = create_sort_controls(
+        sort_combo, sort_btn = create_sort_controls(
             self.app_state,
             [
                 (tr("ui.sort_by_relevance"), "relevant"),
@@ -152,6 +153,7 @@ class ModsBrowserTabBuilder(QObject):
         layout.addWidget(modgame_combo, 0, align_vcenter)
         layout.addSpacing(20)
         tags_label = QLabel(tr("ui.tags_label"))
+        tags_label.setToolTip(tr("tooltips.filter_by_tag"))
         layout.addWidget(tags_label, 0, align_vcenter)
         tags = create_tag_checkboxes(self.app_state, BASE_TAG_NAMES)
         for t in tags.values():
@@ -160,6 +162,7 @@ class ModsBrowserTabBuilder(QObject):
         show_nsfw_checkbox.setChecked(
             bool(self.app_state.local_config.get("show_nsfw", False))
         )
+        show_nsfw_checkbox.setToolTip(tr("tooltips.show_nsfw"))
         layout.addWidget(show_nsfw_checkbox, 0, align_vcenter)
         layout.addStretch()
         blocklist_btn = create_blocklist_button(self.app_state)
@@ -173,6 +176,7 @@ class ModsBrowserTabBuilder(QObject):
         self.widgets.update(
             {
                 "sort_combo": sort_combo,
+                "sort_order_btn": sort_btn,
                 "modgame_combo": modgame_combo,
                 "tags_label": tags_label,
                 "show_nsfw_checkbox": show_nsfw_checkbox,

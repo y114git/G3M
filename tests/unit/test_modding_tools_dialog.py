@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from PyQt6.QtWidgets import QApplication
 
+from services.localization_service import tr
 from ui.dialogs.modding_tools_dialog import _DataConvertTab, _DataConvertWorkerThread
 
 
@@ -25,6 +26,11 @@ def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
     monkeypatch.setattr(_DataConvertTab, "_populate_profiles", lambda self: None)
     tab = _DataConvertTab(_FakeG3M(), SimpleNamespace(local_config={}))
     monkeypatch.setattr(tab, "_scan_mods", lambda *_: tab._run_btn.setEnabled(True))
+
+    assert tab._profile_combo.toolTip() == tr("tooltips.profile_combo")
+    assert tab._fmt_combo.toolTip() == tr("tooltips.modding_tools_target_format")
+    assert tab._mod_list.toolTip() == tr("tooltips.modding_tools_mod_list")
+    assert tab._run_btn.toolTip() == tr("tooltips.run_tool")
 
     tab._set_busy(True)
 

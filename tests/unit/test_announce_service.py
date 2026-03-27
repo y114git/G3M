@@ -29,18 +29,19 @@ class TestAnnounceService:
         response = Mock(status_code=200)
         response.json.return_value = {"ok": True}
 
-        with patch("services.announce_service.CLOUD_FUNCTIONS_BASE_URL", "https://example.com"):
-            with patch("services.announce_service.get_session") as get_session_mock:
-                get_session_mock.return_value.post.return_value = response
-
-                success, error = service.submit_poll_vote(
-                    {
-                        "version": 7,
-                        "type": "poll_single",
-                        "poll": {"A": {}, "B": {}},
-                    },
-                    ["A"],
-                )
+        with patch(
+            "services.announce_service.CLOUD_FUNCTIONS_BASE_URL",
+            "https://example.com",
+        ), patch("services.announce_service.get_session") as get_session_mock:
+            get_session_mock.return_value.post.return_value = response
+            success, error = service.submit_poll_vote(
+                {
+                    "version": 7,
+                    "type": "poll_single",
+                    "poll": {"A": {}, "B": {}},
+                },
+                ["A"],
+            )
 
         assert success is True
         assert error == ""

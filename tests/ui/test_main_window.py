@@ -147,9 +147,14 @@ class TestTabBuilders:
         assert widgets["library_profile_label"].text() == tr("ui.profile_label")
         assert widgets["library_game_label"].text() == tr("ui.game_label")
         assert widgets["installed_mods_label"].text() == tr("ui.installed_mods_label")
+        assert widgets["profile_combo"].toolTip() == tr("tooltips.profile_combo")
+        assert widgets["chapter_mode_checkbox"].toolTip() == tr("tooltips.chapter_mode")
+        assert widgets["full_install_checkbox"].toolTip() == tr("tooltips.full_install_toggle")
+        assert widgets["priority_button"].toolTip() == tr("tooltips.mod_priority")
         widget.deleteLater()
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
+        from services.localization_service import tr
         from PyQt6.QtWidgets import QGridLayout
 
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
@@ -161,8 +166,11 @@ class TestTabBuilders:
         assert widgets["mod_list_columns"] == 1
         assert isinstance(widgets["mod_list_layout"], QGridLayout)
         assert widgets["sort_combo"].currentData() == "relevant"
+        assert widgets["sort_combo"].toolTip() == tr("tooltips.sort_mode")
+        assert widgets["modgame_combo"].toolTip() == tr("tooltips.select_game")
         assert "show_nsfw_checkbox" in widgets
         assert widgets["show_nsfw_checkbox"].isChecked() is False
+        assert widgets["show_nsfw_checkbox"].toolTip() == tr("tooltips.show_nsfw")
         widget.deleteLater()
 
     def test_mods_browser_show_nsfw_checkbox_scales_with_ui_scale(
@@ -183,6 +191,7 @@ class TestTabBuilders:
         widget.deleteLater()
 
     def test_settings_view_builder_creation(self, qapp, app_state, feedback_service):
+        from services.localization_service import tr
         from ui.builders.settings_view_builder import SettingsViewBuilder
 
         builder = SettingsViewBuilder(app_state, None)
@@ -191,3 +200,5 @@ class TestTabBuilders:
         assert "games_manager_button" in builder.get_widgets()
         assert "plugins_layout" in builder.get_widgets()
         assert "plugins_widget" in builder.get_widgets()
+        assert builder.get_widgets()["language_combo"].toolTip() == tr("tooltips.language")
+        assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr("tooltips.ui_scale")

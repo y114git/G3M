@@ -122,12 +122,14 @@ class PluginDetailsDialog(QDialog):
         actions_layout = QHBoxLayout()
         if self.plugin.manifest and self.plugin.manifest.external_link:
             external_button = QPushButton(tr("plugins.details_external"))
+            external_button.setToolTip(tr("tooltips.open_external_site"))
             external_button.clicked.connect(
                 lambda: QDesktopServices.openUrl(QUrl(self.plugin.manifest.external_link))
             )
             actions_layout.addWidget(external_button)
         if self.plugin.manifest and self._can_update:
             update_button = QPushButton(tr("plugins.details_update"))
+            update_button.setToolTip(tr("tooltips.plugin_update"))
             update_button.clicked.connect(lambda: self._on_update(self.plugin.plugin_id))
             actions_layout.addWidget(update_button)
         actions_layout.addStretch(1)
@@ -148,6 +150,7 @@ class PluginDetailsDialog(QDialog):
         delete_button.setStyleSheet(
             f"background-color: darkred; color: {tc}; border-radius: {dr}px;"
         )
+        delete_button.setToolTip(tr("tooltips.plugin_delete"))
         delete_button.clicked.connect(self._confirm_delete_plugin)
         layout.addWidget(delete_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -183,6 +186,8 @@ class PluginDetailsDialog(QDialog):
         container = QWidget(self)
         layout = QHBoxLayout(container)
         label = QLabel(_resolve_text(str(field.get("label", key))))
+        if field.get("description"):
+            label.setToolTip(_resolve_text(str(field.get("description", ""))))
         layout.addWidget(label)
         current_value = self.state_service.get_plugin_setting(
             self.plugin.plugin_id,
@@ -192,6 +197,8 @@ class PluginDetailsDialog(QDialog):
         if field_type == "bool":
             widget = QCheckBox(container)
             widget.setChecked(bool(current_value))
+            if field.get("description"):
+                widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.stateChanged.connect(
                 lambda state, plugin_id=self.plugin.plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, bool(state))
             )
@@ -212,6 +219,8 @@ class PluginDetailsDialog(QDialog):
             widget.setMinimum(min_val)
             widget.setMaximum(max_val)
             widget.setValue(cur_val)
+            if field.get("description"):
+                widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.valueChanged.connect(
                 lambda value, plugin_id=self.plugin.plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, int(value))
             )
@@ -226,20 +235,28 @@ class PluginDetailsDialog(QDialog):
                 if widget.itemData(index) == current_value:
                     widget.setCurrentIndex(index)
                     break
+            if field.get("description"):
+                widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.currentIndexChanged.connect(
                 lambda index, combo=widget, plugin_id=self.plugin.plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, combo.itemData(index))
             )
         elif field_type in {"action", "button"}:
             widget = QPushButton(_resolve_text(str(field.get("button_text", field.get("label", key)))))
+            if field.get("description"):
+                widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.clicked.connect(
                 lambda _=False, plugin_id=self.plugin.plugin_id, setting_key=key: self.runtime_service.run_settings_action(plugin_id, setting_key, self)
             )
         else:
             widget = QLineEdit(container)
             widget.setText("" if current_value is None else str(current_value))
+            if field.get("description"):
+                widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.editingFinished.connect(
                 lambda edit=widget, plugin_id=self.plugin.plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, edit.text())
             )
+        if field.get("description"):
+            widget.setToolTip(_resolve_text(str(field["description"])))
         layout.addWidget(widget, 1 if field_type not in {"action", "button"} else 0)
         return container
 

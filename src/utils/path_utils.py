@@ -547,6 +547,18 @@ def _replace_svg_color_tokens(
         flags=re.IGNORECASE,
     )
     svg = re.sub(
+        r'fill:\s*(?:#(?:0F0F0F|010002|000000|444)|black)',
+        f"fill:{color}",
+        svg,
+        flags=re.IGNORECASE,
+    )
+    svg = re.sub(
+        r'stroke:\s*(?:#(?:0C0310|0F0F0F|010002|000000|444)|black)',
+        f"stroke:{color}",
+        svg,
+        flags=re.IGNORECASE,
+    )
+    svg = re.sub(
         r'<svg([^>]*?)\bfill="(?:#(?:0F0F0F|010002|000000|444)|black)"',
         f'<svg\\1fill="{color}"',
         svg,

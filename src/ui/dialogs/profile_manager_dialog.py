@@ -73,11 +73,13 @@ class ProfileManagerDialog(QDialog):
         self.list_widget.setSelectionMode(
             QAbstractItemView.SelectionMode.SingleSelection
         )
+        self.list_widget.setToolTip(tr("tooltips.profile_reorder"))
         self.list_widget.model().rowsMoved.connect(self._on_rows_moved)
         self.list_widget.currentRowChanged.connect(self._on_selection_changed)
         layout.addWidget(self.list_widget, 1)
 
         close_btn = QPushButton(tr("ui.close_button"))
+        close_btn.setToolTip(tr("tooltips.close_dialog"))
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignRight)
 
@@ -139,6 +141,7 @@ class ProfileManagerDialog(QDialog):
 
         use_btn = QPushButton(tr("ui.use_button"), widget)
         use_btn.setObjectName("profileUseBtn")
+        use_btn.setToolTip(tr("tooltips.use_profile"))
         use_btn.setVisible(False)
         use_btn.clicked.connect(lambda _=False, n=summary["name"]: self._on_use(n))
         h_layout.addWidget(use_btn)

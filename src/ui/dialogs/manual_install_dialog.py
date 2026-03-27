@@ -2,9 +2,10 @@ import logging
 import os
 import shutil
 import zipfile
+from typing import override
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QSize, Qt, QUrl
+from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -25,12 +26,14 @@ from config.config import DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
 from models.game_modes import get_all_game_entries, get_game
 from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values
+from ui.common.styling import clamp_border_radius, get_ui_scale_factor
 from utils.file_utils import (
     get_chapter_folder_name,
     get_unique_mod_dir,
     save_json,
 )
 from utils.mod_config_parser import build_mod_config_data
+from utils.path_utils import colored_icon
 
 
 class ManualModInstallDialog(QDialog):
@@ -68,6 +71,8 @@ class ManualModInstallDialog(QDialog):
                 self.mod_service = p.mod_service
                 break
             p = p.parent() if hasattr(p, "parent") and callable(p.parent) else None
+        if self.app_state is None:
+            self.app_state = self._resolve_app_state(parent)
         self.temp_dir_to_cleanup = None
         self.initial_game_type = initial_game_type
         self.data_file_selections = {}
@@ -83,6 +88,83 @@ class ManualModInstallDialog(QDialog):
         self.setMinimumSize(800, 600)
         self._scan_files()
         self.init_ui()
+
+    @override
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._center_on_screen()
+
+    def _center_on_screen(self):
+        screen = self.screen() or self.windowHandle().screen() if self.windowHandle() else None
+        if screen is None and self.parentWidget():
+            screen = self.parentWidget().screen()
+        if screen is None:
+            return
+        frame = self.frameGeometry()
+        frame.moveCenter(screen.availableGeometry().center())
+        self.move(frame.topLeft())
+
+    def _icon(self, icon_name: str):
+        icon_key = {
+            "folder_icon.svg": "folder",
+            "delete_icon.svg": "delete",
+            "cross_icon.svg": "cross",
+            "add_icon.svg": "add",
+        }.get(icon_name, "folder")
+        return colored_icon(icon_key, self._theme_value("main_text", "#e8e9eb"))
+
+    def _mix_color(self, color_value: str, factor=0.18):
+        color = QColor(color_value)
+        if not color.isValid():
+            return color_value
+        base = QColor("#000000")
+        mixed = QColor(
+            round(color.red() * (1 - factor) + base.red() * factor),
+            round(color.green() * (1 - factor) + base.green() * factor),
+            round(color.blue() * (1 - factor) + base.blue() * factor),
+            235,
+        )
+        return mixed.name(QColor.NameFormat.HexArgb)
+
+    def _theme_value(self, key: str, fallback: str) -> str:
+        theme = (
+            get_dialog_theme_values(self._app_state or self.app_state)
+            if (self._app_state or self.app_state)
+            else {}
+        )
+        return theme.get(key, fallback)
+
+    @staticmethod
+    def _resolve_app_state(start_obj) -> object | None:
+        current = start_obj
+        visited = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            app_state = getattr(current, "app_state", None)
+            if app_state is not None and getattr(app_state, "local_config", None) is not None:
+                return app_state
+            parent_getter = getattr(current, "parent", None)
+            if callable(parent_getter):
+                current = parent_getter()
+            else:
+                current = None
+        return None
+
+    def _ui_scale(self) -> float:
+        config = getattr(self.app_state, "local_config", None)
+        return get_ui_scale_factor(config, default=1.0) if config else 1.0
+
+    def _icon_size(self, base: int) -> QSize:
+        size = max(14, round(base * self._ui_scale()))
+        return QSize(size, size)
+
+    def _center_combo_text(self, combo: QComboBox) -> None:
+        combo.setEditable(True)
+        line_edit = combo.lineEdit()
+        if line_edit:
+            line_edit.setReadOnly(True)
+            line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            line_edit.setCursor(Qt.CursorShape.ArrowCursor)
 
     def closeEvent(self, event):
         if self.temp_dir_to_cleanup and os.path.exists(self.temp_dir_to_cleanup):
@@ -104,10 +186,16 @@ class ManualModInstallDialog(QDialog):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(18, 18, 18, 18)
+        main_layout.setSpacing(14)
+
         game_layout = QHBoxLayout()
         game_layout.addStretch()
         game_layout.addWidget(QLabel(tr("ui.mod_type_label")))
         self.game_combo = QComboBox()
+        self.game_combo.setMinimumWidth(240)
+        self.game_combo.setToolTip(tr("tooltips.manual_install_game"))
+        self._center_combo_text(self.game_combo)
         for entry in get_all_game_entries():
             self.game_combo.addItem(entry.display_name, entry.id)
         game_value = self.initial_game_type or self.gamebanana_metadata.get("game")
@@ -124,7 +212,7 @@ class ManualModInstallDialog(QDialog):
         game_layout.addWidget(self.game_combo)
         game_layout.addStretch()
         main_layout.addLayout(game_layout)
-        main_layout.addSpacing(20)
+        main_layout.addWidget(self._build_summary_card())
         self.tab_widget = QTabWidget()
         self.tab_widget.setStyleSheet("QTabWidget::tab-bar { alignment: center; }")
         self._create_data_tab()
@@ -139,14 +227,57 @@ class ManualModInstallDialog(QDialog):
         button_box.accepted.connect(self._on_finish)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
+        self._apply_theme_styles()
+
+    def _build_section_title(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet("font-size: 15px; font-weight: 700;")
+        return label
+
+    def _build_summary_card(self) -> QWidget:
+        frame = QWidget()
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(4)
+        self.files_summary_label = QLabel()
+        self.files_summary_label.setWordWrap(True)
+        self.files_summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.files_summary_label.setToolTip(tr("tooltips.manual_install_summary"))
+        layout.addWidget(self.files_summary_label)
+        self._refresh_summary_text()
+        return frame
+
+    def _refresh_summary_text(self):
+        total = len(self.all_files)
+        docs = sum(1 for fp, _ in self.all_files if self._is_openable_doc(fp))
+        possible_data = sum(
+            1
+            for fp, _ in self.all_files
+            if os.path.splitext(fp)[1].lower() in DATA_FILE_EXTENSIONS
+        )
+        assigned_data_paths = set(self.data_file_selections.values())
+        for patch_map in self.xdelta_patches_mappings.values():
+            assigned_data_paths.update(patch_map.keys())
+            assigned_data_paths.update(patch_map.values())
+        data_count = max(0, possible_data - len(assigned_data_paths))
+        text = tr(
+            "ui.manual_install_summary",
+            total=total,
+            docs=docs,
+            data=data_count,
+        )
+        if hasattr(self, "files_summary_label"):
+            self.files_summary_label.setText(text)
 
     def _create_data_tab(self):
         data_widget = QWidget()
         data_layout = QVBoxLayout(data_widget)
-        data_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        data_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         info_label = QLabel(tr("dialogs.data_tab_info"))
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info_label.setProperty("hintText", True)
+        info_label.setToolTip(tr("tooltips.manual_install_data_tab"))
         data_layout.addWidget(info_label)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -168,7 +299,9 @@ class ManualModInstallDialog(QDialog):
         instructions_label = QLabel(instructions_text)
         instructions_label.setWordWrap(True)
         instructions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        instructions_label.setStyleSheet("font-size: 11px; color: #888; padding: 10px;")
+        instructions_label.setProperty("hintText", True)
+        instructions_label.setToolTip(tr("tooltips.manual_install_extra_tab"))
+        instructions_label.setStyleSheet("font-size: 11px; padding: 10px;")
         extra_layout.addWidget(instructions_label)
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -207,39 +340,47 @@ class ManualModInstallDialog(QDialog):
         widget = QWidget()
         widget._chapter_id = chapter_id
         layout = QVBoxLayout(widget)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         label = display_name or self._chapter_display_name(chapter_id)
         info_text = tr("dialogs.select_data_file_info", chapter=label)
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info_label.setProperty("hintText", True)
         layout.addWidget(info_label)
         file_path_layout = QHBoxLayout()
         self.data_file_edits = getattr(self, "data_file_edits", {})
         file_edit = QLineEdit()
         file_edit.setReadOnly(True)
         file_edit.setPlaceholderText(tr("dialogs.no_file_selected"))
+        file_edit.setToolTip(tr("tooltips.manual_install_data_file"))
         if chapter_id in self.data_file_selections:
             file_edit.setText(self.data_file_selections[chapter_id])
         self.data_file_edits[chapter_id] = file_edit
         file_path_layout.addWidget(file_edit)
-        browse_btn = QPushButton(tr("ui.browse_button"))
+        browse_btn = self._make_tool_button(
+            "folder_icon.svg", tr("ui.browse_button"), tr("ui.browse_button")
+        )
         browse_btn.clicked.connect(
             lambda checked, cid=chapter_id: self._browse_data_file(cid)
         )
         file_path_layout.addWidget(browse_btn)
-        clear_btn = QPushButton(tr("ui.clear_button"))
+        clear_btn = self._make_tool_button(
+            "cross_icon.svg", tr("ui.clear_button"), ""
+        )
+        clear_btn.setToolTip(tr("tooltips.clear_selection"))
         clear_btn.clicked.connect(
             lambda checked, cid=chapter_id: self._clear_data_file(cid)
         )
         file_path_layout.addWidget(clear_btn)
         layout.addLayout(file_path_layout)
-        layout.addSpacing(20)
         add_xdelta_btn = QPushButton(tr("dialogs.add_additional_xdelta"))
+        add_xdelta_btn.setIcon(self._icon("add_icon.svg"))
+        add_xdelta_btn.setToolTip(tr("tooltips.manual_install_add_xdelta"))
         add_xdelta_btn.clicked.connect(
             lambda checked, cid=chapter_id: self._add_xdelta_patch(cid)
         )
-        layout.addWidget(add_xdelta_btn)
+        layout.addWidget(add_xdelta_btn, 0, Qt.AlignmentFlag.AlignCenter)
         layout.addSpacing(10)
         xdelta_patches_section = self._create_xdelta_patches_section(chapter_id)
         if xdelta_patches_section:
@@ -250,32 +391,14 @@ class ManualModInstallDialog(QDialog):
     def _show_file_picker_dialog(
         self, files: list, title: str, label_text: str
     ) -> str | None:
-        from PyQt6.QtWidgets import QListWidget
-
         file_dialog = QDialog(self)
         file_dialog.setWindowTitle(title)
         file_dialog.resize(600, 400)
         layout = QVBoxLayout(file_dialog)
         layout.addWidget(QLabel(label_text))
+        from PyQt6.QtWidgets import QListWidget
+
         list_widget = QListWidget()
-        theme = get_dialog_theme_values(self.app_state) if self.app_state else {}
-        if theme:
-            list_widget.setStyleSheet(
-                f"""
-                QListWidget::item:hover {{
-                    background-color: {theme["hover"]};
-                    color: {theme["main_text"]};
-                    border: 2px solid transparent;
-                    border-radius: {theme["field_radius"]}px;
-                }}
-                QListWidget::item:selected {{
-                    background-color: {theme["hover"]};
-                    color: {theme["main_text"]};
-                    border: 2px solid {theme["select"]};
-                    border-radius: {theme["field_radius"]}px;
-                }}
-                """
-            )
         for file_path, rel_path in files:
             item_text = f"{os.path.basename(file_path)} ({rel_path})"
             list_widget.addItem(item_text)
@@ -330,6 +453,13 @@ class ManualModInstallDialog(QDialog):
         button.clicked.connect(lambda _=False, p=file_path: self._open_local_file(p))
         return button
 
+    def _make_tool_button(self, icon_name, tooltip: str, text: str = "") -> QPushButton:
+        button = QPushButton(text)
+        button.setIcon(self._icon(icon_name))
+        button.setIconSize(self._icon_size(18))
+        button.setToolTip(tooltip)
+        return button
+
     def _open_local_file(self, file_path: str):
         if not self._is_openable_doc(file_path):
             return
@@ -370,6 +500,7 @@ class ManualModInstallDialog(QDialog):
             self._update_data_file_visibility()
             self._populate_extra_files_list()
             self._update_xdelta_patches_section(chapter_id)
+            self._refresh_summary_text()
 
     def _clear_data_file(self, chapter_id: str):
         if chapter_id in self.data_file_selections:
@@ -379,6 +510,7 @@ class ManualModInstallDialog(QDialog):
         self._update_data_file_visibility()
         self._populate_extra_files_list()
         self._update_xdelta_patches_section(chapter_id)
+        self._refresh_summary_text()
 
     def _update_data_file_visibility(self):
         for chapter_id in list(self.xdelta_patch_widgets.keys()):
@@ -414,7 +546,8 @@ class ManualModInstallDialog(QDialog):
         info_label = QLabel(tr("dialogs.xdelta_patches_info"))
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info_label.setStyleSheet("font-size: 11px; color: #888; padding: 10px;")
+        info_label.setProperty("hintText", True)
+        info_label.setStyleSheet("font-size: 11px; padding: 10px;")
         section_layout.addWidget(info_label)
         section_title = QLabel(tr("dialogs.xdelta_patches_section"))
         section_title.setStyleSheet("font-weight: bold; font-size: 12px;")
@@ -447,6 +580,7 @@ class ManualModInstallDialog(QDialog):
         self, file_path: str, rel_path: str, chapter_id: int
     ) -> QWidget:
         widget = QWidget()
+        widget.setProperty("fileCard", True)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
@@ -460,23 +594,27 @@ class ManualModInstallDialog(QDialog):
         ):
             path_input.setText(self.xdelta_patches_mappings[chapter_id][file_path])
         path_input.setPlaceholderText(tr("dialogs.xdelta_patch_target_path"))
+        path_input.setToolTip(tr("tooltips.manual_install_xdelta_target"))
         path_input.textChanged.connect(
             lambda text, fp=file_path, cid=chapter_id: (
                 self._on_xdelta_target_path_changed(fp, text, cid)
             )
         )
         layout.addWidget(path_input, 1)
-        browse_btn = QPushButton(tr("ui.browse_button"))
-        browse_btn.setMinimumWidth(max(80, browse_btn.sizeHint().width() + 18))
+        browse_btn = self._make_tool_button(
+            "folder_icon.svg", tr("ui.browse_button"), tr("ui.browse_button")
+        )
         browse_btn.clicked.connect(
             lambda checked, fp=file_path, cid=chapter_id: (
                 self._browse_xdelta_target_file(fp, cid)
             )
         )
         layout.addWidget(browse_btn)
-        clear_btn = QPushButton(tr("ui.clear_button"))
-        clear_btn.setMinimumWidth(max(70, clear_btn.sizeHint().width() + 18))
+        clear_btn = self._make_tool_button(
+            "cross_icon.svg", tr("ui.clear_button"), ""
+        )
         clear_btn.setObjectName(f"xdelta_clear_btn_{file_path}")
+        clear_btn.setToolTip(tr("tooltips.clear_selection"))
         clear_btn.clicked.connect(
             lambda checked, fp=file_path, cid=chapter_id: self._clear_xdelta_patch(
                 fp, cid
@@ -566,6 +704,7 @@ class ManualModInstallDialog(QDialog):
             self.xdelta_patches_mappings[chapter_id][file_path] = ""
             self._update_xdelta_patches_section(chapter_id)
             self._populate_extra_files_list()
+            self._refresh_summary_text()
 
     def _clear_xdelta_patch(self, file_path: str, chapter_id: int):
         if (
@@ -575,6 +714,7 @@ class ManualModInstallDialog(QDialog):
             del self.xdelta_patches_mappings[chapter_id][file_path]
         self._update_xdelta_patches_section(chapter_id)
         self._populate_extra_files_list()
+        self._refresh_summary_text()
 
     def _update_xdelta_patches_section(self, chapter_id: int):
         current_tab_index = self.data_tabs.currentIndex()
@@ -626,6 +766,7 @@ class ManualModInstallDialog(QDialog):
 
     def _create_extra_file_widget(self, file_path: str, rel_path: str) -> QWidget:
         widget = QWidget()
+        widget.setProperty("fileCard", True)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
@@ -649,8 +790,10 @@ class ManualModInstallDialog(QDialog):
         if file_path in self.unused_files:
             path_input.setEnabled(False)
         layout.addWidget(path_input, 1)
-        browse_btn = QPushButton(tr("ui.browse_button"))
-        browse_btn.setMinimumWidth(max(80, browse_btn.sizeHint().width() + 18))
+        browse_btn = self._make_tool_button(
+            "folder_icon.svg", tr("ui.browse_button"), tr("ui.browse_button")
+        )
+        browse_btn.setObjectName("browse_target_button")
         browse_btn.clicked.connect(
             lambda checked, fp=file_path: self._browse_target_folder(fp)
         )
@@ -658,13 +801,11 @@ class ManualModInstallDialog(QDialog):
             browse_btn.setEnabled(False)
         layout.addWidget(browse_btn)
         toggle_btn = QPushButton()
-        toggle_btn.setMinimumWidth(max(70, toggle_btn.sizeHint().width() + 18))
         toggle_btn.setObjectName(f"toggle_btn_{file_path}")
         if file_path in self.unused_files:
             toggle_btn.setText(tr("ui.use_button"))
         else:
             toggle_btn.setText(tr("ui.remove_button"))
-        toggle_btn.setMinimumWidth(max(70, toggle_btn.sizeHint().width() + 18))
         toggle_btn.clicked.connect(
             lambda checked, fp=file_path: self._toggle_file_usage(fp)
         )
@@ -757,18 +898,62 @@ class ManualModInstallDialog(QDialog):
             toggle_btn.setText(
                 tr("ui.use_button") if is_unused else tr("ui.remove_button")
             )
-            toggle_btn.setMinimumWidth(max(70, toggle_btn.sizeHint().width() + 18))
         path_input = widget.findChild(QLineEdit, "path_input")
         if path_input:
             path_input.setEnabled(not is_unused)
             if is_unused:
                 path_input.clear()
-        for child in widget.findChildren(QPushButton):
-            if child.objectName() != f"toggle_btn_{file_path}" and child.text() == tr(
-                "ui.browse_button"
-            ):
-                child.setEnabled(not is_unused)
-                break
+        browse_btn = widget.findChild(QPushButton, "browse_target_button")
+        if browse_btn:
+            browse_btn.setEnabled(not is_unused)
+        self._refresh_summary_text()
+
+    def _apply_theme_styles(self):
+        border = self._theme_value("border", "#2d5440")
+        background = self._theme_value("background", "#132019")
+        elements = self._theme_value("elements", "#1d3a2b")
+        hint = self._theme_value("secondary_text", "#8fa89a")
+        field_bg = self._mix_color(elements, 0.08)
+        self.setStyleSheet(
+            f"""
+            QDialog {{
+                background-color: {self._mix_color(background, 0.08)};
+            }}
+            QWidget {{
+                color: {self._theme_value("main_text", "#e8e9eb")};
+            }}
+            QTabWidget::pane, QScrollArea {{
+                background-color: {field_bg};
+            }}
+            QLineEdit, QComboBox {{
+                background-color: {elements};
+            }}
+            QComboBox {{
+                border: 2px solid {border};
+                border-radius: {clamp_border_radius(7, height=max(30, round(36 * self._ui_scale())), border_width=2)}px;
+            }}
+            QComboBox:hover, QComboBox:focus {{
+                border: 2px solid {self._theme_value("hover", "#3cb371")};
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {elements};
+                border: 2px solid {border};
+                selection-background-color: {self._theme_value("hover", "#3cb371")};
+                selection-color: {self._theme_value("main_text", "#e8e9eb")};
+            }}
+            QWidget[fileCard="true"] {{
+                background-color: {field_bg};
+                border: 1px solid {border};
+                border-radius: 10px;
+            }}
+            QLabel[hintText="true"] {{
+                color: {hint};
+                qproperty-alignment: AlignCenter;
+            }}
+            """
+        )
+        for widget in (self.files_summary_label,):
+            widget.setStyleSheet(f"color: {hint}; background-color: {elements}; border: 1px solid {border}; border-radius: 10px;")
 
     def _on_finish(self):
         has_data_files = bool(self.data_file_selections)

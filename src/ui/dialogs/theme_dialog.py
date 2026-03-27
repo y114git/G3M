@@ -18,18 +18,23 @@ class ThemeManagementDialog(QDialog):
 
         info_label = QLabel(tr("themes.current_settings") + ":")
         info_label.setStyleSheet("font-weight: bold;")
+        info_label.setToolTip(tr("tooltips.theme_current_settings"))
         layout.addWidget(info_label)
 
         settings_text = self._build_settings_text()
         settings_label = QLabel(settings_text)
+        settings_label.setToolTip(tr("tooltips.theme_current_settings"))
         layout.addWidget(settings_label)
 
         button_layout = QHBoxLayout()
         import_btn = QPushButton(tr("buttons.import"))
+        import_btn.setToolTip(tr("tooltips.import_theme"))
         import_btn.clicked.connect(self._on_import)
         export_btn = QPushButton(tr("buttons.export"))
+        export_btn.setToolTip(tr("tooltips.export_theme"))
         export_btn.clicked.connect(self._on_export)
         cancel_btn = QPushButton(tr("dialogs.cancel"))
+        cancel_btn.setToolTip(tr("tooltips.cancel"))
         cancel_btn.clicked.connect(self.reject)
 
         button_layout.addWidget(import_btn)

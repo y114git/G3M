@@ -160,6 +160,12 @@ def relocalize_texts(w):
         and w._modding_tools_dialog.isVisible()
     ):
         w._modding_tools_dialog.relocalize_ui()
+    if (
+        hasattr(w, "_announce_dialog")
+        and w._announce_dialog
+        and w._announce_dialog.isVisible()
+    ):
+        w._announce_dialog.relocalize_ui()
     for btn_attr in ("library_modding_tools_button",):
         btn = getattr(w, btn_attr, None)
         if btn:

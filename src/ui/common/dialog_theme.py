@@ -35,7 +35,7 @@ def build_dialog_theme_stylesheet(app_state):
             border-radius: {theme["border_radius"]}px;
         }}
         QLineEdit {{
-            background-color: {theme["background"]};
+            background-color: {theme["elements"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["field_radius"]}px;
             color: {theme["main_text"]};
@@ -43,7 +43,7 @@ def build_dialog_theme_stylesheet(app_state):
             font-size: 16px;
         }}
         QComboBox {{
-            background-color: {theme["background"]};
+            background-color: {theme["elements"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["field_radius"]}px;
             color: {theme["main_text"]};
@@ -62,7 +62,7 @@ def build_dialog_theme_stylesheet(app_state):
             border-color: #6f6f6f;
         }}
         QListWidget {{
-            background-color: {theme["background"]};
+            background-color: {theme["elements"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["border_radius"]}px;
             color: {theme["main_text"]};
@@ -77,7 +77,7 @@ def build_dialog_theme_stylesheet(app_state):
             background-color: {theme["hover"]};
         }}
         QComboBox QAbstractItemView {{
-            background-color: {theme["background"]};
+            background-color: {theme["elements"]};
             color: {theme["main_text"]};
             selection-background-color: {theme["hover"]};
             font-size: 16px;

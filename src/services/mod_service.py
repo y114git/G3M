@@ -31,7 +31,6 @@ from utils.mod_config_parser import (
     normalize_mod_config_data,
     parse_extra_files_raw,
     resolve_chapter_folder,
-    resolve_data_file_version,
     resolve_local_icon_path,
 )
 from utils.mod_scan_utils import (
@@ -628,7 +627,6 @@ class ModManager(QObject):
                 mod.files[normalized_key] = ModFileData(
                     description=ch_info.get("description"),
                     data_file_url=ch_info.get("data_file_url"),
-                    data_file_version=resolve_data_file_version(ch_info),
                     extra_files=extra_files_list,
                 )
             except Exception as e:
@@ -665,7 +663,6 @@ class ModManager(QObject):
             mod.files[normalized_key] = ModFileData(
                 description=config_data.get("description", ""),
                 data_file_url=data_file_url,
-                data_file_version=resolve_data_file_version(ch_info),
                 extra_files=extra_files,
             )
 
@@ -990,24 +987,6 @@ class ModManager(QObject):
             logging.error(f"delete_mod_files: cleanup failed: {e}", exc_info=True)
             raise
 
-    @staticmethod
-    def _collect_remote_versions(mod: mod_models.ModInfo, chapter_id: str) -> dict:
-        if chapter_id == "deltarunedemo":
-            return (
-                {"demo": mod.demo_version}
-                if mod.is_valid_for_demo() and mod.demo_version
-                else {}
-            )
-        ch = mod.get_chapter_data(chapter_id)
-        if not ch:
-            return {}
-        d = {}
-        if ch.data_file_version:
-            d["data"] = ch.data_file_version
-        for ef in ch.extra_files:
-            d[ef.key] = ef.version
-        return d
-
     def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: str) -> str:
         if mod.is_gamebanana_mod():
             return "ready"
@@ -1016,32 +995,14 @@ class ModManager(QObject):
         mod_info = cache.get(mod_id)
         if not mod_info:
             return "install"
-        remote_versions = self._collect_remote_versions(mod, chapter_id)
-        if not remote_versions:
-            return "n/a"
         config_data = mod_info.config_data
         file_key = normalize_chapter_id(chapter_id, config_data.get("game"))
-        local_versions = {}
         files_data = config_data.get("files", {})
         if file_key in files_data:
             file_info = files_data[file_key]
-            if file_info.get("data_file_version"):
-                local_versions["data"] = file_info["data_file_version"]
-            versions_data = file_info.get("versions", {})
-            for version_id, version in versions_data.items():
-                local_versions[version_id] = version
-        if not local_versions:
-            return "install"
-        for k in local_versions:
-            if k not in remote_versions:
-                return "update"
-        from utils.path_utils import version_sort_key
-
-        for k, rv in remote_versions.items():
-            lv = local_versions.get(k)
-            if version_sort_key(rv) > version_sort_key(lv or "0.0.0"):
-                return "update"
-        return "ready"
+            if file_info.get("data_file_url") or file_info.get("extra_files"):
+                return "ready"
+        return "install"
 
     def mod_has_update_available(self, mod_data) -> bool:
         try:

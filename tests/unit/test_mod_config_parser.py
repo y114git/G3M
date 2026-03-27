@@ -64,7 +64,7 @@ def test_normalize_files_data_converts_tab_ids_to_file_keys():
     assert list(files) == ["deltarune_4"]
     assert files["deltarune_4"]["data_file_url"] == "DATA.win"
     assert files["deltarune_4"]["extra_files"] == [
-        {"key": "extras", "version": "1.0.0", "url": "bonus.zip"}
+        {"key": "extras", "url": "bonus.zip"}
     ]
 
 
@@ -82,7 +82,7 @@ def test_normalize_files_data_with_game_prefix_normalizes_chapter_ids():
     assert list(files) == ["deltarune_4"]
     assert files["deltarune_4"]["data_file_url"] == "DATA.win"
     assert files["deltarune_4"]["extra_files"] == [
-        {"key": "extras", "version": "1.0.0", "url": "bonus.zip"}
+        {"key": "extras", "url": "bonus.zip"}
     ]
 
 

@@ -128,7 +128,8 @@ class UrlInstallThread(BaseInstallWorker):
         config_data = load_mod_config(mod_config_path)
         if not config_data:
             return None
-        mod_id = normalize_mod_id(config_data)
+        normalize_mod_id(config_data)
+        mod_id = config_data.get("id")
         mod_name = config_data.get("name", "imported_mod")
         target_mod_dir = self._create_unique_mod_dir(
             self.main_window.app_state.mods_dir, mod_name
@@ -140,7 +141,8 @@ class UrlInstallThread(BaseInstallWorker):
             logging.info(
                 f"Installed DELTAHUB mod from URL: {target_mod_dir}, mod_id={mod_id}"
             )
-        except Exception:
+        except Exception as e:
+            logging.error(f"Failed to save mod config: {e}", exc_info=True)
             return None
         return target_mod_dir
 

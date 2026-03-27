@@ -75,97 +75,6 @@ class InstallModsThread(QThread):
                 f"InstallModsThread.cancel: cleanup failed: {e}", exc_info=True
             )
 
-    def _collect_remote_versions_for_chapter(self, mod, chapter_id: str) -> dict:
-        versions: dict[str, str] = {}
-        if chapter_id == "deltarunedemo":
-            if mod.is_valid_for_demo() and mod.demo_version:
-                versions["demo"] = mod.demo_version
-            return versions
-        chapter_data = mod.get_chapter_data(chapter_id)
-        if not chapter_data:
-            return versions
-        if chapter_data.data_file_version:
-            versions["data"] = chapter_data.data_file_version
-        for extra_file in chapter_data.extra_files:
-            if extra_file and extra_file.key and extra_file.version:
-                versions[extra_file.key] = extra_file.version
-        return versions
-
-    def _should_update_component(
-        self, mod, chapter_id: str, existing_folder: str
-    ) -> dict:
-        if not existing_folder:
-            return {}
-        config_path = os.path.join(
-            self.main_window.app_state.mods_dir, existing_folder, MOD_CONFIG_FILENAME
-        )
-        if not os.path.exists(config_path):
-            return {}
-        try:
-            config_data = self.main_window.settings_service.read_json(config_path)
-            local_versions = (
-                config_data.get("files", {}).get(chapter_id, {}).get("versions", {})
-                or {}
-            )
-            remote_versions = self._collect_remote_versions_for_chapter(mod, chapter_id)
-            from utils.path_utils import version_sort_key
-
-            components_to_update: dict[str, dict] = {}
-            chapter_data = (
-                mod.get_chapter_data(chapter_id)
-                if chapter_id != "deltarunedemo"
-                else None
-            )
-            if (
-                chapter_data
-                and chapter_data.data_file_url
-                and remote_versions.get("data")
-            ):
-                if not is_valid_url(chapter_data.data_file_url):
-                    logging.warning(
-                        f"_should_update_component: Invalid URL for data file: {chapter_data.data_file_url}"
-                    )
-                else:
-                    local_data_v = local_versions.get("data")
-                    remote_data_v = remote_versions.get("data")
-                    if remote_data_v and version_sort_key(
-                        remote_data_v
-                    ) > version_sort_key(local_data_v or "0.0.0"):
-                        components_to_update["data"] = {
-                            "url": chapter_data.data_file_url,
-                            "local_version": local_data_v,
-                            "remote_version": remote_data_v,
-                        }
-            if chapter_data:
-                for extra_file in chapter_data.extra_files:
-                    if not is_valid_url(extra_file.url):
-                        logging.warning(
-                            f"_should_update_component: Invalid URL for extra file {extra_file.key}: {extra_file.url}"
-                        )
-                        continue
-                    rv = remote_versions.get(extra_file.key)
-                    lv = local_versions.get(extra_file.key)
-                    if rv and version_sort_key(rv) > version_sort_key(lv or "0.0.0"):
-                        components_to_update[extra_file.key] = {
-                            "url": extra_file.url,
-                            "local_version": lv,
-                            "remote_version": rv,
-                        }
-                remote_extra_keys = {ef.key for ef in chapter_data.extra_files}
-                for missing_key in [
-                    k
-                    for k in local_versions
-                    if k != "data" and k not in remote_extra_keys
-                ]:
-                    components_to_update[missing_key] = {"delete": True}
-            return components_to_update
-        except Exception as e:
-            logging.error(
-                f"_should_update_component: failed to compute updates: {e}",
-                exc_info=True,
-            )
-            return {}
-
     def _download_component_file(
         self,
         url: str,
@@ -242,6 +151,7 @@ class InstallModsThread(QThread):
             tasks = []
             total_bytes = 0
             mod_folders = {}
+            validated_files = {}
             for mod, chapter_id in self.install_tasks:
                 key = get_mod_id(mod)
                 if key not in mod_folders:
@@ -255,8 +165,6 @@ class InstallModsThread(QThread):
                         mod_folders[key] = get_unique_mod_dir(
                             self.main_window.app_state.mods_dir, mod.name
                         )
-                mod_id = get_mod_id(mod)
-                existing_folder = mod_folders.get(mod_id, "")
                 chapter_data = (
                     mod.get_chapter_data(chapter_id)
                     if chapter_id != "deltarunedemo"
@@ -276,55 +184,64 @@ class InstallModsThread(QThread):
                         logging.warning(
                             f"InstallModsThread: Invalid URL for demo: {mod.demo_url}"
                         )
+                        continue
+                    validated_files.setdefault(key, {})[chapter_id] = {
+                        "data_file_url": os.path.basename(mod.demo_url),
+                        "data_file_version": mod.demo_version or "1.0.0",
+                        "versions": {"demo": mod.demo_version or "1.0.0"},
+                    }
                 elif chapter_data:
-                    components_to_update = self._should_update_component(
-                        mod, chapter_id, existing_folder
-                    )
-                    if not components_to_update:
-                        if chapter_data.data_file_url and is_valid_url(
+                    file_info = {}
+                    if chapter_data.data_file_url and is_valid_url(
+                        chapter_data.data_file_url
+                    ):
+                        tasks.append(
+                            {
+                                "mod": mod,
+                                "url": chapter_data.data_file_url,
+                                "chapter_id": chapter_id,
+                                "component": "data",
+                            }
+                        )
+                        file_info["data_file_url"] = os.path.basename(
                             chapter_data.data_file_url
-                        ):
+                        )
+                        if chapter_data.data_file_version:
+                            file_info["data_file_version"] = chapter_data.data_file_version
+                            file_info["versions"] = {
+                                "data": chapter_data.data_file_version
+                            }
+                    elif chapter_data.data_file_url:
+                        logging.warning(
+                            f"InstallModsThread: Invalid URL for data file: {chapter_data.data_file_url}"
+                        )
+                    extra_files_dict = {}
+                    for extra_file in chapter_data.extra_files:
+                        if is_valid_url(extra_file.url):
                             tasks.append(
                                 {
                                     "mod": mod,
-                                    "url": chapter_data.data_file_url,
+                                    "url": extra_file.url,
                                     "chapter_id": chapter_id,
-                                    "component": "data",
-                                }
+                                    "component": extra_file.key,
+                                    }
+                                )
+                            extra_files_dict.setdefault(extra_file.key, []).append(
+                                os.path.basename(extra_file.url)
                             )
-                        for extra_file in chapter_data.extra_files:
-                            if is_valid_url(extra_file.url):
-                                tasks.append(
-                                    {
-                                        "mod": mod,
-                                        "url": extra_file.url,
-                                        "chapter_id": chapter_id,
-                                        "component": extra_file.key,
-                                    }
+                            if extra_file.version:
+                                file_info.setdefault("versions", {})[extra_file.key] = (
+                                    extra_file.version
                                 )
-                            else:
-                                logging.warning(
-                                    f"InstallModsThread: Invalid URL for extra file {extra_file.key}: {extra_file.url}"
-                                )
-                    else:
-                        for component, info in components_to_update.items():
-                            if info.get("delete"):
-                                tasks.append(
-                                    {
-                                        "mod": mod,
-                                        "chapter_id": chapter_id,
-                                        "component": component,
-                                        "delete": True,
-                                    }
-                                )
-                                continue
-                            t = {
-                                "mod": mod,
-                                "url": info["url"],
-                                "chapter_id": chapter_id,
-                                "component": component,
-                            }
-                            tasks.append(t)
+                        else:
+                            logging.warning(
+                                f"InstallModsThread: Invalid URL for extra file {extra_file.key}: {extra_file.url}"
+                            )
+                    if file_info or extra_files_dict:
+                        file_info.update(
+                            {"extra_files": extra_files_dict} if extra_files_dict else {}
+                        )
+                        validated_files.setdefault(key, {})[chapter_id] = file_info
             if not tasks:
                 self.finished.emit(True)
                 return
@@ -495,7 +412,7 @@ class InstallModsThread(QThread):
                     )
                 key = get_mod_id(mod)
                 if key not in installed_mods:
-                    installed_mods[key] = {"mod": mod, "chapters": set()}
+                    installed_mods[key] = {"mod": mod, "chapters": set(), "files": {}}
                 installed_mods[key]["chapters"].add(chapter_id)
                 if url and total_bytes == 0:
                     done_files += 1
@@ -515,37 +432,7 @@ class InstallModsThread(QThread):
                 )
                 files_data = {}
                 for chapter_id in mod_data["chapters"]:
-                    chapter_data = (
-                        mod.get_chapter_data(chapter_id)
-                        if chapter_id != "deltarunedemo"
-                        else None
-                    )
-                    versions_dict = {}
-                    file_info = {}
-                    if chapter_data:
-                        if (
-                            chapter_data.data_file_url
-                            and chapter_data.data_file_version
-                        ):
-                            versions_dict["data"] = chapter_data.data_file_version
-                        if chapter_data.data_file_url:
-                            file_info["data_file_version"] = (
-                                chapter_data.data_file_version
-                            )
-                        extra_files_dict = {}
-                        for extra_file in chapter_data.extra_files:
-                            versions_dict[extra_file.key] = extra_file.version
-                            if extra_file.key not in extra_files_dict:
-                                extra_files_dict[extra_file.key] = []
-                            basename = os.path.basename(extra_file.url)
-                            extra_files_dict[extra_file.key].append(basename)
-                        if extra_files_dict:
-                            file_info["extra_files"] = extra_files_dict
-                        if versions_dict:
-                            file_info["versions"] = versions_dict
-                    elif chapter_id == "deltarunedemo" and mod.is_valid_for_demo():
-                        file_info["data_file_version"] = mod.demo_version or "1.0.0"
-                        file_info["versions"] = {"demo": mod.demo_version or "1.0.0"}
+                    file_info = validated_files.get(key, {}).get(chapter_id, {})
                     if file_info:
                         files_data[normalize_chapter_id(chapter_id, mod.game)] = file_info
                 config_data = {

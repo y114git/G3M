@@ -93,7 +93,7 @@ def parse_extra_files_raw(
 
     Args:
         extra_files_raw: Raw extra_files data (list, dict, or None).
-        ch_info: The parent chapter info dict (for 'versions' lookups).
+        ch_info: The parent chapter info dict.
         chapter_folder: If set, resolve relative URLs against this folder.
         as_dicts: If True, return dicts instead of ModExtraFile objects.
 
@@ -104,10 +104,10 @@ def parse_extra_files_raw(
     if not extra_files_raw:
         return result
 
-    def _make_entry(key: str, version: str, url: str):
+    def _make_entry(key: str, url: str):
         if as_dicts:
-            return {"key": key, "version": version, "url": url}
-        return ModExtraFile(key=key, version=version, url=url)
+            return {"key": key, "url": url}
+        return ModExtraFile(key=key, url=url)
 
     if isinstance(extra_files_raw, list):
         for ef_data in extra_files_raw:
@@ -119,7 +119,6 @@ def parse_extra_files_raw(
                     result.append(
                         _make_entry(
                             key=ef_data.get("key", ""),
-                            version=ef_data.get("version", "1.0.0"),
                             url=url,
                         )
                     )
@@ -137,9 +136,6 @@ def parse_extra_files_raw(
                 else:
                     result.append(ef_data)
     elif isinstance(extra_files_raw, dict):
-        versions = ch_info.get("versions", {})
-        if not isinstance(versions, dict):
-            versions = {}
         for group_key, filenames in extra_files_raw.items():
             if isinstance(filenames, list):
                 for filename in filenames:
@@ -149,19 +145,10 @@ def parse_extra_files_raw(
                     result.append(
                         _make_entry(
                             key=group_key,
-                            version=versions.get(group_key, "1.0.0"),
                             url=url,
                         )
                     )
     return result
-
-
-def resolve_data_file_version(ch_info: dict) -> str:
-    """Extract the data file version from a chapter info dict."""
-    version = ch_info.get("data_file_version")
-    if not version and isinstance(ch_info.get("versions"), dict):
-        version = ch_info.get("versions", {}).get("data")
-    return version or "1.0.0"
 
 
 def resolve_chapter_folder(
@@ -204,8 +191,7 @@ def resolve_local_icon_path(config_data: dict, mod_folder_path: str | None) -> s
 def normalize_files_data(files_data: dict, game: str | None = None) -> dict:
     """Normalize files_data dict for use with ModInfo.from_dict().
 
-    Returns a dict where each chapter's extra_files are list-of-dicts
-    and data_file_version is resolved.
+    Returns a dict where each chapter's extra_files are list-of-dicts.
     """
     normalized = {}
     for raw_file_key, ch_info in files_data.items():
@@ -222,7 +208,6 @@ def normalize_files_data(files_data: dict, game: str | None = None) -> dict:
             {
                 "description": None,
                 "data_file_url": None,
-                "data_file_version": "1.0.0",
                 "extra_files": [],
             },
         )
@@ -230,7 +215,6 @@ def normalize_files_data(files_data: dict, game: str | None = None) -> dict:
             file_info["description"] = ch_info.get("description")
         if ch_info.get("data_file_url"):
             file_info["data_file_url"] = ch_info.get("data_file_url")
-        file_info["data_file_version"] = resolve_data_file_version(ch_info)
         for extra_file in extra_files_list:
             if extra_file not in file_info["extra_files"]:
                 file_info["extra_files"].append(extra_file)

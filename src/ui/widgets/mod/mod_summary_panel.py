@@ -584,7 +584,7 @@ class ModSummaryPanel(QFrame):
             f"color: {text_color}; font-weight: 600;",
             cache_attr="_playtime_ss_cache",
         )
-        meta_bg = get_theme_color(config, "card_background", "#202326")
+        meta_bg = get_theme_color(config, "elements", "#202326")
         apply_stylesheet_if_changed(
             self._meta_label,
             f"""
@@ -641,6 +641,11 @@ class ModSummaryPanel(QFrame):
                 )
             self._update_playtime(self._current_mod)
         self.update_use_button_state(self._use_button.text() == tr("ui.remove_button"))
+
+    def refresh_theme(self):
+        self._cached_metadata = None
+        self._cached_file_info = None
+        self.apply_theme()
 
     def update_labels_text(self):
         self._empty_label.setText(tr("ui.select_mod"))

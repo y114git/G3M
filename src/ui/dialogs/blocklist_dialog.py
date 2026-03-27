@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -63,13 +62,11 @@ class BlocklistDialog(QDialog):
         game_selector_layout = QHBoxLayout()
         game_selector_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.game_label = QLabel(tr("blocklist.select_game"))
-        self.game_label.setFont(QFont("", 10, QFont.Weight.Bold))
+        game_font = self.game_label.font()
+        game_font.setBold(True)
+        self.game_label.setFont(game_font)
         game_selector_layout.addWidget(self.game_label)
         self.game_combo = QComboBox()
-        combo_font = self.game_combo.font()
-        combo_font.setPointSize(16)
-        self.game_combo.setFont(combo_font)
-        self.game_combo.view().setFont(combo_font)
         self.game_combo.currentIndexChanged.connect(self.on_game_changed)
         game_selector_layout.addWidget(self.game_combo)
         main_layout.addLayout(game_selector_layout)
@@ -84,10 +81,6 @@ class BlocklistDialog(QDialog):
         self.prefix_label = QLabel(tr("blocklist.prefix"))
         prefix_layout.addWidget(self.prefix_label)
         self.prefix_combo = QComboBox()
-        prefix_font = self.prefix_combo.font()
-        prefix_font.setPointSize(16)
-        self.prefix_combo.setFont(prefix_font)
-        self.prefix_combo.view().setFont(prefix_font)
         self._populate_prefix_combo()
         prefix_layout.addWidget(self.prefix_combo)
         add_layout.addLayout(prefix_layout)
@@ -118,9 +111,6 @@ class BlocklistDialog(QDialog):
         self.list_group = QGroupBox(tr("blocklist.current_entries"))
         list_layout = QVBoxLayout(self.list_group)
         self.blocklist_list = QListWidget()
-        list_font = self.blocklist_list.font()
-        list_font.setPointSize(16)
-        self.blocklist_list.setFont(list_font)
         self.blocklist_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         list_layout.addWidget(self.blocklist_list)
         list_buttons_layout = QHBoxLayout()
@@ -156,6 +146,18 @@ class BlocklistDialog(QDialog):
             self.setStyleSheet(
                 build_dialog_theme_stylesheet(parent.app_state)
                 + f"""
+                QComboBox {{
+                    border: 2px solid {border_color};
+                }}
+                QComboBox:hover, QComboBox:focus {{
+                    border: 2px solid {theme["hover"]};
+                }}
+                QComboBox QAbstractItemView {{
+                    background-color: {theme["elements"]};
+                    border: 2px solid {border_color};
+                    selection-background-color: {theme["hover"]};
+                    selection-color: {text_color};
+                }}
                 QGroupBox {{
                     color: {text_color};
                     border: 2px solid {border_color};

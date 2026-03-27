@@ -87,9 +87,11 @@ class _PathRow(QWidget):
         lay.addWidget(self._label)
         self._edit = QLineEdit()
         self._edit.setPlaceholderText(tr("ui.file_path_placeholder"))
+        self._edit.setToolTip(tr("tooltips.file_path_field"))
         lay.addWidget(self._edit, 1)
         self._btn = QPushButton(tr("ui.browse_button"))
         self._btn.setObjectName("modding_tools_browse_btn")
+        self._btn.setToolTip(tr("tooltips.browse_file"))
         self._btn.clicked.connect(self._browse)
         lay.addWidget(self._btn)
 
@@ -174,10 +176,7 @@ class _PatchTab(QWidget):
         mode_row.addWidget(self._mode_label)
         self._mode_combo = QComboBox()
         self._mode_combo.addItems(["g3mpatch", "xdelta"])
-        mode_font = self._mode_combo.font()
-        mode_font.setPointSize(16)
-        self._mode_combo.setFont(mode_font)
-        self._mode_combo.view().setFont(mode_font)
+        self._mode_combo.setToolTip(tr("tooltips.modding_tools_mode"))
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_row.addWidget(self._mode_combo)
         mode_row.addSpacing(20)
@@ -191,10 +190,7 @@ class _PatchTab(QWidget):
                 tr("modding_tools.action_convert"),
             ]
         )
-        action_font = self._action_combo.font()
-        action_font.setPointSize(16)
-        self._action_combo.setFont(action_font)
-        self._action_combo.view().setFont(action_font)
+        self._action_combo.setToolTip(tr("tooltips.modding_tools_action"))
         self._action_combo.currentIndexChanged.connect(self._on_action_changed)
         mode_row.addWidget(self._action_combo)
         mode_row.addStretch()
@@ -215,6 +211,7 @@ class _PatchTab(QWidget):
         btn_row.addStretch()
         self._run_btn = QPushButton(tr("modding_tools.run"))
         self._run_btn.setObjectName("modding_tools_run_btn")
+        self._run_btn.setToolTip(tr("tooltips.run_tool"))
         self._run_btn.clicked.connect(self._on_run)
         btn_row.addWidget(self._run_btn)
         btn_row.addStretch()
@@ -505,10 +502,7 @@ class _DataConvertTab(QWidget):
         profile_row.addWidget(self._profile_label)
         self._profile_combo = QComboBox()
         self._profile_combo.setMinimumWidth(200)
-        profile_font = self._profile_combo.font()
-        profile_font.setPointSize(16)
-        self._profile_combo.setFont(profile_font)
-        self._profile_combo.view().setFont(profile_font)
+        self._profile_combo.setToolTip(tr("tooltips.profile_combo"))
         self._profile_combo.currentIndexChanged.connect(self._scan_mods)
         profile_row.addWidget(self._profile_combo)
         profile_row.addStretch()
@@ -520,10 +514,7 @@ class _DataConvertTab(QWidget):
         fmt_row.addWidget(self._fmt_label)
         self._fmt_combo = QComboBox()
         self._fmt_combo.addItems(["g3mpatch", "xdelta"])
-        fmt_font = self._fmt_combo.font()
-        fmt_font.setPointSize(16)
-        self._fmt_combo.setFont(fmt_font)
-        self._fmt_combo.view().setFont(fmt_font)
+        self._fmt_combo.setToolTip(tr("tooltips.modding_tools_target_format"))
         self._fmt_combo.currentIndexChanged.connect(self._scan_mods)
         fmt_row.addWidget(self._fmt_combo)
         fmt_row.addStretch()
@@ -532,16 +523,15 @@ class _DataConvertTab(QWidget):
         self._mod_label = QLabel(tr("modding_tools.convert_select_mod"))
         lay.addWidget(self._mod_label)
         self._mod_list = QListWidget()
-        mod_list_font = self._mod_list.font()
-        mod_list_font.setPointSize(16)
-        self._mod_list.setFont(mod_list_font)
         self._mod_list.setMinimumHeight(150)
+        self._mod_list.setToolTip(tr("tooltips.modding_tools_mod_list"))
         lay.addWidget(self._mod_list, 1)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self._run_btn = QPushButton(tr("modding_tools.run"))
         self._run_btn.setObjectName("modding_tools_run_btn")
+        self._run_btn.setToolTip(tr("tooltips.run_tool"))
         self._run_btn.clicked.connect(self._on_run)
         self._run_btn.setEnabled(False)
         btn_row.addWidget(self._run_btn)
@@ -741,9 +731,6 @@ class _MergeTab(QWidget):
         self._list_label = list_label
 
         self._file_list = QListWidget()
-        file_list_font = self._file_list.font()
-        file_list_font.setPointSize(16)
-        self._file_list.setFont(file_list_font)
         self._file_list.setMinimumHeight(100)
         lay.addWidget(self._file_list, 1)
 
@@ -1150,24 +1137,23 @@ class ModdingToolsDialog(QDialog):
                 border-radius: {theme["field_radius"]}px;
                 color: {theme["main_text"]};
                 padding: 6px 10px;
-                font-size: 16px;
                 min-height: 36px;
             }}
             QComboBox QAbstractItemView {{
-                background-color: {theme["background"]};
+                background-color: {theme["elements"]};
                 color: {theme["main_text"]};
                 selection-background-color: {theme["hover"]};
-                font-size: 16px;
+                selection-color: {theme["main_text"]};
+                border: 2px solid {theme["border"]};
             }}
             QListWidget {{
-                background-color: {theme["background"]};
+                background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["field_radius"]}px;
                 color: {theme["main_text"]};
-                font-size: 16px;
             }}
             QListWidget::item {{
-                padding: 10px 8px;
+                padding: 6px 8px;
             }}
             QListWidget::item:selected {{
                 background-color: {theme["hover"]};

@@ -28,6 +28,18 @@ def _update_downloads_badge(btn, count: int):
     btn.setText(str(count) if count > 0 else "")
 
 
+def _wire_downloads_badge(w, button_name: str):
+    """Connect a downloads button to the shared badge state and sync it once."""
+    btn = getattr(w, button_name, None)
+    if not btn:
+        return
+    btn.clicked.connect(lambda: open_downloads_dialog(w))
+    w.downloads_manager.badge_changed.connect(
+        lambda count, _: _update_downloads_badge(btn, count)
+    )
+    w.downloads_manager._emit_badge()
+
+
 def setup_search_tab(w):
     """Build and wire the Mods Browser tab."""
     from ui.builders.search_tab_builder import ModsBrowserTabBuilder
@@ -93,12 +105,7 @@ def setup_search_tab(w):
     w.search_button.clicked.connect(w.search_display.show_search_dialog)
     if hasattr(w, "blocklist_button") and w.blocklist_button:
         w.blocklist_button.clicked.connect(w.search_display.show_blocklist_dialog)
-    if hasattr(w, "downloads_button") and w.downloads_button:
-        w.downloads_button.clicked.connect(lambda: open_downloads_dialog(w))
-        w.downloads_manager.badge_changed.connect(
-            lambda count, _: _update_downloads_badge(w.downloads_button, count)
-        )
-        w.downloads_manager._emit_badge()
+    _wire_downloads_badge(w, "downloads_button")
     with contextlib.suppress(AttributeError, RuntimeError):
         w.mods_browser_scroll.verticalScrollBar().valueChanged.connect(
             w.search_display.on_scroll_value_changed
@@ -196,11 +203,7 @@ def _wire_library_signals(w):
     for tag in w.library_tag_widgets:
         tag.stateChanged.connect(w.library_display.update_display)
     w.library_search_button.clicked.connect(w._show_library_search_dialog)
-    if w.library_downloads_button:
-        w.library_downloads_button.clicked.connect(lambda: open_downloads_dialog(w))
-        w.downloads_manager.badge_changed.connect(
-            lambda count, _: _update_downloads_badge(w.library_downloads_button, count)
-        )
+    _wire_downloads_badge(w, "library_downloads_button")
     if w.library_game_versions_button:
         w.library_game_versions_button.clicked.connect(
             lambda: open_game_versions_dialog(w)

@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from PyQt6.QtWidgets import QDialog, QWidget
+from PyQt6.QtWidgets import QDialog, QPushButton, QWidget
 
 
 class TestImportDialog:
@@ -58,6 +58,7 @@ class TestModPriorityDialog:
 class TestReportBugDialog:
 
     def test_report_bug_dialog_creation(self, qapp, app_state):
+        from services.localization_service import tr
         from ui.dialogs.report_bug_dialog import ReportBugDialog
         dialog = ReportBugDialog(None, app_state)
         assert dialog is not None
@@ -67,6 +68,10 @@ class TestReportBugDialog:
         assert hasattr(dialog, 'attach_logs_checkbox')
         assert hasattr(dialog, 'send_button')
         assert dialog.max_total_size == 10 * 1024 * 1024
+        assert dialog.text_edit.toolTip() == tr("tooltips.report_bug_text")
+        assert dialog.file_list.toolTip() == tr("tooltips.report_bug_files")
+        assert dialog.attach_logs_checkbox.toolTip() == tr("tooltips.report_bug_attach_logs")
+        assert dialog.send_button.toolTip() == tr("tooltips.report_bug_send")
         dialog.close()
 
 
@@ -123,6 +128,7 @@ class TestThemeManagementDialog:
     def test_theme_management_dialog_creation(self, qapp, app_state):
         from unittest.mock import Mock
 
+        from services.localization_service import tr
         from services.customization_service import CustomizationManager
         from ui.dialogs.theme_dialog import ThemeManagementDialog
 
@@ -136,6 +142,7 @@ class TestThemeManagementDialog:
         dialog = ThemeManagementDialog(None, theme_controller)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
+        assert dialog.findChildren(QPushButton)[0].toolTip() == tr("tooltips.import_theme")
 
         settings_text = dialog._build_settings_text()
         assert isinstance(settings_text, str)
@@ -199,6 +206,7 @@ class TestModEditorDialog:
         collected = dialog._collect_files()
 
         assert dialog.icon_edit.text() == 'icon.png'
+        assert dialog.findChild(QWidget, 'modEditorIntroCard') is None
         assert collected['deltarune_4']['data_file_url'] == 'BOSSRUSH.win'
         assert collected['deltarune_4']['extra_files']['extras'] == ['bonus.zip']
         assert dialog._resolve_file_path('BOSSRUSH.win') == str(
@@ -206,3 +214,23 @@ class TestModEditorDialog:
         )
         dialog.close()
         parent.deleteLater()
+
+
+class TestManualInstallDialog:
+
+    def test_manual_install_dialog_shows_summary_for_found_files(self, qapp, tmp_path):
+        from services.localization_service import tr
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        prepared = tmp_path / 'prepared'
+        prepared.mkdir()
+        (prepared / 'README.md').write_text('# guide', encoding='utf-8')
+        (prepared / 'mod.win').write_text('data', encoding='utf-8')
+
+        dialog = ManualModInstallDialog(None, str(prepared))
+
+        assert hasattr(dialog, 'files_summary_label')
+        assert dialog.files_summary_label.text()
+        assert dialog.game_combo.toolTip() == tr("tooltips.manual_install_game")
+        assert dialog.files_summary_label.toolTip() == tr("tooltips.manual_install_summary")
+        dialog.close()

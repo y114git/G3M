@@ -18,6 +18,7 @@ from config.config import (
 )
 from services.migration_service import get_theme_color_setting
 from utils.mod_utils import get_mod_id
+from utils.path_utils import colored_icon
 
 
 class _WidgetUpdateFilter(QObject):
@@ -585,6 +586,19 @@ def install_panel_style_handler(
         ),
         attr_name=attr_name,
     )
+
+
+def refresh_themed_button_icon(button) -> None:
+    if not button:
+        return
+    icon_name = getattr(button, "_themed_icon_name", None)
+    app_state = getattr(button, "_themed_icon_app_state", None)
+    icon_size = getattr(button, "_themed_icon_size", None)
+    if not icon_name or app_state is None or icon_size is None:
+        return
+    tc = get_theme_color(app_state.local_config, "main_text") if app_state else "#ffffff"
+    button.setIcon(colored_icon(icon_name, tc))
+    button.setIconSize(icon_size)
 
 
 def apply_scroll_area_chrome(

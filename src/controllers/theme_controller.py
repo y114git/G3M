@@ -290,6 +290,17 @@ class ThemeController:
             summary = getattr(self.app, "mod_summary_panel", None)
             if summary and hasattr(summary, "apply_theme"):
                 summary.apply_theme()
+            for dialog_attr in (
+                "_game_versions_dialog",
+                "_mod_versions_dialog",
+                "_downloads_dialog",
+                "_modding_tools_dialog",
+            ):
+                dialog = getattr(self.app, dialog_attr, None)
+                if not dialog or not hasattr(dialog, "refresh_theme"):
+                    continue
+                with contextlib.suppress(RuntimeError):
+                    dialog.refresh_theme()
             self.update_dynamic_elements()
             self._resync_filter_scroll_heights()
 
@@ -612,6 +623,7 @@ class ThemeController:
 
     def update_dynamic_elements(self):
         from ui.builders.shared_filters_builder import apply_filters_frame_style
+        from ui.common.styling import apply_panel_style, refresh_themed_button_icon
 
         for builder_name, widget_key in (
             ("search_tab_builder", "filters_widget"),
@@ -623,11 +635,41 @@ class ThemeController:
             )
             if filters and filters.objectName() == "filters":
                 apply_filters_frame_style(filters, self.app_state)
+        for container_attr in ("mods_browser_container", "installed_mods_container"):
+            container = getattr(self.app, container_attr, None)
+            if container:
+                apply_panel_style(container, self.app_state.local_config)
         mod_list = getattr(self.app, "mod_list_widget", None)
         installed_mods = getattr(self.app, "installed_mods_widget", None)
         self.customization_service.update_mod_cards_styles(mod_list, installed_mods)
         if hasattr(self.app, "library_tab_builder"):
             self.app.library_tab_builder.update_priority_button_style()
+        for builder in (
+            getattr(self.app, "search_tab_builder", None),
+            getattr(self.app, "library_tab_builder", None),
+        ):
+            if not builder:
+                continue
+            widgets = getattr(builder, "widgets", {})
+            for widget_key in (
+                "sort_order_btn",
+                "search_button",
+                "downloads_button",
+                "blocklist_button",
+                "library_game_versions_button",
+                "library_modding_tools_button",
+                "library_downloads_button",
+                "library_search_button",
+                "library_tag_widgets",
+                "chapter_mode_checkbox",
+                "full_install_checkbox",
+            ):
+                widget = widgets.get(widget_key)
+                if isinstance(widget, list):
+                    for item in widget:
+                        refresh_themed_button_icon(item)
+                    continue
+                refresh_themed_button_icon(widget)
         section_lines = getattr(self.app, "_section_lines", None)
         if isinstance(section_lines, list) and section_lines:
             from ui.common.styling import get_section_line_color
@@ -640,6 +682,9 @@ class ThemeController:
                     line_frame.setStyleSheet(line_style)
         if hasattr(self.app, "_refresh_themed_icons"):
             self.app._refresh_themed_icons()
+        summary = getattr(self.app, "mod_summary_panel", None)
+        if summary and hasattr(summary, "refresh_theme"):
+            summary.refresh_theme()
 
     def on_background_button_click(self):
         self.settings_service.on_background_button_click()

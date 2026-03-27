@@ -64,6 +64,7 @@ def create_sort_controls(
     if config_key:
         idx = app_state.local_config.get(config_key, 0)
         sort_combo.setCurrentIndex(idx if 0 <= idx < sort_combo.count() else 0)
+    sort_combo.setToolTip(tr("tooltips.sort_mode"))
     sort_btn = None
     if include_order_button:
         sort_btn = QPushButton()
@@ -90,6 +91,7 @@ def create_tag_checkboxes(app_state, tag_names):
     )
     for t in tags.values():
         t.setStyleSheet(style)
+        t.setToolTip(tr("tooltips.filter_by_tag"))
     return tags
 
 
@@ -101,6 +103,7 @@ def create_modgame_combo(app_state, games_list, config_key=None):
         games_list,
         app_state.local_config.get(config_key, "deltarune") if config_key else None,
     )
+    modgame_combo.setToolTip(tr("tooltips.select_game"))
     return modgame_combo
 
 

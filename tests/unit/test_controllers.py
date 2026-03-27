@@ -91,22 +91,6 @@ class TestLibraryDisplayController:
         controller.refresh_async.assert_not_called()
         controller.update_mod_widgets_active_status.assert_called_once()
 
-
-class TestModImportExportController:
-    def test_materialize_local_import_keeps_plain_files(self, temp_dir):
-        from controllers.mod_import_export_controller import ModImportExportController
-
-        source_file = os.path.join(temp_dir, "sample.png")
-        with open(source_file, "wb") as handle:
-            handle.write(b"png")
-
-        controller = ModImportExportController(Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock())
-
-        with tempfile.TemporaryDirectory() as extract_dir:
-            content_path = controller._materialize_local_import(source_file, extract_dir)
-            assert content_path == extract_dir
-            assert os.path.isfile(os.path.join(extract_dir, "sample.png"))
-
     def test_library_display_refreshes_when_installed_cache_is_invalid(
         self, app_state, feedback_service
     ):
@@ -140,6 +124,22 @@ class TestModImportExportController:
         )
         controller.update_display()
         controller.refresh_async.assert_called_once()
+
+
+class TestModImportExportController:
+    def test_materialize_local_import_keeps_plain_files(self, temp_dir):
+        from controllers.mod_import_export_controller import ModImportExportController
+
+        source_file = os.path.join(temp_dir, "sample.png")
+        with open(source_file, "wb") as handle:
+            handle.write(b"png")
+
+        controller = ModImportExportController(Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock())
+
+        with tempfile.TemporaryDirectory() as extract_dir:
+            content_path = controller._materialize_local_import(source_file, extract_dir)
+            assert content_path == extract_dir
+            assert os.path.isfile(os.path.join(extract_dir, "sample.png"))
 
     def test_library_sort_order_name_ascending_and_date_descending(
         self, app_state, feedback_service
@@ -497,6 +497,178 @@ class TestThemeController:
             )
             controller.apply_theme(force=True)
         assert app_window._last_tooltip_size_key is None
+
+    def test_apply_theme_refreshes_open_version_dialogs(
+        self, app_state, feedback_service
+    ):
+        from PyQt6.QtWidgets import QApplication as RealQApplication
+
+        from controllers.theme_controller import ThemeController
+
+        settings_service = Mock()
+        settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
+        customization_service = Mock()
+        app_window = Mock()
+        app_window.custom_font_family = None
+        app_window.palette.return_value = Mock()
+        app_window.status_label = Mock()
+        app_window.color_widgets = {
+            "hover": Mock(text=lambda: ""),
+            "select": Mock(text=lambda: ""),
+        }
+        app_window.installed_mods_label = None
+        app_window.title_bar = None
+        app_window.top_panel_widget = Mock()
+        app_window.logo_placeholder = Mock()
+        app_window.launcher_icon_label = Mock()
+        app_window.findChildren.return_value = []
+        app_window.library_tag_widgets = []
+        app_window.search_display = None
+        app_window.library_tab_builder = Mock()
+        app_window.library_tab_builder.update_priority_button_style = Mock()
+        app_window._apply_window_corner_mask = Mock()
+        app_window.update = Mock()
+        app_window.size.return_value = Mock()
+        app_window._game_versions_dialog = Mock()
+        app_window._game_versions_dialog.refresh_theme = Mock()
+        app_window._mod_versions_dialog = Mock()
+        app_window._mod_versions_dialog.refresh_theme = Mock()
+        app_window._downloads_dialog = Mock()
+        app_window._downloads_dialog.refresh_theme = Mock()
+        app_window._modding_tools_dialog = Mock()
+        app_window._modding_tools_dialog.refresh_theme = Mock()
+        with (
+            patch(
+                "controllers.theme_controller.DEFAULT_THEME",
+                {
+                    "background": "images/background.png",
+                    "colors": {
+                        "main_text": "#FFFFFF",
+                        "background": "#000000",
+                        "elements": "#333333",
+                        "border": "#444444",
+                        "hover": "#555555",
+                        "select": "#666666",
+                    },
+                    "font_family": "Arial",
+                    "font_size_main": 12,
+                    "font_size_small": 10,
+                },
+            ),
+            patch("controllers.theme_controller.BgLoader"),
+            patch("controllers.theme_controller.build_stylesheet", return_value=""),
+            patch("PyQt6.QtCore.QTimer.singleShot", side_effect=lambda _delay, cb: cb()),
+            patch.object(RealQApplication, "instance", return_value=None),
+            patch("controllers.theme_controller.QApplication", RealQApplication),
+        ):
+            controller = ThemeController(
+                app_state=app_state,
+                feedback_service=feedback_service,
+                settings_service=settings_service,
+                customization_service=customization_service,
+                app_window=app_window,
+            )
+            controller.apply_theme(force=True)
+        app_window._game_versions_dialog.refresh_theme.assert_called_once()
+        app_window._mod_versions_dialog.refresh_theme.assert_called_once()
+        app_window._downloads_dialog.refresh_theme.assert_called_once()
+        app_window._modding_tools_dialog.refresh_theme.assert_called_once()
+
+    def test_update_dynamic_elements_refreshes_theme_dependent_widgets(
+        self, app_state, feedback_service
+    ):
+        from controllers.theme_controller import ThemeController
+
+        settings_service = Mock()
+        settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
+        customization_service = Mock()
+        app_window = Mock()
+        app_window.library_tab_builder = Mock()
+        library_search_button = Mock()
+        library_downloads_button = Mock()
+        library_sort_order_btn = Mock()
+        library_game_versions_button = Mock()
+        library_modding_tools_button = Mock()
+        library_tag_widgets_items = [Mock(), Mock()]
+        app_window.library_tab_builder.widgets = {
+            "library_search_button": library_search_button,
+            "library_downloads_button": library_downloads_button,
+            "library_sort_order_btn": library_sort_order_btn,
+            "library_game_versions_button": library_game_versions_button,
+            "library_modding_tools_button": library_modding_tools_button,
+            "library_tag_widgets": library_tag_widgets_items,
+        }
+        app_window.search_tab_builder = Mock()
+        search_button = Mock()
+        downloads_button = Mock()
+        sort_order_btn = Mock()
+        blocklist_button = Mock()
+        chapter_mode_checkbox = Mock()
+        full_install_checkbox = Mock()
+        app_window.search_tab_builder.widgets = {
+            "search_button": search_button,
+            "downloads_button": downloads_button,
+            "sort_order_btn": sort_order_btn,
+            "blocklist_button": blocklist_button,
+            "chapter_mode_checkbox": chapter_mode_checkbox,
+            "full_install_checkbox": full_install_checkbox,
+        }
+        app_window.mods_browser_container = Mock()
+        app_window.installed_mods_container = Mock()
+        app_window.mod_list_widget = Mock()
+        app_window.installed_mods_widget = Mock()
+        app_window.mod_summary_panel = Mock()
+        app_window._section_lines = []
+        controller = ThemeController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=settings_service,
+            customization_service=customization_service,
+            app_window=app_window,
+        )
+        with (
+            patch("ui.common.styling.apply_panel_style") as panel_style_mock,
+            patch("ui.common.styling.refresh_themed_button_icon") as refresh_icon_mock,
+        ):
+            controller.update_dynamic_elements()
+        assert panel_style_mock.call_count == 2
+        actual_calls = [call.args for call in refresh_icon_mock.call_args_list]
+
+        called_widgets = [call[0] for call in actual_calls]
+
+        assert library_search_button in called_widgets
+        assert library_downloads_button in called_widgets
+        assert library_game_versions_button in called_widgets
+        assert library_modding_tools_button in called_widgets
+        assert search_button in called_widgets
+        assert downloads_button in called_widgets
+        assert sort_order_btn in called_widgets
+        assert blocklist_button in called_widgets
+        assert chapter_mode_checkbox in called_widgets
+        assert full_install_checkbox in called_widgets
+
+        for item in library_tag_widgets_items:
+            assert item in called_widgets
+
+        expected_widgets = [
+            library_search_button,
+            library_downloads_button,
+            library_game_versions_button,
+            library_modding_tools_button,
+            search_button,
+            downloads_button,
+            sort_order_btn,
+            blocklist_button,
+            chapter_mode_checkbox,
+            full_install_checkbox,
+            *library_tag_widgets_items,
+        ]
+
+        for widget in expected_widgets:
+            assert widget in called_widgets, f"Expected widget {widget} not found in refresh calls"
+
+        assert refresh_icon_mock.call_count >= len(expected_widgets)
+        app_window.mod_summary_panel.refresh_theme.assert_called_once()
 
     def test_reload_custom_font_skips_reloading_unchanged_file(
         self, app_state, feedback_service, tmp_path

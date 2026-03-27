@@ -293,7 +293,6 @@ class CreateModpackThread(QThread):
                     )
                     if xdelta_patch and os.path.exists(xdelta_patch):
                         file_info["data_file_url"] = os.path.basename(xdelta_patch)
-                        file_info["data_file_version"] = "1.0.0"
                         files_data[chapter_key] = file_info
                         continue
                     logging.warning(
@@ -303,7 +302,6 @@ class CreateModpackThread(QThread):
                 if data_file := find_data_win(chapter_modpack_dir, game_id=game):
                     file_info["data_file_url"] = os.path.basename(data_file)
                 if file_info:
-                    file_info["data_file_version"] = "1.0.0"
                     files_data[chapter_key] = file_info
             mod_id = f"local_{uuid.uuid4().hex[:12]}"
             detected_game = self._determine_primary_game_type(detected_games)

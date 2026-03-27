@@ -11,7 +11,6 @@ class ModExtraFile:
     """Represents an extra file associated with a mod."""
 
     key: str
-    version: str
     url: str
 
 
@@ -21,7 +20,6 @@ class ModFileData:
 
     description: str | None = None
     data_file_url: str | None = None
-    data_file_version: str | None = None
     extra_files: list[ModExtraFile] = field(default_factory=list)
 
     def is_valid(self) -> bool:
@@ -120,11 +118,20 @@ class ModInfo:
                         and isinstance(extra_files[0], dict)
                     ):
                         value = value.copy()
+                        value.pop("data_file_version", None)
                         value["extra_files"] = [
-                            ModExtraFile(**ef) if isinstance(ef, dict) else ef
+                            ModExtraFile(
+                                key=ef.get("key", ""), url=ef.get("url", "")
+                            )
+                            if isinstance(ef, dict)
+                            else ef
                             for ef in extra_files
                         ]
-                    files_dict[key] = ModFileData(**value)
+                    files_dict[key] = ModFileData(
+                        description=value.get("description"),
+                        data_file_url=value.get("data_file_url"),
+                        extra_files=value.get("extra_files", []),
+                    )
                 elif isinstance(value, ModFileData):
                     files_dict[key] = value
         mod_id = data_dict.get("id", "")

@@ -104,6 +104,7 @@ class LibraryTabBuilder(QObject):
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
         f_scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        f_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         f_scroll.setMinimumWidth(200)
         filters = self._create_library_filters_widget()
         f_scroll.setWidget(filters)
@@ -126,6 +127,7 @@ class LibraryTabBuilder(QObject):
         profile_combo = QComboBox()
         profile_combo.setObjectName("profile_combo")
         profile_combo.setMinimumWidth(180)
+        profile_combo.setToolTip(tr("tooltips.profile_combo"))
         profile_row.addWidget(profile_combo)
         profile_settings_btn = QPushButton()
         profile_settings_btn.setObjectName("profile_settings_button")
@@ -155,10 +157,13 @@ class LibraryTabBuilder(QObject):
         ctrl.addWidget(game_combo)
         ctrl.addSpacing(4)
         game_versions_btn = create_game_versions_button(self.app_state)
+        game_versions_btn.setToolTip(tr("tooltips.game_versions"))
         ctrl.addWidget(game_versions_btn)
         ctrl.addSpacing(20)
         ch_cb = QCheckBox(tr("ui.chapter_mode"))
         f_cb = QCheckBox(tr("ui.full_install"))
+        ch_cb.setToolTip(tr("tooltips.chapter_mode"))
+        f_cb.setToolTip(tr("tooltips.full_install_toggle"))
         ctrl.addWidget(ch_cb)
         ctrl.addWidget(f_cb)
         ctrl.addStretch()
@@ -190,6 +195,7 @@ class LibraryTabBuilder(QObject):
             btn = QPushButton(name)
             btn.setCheckable(True)
             btn.setObjectName(f"chapter_tab_{i}")
+            btn.setToolTip(tr("tooltips.chapter_tab"))
             btn.setStyleSheet(
                 build_button_style(
                     btn.objectName(),
@@ -238,6 +244,8 @@ class LibraryTabBuilder(QObject):
             self._update_priority_button_style(
                 b, colors["elements"], colors["border"], colors["hover"]
             )
+        p_btn.setToolTip(tr("tooltips.mod_priority"))
+        m_btn.setToolTip(tr("tooltips.create_modpack"))
         add_btn = QPushButton(tr("ui.add_mod"))
         add_btn.setObjectName("add_mod_button")
         self.widgets["add_mod_button"] = add_btn
@@ -248,6 +256,7 @@ class LibraryTabBuilder(QObject):
         header_row.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignLeft)
         header_row.addStretch()
         mods_lbl = QLabel(tr("ui.installed_mods_label"))
+        mods_lbl.setToolTip(tr("tooltips.installed_mods"))
         mods_lbl.setStyleSheet("font-weight: bold; font-size: 16px;")
         mods_lbl.setAlignment(
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter

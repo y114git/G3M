@@ -43,6 +43,7 @@ class AnnouncePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.text_browser = QTextBrowser()
         self.text_browser.setOpenExternalLinks(True)
+        self.text_browser.setToolTip(tr("tooltips.announcement_text"))
         document = self.text_browser.document()
         if document is not None:
             document.setDefaultStyleSheet("p { margin: 0.5em 0; }")
@@ -58,6 +59,7 @@ class AnnouncePanel(QWidget):
         link_layout = QHBoxLayout()
         link_layout.addStretch()
         self.details_button = QPushButton(tr("dialogs.announce_details_button"))
+        self.details_button.setToolTip(tr("tooltips.announcement_details"))
         self.details_button.clicked.connect(self._open_link)
         link_layout.addWidget(self.details_button)
         link_layout.addStretch()
@@ -68,6 +70,7 @@ class AnnouncePanel(QWidget):
         button_layout.addLayout(self._poll_buttons_layout)
         button_layout.addStretch()
         self.ok_button = QPushButton(tr("ui.ok"))
+        self.ok_button.setToolTip(tr("tooltips.confirm"))
         self.ok_button.clicked.connect(self._on_ok_clicked)
         self.ok_button.setDefault(True)
         button_layout.addWidget(self.ok_button)
@@ -75,7 +78,7 @@ class AnnouncePanel(QWidget):
         self._populate_poll_buttons()
         self._apply_poll_button_theme()
         self.details_button.setVisible(bool(self._announce.get("link", "")))
-        self._sync_ok_button_state()
+        self.sync_ok_button_state()
 
     def selected_options(self) -> list[str]:
         return [
@@ -118,7 +121,7 @@ class AnnouncePanel(QWidget):
         if self.details_button is not None:
             self.details_button.setVisible(bool(self._announce.get("link", "")))
         self._populate_poll_buttons()
-        self._sync_ok_button_state()
+        self.sync_ok_button_state()
 
     def _on_ok_clicked(self):
         if AnnounceService.is_poll_announce(self._announce):
@@ -149,6 +152,7 @@ class AnnouncePanel(QWidget):
             button = QPushButton(option)
             button.setCheckable(True)
             button.setProperty("pollOption", True)
+            button.setToolTip(tr("tooltips.announcement_option"))
             button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
             button.setMinimumWidth(0)
             button.setMaximumWidth(max(70, button.sizeHint().width() + 18))
@@ -170,9 +174,9 @@ class AnnouncePanel(QWidget):
                 clicked_button.blockSignals(True)
                 clicked_button.setChecked(True)
                 clicked_button.blockSignals(False)
-        self._sync_ok_button_state()
+        self.sync_ok_button_state()
 
-    def _sync_ok_button_state(self) -> None:
+    def sync_ok_button_state(self) -> None:
         if not AnnounceService.is_poll_announce(self._announce):
             self.ok_button.setEnabled(True)
             return
@@ -196,6 +200,16 @@ class AnnouncePanel(QWidget):
         existing = self.styleSheet() or ""
         if "pollOption" not in existing:
             self.setStyleSheet(existing + poll_styles)
+
+    def relocalize_ui(self) -> None:
+        self.details_button.setText(tr("dialogs.announce_details_button"))
+        self.text_browser.setToolTip(tr("tooltips.announcement_text"))
+        self.details_button.setToolTip(tr("tooltips.announcement_details"))
+        self.ok_button.setText(tr("ui.ok"))
+        self.ok_button.setToolTip(tr("tooltips.confirm"))
+        for button in self._option_buttons:
+            button.setToolTip(tr("tooltips.announcement_option"))
+        self.sync_ok_button_state()
 
 
 class AnnounceDialog(QDialog):
@@ -223,3 +237,7 @@ class AnnounceDialog(QDialog):
     def _on_panel_accepted(self) -> None:
         self.accepted_with_ok.emit()
         self.accept()
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("dialogs.announce_title"))
+        self.panel.relocalize_ui()
