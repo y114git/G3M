@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QLabel
 
 from config.config import DEFAULT_COLORS
 from services.localization_service import tr
-from services.migration_service import get_theme_color_setting
+from config.settings_schema import get_theme_color_key
 from ui.common.styling import install_panel_style_handler, qt_hex_to_display_hex
 from utils.path_utils import resource_path
 
@@ -249,7 +249,7 @@ class CustomizationManager(QObject):
                 placeholder_defaults.get(key, "#000000")
             )
             custom_display_hex = qt_hex_to_display_hex(
-                self.app_state.local_config.get(get_theme_color_setting(key), "")
+                self.app_state.local_config.get(get_theme_color_key(key), "")
             )
             effective_display_hex = custom_display_hex or default_display_hex
             widget.setText(effective_display_hex)

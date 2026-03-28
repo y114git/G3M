@@ -328,10 +328,9 @@ class UsedModsManager(QObject):
                         hasattr(self, "_pending_mod_ids")
                         and chapter_id in self._pending_mod_ids
                     )
-                ):
-                    del used_mods_data[chapter_id_str]
-                    needs_save = True
-
+                    ):
+                        del used_mods_data[chapter_id_str]
+                        needs_save = True
             if migrations_needed:
                 current_keys = set(used_mods_data.keys())
                 for old_chapter_id, new_chapter_id, mod_data in migrations_needed:
@@ -352,7 +351,7 @@ class UsedModsManager(QObject):
         self.mod_widgets_update_needed.emit()
         self.action_button_update_needed.emit()
 
-    def _find_mod_by_id(self, mod_id: str, use_legacy_name_lookup: bool = False):
+    def _find_mod_by_id(self, mod_id: str):
         """Find mod by id from all_mods, installed mods, or config."""
         if hasattr(self.app_state, "all_mods") and self.app_state.all_mods:
             for mod in self.app_state.all_mods:
@@ -361,8 +360,6 @@ class UsedModsManager(QObject):
         if self.parent_widget:
             for im in self.mod_service.get_installed_mods_list():
                 installed_mod_id = im.get("id")
-                if use_legacy_name_lookup and not installed_mod_id:
-                    installed_mod_id = im.get("name")
                 if installed_mod_id == mod_id:
                     return self.mod_service.create_mod_object_from_info(
                         im, getattr(self.app_state, "all_mods", None)

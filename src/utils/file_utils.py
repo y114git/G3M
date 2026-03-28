@@ -14,13 +14,14 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from config.config import (
+    DELTAMOD_INFO_FILENAME,
     GAME_DATA_FILE_EXTENSIONS,
     ICON_PNG_FILENAME,
     IS_WINDOWS_PLATFORM,
-    LEGACY_META_JSON_FILENAME,
     META_JSON_FILENAME,
     MOD_CONFIG_FILENAME,
 )
+from services.migration_service import LEGACY_MOD_ID_KEYS, migrate_legacy_chapter_id
 from utils.network_utils import download_file, get_filename_from_url, get_session
 
 T = TypeVar("T")
@@ -243,7 +244,18 @@ def save_json(
         isinstance(to_save, dict)
         and os.path.basename(path).lower() == MOD_CONFIG_FILENAME.lower()
     ):
-        to_save, _ = migrate_mod_config_id(to_save)
+        mod_id = next(
+            (
+                str(to_save[field]).strip()
+                for field in ("id", *LEGACY_MOD_ID_KEYS)
+                if isinstance(to_save.get(field), str) and to_save.get(field).strip()
+            ),
+            "",
+        )
+        if mod_id:
+            to_save["id"] = mod_id
+        for legacy_field in LEGACY_MOD_ID_KEYS:
+            to_save.pop(legacy_field, None)
     tmp = os.path.join(
         dir_path or ".",
         f"{os.path.basename(path)}.{os.getpid()}.{threading.get_ident()}.tmp",
@@ -282,7 +294,26 @@ def load_json(path: str) -> dict:
             isinstance(data, dict)
             and os.path.basename(path).lower() == MOD_CONFIG_FILENAME.lower()
         ):
-            data, changed = migrate_mod_config_id(data)
+            mod_id = next(
+                (
+                    str(data[field]).strip()
+                    for field in ("id", *LEGACY_MOD_ID_KEYS)
+                    if isinstance(data.get(field), str) and data.get(field).strip()
+                ),
+                "",
+            )
+            changed = False
+            if data.get("id") != mod_id:
+                if mod_id:
+                    data["id"] = mod_id
+                    changed = True
+                elif "id" in data:
+                    data.pop("id", None)
+                    changed = True
+            for legacy_field in LEGACY_MOD_ID_KEYS:
+                if legacy_field in data:
+                    data.pop(legacy_field, None)
+                    changed = True
             if changed:
                 save_json(path, data)
         return data
@@ -298,32 +329,6 @@ def load_json(path: str) -> dict:
     except Exception as e:
         logging.error(f"Error loading JSON {path}: {e}", exc_info=True)
         return {}
-
-
-def migrate_mod_config_id(config_data: dict) -> tuple[dict, bool]:
-    """Normalize mod_config identity fields to id only."""
-    if not isinstance(config_data, dict):
-        return config_data, False
-    changed = False
-    mod_id = next(
-        (
-            str(config_data[field]).strip()
-            for field in ("id", "key", "mod_key")
-            if isinstance(config_data.get(field), str) and config_data.get(field).strip()
-        ),
-        "",
-    )
-    if config_data.get("id") != mod_id:
-        if mod_id:
-            config_data["id"] = mod_id
-        elif "id" in config_data:
-            config_data.pop("id", None)
-        changed = True
-    for legacy_field in ("key", "mod_key"):
-        if legacy_field in config_data:
-            config_data.pop(legacy_field, None)
-            changed = True
-    return config_data, changed
 
 
 def remove_archive_extension(filename: str) -> str:
@@ -360,7 +365,6 @@ def normalize_chapter_id(chapter_id, game: str | None = None) -> str:
     """Normalize chapter/file keys to the config-facing tab_id/game_id form."""
     cid = str(chapter_id)
     from models.game_modes import get_game
-    from services.migration_service import migrate_legacy_chapter_id
 
     game_def = get_game(game) if game else None
     if game_def and (tab := game_def.get_tab(cid)):
@@ -441,7 +445,7 @@ def get_file_filter(filter_type: str) -> str:
 
 
 def find_deltamod_info_file(directory: str) -> str | None:
-    for name in (META_JSON_FILENAME, LEGACY_META_JSON_FILENAME):
+    for name in (META_JSON_FILENAME, DELTAMOD_INFO_FILENAME):
         path = os.path.join(directory, name)
         if os.path.exists(path):
             return path
@@ -450,13 +454,13 @@ def find_deltamod_info_file(directory: str) -> str | None:
 
 def has_deltamod_info_file(file_list: list[str] | set[str]) -> bool:
     file_set = set(file_list)
-    return META_JSON_FILENAME in file_set or LEGACY_META_JSON_FILENAME in file_set
+    return META_JSON_FILENAME in file_set or DELTAMOD_INFO_FILENAME in file_set
 
 
 def check_filename_is_deltamod_info(filename: str) -> bool:
     return filename.lower() in {
         META_JSON_FILENAME.lower(),
-        LEGACY_META_JSON_FILENAME.lower(),
+        DELTAMOD_INFO_FILENAME.lower(),
     }
 
 

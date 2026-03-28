@@ -8,15 +8,18 @@ import webbrowser
 
 from PyQt6 import sip as _sip
 from PyQt6.QtCore import Qt, QThread, QThreadPool, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QGuiApplication, QMouseEvent, QPainter, QPixmap
 from PyQt6.QtWidgets import (
+    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLayout,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QStyleFactory,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -180,6 +183,127 @@ class LoadModDetailsThread(QThread):
         except Exception as e:
             if not self.isInterruptionRequested():
                 logging.error(f"Error loading mod details: {e}", exc_info=True)
+
+
+class ScreenshotViewerDialog(QDialog):
+    class _ScreenshotContextMenu(QMenu):
+        def mousePressEvent(self, event):
+            if event.button() == Qt.MouseButton.RightButton:
+                self.close()
+                return
+            super().mousePressEvent(event)
+
+        def mouseReleaseEvent(self, event):
+            if event.button() == Qt.MouseButton.RightButton:
+                self.close()
+                return
+            super().mouseReleaseEvent(event)
+
+        def contextMenuEvent(self, event):
+            event.ignore()
+
+    def __init__(self, urls, index=0, parent=None) -> None:
+        super().__init__(parent)
+        self._urls = urls
+        self._index = index
+        self._loader = QThreadPool.globalInstance()
+        self._label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
+        self._prev = QPushButton("←")
+        self._next = QPushButton("→")
+        self._label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._label.customContextMenuRequested.connect(self._show_context_menu)
+        self._prev.clicked.connect(lambda: self._shift(-1))
+        self._next.clicked.connect(lambda: self._shift(1))
+        nav = QHBoxLayout()
+        nav.addWidget(self._prev)
+        nav.addWidget(self._next)
+        layout = QVBoxLayout(self)
+        self._label.setMinimumSize(960, 540)
+        layout.addWidget(self._label)
+        layout.addLayout(nav)
+        self._load()
+
+    def _load(self):
+        if not self._urls:
+            self._label.setText("No screenshots")
+            return
+        signals = WorkerSignals()
+        signals.result.connect(self._set_image)
+        self._loader.start(ImageLoaderRunnable(self._urls[self._index], signals))
+
+    def _set_image(self, qimg):
+        pm = QPixmap.fromImage(qimg)
+        self._label.setPixmap(
+            pm.scaled(
+                self._label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def _show_context_menu(self, pos):
+        if not self._urls:
+            return
+        menu = self._ScreenshotContextMenu()
+        self._context_menu = menu
+        fusion_style = QStyleFactory.create("Fusion")
+        if fusion_style is not None:
+            menu.setStyle(fusion_style)
+        menu.setObjectName("screenshotContextMenu")
+        url = self._urls[self._index]
+        menu.addAction(tr("ui.open_image_in_browser"), lambda: webbrowser.open(url))
+        menu.addAction(
+            tr("ui.copy_image"),
+            lambda: QGuiApplication.clipboard().setPixmap(
+                self._label.pixmap() or QPixmap()
+            ),
+        )
+        menu.addAction(
+            tr("ui.copy_image_url"),
+            lambda: QGuiApplication.clipboard().setText(url),
+        )
+        parent_colors = getattr(self.parent(), '_colors', None) or {}
+        elements_bg = parent_colors.get('elements', '#2b2b2b')
+        main_text = parent_colors.get('main_text', '#f0f0f0')
+        border = parent_colors.get('border', '#19c37d')
+        hover = parent_colors.get('hover', '#3d3d3d')
+        menu.setStyleSheet(
+            f"""
+            QMenu {{
+                background-color: {elements_bg};
+                color: {main_text};
+                border: 2px solid {border};
+                padding: 8px;
+            }}
+            QMenu::item {{
+                padding: 10px 24px;
+                margin: 3px 3px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: {hover};
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background: {border};
+                margin: 4px 8px;
+            }}
+            """
+        )
+        menu.aboutToHide.connect(self._clear_context_menu)
+        try:
+            menu.exec(self._label.mapToGlobal(pos))
+        finally:
+            self._clear_context_menu()
+
+    def _clear_context_menu(self):
+        self._context_menu = None
+
+    def _shift(self, step):
+        if not self._urls:
+            return
+        self._index = (self._index + step) % len(self._urls)
+        self._load()
 
 
 class ModDetailsOverlay(QWidget):
@@ -544,8 +668,8 @@ class ModDetailsOverlay(QWidget):
         nav = self._layout(QHBoxLayout, margins=(0, 0, 0, 0), spacing=4)
         nav.addStretch()
         for attr, text, slot in (
-            ("_prev_btn", "<", self._ss_prev),
-            ("_next_btn", ">", self._ss_next),
+            ("_prev_btn", "←", self._ss_prev),
+            ("_next_btn", "→", self._ss_next),
         ):
             button = self._create_button(
                 text,
@@ -1221,13 +1345,13 @@ class ModDetailsOverlay(QWidget):
             logging.error(f"Error in _on_details_loaded: {e}", exc_info=True)
 
     def _on_screenshot_click(self, event):
-        """Handle screenshot click to open in browser."""
+        """Handle screenshot click to open in a larger viewer."""
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._ss_urls
             and 0 <= self._ss_index < len(self._ss_urls)
         ):
-            webbrowser.open(self._ss_urls[self._ss_index])
+            ScreenshotViewerDialog(self._ss_urls, self._ss_index, self).exec()
 
     def _restore_main_window_resize(self):
         """Restores the original resizeEvent of the main window."""

@@ -288,10 +288,9 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
     from app.window import AppWindow
 
     user_root = tmp_path / "user"
-    mods_dir = tmp_path / "mods"
     profiles_dir = tmp_path / "profiles"
     themes_dir = tmp_path / "themes"
-    for path in (user_root, mods_dir, profiles_dir, themes_dir):
+    for path in (user_root, profiles_dir, themes_dir):
         path.mkdir(parents=True, exist_ok=True)
     mock_presence_response = Mock()
     mock_presence_response.status_code = 200
@@ -316,7 +315,6 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
             return_value=str(user_root),
         ),
         patch("utils.path_utils.get_user_themes_dir", return_value=str(themes_dir)),
-        patch("services.profile_service.get_user_mods_dir", return_value=str(mods_dir)),
         patch(
             "services.profile_service.get_user_profiles_dir",
             return_value=str(profiles_dir),

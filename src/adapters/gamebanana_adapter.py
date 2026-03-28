@@ -661,7 +661,6 @@ class GameBananaAPI:
             description_url=gb_data.get("_sTextUrl", ""),
             downloads=downloads,
             game=game_name,
-            is_verified=gb_data.get("_bIsVerified", False),
             like_count=like_count,
             icon=self.extract_icon(preview_media),
             tags=tags,

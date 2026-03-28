@@ -16,7 +16,7 @@ from config.config import (
     MOD_WIDGET_STYLE_TEMPLATE,
     UI_COLORS,
 )
-from services.migration_service import get_theme_color_setting
+from config.settings_schema import get_theme_color_key
 from utils.mod_utils import get_mod_id
 from utils.path_utils import colored_icon
 
@@ -383,7 +383,7 @@ def get_theme_color(config, color_key, default_color=None):
     if default_color is None:
         default_color = DEFAULT_COLORS.get(color_key, DEFAULT_COLORS["main_text"])
     if config and hasattr(config, "get"):
-        color_config_key = get_theme_color_setting(color_key)
+        color_config_key = get_theme_color_key(color_key)
         current_value = config.get(color_config_key)
         cache_key = (id(config), color_key, default_color, current_value)
         cached = _theme_color_cache.get(cache_key)

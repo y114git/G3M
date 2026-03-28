@@ -3,17 +3,14 @@
 import logging
 import os
 import shutil
-import tempfile
 import threading
 import time
-import zipfile
 from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
+from PyQt6.QtWidgets import QDialog, QMessageBox
 
 import models.mod_models as mod_models
-from adapters.deltamod_adapter import DeltamodConverter
 from config.config import MOD_CONFIG_FILENAME, UI_COLORS
 from models.exceptions import ModUninstallationError
 from models.mod_models import ModFileData
@@ -21,7 +18,6 @@ from services.localization_service import tr
 from services.migration_service import migrate_mod_metadata
 from utils.file_utils import (
     get_chapter_folder_name,
-    has_deltamod_info_file,
     load_json,
     normalize_chapter_id,
     sanitize_filename,
@@ -184,8 +180,7 @@ class ModManager(QObject):
             "description_url": "",
             "downloads": 0,
             "game": config_data.get("game", "deltarune"),
-            "is_verified": False,
-            "icon": icon_path,
+                        "icon": icon_path,
             "tags": tags,
             "hide_mod": False,
             "ban_status": False,
@@ -224,161 +219,11 @@ class ModManager(QObject):
             self._mods_cache_valid = True
             return self._mods_cache.copy()
 
-    @staticmethod
-    def _check_archive_is_deltamod(item_path: str, item_name: str) -> bool:
-        item_lower = item_name.lower()
-        try:
-            if item_lower.endswith(".zip"):
-                with zipfile.ZipFile(item_path, "r") as zf:
-                    return has_deltamod_info_file(zf.namelist())
-            elif item_lower.endswith(".tar.gz"):
-                import tarfile
-
-                with tarfile.open(item_path, "r:gz") as tf:
-                    return has_deltamod_info_file(tf.getnames())
-            elif item_lower.endswith(".rar"):
-                import rarfile
-
-                with rarfile.RarFile(item_path, "r") as rf:
-                    return has_deltamod_info_file(rf.namelist())
-            elif item_lower.endswith(".7z"):
-                import py7zr
-
-                with py7zr.SevenZipFile(item_path, mode="r") as zf:
-                    return has_deltamod_info_file(zf.getnames())
-        except (OSError, ImportError) as e:
-            logging.warning(
-                f"_check_archive_is_deltamod: failed to check {item_name}: {e}",
-                exc_info=True,
-            )
-        return False
-
-    def convert_legacy_mods(self) -> bool:
-        if not os.path.exists(self.app_state.mods_dir):
-            return False
-        conversion_happened = False
-        try:
-            for item_name in os.listdir(self.app_state.mods_dir):
-                item_path = os.path.join(self.app_state.mods_dir, item_name)
-                if os.path.isfile(item_path) and item_name.lower().endswith(
-                    (".zip", ".7z", ".rar", ".tar.gz", ".lzma")
-                ):
-                    try:
-                        is_deltamod_archive = self._check_archive_is_deltamod(
-                            item_path, item_name
-                        )
-                        if is_deltamod_archive:
-                            self.status_changed.emit(
-                                tr("status.deltamod_archive_detected", name=item_name),
-                                UI_COLORS["status_info"],
-                            )
-                            QApplication.processEvents()
-                            with tempfile.TemporaryDirectory() as temp_dir:
-                                shutil.unpack_archive(item_path, temp_dir)
-                                content_path = temp_dir
-                                contents = os.listdir(temp_dir)
-                                if len(contents) == 1 and os.path.isdir(
-                                    os.path.join(temp_dir, contents[0])
-                                ):
-                                    content_path = os.path.join(temp_dir, contents[0])
-                                converter = DeltamodConverter(
-                                    content_path, self.app_state.mods_dir
-                                )
-                                new_mod_path = converter.convert()
-                                if new_mod_path:
-                                    self.status_changed.emit(
-                                        tr(
-                                            "status.deltamod_converted",
-                                            name=os.path.basename(new_mod_path),
-                                        ),
-                                        UI_COLORS["status_success"],
-                                    )
-                                    os.remove(item_path)
-                                    conversion_happened = True
-                                    logging.info(
-                                        f"convert_legacy_mods: converted archive {item_name} -> {new_mod_path}"
-                                    )
-                                else:
-                                    self.status_changed.emit(
-                                        tr(
-                                            "errors.deltamod_conversion_failed",
-                                            name=item_name,
-                                        ),
-                                        UI_COLORS["status_error"],
-                                    )
-                                    logging.warning(
-                                        f"convert_legacy_mods: conversion failed for archive {item_name}"
-                                    )
-                    except (OSError, ValueError, shutil.Error) as e:
-                        error_msg = (
-                            f"Failed to process Deltamod archive {item_name}: {e}"
-                        )
-                        logging.error(
-                            f"convert_legacy_mods: {error_msg}", exc_info=True
-                        )
-                        self.status_changed.emit(
-                            tr("errors.deltamod_conversion_failed", name=item_name),
-                            UI_COLORS["status_error"],
-                        )
-                elif os.path.isdir(item_path):
-                    try:
-                        dir_contents = os.listdir(item_path)
-                        if (
-                            has_deltamod_info_file(dir_contents)
-                            and MOD_CONFIG_FILENAME not in dir_contents
-                        ):
-                            self.status_changed.emit(
-                                tr("status.deltamod_detected", name=item_name),
-                                UI_COLORS["status_info"],
-                            )
-                            QApplication.processEvents()
-                            converter = DeltamodConverter(
-                                item_path, self.app_state.mods_dir
-                            )
-                            if converter.convert():
-                                shutil.rmtree(item_path)
-                                conversion_happened = True
-                                logging.info(
-                                    f"convert_legacy_mods: converted folder {item_name}"
-                                )
-                            else:
-                                self.status_changed.emit(
-                                    tr(
-                                        "errors.deltamod_conversion_failed",
-                                        name=item_name,
-                                    ),
-                                    UI_COLORS["status_error"],
-                                )
-                                logging.warning(
-                                    f"convert_legacy_mods: conversion failed for folder {item_name}"
-                                )
-                    except Exception as e:
-                        error_msg = (
-                            f"Failed to process Deltamod folder {item_name}: {e}"
-                        )
-                        logging.error(
-                            f"convert_legacy_mods: {error_msg}", exc_info=True
-                        )
-            if conversion_happened:
-                self.invalidate_mods_cache()
-                logging.info(
-                    "convert_legacy_mods: conversion completed, mods cache invalidated"
-                )
-            return conversion_happened
-        except Exception as e:
-            error_msg = f"Error during legacy mod conversion: {e}"
-            logging.error(f"convert_legacy_mods: {error_msg}", exc_info=True)
-            return False
-
-    def load_local_mods(self, _skip_conversion=False):
+    def load_local_mods(self):
         if not os.path.exists(self.app_state.mods_dir):
             os.makedirs(self.app_state.mods_dir, exist_ok=True)
             return False
         cleanup_corrupted_mods(self.app_state.mods_dir)
-        if not _skip_conversion:
-            conversion_happened = self.convert_legacy_mods()
-            if conversion_happened:
-                return self.load_local_mods(_skip_conversion=True)
         try:
             cache = self._get_mods_cache(use_async=False)
         except Exception as e:
@@ -1206,28 +1051,6 @@ class ModManager(QObject):
                     exc_info=True,
                 )
 
-    def migrate_metadata_from_local_configs(self) -> bool:
-        mods_metadata = self._read_metadata()
-        updated = False
-        for (
-            folder_name,
-            _folder_path,
-            config_path,
-            config_data,
-        ) in self._iter_mod_configs():
-            try:
-                _mod_id, changed = migrate_mod_metadata(config_data, mods_metadata)
-                if changed:
-                    save_json(config_path, config_data, indent=4)
-                    updated = True
-            except Exception as e:
-                logging.warning(
-                    f"Failed to migrate metadata for mod in {folder_name}: {e}"
-                )
-        if updated:
-            self._write_metadata(mods_metadata)
-        return updated
-
     def get_installed_mods_list(self) -> list[dict]:
         installed_mods: list[dict] = []
         if not hasattr(self.app_state, "mods_dir") or not os.path.exists(
@@ -1331,6 +1154,23 @@ class ModManager(QObject):
         if metadata_updated:
             self._write_metadata(mods_metadata)
         return installed_mods
+
+    def migrate_metadata_from_local_configs(self) -> bool:
+        mods_metadata = self._read_metadata()
+        updated = False
+        for folder_name, _folder_path, config_path, config_data in self._iter_mod_configs():
+            try:
+                _mod_id, changed = migrate_mod_metadata(config_data, mods_metadata)
+                if changed:
+                    save_json(config_path, config_data, indent=4)
+                    updated = True
+            except Exception as e:
+                logging.warning(
+                    f"Failed to migrate metadata for mod in {folder_name}: {e}"
+                )
+        if updated:
+            self._write_metadata(mods_metadata)
+        return updated
 
 
 def parse_mod_date(date_str: str) -> tuple[int, int, int, int, int]:

@@ -76,7 +76,7 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
 
     if mod_service:
         mod_service.invalidate_mods_cache()
-        mod_service.load_local_mods(_skip_conversion=True)
+        mod_service.load_local_mods()
         mod_service.mod_list_updated.emit()
     if hasattr(main_window, "library_display"):
         main_window.library_display.update_display()

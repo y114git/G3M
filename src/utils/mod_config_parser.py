@@ -2,7 +2,7 @@
 
 import os
 
-from config.config import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
+from services.migration_service import migrate_mod_config_legacy_fields
 from models.mod_models import ModExtraFile
 from utils.file_utils import normalize_chapter_id
 from utils.mod_utils import resolve_mod_icon
@@ -26,46 +26,17 @@ def normalize_mod_config_data(config_data: dict) -> bool:
     """Normalize config keys to the current schema."""
     if not isinstance(config_data, dict):
         return False
-    changed = False
-    description_value = config_data.get("description")
-    if description_value in (None, ""):
-        description_value = config_data.get(LEGACY_DESCRIPTION_KEY)
-        if LEGACY_DESCRIPTION_KEY in config_data:
-            changed = True
-    icon_value = config_data.get("icon")
-    if icon_value in (None, ""):
-        icon_value = config_data.get(LEGACY_ICON_KEY)
-        if LEGACY_ICON_KEY in config_data:
-            changed = True
-    normalized_items = []
-    seen_keys = set()
-    for key, value in config_data.items():
-        if key == LEGACY_DESCRIPTION_KEY:
-            key, value = "description", description_value
-        elif key == LEGACY_ICON_KEY:
-            key, value = "icon", icon_value
-        elif key == "description":
-            value = description_value
-        elif key == "icon":
-            value = icon_value
-        if key == "files" and isinstance(value, dict):
-            normalized_files = {
-                normalize_chapter_id(file_key, config_data.get("game")): file_info
-                for file_key, file_info in value.items()
-            }
-            changed = changed or normalized_files != value
-            value = normalized_files
-        if key in seen_keys:
-            changed = True
-            continue
-        seen_keys.add(key)
-        normalized_items.append((key, value))
-    changed = changed or list(config_data.items()) != normalized_items
-    if not changed:
-        return False
-    config_data.clear()
-    config_data.update(normalized_items)
-    return True
+    changed = migrate_mod_config_legacy_fields(config_data)
+    if "files" not in config_data or not isinstance(config_data["files"], dict):
+        return changed
+    normalized_files = {
+        normalize_chapter_id(file_key, config_data.get("game")): file_info
+        for file_key, file_info in config_data["files"].items()
+    }
+    if normalized_files != config_data["files"]:
+        config_data["files"] = normalized_files
+        changed = True
+    return changed
 
 
 def build_mod_config_data(config_data: dict) -> dict:
@@ -129,7 +100,6 @@ def parse_extra_files_raw(
                     result.append(
                         {
                             "key": ef_data.key,
-                            "version": ef_data.version,
                             "url": ef_data.url,
                         }
                     )

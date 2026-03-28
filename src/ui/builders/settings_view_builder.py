@@ -28,7 +28,7 @@ from config.config import (
 )
 from models.game_modes import get_visible_game_entries
 from services.localization_service import localization_service, tr
-from services.migration_service import get_theme_color_setting
+from config.settings_schema import get_theme_color_key
 from ui.common.styling import (
     get_border_radius,
     get_theme_color,
@@ -547,7 +547,7 @@ class SettingsViewBuilder:
             row_layout, line_edit, btn, reset_btn, label_widget = (
                 self._create_color_row(tr(lang_key))
             )
-            self._mark_reset(line_edit, config_key=get_theme_color_setting(key))
+            self._mark_reset(line_edit, config_key=get_theme_color_key(key))
             color_widgets[key], color_labels[key] = line_edit, label_widget
             self.widgets[f"color_btn_{key}"], self.widgets[f"color_reset_{key}"] = (
                 btn,

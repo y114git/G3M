@@ -15,24 +15,14 @@ def profiles_dir(temp_dir):
 
 
 @pytest.fixture
-def legacy_mods_dir(temp_dir):
-    d = os.path.join(temp_dir, "mods")
-    os.makedirs(d, exist_ok=True)
-    return d
-
-
-@pytest.fixture
 def profile_service(
-    app_state, feedback_service, temp_dir, profiles_dir, legacy_mods_dir, monkeypatch
+    app_state, feedback_service, profiles_dir, monkeypatch
 ):
     from services.profile_service import ProfileService
     from services.settings_service import SettingsManager
 
     monkeypatch.setattr(
         "services.profile_service.get_user_profiles_dir", lambda: profiles_dir
-    )
-    monkeypatch.setattr(
-        "services.profile_service.get_user_mods_dir", lambda: legacy_mods_dir
     )
     settings_service = SettingsManager(app_state, feedback_service, None, parent=None)
     app_state.local_config = {
@@ -54,8 +44,8 @@ def _profile_json(profiles_dir, name):
     return os.path.join(_profile_dir(profiles_dir, name), f"{name}.json")
 
 
-class TestProfileMigration:
-    def test_migrate_creates_default_profile_folder(
+class TestProfileInitialization:
+    def test_initialize_creates_default_profile_folder(
         self, profile_service, profiles_dir, app_state
     ):
         profile_service.initialize()
@@ -72,26 +62,7 @@ class TestProfileMigration:
             _profile_dir(profiles_dir, "Default"), "mods_data.json"
         )
 
-    def test_migrate_moves_legacy_mods_into_default_profile(
-        self, profile_service, profiles_dir, legacy_mods_dir
-    ):
-        os.makedirs(os.path.join(legacy_mods_dir, "legacy_mod"), exist_ok=True)
-        with open(
-            os.path.join(legacy_mods_dir, "mods_data.json"), "w", encoding="utf-8"
-        ) as f:
-            json.dump({"legacy": True}, f)
-        profile_service.initialize()
-        assert not os.path.exists(os.path.join(legacy_mods_dir, "legacy_mod"))
-        assert os.path.isdir(
-            os.path.join(_profile_dir(profiles_dir, "Default"), "legacy_mod")
-        )
-        with open(
-            os.path.join(_profile_dir(profiles_dir, "Default"), "mods_data.json"),
-            encoding="utf-8",
-        ) as f:
-            assert json.load(f) == {"legacy": True}
-
-    def test_migrate_removes_profile_keys_from_settings_json(
+    def test_initialize_removes_profile_keys_from_settings_json(
         self, profile_service, app_state
     ):
         profile_service.initialize()
@@ -101,16 +72,6 @@ class TestProfileMigration:
         assert "selected_game_type" not in settings
         assert "used_mods_deltarune" not in settings
         assert settings["some_other_setting"] == "keep_me"
-
-    def test_migrate_is_idempotent(self, profile_service, profiles_dir):
-        profile_service.initialize()
-        default_path = _profile_json(profiles_dir, "Default")
-        with open(default_path, encoding="utf-8") as f:
-            data_before = f.read()
-        profile_service._migrate_from_settings()
-        with open(default_path, encoding="utf-8") as f:
-            data_after = f.read()
-        assert data_before == data_after
 
 
 class TestProfileCRUD:

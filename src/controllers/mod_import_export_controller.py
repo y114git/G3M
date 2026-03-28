@@ -29,7 +29,7 @@ class ModImportExportController:
 
     def _refresh_mod_list(self) -> None:
         self.mod_service.invalidate_mods_cache()
-        self.mod_service.load_local_mods(_skip_conversion=True)
+        self.mod_service.load_local_mods()
         self.mod_service.mod_list_updated.emit()
 
     def show_add_mod_dialog(self):

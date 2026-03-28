@@ -17,7 +17,6 @@ def test_create_mod_object_from_info_keeps_existing_files_and_updates_playtime()
         description_url="",
         downloads=0,
         game="deltarune",
-        is_verified=False,
         files={"1": ModFileData(data_file_url="data.win")},
         playtime_hours=0.0,
     )
@@ -35,3 +34,5 @@ def test_create_mod_object_from_info_keeps_existing_files_and_updates_playtime()
     assert result is existing_mod
     assert result.playtime_hours == pytest.approx(0.5178)
     assert result.added_date == "2026-03-26 18:57:01"
+
+

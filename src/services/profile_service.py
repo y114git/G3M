@@ -56,7 +56,7 @@ class ProfileService(QObject):
         self._active_name = DEFAULT_PROFILE
 
     def initialize(self):
-        """Call after local_config is loaded and migrate_config_if_needed ran."""
+        """Call after local_config is loaded and settings defaults are applied."""
         os.makedirs(self.profiles_dir, exist_ok=True)
         self._migrate_from_settings()
         self._ensure_default_exists()
@@ -67,10 +67,10 @@ class ProfileService(QObject):
             self._active_name = DEFAULT_PROFILE
             self.app_state.local_config["active_profile"] = DEFAULT_PROFILE
         self._apply_profile_paths(self._active_name)
+        self._strip_profile_keys_from_config()
         self._load_into_config(self._active_name)
 
     def _migrate_from_settings(self):
-        """One-time: move profile keys from settings.json and legacy mods to Default."""
         migrate_profile_settings(
             self.app_state.local_config,
             self._profile_path(DEFAULT_PROFILE),
@@ -86,9 +86,12 @@ class ProfileService(QObject):
 
     def _ensure_default_exists(self):
         if not self._profile_path(DEFAULT_PROFILE).exists():
-            self._write_profile(
-                DEFAULT_PROFILE, {"selected_game_type": get_first_visible_game_id()}
+            default_profile_data = self._extract_profile_data_from_config()
+            default_profile_data.setdefault(
+                "selected_game_type",
+                get_first_visible_game_id(),
             )
+            self._write_profile(DEFAULT_PROFILE, default_profile_data)
 
     def _apply_profile_paths(self, name: str):
         profile_dir = self._profile_dir(name)

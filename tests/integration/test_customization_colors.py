@@ -377,13 +377,13 @@ class TestBorderRadius:
         assert clamp_border_radius(100, width=22, height=22) == 11
         assert clamp_border_radius(12, width=18, height=18, border_width=2) == 11
 
-    def test_settings_migration_persists_default_border_radius(self, app_state):
+    def test_settings_defaults_persist_default_border_radius(self, app_state):
         from unittest.mock import Mock
 
         from services.settings_service import SettingsManager
 
         manager = SettingsManager(app_state, Mock(), Mock())
-        manager.migrate_config_if_needed()
+        manager.ensure_config_defaults()
         assert app_state.local_config["custom_border_radius"] == 7
 
     def test_border_radius_in_stylesheet(self):

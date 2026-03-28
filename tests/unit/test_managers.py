@@ -477,7 +477,7 @@ class TestExpandedFormats:
         assert any(p.endswith(".ogg") for p in paths)
         assert any(p.endswith(".flac") for p in paths)
 
-    def test_settings_manager_migrates_disable_startup_sound(
+    def test_settings_manager_applies_disable_startup_sound_default(
         self, app_state, feedback_service, qapp
     ):
         from services.localization_service import localization_service
@@ -486,5 +486,5 @@ class TestExpandedFormats:
         manager = SettingsManager(
             app_state, feedback_service, localization_service, parent=qapp
         )
-        manager.migrate_config_if_needed()
+        manager.ensure_config_defaults()
         assert app_state.local_config["disable_startup_sound"] is False

@@ -21,7 +21,7 @@ class TestModInfo:
     def test_creation_minimal(self):
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False)
+                      game='deltarune')
         assert mod.id == 'k'
         assert mod.name == 'N'
         assert mod.game == 'deltarune'
@@ -29,25 +29,23 @@ class TestModInfo:
     def test_from_dict_basic(self):
         data = {'id': 'mod_a', 'name': 'Mod A', 'version': '2.0', 'author': 'Auth',
                 'description': 'Tag', 'game_version': '1.0', 'description_url': '',
-                'downloads': 5, 'game': 'deltarune', 'is_verified': True}
+                'downloads': 5, 'game': 'deltarune'}
         mod = ModInfo.from_dict(data)
         assert mod.id == 'mod_a'
         assert mod.version == '2.0'
         assert mod.downloads == 5
-        assert mod.is_verified is True
 
     def test_from_dict_defaults(self):
         mod = ModInfo.from_dict({})
         assert mod.id == ''
         assert mod.game == 'deltarune'
-        assert mod.is_verified is False
         assert mod.downloads is None
 
     def test_from_dict_with_files(self):
         data = {
             'id': 'mod_f', 'name': 'F', 'version': '1.0', 'author': 'A',
             'description': 'T', 'game_version': '1.0', 'description_url': '',
-            'downloads': 0, 'game': 'deltarune', 'is_verified': False,
+            'downloads': 0, 'game': 'deltarune',
             'files': {
                 '1': {'data_file_url': 'http://example.com/data.win'},
                 '2': {'data_file_url': 'http://example.com/ch2.win'},
@@ -63,7 +61,7 @@ class TestModInfo:
         data = {
             'id': 'mod_e', 'name': 'E', 'version': '1.0', 'author': 'A',
             'description': 'T', 'game_version': '1.0', 'description_url': '',
-            'downloads': 0, 'game': 'deltarune', 'is_verified': False,
+            'downloads': 0, 'game': 'deltarune',
             'files': {
                 '0': {
                     'data_file_url': 'http://example.com/data.win',
@@ -81,7 +79,7 @@ class TestModInfo:
     def test_get_file_data_direct(self):
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False,
+                      game='deltarune',
                       files={'1': ModFileData(data_file_url='url1')})
         assert mod.get_file_data('1') is not None
         assert mod.get_file_data('1').data_file_url == 'url1'
@@ -90,7 +88,7 @@ class TestModInfo:
     def test_get_chapter_data_deltarune(self):
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False,
+                      game='deltarune',
                       files={
                           '0': ModFileData(data_file_url='menu_url'),
                           '1': ModFileData(data_file_url='ch1_url'),
@@ -105,7 +103,7 @@ class TestModInfo:
         """Undertale mods use 'undertale' key, accessed via tab_id='undertale'."""
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='undertale', is_verified=False,
+                      game='undertale',
                       files={'undertale': ModFileData(data_file_url='ut_url')})
         result = mod.get_chapter_data('undertale')
         assert result is not None
@@ -114,7 +112,7 @@ class TestModInfo:
     def test_get_chapter_data_demo(self):
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarunedemo', is_verified=False,
+                      game='deltarunedemo',
                       files={'demo': ModFileData(data_file_url='demo_url')})
         result = mod.get_chapter_data('deltarunedemo')
         assert result is not None
@@ -123,42 +121,42 @@ class TestModInfo:
     def test_is_valid_for_demo(self):
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarunedemo', is_verified=False,
+                      game='deltarunedemo',
                       files={'demo': ModFileData(data_file_url='url')})
         assert mod.is_valid_for_demo() is True
 
     def test_is_valid_for_demo_wrong_game(self):
         mod = ModInfo(id='k', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False,
+                      game='deltarune',
                       files={'demo': ModFileData(data_file_url='url')})
         assert mod.is_valid_for_demo() is False
 
     def test_is_gamebanana_mod(self):
         mod = ModInfo(id='gb_mod_12345', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False)
+                      game='deltarune')
         assert mod.is_gamebanana_mod() is True
         assert mod.get_gamebanana_mod_id() == '12345'
 
     def test_is_gamebanana_wip_mod(self):
         mod = ModInfo(id='gb_wip_67890', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False)
+                      game='deltarune')
         assert mod.is_gamebanana_mod() is True
         assert mod.get_gamebanana_mod_id() == '67890'
 
-    def test_legacy_gb_key_not_recognized(self):
+    def test_invalid_gb_key_not_recognized(self):
         mod = ModInfo(id='gb_12345', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False)
+                      game='deltarune')
         assert mod.is_gamebanana_mod() is False
         assert mod.get_gamebanana_mod_id() is None
 
     def test_is_not_gamebanana_mod(self):
         mod = ModInfo(id='local_mod', name='N', version='1.0', author='A', description='T',
                       game_version='1.0', description_url='', downloads=0,
-                      game='deltarune', is_verified=False)
+                      game='deltarune')
         assert mod.is_gamebanana_mod() is False
         assert mod.get_gamebanana_mod_id() is None
 
@@ -269,11 +267,11 @@ class TestDeltaruneGame:
         g = DeltaruneGame()
         mod1 = ModInfo(id='m1', name='M1', version='1.0', author='A', description='T',
                        game_version='1.0', description_url='', downloads=0,
-                       game='deltarune', is_verified=False,
+                       game='deltarune',
                        files={'1': ModFileData(data_file_url='url')})
         mod2 = ModInfo(id='m2', name='M2', version='1.0', author='A', description='T',
                        game_version='1.0', description_url='', downloads=0,
-                       game='undertale', is_verified=False,
+                       game='undertale',
                        files={'undertale': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([mod1, mod2])
         assert len(result) == 5
@@ -284,7 +282,7 @@ class TestDeltaruneGame:
         g = DeltaruneGame()
         hidden = ModInfo(id='h', name='H', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
-                         game='deltarune', is_verified=False, hide_mod=True,
+                         game='deltarune', hide_mod=True,
                          files={'0': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([hidden])
         assert hidden not in result[0]
@@ -293,7 +291,7 @@ class TestDeltaruneGame:
         g = DeltaruneGame()
         banned = ModInfo(id='b', name='B', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
-                         game='deltarune', is_verified=False, ban_status=True,
+                         game='deltarune', ban_status=True,
                          files={'0': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([banned])
         assert banned not in result[0]
@@ -317,11 +315,11 @@ class TestDeltaruneDemoGame:
         g = DeltaruneDemoGame()
         valid_demo = ModInfo(id='d1', name='D1', version='1.0', author='A', description='T',
                              game_version='1.0', description_url='', downloads=0,
-                             game='deltarunedemo', is_verified=False,
+                             game='deltarunedemo',
                              files={'demo': ModFileData(data_file_url='url')})
         wrong_game = ModInfo(id='d2', name='D2', version='1.0', author='A', description='T',
                              game_version='1.0', description_url='', downloads=0,
-                             game='deltarune', is_verified=False,
+                             game='deltarune',
                              files={'demo': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([valid_demo, wrong_game])
         assert valid_demo in result[0]
@@ -342,11 +340,11 @@ class TestUndertaleGame:
         g = UndertaleGame()
         ut_mod = ModInfo(id='u1', name='U1', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
-                         game='undertale', is_verified=False,
+                         game='undertale',
                          files={'undertale': ModFileData(data_file_url='url')})
         dr_mod = ModInfo(id='d1', name='D1', version='1.0', author='A', description='T',
                          game_version='1.0', description_url='', downloads=0,
-                         game='deltarune', is_verified=False,
+                         game='deltarune',
                          files={'1': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([ut_mod, dr_mod])
         assert ut_mod in result[0]
@@ -371,16 +369,15 @@ class TestPizzaTowerGame:
         assert g.steam_app_id != ''
         assert g.direct_launch_allowed is True
 
-    def test_filter_accepts_legacy_key(self):
-        """Pizza Tower accepts both '0' and 'pizzatower' as files keys."""
+    def test_filter_accepts_single_tab_zero_key(self):
         g = PizzaTowerGame()
         mod_legacy = ModInfo(id='p1', name='P1', version='1.0', author='A', description='T',
                              game_version='1.0', description_url='', downloads=0,
-                             game='pizzatower', is_verified=False,
+                             game='pizzatower',
                              files={'0': ModFileData(data_file_url='url')})
         mod_new = ModInfo(id='p2', name='P2', version='1.0', author='A', description='T',
                           game_version='1.0', description_url='', downloads=0,
-                          game='pizzatower', is_verified=False,
+                          game='pizzatower',
                           files={'pizzatower': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([mod_legacy, mod_new])
         assert mod_legacy in result[0]
@@ -439,14 +436,6 @@ class TestGameRegistry:
             else:
                 assert g.is_multi_tab is False, f'{g.game_id} should not be multi-tab'
 
-    def test_backward_compat_aliases(self):
-        """Old class names still work as aliases."""
-        from models.game_modes import DeltaruneDemoGame, DeltaruneGame, UndertaleGame
-        assert DeltaruneGame is DeltaruneGame
-        assert DeltaruneDemoGame is DeltaruneDemoGame
-        assert UndertaleGame is UndertaleGame
-
-
 class TestGamePathHelpers:
 
     def test_get_game_path(self):
@@ -467,3 +456,5 @@ class TestGamePathHelpers:
     def test_get_custom_exec_config_key(self):
         g = PizzaTowerGame()
         assert g.get_custom_exec_config_key() == 'pizzatower_custom_executable_path'
+
+

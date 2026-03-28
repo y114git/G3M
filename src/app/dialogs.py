@@ -40,7 +40,7 @@ def on_downloads_use_completed(w):
     """Refresh UI after Downloads system finishes a successful Use."""
     try:
         w.mod_service.invalidate_mods_cache()
-        w.mod_service.load_local_mods(_skip_conversion=True)
+        w.mod_service.load_local_mods()
         w.mod_service.mod_list_updated.emit()
         if hasattr(w, "search_display"):
             w.search_display.update_search_cards()
@@ -172,7 +172,7 @@ def on_profile_switched(w, name: str):
     w.app_state.selected_chapter_id = None
     w.downloads_manager.set_app_context(mods_dir=w.app_state.mods_dir)
     w.mod_service.invalidate_mods_cache()
-    w.mod_service.load_local_mods(_skip_conversion=True)
+    w.mod_service.load_local_mods()
     if hasattr(w, "game_launch"):
         w.game_launch._full_install_checkbox_is_checked = saved_full_install
     update_checkbox_visibility(w)

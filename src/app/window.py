@@ -225,7 +225,7 @@ class AppWindow(QWidget):
     def _refresh_after_install(self) -> None:
         if self.mod_service:
             self.mod_service.invalidate_mods_cache()
-            self.mod_service.load_local_mods(_skip_conversion=True)
+            self.mod_service.load_local_mods()
             self.mod_service.mod_list_updated.emit()
         if hasattr(self, "library_display"):
             self.library_display.update_display()
@@ -1147,7 +1147,6 @@ class AppWindow(QWidget):
             self.mod_service.migrate_metadata_from_local_configs()
         except Exception as e:
             logging.warning(f"Metadata migration failed: {e}")
-        self.app_state.local_config["metadata_migrated_v2"] = True
         self.settings_service.write_local_config()
 
     def _update_qt_locale(self, language_code):

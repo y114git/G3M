@@ -49,7 +49,7 @@ class TestModPriorityDialog:
     def test_mod_priority_dialog_creation(self, qapp, app_state):
         from models.mod_models import ModInfo
         from ui.dialogs.mod_priority_dialog import ModPriorityDialog
-        mods_list = [ModInfo(id='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune', is_verified=False)]
+        mods_list = [ModInfo(id='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune')]
         dialog = ModPriorityDialog(mods_list, 1, app_state, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
@@ -234,3 +234,5 @@ class TestManualInstallDialog:
         assert dialog.game_combo.toolTip() == tr("tooltips.manual_install_game")
         assert dialog.files_summary_label.toolTip() == tr("tooltips.manual_install_summary")
         dialog.close()
+
+

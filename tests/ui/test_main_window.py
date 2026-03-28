@@ -7,10 +7,9 @@ class TestAppWindow:
         from app.window import AppWindow
 
         user_root = os.path.join(temp_dir, "user")
-        mods_dir = os.path.join(temp_dir, "mods")
         profiles_dir = os.path.join(temp_dir, "profiles")
         themes_dir = os.path.join(temp_dir, "themes")
-        for path in (user_root, mods_dir, profiles_dir, themes_dir):
+        for path in (user_root, profiles_dir, themes_dir):
             os.makedirs(path, exist_ok=True)
         mock_presence_response = Mock()
         mock_presence_response.status_code = 200
@@ -29,7 +28,6 @@ class TestAppWindow:
                 return_value=user_root,
             ),
             patch("utils.path_utils.get_user_themes_dir", return_value=themes_dir),
-            patch("services.profile_service.get_user_mods_dir", return_value=mods_dir),
             patch(
                 "services.profile_service.get_user_profiles_dir",
                 return_value=profiles_dir,
@@ -58,10 +56,9 @@ class TestAppWindow:
         from app.window import AppWindow
 
         user_root = os.path.join(temp_dir, "user")
-        mods_dir = os.path.join(temp_dir, "mods")
         profiles_dir = os.path.join(temp_dir, "profiles")
         themes_dir = os.path.join(temp_dir, "themes")
-        for path in (user_root, mods_dir, profiles_dir, themes_dir):
+        for path in (user_root, profiles_dir, themes_dir):
             os.makedirs(path, exist_ok=True)
         mock_presence_response = Mock()
         mock_presence_response.status_code = 200
@@ -80,7 +77,6 @@ class TestAppWindow:
                 return_value=user_root,
             ),
             patch("utils.path_utils.get_user_themes_dir", return_value=themes_dir),
-            patch("services.profile_service.get_user_mods_dir", return_value=mods_dir),
             patch(
                 "services.profile_service.get_user_profiles_dir",
                 return_value=profiles_dir,

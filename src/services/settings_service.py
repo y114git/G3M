@@ -15,13 +15,12 @@ from PyQt6.QtGui import QFontDatabase, QGuiApplication
 from PyQt6.QtWidgets import QFileDialog, QWidget
 
 from config.config import APP_VERSION, UI_COLORS
+from config.settings_schema import (
+    get_theme_color_key,
+)
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
-from services.migration_service import (
-    get_theme_color_setting,
-    migrate_settings_payload,
-    migrate_theme_settings,
-)
+from services.migration_service import migrate_settings_payload, migrate_theme_settings
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
 
@@ -150,7 +149,7 @@ class SettingsManager(QObject):
         else:
             self.write_json(self.app_state.config_path, self.app_state.local_config)
 
-    def migrate_config_if_needed(self):
+    def ensure_config_defaults(self):
         migrate_settings_payload(self.app_state.local_config, APP_VERSION)
         self.write_local_config()
 
@@ -547,7 +546,7 @@ class SettingsManager(QObject):
                 stored_color = (
                     "" if color == default_display_hex else display_hex_to_qt_hex(color)
                 )
-                config_key = get_theme_color_setting(key)
+                config_key = get_theme_color_key(key)
                 if self.app_state.local_config.get(config_key, "") != stored_color:
                     self.app_state.local_config[config_key] = stored_color
                     changed = True
@@ -676,7 +675,6 @@ class SettingsManager(QObject):
                         )
                 with open(theme_json_path, encoding="utf-8") as f:
                     theme_settings = json.load(f)
-                migrate_theme_settings(theme_settings)
                 for key, value in theme_settings.items():
                     self.app_state.local_config[key] = value
 
@@ -819,7 +817,7 @@ class SettingsManager(QObject):
                 self.write_local_config,
                 self.write_json,
             )
-        self.migrate_config_if_needed()
+        self.ensure_config_defaults()
         self.theme_changed.emit()
         self.settings_changed.emit()
         if language_code:

@@ -241,7 +241,6 @@ class FetchModsThread(QThread):
                         "description_url",
                         "downloads",
                         "icon",
-                        "is_verified",
                         "is_nsfw",
                     ]:
                         if hasattr(mod, attr):
@@ -262,7 +261,6 @@ class FetchModsThread(QThread):
                             "description_url",
                             "downloads",
                             "icon",
-                            "is_verified",
                             "is_nsfw",
                         ]:
                             if hasattr(mod, attr):

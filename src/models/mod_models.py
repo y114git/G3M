@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from config.config import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
+from services.migration_service import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
 
 
 @dataclass
@@ -39,7 +39,6 @@ class ModInfo:
     description_url: str
     downloads: int | None
     game: str
-    is_verified: bool
     like_count: int | None = None
     icon: str | None = None
     tags: list[str] = field(default_factory=list)
@@ -148,19 +147,14 @@ class ModInfo:
             "game_version": data_dict.get("game_version", tr("defaults.not_specified")),
             "description_url": data_dict.get("description_url", ""),
             "downloads": data_dict.get("downloads"),
-            "like_count": data_dict.get(
-                "like_count", data_dict.get("likes", data_dict.get("_nLikeCount"))
-            ),
+            "like_count": data_dict.get("like_count"),
             "game": game,
-            "is_verified": data_dict.get("is_verified", False),
             "icon": data_dict.get("icon", data_dict.get(LEGACY_ICON_KEY)),
             "tags": data_dict.get("tags", []),
             "hide_mod": data_dict.get("hide_mod", False),
             "ban_status": data_dict.get("ban_status", False),
-            "is_nsfw": data_dict.get(
-                "is_nsfw", data_dict.get("nsfw", data_dict.get("_bIsNsfw", False))
-            ),
-            "has_files": data_dict.get("has_files", data_dict.get("_bHasFiles", True)),
+            "is_nsfw": data_dict.get("is_nsfw", False),
+            "has_files": data_dict.get("has_files", True),
             "is_wip": data_dict.get("is_wip", False),
             "files": files_dict,
             "demo_url": data_dict.get("demo_url"),
@@ -177,7 +171,7 @@ class ModInfo:
             "gamebanana_compatibility_checked": data_dict.get(
                 "gamebanana_compatibility_checked", False
             ),
-            "has_full_metadata": data_dict.get("has_full_metadata", True),
+            "has_full_metadata": data_dict.get("has_full_metadata", False),
             "playtime_hours": data_dict.get("playtime_hours", 0.0),
         }
         return cls(**kwargs)

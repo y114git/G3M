@@ -2,7 +2,7 @@
 
 import os
 
-from config.config import LEGACY_ICON_KEY
+from services.migration_service import LEGACY_ICON_KEY
 
 
 def _get_mod_field(mod_data, field, default=None):

@@ -97,7 +97,7 @@ def build_application_context(parent=None) -> ApplicationContext:
         settings_service.write_json,
     )
     localization_service.update_qt_locale(saved_language, qt_translator_holder)
-    settings_service.migrate_config_if_needed()
+    settings_service.ensure_config_defaults()
     announce_service = AnnounceService(app_state, settings_service)
     game_registry_service = GameRegistryService(app_state, settings_service, parent)
     game_registry_service.load()

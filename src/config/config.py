@@ -263,7 +263,7 @@ MOD_CONFIG_FILENAME = "mod_config.json"
 DATA_WIN_FILENAME = "data.win"
 META_JSON_FILENAME = "meta.json"
 ICON_PNG_FILENAME = "icon.png"
-LEGACY_META_JSON_FILENAME = "_deltamodInfo.json"
+DELTAMOD_INFO_FILENAME = "_deltamodInfo.json"
 MAX_PATCHING_ARCHIVES = 10
 MOD_TYPE_G3MPATCH = "g3mpatch"
 MOD_TYPE_XDELTA = "xdelta"
@@ -272,16 +272,11 @@ MOD_TYPE_OVERRIDES_ONLY = "overrides_only"
 MOD_FILTER_TRUE_VALUES = (True, "true", "True", 1)
 MOD_FILTER_NSFW_TEXT_MARKERS = ("nsfw", "adult", "18+", "18plus", "explicit", "mature")
 
-"""Legacy mod config key constants for backward compatibility."""
-LEGACY_DESCRIPTION_KEY = "tagline"
-LEGACY_ICON_KEY = "icon_url"
-
-
 SKIP_FILES = (
     "mod_config.json",
     "_icon.png",
     "icon.png",
     "meta.json",
-    "_deltamodInfo.json",
+    DELTAMOD_INFO_FILENAME,
 )
 ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma")
