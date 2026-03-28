@@ -26,9 +26,9 @@ from config.config import (
     QSS_SETTINGS_TAB_ALIGNMENT,
     SETTINGS_COLOR_CONFIG,
 )
+from config.settings_schema import get_theme_color_key
 from models.game_modes import get_visible_game_entries
 from services.localization_service import localization_service, tr
-from config.settings_schema import get_theme_color_key
 from ui.common.styling import (
     get_border_radius,
     get_theme_color,

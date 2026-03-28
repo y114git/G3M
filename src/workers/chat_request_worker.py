@@ -16,6 +16,7 @@ class ChatRequestThread(QThread):
         super().__init__(parent)
         self.chat_service = ChatManager()
         self._request_type = self._channel = self._message = None
+        self._force_refresh = False
         self._cancelled = False
 
     def _is_cancelled(self):
@@ -34,8 +35,9 @@ class ChatRequestThread(QThread):
         )
         self.start()
 
-    def request_messages(self, channel: str):
-        self._start_request("get_messages", channel)
+    def request_messages(self, channel: str, force_refresh: bool = False):
+        self._force_refresh = force_refresh
+        self._start_request("get_messages", channel, None)
 
     def request_send_message(self, channel: str, message: str):
         self._start_request("send_message", channel, message)
@@ -49,7 +51,9 @@ class ChatRequestThread(QThread):
             return
         try:
             if self._request_type == "get_messages" and self._channel:
-                msgs = self.chat_service.get_messages(self._channel)
+                msgs = self.chat_service.get_messages(
+                    self._channel, force_refresh=self._force_refresh
+                )
                 if not self._is_cancelled():
                     self.messages_received.emit(self._channel, msgs)
             elif (

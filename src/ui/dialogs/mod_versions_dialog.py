@@ -656,7 +656,7 @@ class ModVersionsDialog(QDialog):
         return getattr(self._mod_data, attr, default)
 
     @staticmethod
-    def _resolve_mod_service(parent):
+    def _resolve_mod_service(parent) -> object | None:
         if parent and hasattr(parent, "mod_service"):
             return parent.mod_service
         parent_app = getattr(parent, "parent_app", None)

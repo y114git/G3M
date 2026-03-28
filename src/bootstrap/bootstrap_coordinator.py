@@ -23,7 +23,11 @@ from services.game_detection_service import is_game_running
 from services.localization_service import tr
 from ui.splash import create_png_splash
 from ui.utils.audio_utils import _audio_service
-from utils.network_utils import check_internet_connection, get_session
+from utils.network_utils import (
+    check_internet_connection,
+    cloud_function_request,
+    get_session,
+)
 
 
 class _NetworkInitThread(QThread):
@@ -38,10 +42,13 @@ class _NetworkInitThread(QThread):
         global_settings = {}
         if has_internet:
             try:
-                response = get_session(self._app_state).get(
-                    f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings", timeout=5
+                response = cloud_function_request(
+                    "get",
+                    f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings",
+                    session=get_session(self._app_state),
+                    timeout=5,
                 )
-                if response.status_code == 200:
+                if response and response.status_code == 200:
                     global_settings = response.json() or {}
             except Exception as error:
                 logging.debug(f"Failed to fetch global settings: {error}")

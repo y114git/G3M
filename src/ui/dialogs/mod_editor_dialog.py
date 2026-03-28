@@ -924,9 +924,8 @@ class ModEditorDialog(QDialog):
             path_edit = None
             for i in range(fl.count()):
                 w = fl.itemAt(i).widget() if fl.itemAt(i) else None
-                if isinstance(w, QLineEdit):
-                    if w.property("is_local_path"):
-                        path_edit = w
+                if isinstance(w, QLineEdit) and w.property("is_local_path"):
+                    path_edit = w
             if path_edit and path_edit.text():
                 return {
                     "type": "data",

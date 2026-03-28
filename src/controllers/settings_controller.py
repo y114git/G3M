@@ -64,11 +64,6 @@ class SettingsUiController:
             self.app.bottom_widget.setVisible(True)
             self.app.game_launch.update_button_state()
 
-    def show_report_bug_dialog(self):
-        from ui.dialogs.report_bug_dialog import ReportBugDialog
-
-        ReportBugDialog(self.app, self.app_state).exec()
-
     def _set_combo_data(self, combo, value):
         was_blocked = combo.blockSignals(True)
         for i in range(combo.count()):

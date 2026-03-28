@@ -55,59 +55,39 @@ class TestModPriorityDialog:
         assert isinstance(dialog, QDialog)
 
 
-class TestReportBugDialog:
-
-    def test_report_bug_dialog_creation(self, qapp, app_state):
-        from services.localization_service import tr
-        from ui.dialogs.report_bug_dialog import ReportBugDialog
-        dialog = ReportBugDialog(None, app_state)
-        assert dialog is not None
-        assert isinstance(dialog, QDialog)
-        assert hasattr(dialog, 'text_edit')
-        assert hasattr(dialog, 'file_list')
-        assert hasattr(dialog, 'attach_logs_checkbox')
-        assert hasattr(dialog, 'send_button')
-        assert dialog.max_total_size == 10 * 1024 * 1024
-        assert dialog.text_edit.toolTip() == tr("tooltips.report_bug_text")
-        assert dialog.file_list.toolTip() == tr("tooltips.report_bug_files")
-        assert dialog.attach_logs_checkbox.toolTip() == tr("tooltips.report_bug_attach_logs")
-        assert dialog.send_button.toolTip() == tr("tooltips.report_bug_send")
-        dialog.close()
-
-
 class TestAboutDialog:
 
     def test_about_dialog_creation(self, qapp, app_state, temp_dir):
         from models.plugin_models import PLUGIN_API_VERSION
         from ui.dialogs.about_dialog import AboutDialog
-        callback = Mock()
-        dialog = AboutDialog(None, app_state, on_report_bug=callback)
+        app_state.global_settings = {"reportform_url": "https://example.com/form"}
+        dialog = AboutDialog(None, app_state)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
         assert dialog.title_label.text() == 'DELTAHUB'
         assert dialog.data_path_edit.text() == temp_dir
         assert dialog.plugin_api_value.text() == PLUGIN_API_VERSION
-        assert dialog.report_bug_button.isEnabled()
+        assert dialog.report_issue_button.isEnabled()
         assert dialog.os_value.text()
         assert dialog.python_value.text()
         dialog.close()
 
     def test_about_dialog_actions(self, qapp, app_state):
         from ui.dialogs.about_dialog import AboutDialog
-        callback = Mock()
-        dialog = AboutDialog(None, app_state, on_report_bug=callback)
+        app_state.global_settings = {"reportform_url": "https://example.com/form"}
+        dialog = AboutDialog(None, app_state)
         with patch('ui.dialogs.about_dialog.QDesktopServices.openUrl') as open_url:
             dialog.wiki_button.click()
             dialog.open_folder_button.click()
         assert open_url.call_count == 2
-        dialog.report_bug_button.click()
-        callback.assert_called_once()
+        dialog.report_issue_button.click()
+        assert open_url.call_count == 3
         assert dialog.result() == QDialog.DialogCode.Accepted
 
-    def test_about_dialog_disables_report_bug_without_callback(self, qapp, app_state):
+    def test_about_dialog_disables_report_issue_without_url(self, qapp, app_state):
         from ui.dialogs.about_dialog import AboutDialog
         dialog = AboutDialog(None, app_state)
-        assert not dialog.report_bug_button.isEnabled()
+        assert not dialog.report_issue_button.isEnabled()
         dialog.close()
 
 
@@ -128,8 +108,8 @@ class TestThemeManagementDialog:
     def test_theme_management_dialog_creation(self, qapp, app_state):
         from unittest.mock import Mock
 
-        from services.localization_service import tr
         from services.customization_service import CustomizationManager
+        from services.localization_service import tr
         from ui.dialogs.theme_dialog import ThemeManagementDialog
 
         class FakeThemeController:

@@ -59,7 +59,7 @@ def test_plugin_download_button_disables_while_busy(qapp, temp_dir):
 
 
 def test_plugin_active_download_update_does_not_rerender_tab(qapp, temp_dir):
-    controller, downloads_manager, plugin_catalog_service = _make_controller(temp_dir)
+    controller, _downloads_manager, plugin_catalog_service = _make_controller(temp_dir)
     controller.render = Mock()
     controller.refresh_main_tabs = Mock()
     controller._loaded = True

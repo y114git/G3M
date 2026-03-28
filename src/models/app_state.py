@@ -73,6 +73,7 @@ class AppState(QObject):
         self.is_shown_to_user: bool = False
         self._game_mode: GameDefinition = DeltaruneGame()
         self.global_settings: dict[str, Any] = {}
+        self.global_settings_loaded_at: float = 0.0
         self.is_full_install: bool = False
         self.game_is_running: bool = False
         self.pending_dialogs: list[Any] = []
@@ -92,6 +93,7 @@ class AppState(QObject):
         self.has_internet: bool = True
         self.pending_announce_check: bool = False
         self.network_session: Any | None = None
+        self.global_settings_load_in_progress: bool = False
 
     def __setattr__(self, name: str, value: Any) -> None:
         reactive_attrs = getattr(type(self), "_reactive_attrs", None)

@@ -2,11 +2,10 @@
 
 import logging
 import re
-
-import requests
+import time
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
-from utils.network_utils import check_internet_connection, get_session
+from utils.network_utils import cloud_function_request
 
 
 class ChatManager:
@@ -28,30 +27,33 @@ class ChatManager:
         re.IGNORECASE,
     )
 
+    _MESSAGE_CACHE_TTL_SECONDS = 5
+
     def __init__(self) -> None:
         self.base_url = CLOUD_FUNCTIONS_BASE_URL.rstrip("/")
         if not self.base_url:
             logging.error("ChatManager: CLOUD_FUNCTIONS_BASE_URL is not configured")
+        self._messages_cache: dict[str, tuple[float, list]] = {}
 
     def _check_ready(self):
-        return (
-            "config_error"
-            if not self.base_url
-            else ("no_internet" if not check_internet_connection() else None)
-        )
+        return "config_error" if not self.base_url else None
 
     def _safe_request(self, method: str, endpoint: str, action: str, **kwargs):
-        try:
-            return getattr(get_session(), method)(
-                f"{self.base_url}/{endpoint}", timeout=NETWORK_TIMEOUT_MEDIUM, **kwargs
-            )
-        except requests.RequestException as e:
-            logging.warning(f"ChatManager: Request exception when {action}: {e}")
-            return None
+        return cloud_function_request(
+            method,
+            f"{self.base_url}/{endpoint}", timeout=NETWORK_TIMEOUT_MEDIUM, **kwargs
+        )
 
-    def get_messages(self, channel: str):
+    def get_messages(self, channel: str, *, force_refresh: bool = False):
         if self._check_ready():
             return []
+        cached = self._messages_cache.get(channel)
+        if (
+            not force_refresh
+            and cached
+            and (time.time() - cached[0] < self._MESSAGE_CACHE_TTL_SECONDS)
+        ):
+            return list(cached[1])
         resp = self._safe_request(
             "get", "getChatMessages", "getting messages", params={"channel": channel}
         )
@@ -62,6 +64,7 @@ class ChatManager:
             and data.get("ok")
             and isinstance(data.get("messages"), list)
         ):
+            self._messages_cache[channel] = (time.time(), list(data["messages"]))
             return data["messages"]
         return []
 

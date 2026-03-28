@@ -251,22 +251,11 @@ class AppWindow(QWidget):
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ""
 
     def _show_about_dialog(self):
-        dialog = AboutDialog(
-            self,
-            self.app_state,
-            on_report_bug=self.settings_ui.show_report_bug_dialog
-            if hasattr(self, "settings_ui")
-            else None,
-        )
+        dialog = AboutDialog(self, self.app_state)
         dialog.exec()
 
     def _show_changelog_dialog(self):
-        changelog_url = self._localized_value(
-            self.app_state.global_settings,
-            "changelog_ru_url",
-            "changelog_en_url",
-            "changelog_url",
-        )
+        changelog_url = self.app_state.global_settings.get("changelog_url", "")
         dialog = ChangelogDialog(self, changelog_url.strip() if changelog_url else "")
         dialog.exec()
 
@@ -1231,6 +1220,7 @@ class AppWindow(QWidget):
         if not is_initial and self.app_state.has_internet:
             reload_global_settings(
                 self,
+                force_refresh=True,
                 callback=lambda success: (
                     check_and_show_announce(self, force_check=True) if success else None
                 ),

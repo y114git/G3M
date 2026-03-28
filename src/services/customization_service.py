@@ -12,8 +12,8 @@ from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QLabel
 
 from config.config import DEFAULT_COLORS
-from services.localization_service import tr
 from config.settings_schema import get_theme_color_key
+from services.localization_service import tr
 from ui.common.styling import install_panel_style_handler, qt_hex_to_display_hex
 from utils.path_utils import resource_path
 

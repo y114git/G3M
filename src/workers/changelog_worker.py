@@ -1,7 +1,6 @@
 """Changelog fetching worker."""
 
 import os
-import time
 
 import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
@@ -27,8 +26,6 @@ class FetchChangelogWorker(QObject):
             if self.source.startswith(("http://", "https://")):
                 resp = get_session().get(
                     self.source,
-                    params={"ts": int(time.time())},
-                    headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
                     timeout=NETWORK_TIMEOUT_MEDIUM,
                 )
                 if thread.isInterruptionRequested():
@@ -38,15 +35,7 @@ class FetchChangelogWorker(QObject):
                     return
                 text = resp.text
             else:
-                path = (
-                    self.source
-                    if os.path.exists(self.source)
-                    else (
-                        self.source.replace(".md", ".txt")
-                        if os.path.exists(self.source.replace(".md", ".txt"))
-                        else None
-                    )
-                )
+                path = self.source if os.path.exists(self.source) else None
                 if thread.isInterruptionRequested():
                     return
                 if path:

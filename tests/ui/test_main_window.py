@@ -150,9 +150,9 @@ class TestTabBuilders:
         widget.deleteLater()
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
-        from services.localization_service import tr
         from PyQt6.QtWidgets import QGridLayout
 
+        from services.localization_service import tr
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
 
         builder = ModsBrowserTabBuilder(app_state, None)

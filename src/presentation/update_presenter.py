@@ -1,16 +1,18 @@
 """Update and announce presentation helpers."""
 
 import logging
+import time
 
 from PyQt6.QtCore import QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL
 from services.localization_service import tr
-from utils.network_utils import get_session
+from utils.network_utils import cloud_function_request, get_session
 
 UPDATE_PROMPT_RETRY_INTERVAL_MS = 500
 UPDATE_PROMPT_MAX_RETRIES = 15
+GLOBAL_SETTINGS_CACHE_TTL_SECONDS = 300
 
 
 class _GlobalSettingsWorker(QThread):
@@ -24,10 +26,13 @@ class _GlobalSettingsWorker(QThread):
 
     def run(self):
         try:
-            response = get_session(self._app_state).get(
-                f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings", timeout=5
+            response = cloud_function_request(
+                "get",
+                f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings",
+                session=get_session(self._app_state),
+                timeout=5,
             )
-            if response.status_code == 200:
+            if response and response.status_code == 200:
                 self.finished.emit(True, response.json() or {})
                 return
         except Exception as e:
@@ -60,20 +65,34 @@ def handle_update_info(app, update_info, retry_count=0):
     app.show_update_prompt.emit(update_info)
 
 
-def reload_global_settings(app, callback=None):
+def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
+    if not force_refresh and app.app_state.global_settings and (
+        time.time() - float(getattr(app.app_state, "global_settings_loaded_at", 0.0))
+        < GLOBAL_SETTINGS_CACHE_TTL_SECONDS
+    ):
+        if callback:
+            callback(True)
+        return
     if not app.app_state.has_internet:
         if callback:
             callback(False)
         return
+    if getattr(app.app_state, "global_settings_load_in_progress", False):
+        if callback:
+            callback(True)
+        return
+    app.app_state.global_settings_load_in_progress = True
     worker = _GlobalSettingsWorker(app.app_state, parent=app)
 
     def _on_finished(success, data):
         try:
             if success:
                 app.app_state.global_settings = data
+                app.app_state.global_settings_loaded_at = time.time()
             if callback:
                 callback(success)
         finally:
+            app.app_state.global_settings_load_in_progress = False
             worker.deleteLater()
 
     worker.finished.connect(_on_finished)
@@ -90,6 +109,8 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
                 500,
                 lambda: check_and_show_announce(app, retry_count + 1, force_check),
             )
+        return
+    if not app.app_state.global_settings and not force_check:
         return
     announce = (app.app_state.global_settings or {}).get("announce", {})
     announce_messages = announce.get("messages", {})

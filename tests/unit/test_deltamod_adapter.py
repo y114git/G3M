@@ -1,5 +1,6 @@
-from adapters.deltamod_adapter import DeltamodConverter
 from defusedxml import ElementTree
+
+from adapters.deltamod_adapter import DeltamodConverter
 
 
 def _make_converter(metadata: dict, gamebanana_metadata: dict | None = None) -> DeltamodConverter:

@@ -2,7 +2,7 @@ import contextlib
 import logging
 import time
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QSize, Qt, QTimer
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -24,6 +25,7 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from ui.common.styling import clamp_border_radius
+from utils.path_utils import colored_icon
 
 
 class ChatWindow(QDialog):
@@ -78,7 +80,11 @@ class ChatWindow(QDialog):
         layout.setContentsMargins(15, 15, 15, 15)
         channels_layout = QHBoxLayout()
         channels_layout.setSpacing(10)
-        channels_layout.addStretch()
+
+        tabs_container = QWidget()
+        tabs_container_layout = QHBoxLayout(tabs_container)
+        tabs_container_layout.setContentsMargins(0, 0, 0, 0)
+        tabs_container_layout.setSpacing(10)
         self.channel_buttons = {}
         self._updating_channel_buttons = False
         channels = [
@@ -105,9 +111,23 @@ class ChatWindow(QDialog):
                 return handler
 
             btn.clicked.connect(make_switch_handler(channel_code))
-            channels_layout.addWidget(btn)
+            tabs_container_layout.addWidget(btn)
             self.channel_buttons[channel_code] = btn
+
+        tabs_container.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred
+        )
+        channels_layout.addWidget(tabs_container)
         channels_layout.addStretch()
+
+        refresh_container = QWidget()
+        refresh_container_layout = QHBoxLayout(refresh_container)
+        refresh_container_layout.setContentsMargins(0, 0, 0, 0)
+        refresh_container_layout.setSpacing(0)
+        self.refresh_button = QPushButton()
+        self.refresh_button.clicked.connect(self._manual_refresh_messages)
+        refresh_container_layout.addWidget(self.refresh_button)
+        channels_layout.addWidget(refresh_container)
         layout.addLayout(channels_layout)
         self.messages_area = QScrollArea()
         self.messages_area.setWidgetResizable(True)
@@ -263,16 +283,31 @@ class ChatWindow(QDialog):
             return
         if self._loading_messages or self._refreshing_messages:
             return
-        self._request_refresh_messages()
+        self._request_refresh_messages(force_refresh=True)
 
-    def _request_refresh_messages(self):
+    def _request_refresh_messages(self, force_refresh: bool = False):
         if not getattr(self.app_state, "has_internet", False):
             return
         self._refreshing_messages = True
         if self.chat_request_thread.isRunning():
             self._refreshing_messages = False
             return
-        self.chat_request_thread.request_messages(self.current_channel)
+        self.chat_request_thread.request_messages(
+            self.current_channel, force_refresh=force_refresh
+        )
+
+    def _manual_refresh_messages(self):
+        if not self.current_channel or self._loading_messages or self._refreshing_messages:
+            return
+        if not getattr(self.app_state, "has_internet", False):
+            return
+        self._refreshing_messages = True
+        if self.chat_request_thread.isRunning():
+            self._refreshing_messages = False
+            return
+        self.chat_request_thread.request_messages(
+            self.current_channel, force_refresh=True
+        )
 
     def _refresh_messages_async(self):
         if (
@@ -564,6 +599,8 @@ class ChatWindow(QDialog):
         self.limit_label.setStyleSheet(
             f"color: {theme['secondary_text']}; font-size: 12px;"
         )
+        self.refresh_button.setIcon(colored_icon("refresh", theme["main_text"]))
+        self.refresh_button.setIconSize(QSize(20, 20))
         for msg_widget in self._iter_message_widgets():
             self._style_message_widget(
                 msg_widget, theme["border_radius"], theme["main_text"]

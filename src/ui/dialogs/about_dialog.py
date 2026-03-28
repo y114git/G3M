@@ -1,7 +1,6 @@
 import os
 import platform
 import sys
-from collections.abc import Callable
 
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont
@@ -25,12 +24,9 @@ class AboutDialog(QDialog):
     WIKI_URL = "https://github.com/y114git/DELTAHUB/wiki"
     ISSUES_URL = "https://github.com/y114git/DELTAHUB/issues"
 
-    def __init__(
-        self, parent, app_state, on_report_bug: Callable[[], None] | None = None
-    ) -> None:
+    def __init__(self, parent, app_state) -> None:
         super().__init__(parent)
         self.app_state = app_state
-        self._on_report_bug = on_report_bug
         self.data_root = self._resolve_data_root()
         self.setWindowTitle(tr("ui.about_title"))
         self.setMinimumWidth(620)
@@ -127,9 +123,9 @@ class AboutDialog(QDialog):
         actions_layout = QHBoxLayout()
         self.open_folder_button = QPushButton(tr("buttons.open_deltahub_folder"))
         self.open_folder_button.clicked.connect(self._open_data_folder)
-        self.report_bug_button = QPushButton(tr("buttons.report_bug"))
-        self.report_bug_button.clicked.connect(self._report_bug)
-        self.report_bug_button.setEnabled(self._on_report_bug is not None)
+        self.report_issue_button = QPushButton(tr("buttons.report_issue"))
+        self.report_issue_button.clicked.connect(self._open_report_form)
+        self.report_issue_button.setEnabled(bool(self._report_form_url()))
         self.telegram_button = QPushButton(tr("buttons.telegram"))
         self.telegram_button.clicked.connect(
             lambda: self._open_url(SOCIAL_LINKS["telegram"])
@@ -141,7 +137,7 @@ class AboutDialog(QDialog):
         self.close_button = QPushButton(tr("buttons.close"))
         self.close_button.clicked.connect(self.reject)
         actions_layout.addWidget(self.open_folder_button)
-        actions_layout.addWidget(self.report_bug_button)
+        actions_layout.addWidget(self.report_issue_button)
         actions_layout.addStretch(1)
         actions_layout.addWidget(self.telegram_button)
         actions_layout.addWidget(self.discord_button)
@@ -155,8 +151,12 @@ class AboutDialog(QDialog):
         if self.data_root and os.path.exists(self.data_root):
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.data_root))
 
-    def _report_bug(self):
-        if self._on_report_bug is None:
+    def _report_form_url(self) -> str:
+        return str((self.app_state.global_settings or {}).get("reportform_url", "")).strip()
+
+    def _open_report_form(self):
+        url = self._report_form_url()
+        if not url:
             return
         self.accept()
-        self._on_report_bug()
+        self._open_url(url)

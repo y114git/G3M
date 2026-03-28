@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Iterable
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_SHORT
-from utils.network_utils import get_session
+from utils.network_utils import cloud_function_request, get_session
 
 _ANNOUNCE_TYPE_POST = "post"
 _ANNOUNCE_TYPE_POLL_SINGLE = "poll_single"
@@ -137,13 +137,17 @@ class AnnounceService:
             "timestamp": int(time.time()),
         }
         try:
-            response = get_session(self.app_state).post(
+            response = cloud_function_request(
+                "post",
                 f"{CLOUD_FUNCTIONS_BASE_URL}/submitAnnouncePoll",
                 json=payload,
                 timeout=NETWORK_TIMEOUT_SHORT,
+                session=get_session(self.app_state),
             )
         except Exception as exc:
             return False, str(exc)
+        if not response:
+            return False, "request_failed"
         if response.status_code != 200:
             try:
                 error_payload = response.json() or {}

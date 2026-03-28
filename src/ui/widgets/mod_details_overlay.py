@@ -1,9 +1,13 @@
 """Overlay widget for displaying mod details with inline screenshot carousel."""
 
+import collections
 import contextlib
+import copy
 import html
 import json
 import logging
+import threading
+import time
 import webbrowser
 
 from PyQt6 import sip as _sip
@@ -42,6 +46,33 @@ from ui.utils.image_loader import ImageLoaderRunnable
 from ui.utils.ui_utils import UIAnimator
 from utils.mod_utils import get_mod_id
 from workers import WorkerSignals
+
+_MOD_DETAILS_CACHE: collections.OrderedDict[tuple[int, str], tuple[float, dict]] = (
+    collections.OrderedDict()
+)
+_MOD_DETAILS_CACHE_LOCK = threading.Lock()
+_MOD_DETAILS_CACHE_TTL_SECONDS = 600
+_MOD_DETAILS_CACHE_MAX_ENTRIES = 64
+
+
+def _get_cached_mod_details(cache_key: tuple[int, str]) -> dict | None:
+    with _MOD_DETAILS_CACHE_LOCK:
+        cached = _MOD_DETAILS_CACHE.get(cache_key)
+        if not cached:
+            return None
+        if time.time() - cached[0] >= _MOD_DETAILS_CACHE_TTL_SECONDS:
+            _MOD_DETAILS_CACHE.pop(cache_key, None)
+            return None
+        _MOD_DETAILS_CACHE.move_to_end(cache_key)
+        return copy.deepcopy(cached[1])
+
+
+def _store_cached_mod_details(cache_key: tuple[int, str], value: dict) -> None:
+    with _MOD_DETAILS_CACHE_LOCK:
+        _MOD_DETAILS_CACHE[cache_key] = (time.time(), dict(value))
+        _MOD_DETAILS_CACHE.move_to_end(cache_key)
+        while len(_MOD_DETAILS_CACHE) > _MOD_DETAILS_CACHE_MAX_ENTRIES:
+            _MOD_DETAILS_CACHE.popitem(last=False)
 
 
 class LoadDescriptionFromUrlThread(QThread):
@@ -157,6 +188,13 @@ class LoadModDetailsThread(QThread):
                 return
             if self.isInterruptionRequested():
                 return
+            cache_key = (mod_id, "Wip" if self._is_wip() else "Mod")
+            cached = _get_cached_mod_details(cache_key)
+            if cached is not None:
+                if self.isInterruptionRequested():
+                    return
+                self.details_loaded.emit(cached)
+                return
             api = GameBananaAPI()
             itemtype = "Wip" if self._is_wip() else "Mod"
             details = api.get_mod_full_details_for_display(mod_id, itemtype=itemtype)
@@ -177,7 +215,7 @@ class LoadModDetailsThread(QThread):
                     result["text"] = full_description
                 if description:
                     result["description"] = description.strip()
-                result["screenshots"] = screenshots
+                _store_cached_mod_details(cache_key, result)
                 if not self.isInterruptionRequested():
                     self.details_loaded.emit(result)
         except Exception as e:

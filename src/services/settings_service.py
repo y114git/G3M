@@ -20,7 +20,7 @@ from config.settings_schema import (
 )
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
-from services.migration_service import migrate_settings_payload, migrate_theme_settings
+from services.migration_service import migrate_settings_payload
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
 

@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QMessageBox
 
 import models.mod_models as mod_models
-from config.config import MOD_CONFIG_FILENAME, UI_COLORS
+from config.config import MOD_CONFIG_FILENAME
 from models.exceptions import ModUninstallationError
 from models.mod_models import LocalModInfo, ModFileData
 from services.localization_service import tr

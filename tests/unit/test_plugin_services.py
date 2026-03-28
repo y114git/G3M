@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import zipfile
 from unittest.mock import Mock
 
@@ -106,6 +107,20 @@ def test_plugin_catalog_service_returns_empty_when_cache_is_empty(temp_dir):
     assert service.is_loaded() is False
     assert catalog == {}
     assert service.get_entry("fallback_plugin") is None
+
+
+def test_plugin_catalog_service_uses_in_memory_cache(temp_dir):
+    app_state = Mock()
+    app_state.network_session = None
+    settings_service = _DummySettingsService()
+    service = PluginCatalogService(app_state, settings_service, temp_dir)
+    service._catalog = {"plugins": [{"id": "cached_plugin", "name": "Cached"}]}
+    service._catalog_loaded_at = time.time()
+
+    catalog = service.load_catalog()
+
+    assert catalog["plugins"][0]["id"] == "cached_plugin"
+    assert service.get_entry("cached_plugin").name == "Cached"
 
 
 def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir):

@@ -202,6 +202,15 @@ def safe_request(method, url, session=None, timeout=None, **kwargs):
         return None
 
 
+def cloud_function_request(method, url, session=None, timeout=None, **kwargs):
+    try:
+        return getattr(session or get_session(), method.lower())(
+            url, timeout=timeout or NETWORK_TIMEOUT_MEDIUM, **kwargs
+        )
+    except Exception:
+        return None
+
+
 def increment_launch_counter():
     from config.config import CLOUD_FUNCTIONS_BASE_URL
 

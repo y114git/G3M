@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
+import time
 
 from config.config import PLUGIN_CATALOG_URL
 from models.plugin_models import CatalogPluginEntry
@@ -13,34 +13,35 @@ logger = logging.getLogger(__name__)
 
 class PluginCatalogService:
     """Loads the remote plugin catalog only when requested."""
+    _CACHE_TTL_SECONDS = 300
 
     def __init__(self, app_state, settings_service, plugins_dir: str) -> None:
         self.app_state = app_state
         self.settings_service = settings_service
         self.plugins_dir = plugins_dir
-        self.cache_path = os.path.join(plugins_dir, "catalog_cache.json")
         self._catalog: dict | None = None
+        self._catalog_loaded_at: float = 0.0
         self._entries_cache: list[CatalogPluginEntry] | None = None
         self._entries_by_id: dict[str, CatalogPluginEntry] | None = None
 
     def load_catalog(self, force_refresh: bool = False) -> dict:
-        if self._catalog is not None and not force_refresh:
+        if (
+            self._catalog is not None
+            and not force_refresh
+            and (time.time() - self._catalog_loaded_at) < self._CACHE_TTL_SECONDS
+        ):
             return self._catalog
-        os.makedirs(self.plugins_dir, exist_ok=True)
         if force_refresh:
             data = self._try_fetch_catalog()
             if data:
                 self._catalog = data
-                self._write_cache(data)
+                self._catalog_loaded_at = time.time()
                 self._invalidate_cache()
                 return data
-        cached = self.settings_service.read_json(self.cache_path) or {}
-        if not cached:
-            self._catalog = None
-        else:
-            self._catalog = cached
+        self._catalog = self._catalog or {}
+        self._catalog_loaded_at = time.time() if self._catalog else 0.0
         self._invalidate_cache()
-        return cached or {}
+        return self._catalog
 
     def is_loaded(self) -> bool:
         return self._catalog is not None
@@ -96,9 +97,6 @@ class PluginCatalogService:
         except Exception as e:
             logger.debug("PluginCatalogService: fetch failed: %s", e, exc_info=True)
         return None
-
-    def _write_cache(self, data: dict) -> None:
-        self.settings_service.write_json(self.cache_path, data)
 
     def _invalidate_cache(self) -> None:
         """Invalidate the entries cache when catalog changes."""
