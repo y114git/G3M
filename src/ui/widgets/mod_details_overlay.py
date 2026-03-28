@@ -8,7 +8,7 @@ import webbrowser
 
 from PyQt6 import sip as _sip
 from PyQt6.QtCore import Qt, QThread, QThreadPool, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QGuiApplication, QMouseEvent, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -193,13 +193,13 @@ class ScreenshotViewerDialog(QDialog):
                 return
             super().mousePressEvent(event)
 
-        def mouseReleaseEvent(self, event):
+        def mouse_release_event(self, event):
             if event.button() == Qt.MouseButton.RightButton:
                 self.close()
                 return
             super().mouseReleaseEvent(event)
 
-        def contextMenuEvent(self, event):
+        def context_menu_event(self, event):
             event.ignore()
 
     def __init__(self, urls, index=0, parent=None) -> None:
@@ -743,10 +743,10 @@ class ModDetailsOverlay(QWidget):
 
     def _build_left_column(self):
         left = self._layout(QVBoxLayout, margins=(0, 0, 0, 0), spacing=15)
-        if external_url := getattr(self.mod_data, "external_url", None):
+        if homepage := getattr(self.mod_data, "homepage", None):
             left.addWidget(
                 self._create_button(
-                    tr("ui.view_on_external_site"),
+                    tr("ui.view_homepage"),
                     obj_name="cardButtonExternal",
                     style=self._button_style(
                         "cardButtonExternal",
@@ -754,7 +754,7 @@ class ModDetailsOverlay(QWidget):
                         width=self.EXTERNAL_BUTTON_WIDTH,
                         font_size=15,
                     ),
-                    clicked=lambda: webbrowser.open(external_url),
+                    clicked=lambda: webbrowser.open(homepage),
                     fixed_width=self.EXTERNAL_BUTTON_WIDTH,
                 ),
                 0,

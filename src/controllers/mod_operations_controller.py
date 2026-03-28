@@ -53,12 +53,12 @@ class ModOperationsController:
                 with contextlib.suppress(TypeError, RuntimeError):
                     getattr(task, sig_name).disconnect()
 
-    def _pick_gamebanana_file(self, available_files, mod_name, external_url):
+    def _pick_gamebanana_file(self, available_files, mod_name, homepage):
         available_files = sort_gamebanana_files_by_priority(available_files)
         if len(available_files) <= 1:
             return available_files[0] if available_files else None
         dialog = GameBananaFilePickerDialog(
-            self.app, available_files, mod_name, external_url
+            self.app, available_files, mod_name, homepage
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             self.feedback_service.update_status(
@@ -141,7 +141,7 @@ class ModOperationsController:
             "gb_file_id": file_id,
             "file_name": file_name,
             "compatibility": compatibility,
-            "profile_url": getattr(mod, "external_url", None),
+            "homepage": getattr(mod, "homepage", None),
             "icon": getattr(mod, "icon", None),
             "tags": getattr(mod, "tags", None) or [],
             "category": getattr(mod, "gamebanana_category", None),
@@ -316,7 +316,7 @@ class ModOperationsController:
                     )
                     return
                 selected_file = self._pick_gamebanana_file(
-                    available_files, mod.name, getattr(mod, "external_url", None)
+                    available_files, mod.name, getattr(mod, "homepage", None)
                 )
                 if selected_file is None:
                     return

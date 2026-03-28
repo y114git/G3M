@@ -61,7 +61,7 @@ class PluginCatalogService:
                     version=str(item.get("version", "")).strip(),
                     api_version=str(item.get("api_version", "")).strip(),
                     icon=str(item.get("icon", "")).strip(),
-                    external_link=str(item.get("external_link", "")).strip(),
+                    homepage=str(item.get("homepage", "")).strip(),
                     download_link=str(item.get("download_link", "")).strip(),
                     tags=[str(tag).strip() for tag in item.get("tags", []) if str(tag).strip()],
                     relations={

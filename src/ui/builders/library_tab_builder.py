@@ -376,11 +376,6 @@ class LibraryTabBuilder(QObject):
         from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
 
         summary_panel = ModSummaryPanel(self.app_state)
-        install_panel_style_handler(
-            summary_panel,
-            self.app_state.local_config,
-            attr_name="_summary_panel_style_filter",
-        )
         content_hlayout.addWidget(summary_panel, 4)
 
         layout.addLayout(content_hlayout, 1)

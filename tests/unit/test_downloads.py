@@ -7,6 +7,7 @@ from models.download_models import (
     DownloadRecord,
     DownloadStatus,
     SourceKind,
+    TargetKind,
     UseStatus,
 )
 from services.downloads_manager import DownloadsManager, _safe_filename
@@ -282,6 +283,35 @@ class TestDownloadsManager:
         assert dup2
         assert rid1 == rid2
         assert len(self.manager.records) == 1
+
+    def test_enqueue_plugin_replaces_existing_non_active_duplicate(self, tmp_path):
+        plugin_file = tmp_path / 'plugin_old.zip'
+        plugin_file.write_text('old plugin data')
+        existing = DownloadRecord(
+            id='pluginold01',
+            display_name='Plugin A',
+            source_kind=SourceKind.EXTERNAL_URL,
+            target_kind=TargetKind.PLUGIN,
+            canonical_key='plugin:sample:1.0.0',
+            download_status=DownloadStatus.DOWNLOADED,
+            use_status=UseStatus.READY,
+            file_path=str(plugin_file),
+            file_exists=True,
+        )
+        self.manager.store.add(existing)
+
+        record_id, is_dup = self.manager.enqueue(
+            display_name='Plugin A',
+            source_url='https://example.com/plugin.zip',
+            target_kind=TargetKind.PLUGIN,
+            canonical_key='plugin:sample:1.0.0',
+            metadata={'plugin_id': 'sample'},
+        )
+
+        assert not is_dup
+        assert record_id != 'pluginold01'
+        assert self.manager.store.find('pluginold01') is None
+        assert not plugin_file.exists()
 
     def test_action_cancel_download(self):
         rid, _ = self.manager.enqueue(

@@ -137,7 +137,7 @@ def mock_requests():
 
 @pytest.fixture
 def sample_mod_config():
-    return {'id': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'files': {}}
+    return {'config_version': '1.0.0', 'id': 'test_mod_001', 'name': 'Test Mod', 'version': '1.0.0', 'author': 'Test Author', 'description': 'A test mod', 'game': 'deltarune', 'files': {}}
 
 
 @pytest.fixture

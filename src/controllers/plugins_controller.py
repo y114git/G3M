@@ -26,6 +26,7 @@ from ui.common.styling import (
     get_card_button_metrics,
     get_card_layout_scale,
     get_theme_color,
+    load_mod_icon_universal,
     show_empty_message_in_layout,
     update_mod_widget_style,
 )
@@ -90,10 +91,9 @@ class PluginsController:
         self._filtering = False
         self._catalog_worker: _PluginCatalogWorker | None = None
         self._plugin_tab_ids: list[str] = []
+        self._download_buttons: dict[str, QPushButton] = {}
         self.downloads_manager.record_updated.connect(self._on_download_record_updated)
-        self.downloads_manager.record_removed.connect(
-            lambda _record_id: self.render() if self._loaded else None
-        )
+        self.downloads_manager.record_removed.connect(self._on_download_record_removed)
 
     def restore_filter_state(self) -> None:
         if not hasattr(self.app, "plugins_installed_only_checkbox"):
@@ -112,7 +112,10 @@ class PluginsController:
     def on_tab_changed(self, index: int) -> None:
         if not hasattr(self.app, "settings_tab_widget"):
             return
-        if hasattr(self.app, "plugins_tab") and self.app.settings_tab_widget.currentWidget() is self.app.plugins_tab:
+        if (
+            hasattr(self.app, "plugins_tab")
+            and self.app.settings_tab_widget.currentWidget() is self.app.plugins_tab
+        ):
             self.ensure_loaded()
 
     def ensure_loaded(self, force_refresh: bool = False) -> None:
@@ -143,6 +146,7 @@ class PluginsController:
         if not hasattr(self.app, "plugins_layout"):
             return
         self._apply_list_style()
+        self._download_buttons.clear()
         clear_layout_widgets(self.app.plugins_layout)
         installed = {
             plugin.plugin_id: plugin
@@ -154,7 +158,9 @@ class PluginsController:
         items: list[QWidget] = []
 
         for plugin in installed.values():
-            if tag_filter and not (tag_filter & set(plugin.manifest.tags if plugin.manifest else [])):
+            if tag_filter and not (
+                tag_filter & set(plugin.manifest.tags if plugin.manifest else [])
+            ):
                 continue
             items.append(self._build_installed_card(plugin))
         if not filters["installed_only"]:
@@ -183,6 +189,27 @@ class PluginsController:
 
     def _on_download_record_updated(self, record) -> None:
         if getattr(record, "target_kind", None) != TargetKind.PLUGIN:
+            return
+        plugin_id = (
+            str((record.metadata or {}).get("plugin_id", "")).strip()
+            if getattr(record, "metadata", None)
+            else ""
+        )
+        effective_status = getattr(record, "effective_status_key", "")
+        if plugin_id and effective_status in {"downloading", "installing", "ready"}:
+            self._refresh_download_button_state(plugin_id)
+            return
+        self.plugin_runtime_service.scan_installed_plugins(
+            resolve_catalog=self.plugin_catalog_service.is_loaded()
+        )
+        self.refresh_main_tabs()
+        if self._loaded:
+            self.render()
+
+    def _on_download_record_removed(self, record) -> None:
+        if getattr(record, "target_kind", None) != TargetKind.PLUGIN:
+            if self._loaded:
+                self.render()
             return
         self.plugin_runtime_service.scan_installed_plugins(
             resolve_catalog=self.plugin_catalog_service.is_loaded()
@@ -253,11 +280,30 @@ QPushButton#cardButton {{
 QPushButton#cardButton:hover {{
     background-color: {hover};
 }}
+QPushButton#cardButtonDownload {{
+    background-color: #4CAF50;
+    color: {text};
+    border: 2px solid {border};
+    border-radius: {radius}px;
+    min-width: {button_width}px;
+    min-height: {button_height}px;
+    font-size: {button_font_size}px;
+}}
+QPushButton#cardButtonDownload:hover {{
+    background-color: #5cb85c;
+}}
 QPushButton#cardButtonUninstall {{
     background-color: #d68b2a;
 }}
 QPushButton#cardButtonUninstall:hover {{
     background-color: #e29c3f;
+}}
+QPushButton#cardButtonDownload:disabled,
+QPushButton#cardButton:disabled,
+QPushButton#cardButtonUninstall:disabled {{
+    background-color: #3b3b3b;
+    color: #808080;
+    border-color: #808080;
 }}
 """
         )
@@ -311,7 +357,8 @@ QPushButton#cardButtonUninstall:hover {{
         name_label.setStyleSheet("font-size: 15px; font-weight: bold;")
         meta = QLabel(f"{author}  |  {version}".strip(" |"))
         meta.setObjectName("secondaryText")
-        meta.setStyleSheet(f"font-size: 13px; color: {get_theme_color(self.app_state.local_config, 'secondary_text')};")
+        meta_color = get_theme_color(self.app_state.local_config, "secondary_text")
+        meta.setStyleSheet(f"font-size: 13px; color: {meta_color};")
         text_layout.addWidget(name_label)
         text_layout.addWidget(meta)
         layout.addLayout(text_layout, 1)
@@ -319,7 +366,7 @@ QPushButton#cardButtonUninstall:hover {{
             badge_label = QLabel(badge)
             badge_label.setObjectName("secondaryText")
             badge_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            badge_label.setStyleSheet(f"font-size: 13px; color: {get_theme_color(self.app_state.local_config, 'secondary_text')};")
+            badge_label.setStyleSheet(f"font-size: 13px; color: {meta_color};")
             if badge_tooltip:
                 badge_label.setToolTip(badge_tooltip)
             if badge_color:
@@ -342,12 +389,17 @@ QPushButton#cardButtonUninstall:hover {{
                 )
 
     def _build_catalog_card(self, entry):
-        card, _icon, body, actions = self._build_card_shell()
+        card, icon_label, body, actions = self._build_card_shell()
         card.setProperty("plugin_id", entry.id)
+        if entry.icon:
+            load_mod_icon_universal(icon_label, entry, size=icon_label.width())
         body.addWidget(self._card_header(entry.name, entry.version, entry.author))
         description = QLabel(entry.description)
         description.setObjectName("secondaryText")
-        description.setStyleSheet(f"color: {get_theme_color(self.app_state.local_config, 'secondary_text')}; font-size: 12px;")
+        secondary_color = get_theme_color(self.app_state.local_config, "secondary_text")
+        description.setStyleSheet(
+            f"color: {secondary_color}; font-size: 12px;"
+        )
         description.setWordWrap(True)
         description.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         body.addWidget(description)
@@ -355,27 +407,37 @@ QPushButton#cardButtonUninstall:hover {{
         is_compatible = self._entry_api_compatible(entry)
 
         if not is_compatible:
-            warning = QLabel(tr("plugins.incompatible_api_warning", required_version=entry.api_version, current_version=PLUGIN_API_VERSION))
+            warning = QLabel(
+                tr(
+                    "plugins.incompatible_api_warning",
+                    required_version=entry.api_version,
+                    current_version=PLUGIN_API_VERSION,
+                )
+            )
             warning.setObjectName("warningText")
-            warning.setStyleSheet(f"color: {get_theme_color(self.app_state.local_config, 'warning')}; font-size: 11px; font-style: italic;")
+            warning_color = get_theme_color(self.app_state.local_config, "warning")
+            warning.setStyleSheet(
+                f"color: {warning_color}; font-size: 11px; font-style: italic;"
+            )
             warning.setWordWrap(True)
             warning.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             body.addWidget(warning)
 
-        actions.addWidget(
-            self._action_button(
-                tr("plugins.action_download"),
-                "cardButtonDownload",
-                lambda: self.download_plugin(entry),
-                enabled=bool(entry.download_link and is_compatible),
-            )
+        download_button = self._action_button(
+            tr("plugins.action_download"),
+            "cardButtonDownload",
+            lambda: self.download_plugin(entry),
+            enabled=bool(entry.download_link and is_compatible),
         )
-        if entry.external_link:
+        self._download_buttons[entry.id] = download_button
+        self._apply_download_button_state(download_button, entry, is_compatible)
+        actions.addWidget(download_button)
+        if entry.homepage:
             actions.addWidget(
                 self._action_button(
                     tr("plugins.action_details"),
                     "cardButton",
-                    lambda: QDesktopServices.openUrl(QUrl(entry.external_link)),
+                    lambda: QDesktopServices.openUrl(QUrl(entry.homepage)),
                 )
             )
         return card
@@ -411,7 +473,10 @@ QPushButton#cardButtonUninstall:hover {{
             _resolve_text(plugin.manifest.description if plugin.manifest else plugin.error)
         )
         description.setObjectName("secondaryText")
-        description.setStyleSheet(f"color: {get_theme_color(self.app_state.local_config, 'secondary_text')}; font-size: 12px;")
+        secondary_color = get_theme_color(self.app_state.local_config, "secondary_text")
+        description.setStyleSheet(
+            f"color: {secondary_color}; font-size: 12px;"
+        )
         description.setWordWrap(True)
         description.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         body.addWidget(description)
@@ -420,7 +485,9 @@ QPushButton#cardButtonUninstall:hover {{
             badge_text = tr("plugins.badge_local")
             badge_label = QLabel(badge_text)
             badge_label.setObjectName("secondaryText")
-            badge_label.setStyleSheet(f"color: {get_theme_color(self.app_state.local_config, 'secondary_text')}; font-size: 12px;")
+            badge_label.setStyleSheet(
+                f"color: {secondary_color}; font-size: 12px;"
+            )
             badge_label.setToolTip(tr("plugins.badge_local_tooltip"))
             body.addWidget(badge_label)
 
@@ -454,10 +521,11 @@ QPushButton#cardButtonUninstall:hover {{
                 "plugin_id": entry.id,
                 "catalog_plugin_version": entry.version,
                 "source": "catalog",
-                "external_link": entry.external_link,
+                "homepage": entry.homepage,
                 "file_name": f"{entry.id}.zip",
             },
         )
+        self._refresh_download_button_state(entry.id)
 
     def import_paths(self, paths: list[str]) -> None:
         if not paths:
@@ -483,7 +551,11 @@ QPushButton#cardButtonUninstall:hover {{
         else:
             success, error = self.plugin_runtime_service.enable_plugin(plugin_id)
             if not success:
-                self.feedback_service.show_message("error", "errors.error", error or tr("plugins.enable_failed"))
+                self.feedback_service.show_message(
+                    "error",
+                    "errors.error",
+                    error or tr("plugins.enable_failed"),
+                )
         self.refresh_main_tabs()
         self.render()
 
@@ -539,6 +611,59 @@ QPushButton#cardButtonUninstall:hover {{
             f"}}"
             "QScrollArea { background: transparent; }"
             "QWidget { background: transparent; }"
+        )
+
+    def _get_plugin_download_record(self, plugin_id: str):
+        for record in reversed(list(getattr(self.downloads_manager, "records", []))):
+            if getattr(record, "target_kind", None) != TargetKind.PLUGIN:
+                continue
+            metadata = getattr(record, "metadata", None) or {}
+            if str(metadata.get("plugin_id", "")).strip() == plugin_id:
+                return record
+        return None
+
+    @staticmethod
+    def _is_plugin_download_busy(record) -> bool:
+        if not record:
+            return False
+        return getattr(record, "effective_status_key", "") in {
+            "downloading",
+            "installing",
+        }
+
+    def _download_button_text(self, record) -> str:
+        if not record:
+            return tr("plugins.action_download")
+        effective_status = getattr(record, "effective_status_key", "")
+        if effective_status == "downloading":
+            progress = max(0, min(100, int(getattr(record, "progress", 0) or 0)))
+            return tr("downloads.status_downloading", progress=progress)
+        if effective_status == "installing":
+            return tr("downloads.status_installing")
+        return tr("plugins.action_download")
+
+    def _apply_download_button_state(
+        self, button: QPushButton, entry, is_compatible: bool
+    ) -> None:
+        record = self._get_plugin_download_record(entry.id)
+        button.setText(self._download_button_text(record))
+        button.setEnabled(
+            bool(
+                entry.download_link
+                and is_compatible
+                and not self._is_plugin_download_busy(record)
+            )
+        )
+
+    def _refresh_download_button_state(self, plugin_id: str) -> None:
+        button = self._download_buttons.get(plugin_id)
+        if not button:
+            return
+        entry = self.plugin_catalog_service.get_entry(plugin_id, load_if_needed=False)
+        if not entry:
+            return
+        self._apply_download_button_state(
+            button, entry, self._entry_api_compatible(entry)
         )
 
     def _start_catalog_load(self) -> None:

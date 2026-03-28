@@ -14,6 +14,7 @@ from config.settings_schema import DEFAULT_APP_SETTINGS
 LEGACY_DESCRIPTION_KEY = "tagline"
 LEGACY_ICON_KEY = "icon_url"
 LEGACY_MOD_ID_KEYS = ("key", "mod_key")
+LEGACY_HOMEPAGE_KEYS = ("homepage", "external_url", "external_link", "site", "url")
 LEGACY_THEME_COLOR_KEYS = {
     "custom_color_background": "custom_background_color",
     "custom_color_elements": "custom_elements_color",
@@ -84,6 +85,12 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
     icon_value = config_data.get("icon")
     if icon_value in (None, "") and LEGACY_ICON_KEY in config_data:
         icon_value = config_data.get(LEGACY_ICON_KEY)
+    homepage_value = config_data.get("homepage")
+    if homepage_value in (None, ""):
+        for legacy_key in LEGACY_HOMEPAGE_KEYS:
+            if legacy_key in config_data and config_data.get(legacy_key) not in (None, ""):
+                homepage_value = config_data.get(legacy_key)
+                break
 
     current_id = config_data.get("id")
     if not current_id:
@@ -106,10 +113,15 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
         elif key in LEGACY_MOD_ID_KEYS:
             key = "id"
             value = config_data.get("id", value)
+        elif key in LEGACY_HOMEPAGE_KEYS:
+            key = "homepage"
+            value = homepage_value
         elif key == "description":
             value = description_value
         elif key == "icon":
             value = icon_value
+        elif key == "homepage":
+            value = homepage_value
         elif key == "files" and isinstance(value, dict):
             migrated_files = {
                 migrate_legacy_chapter_id(file_key): file_info

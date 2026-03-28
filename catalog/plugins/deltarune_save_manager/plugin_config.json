@@ -8,7 +8,7 @@
   "api_version": ">=1.0.0",
   "entry": "plugin.py",
   "icon": "icon.png",
-  "external_link": "https://github.com/y114git/DELTAHUB/tree/stable/catalog/plugins/deltarune_save_manager",
+  "homepage": "https://github.com/y114git/DELTAHUB/tree/stable/catalog/plugins/deltarune_save_manager",
   "tags": [
     "tool",
     "game_experience"

@@ -120,11 +120,11 @@ class PluginDetailsDialog(QDialog):
         layout.addWidget(summary)
 
         actions_layout = QHBoxLayout()
-        if self.plugin.manifest and self.plugin.manifest.external_link:
-            external_button = QPushButton(tr("plugins.details_external"))
-            external_button.setToolTip(tr("tooltips.open_external_site"))
+        if self.plugin.manifest and self.plugin.manifest.homepage:
+            external_button = QPushButton(tr("plugins.details_homepage"))
+            external_button.setToolTip(tr("tooltips.open_homepage"))
             external_button.clicked.connect(
-                lambda: QDesktopServices.openUrl(QUrl(self.plugin.manifest.external_link))
+                lambda: QDesktopServices.openUrl(QUrl(self.plugin.manifest.homepage))
             )
             actions_layout.addWidget(external_button)
         if self.plugin.manifest and self._can_update:

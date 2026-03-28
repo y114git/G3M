@@ -218,10 +218,12 @@ class GameBananaConverter:
                 logger.info(
                     f"GameBananaConverter: Updated config - id={expected_mod_id}, mod_dir={mod_dir} (folder name based on mod name)"
                 )
-            if not config_data.get("external_url") and self.gamebanana_metadata.get(
-                "profile_url"
-            ):
-                config_data["external_url"] = self.gamebanana_metadata["profile_url"]
+            if not config_data.get("homepage"):
+                homepage = self.gamebanana_metadata.get("homepage") or self.gamebanana_metadata.get(
+                    "profile_url"
+                )
+                if homepage:
+                    config_data["homepage"] = homepage
             if self.gamebanana_metadata.get("icon"):
                 config_data["icon"] = self.gamebanana_metadata["icon"]
             tags = []

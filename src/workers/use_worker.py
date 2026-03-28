@@ -153,7 +153,7 @@ class UseWorker(QThread):
         return {
             "mod_id": self._metadata["gb_mod_id"],
             "item_type": self._metadata.get("item_type", "mod"),
-            "profile_url": self._metadata.get("profile_url"),
+            "homepage": self._metadata.get("homepage") or self._metadata.get("profile_url"),
             "icon": self._metadata.get("icon"),
             "tags": self._metadata.get("tags") or [],
             "category": self._metadata.get("category"),
@@ -261,8 +261,8 @@ class UseWorker(QThread):
         if mod_id:
             item_type = gb_metadata.get("item_type", "mod")
             config_data["id"] = f"gb_{item_type}_{mod_id}"
-        if gb_metadata.get("profile_url") and not config_data.get("external_url"):
-            config_data["external_url"] = gb_metadata["profile_url"]
+        if gb_metadata.get("homepage") and not config_data.get("homepage"):
+            config_data["homepage"] = gb_metadata["homepage"]
         if gb_metadata.get("icon"):
             config_data["icon"] = gb_metadata["icon"]
         tags = gb_metadata.get("tags") or []

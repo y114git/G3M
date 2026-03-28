@@ -15,7 +15,7 @@ from config.config import (
     UI_COLORS,
 )
 from models.game_modes import get_gamebanana_reverse_map
-from models.mod_models import ModInfo
+from models.mod_models import BrowserModInfo
 from services.localization_service import tr
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class SearchGameBananaModsThread(QThread):
 
     def run(self):
         self._start_time = time.time()
-        new_mods: list[ModInfo] = []
+        new_mods: list[BrowserModInfo] = []
         try:
             game_name = get_gamebanana_reverse_map().get(self.game_id)
             if not game_name:

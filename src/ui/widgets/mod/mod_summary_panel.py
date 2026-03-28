@@ -27,6 +27,7 @@ from ui.common.styling import (
     get_theme_color,
     load_mod_icon_universal,
 )
+from utils.mod_readme_utils import find_mod_readme_files
 from utils.path_utils import colored_icon
 
 logger = logging.getLogger(__name__)
@@ -41,10 +42,11 @@ class ModSummaryPanel(QFrame):
     folder_requested = pyqtSignal(object)
     versions_requested = pyqtSignal(object)
     delete_requested = pyqtSignal(object)
-    external_requested = pyqtSignal(object)
+    homepage_requested = pyqtSignal(object)
+    readme_requested = pyqtSignal(object)
 
     _ACTION_DEFS = [
-        ("external", "tooltips.open_external_site", "external_requested"),
+        ("external", "tooltips.open_homepage", "homepage_requested"),
         ("edit", "ui.edit_mod", "edit_requested"),
         ("export", "ui.export_mod", "export_requested"),
         ("folder", "tooltips.open_mod_folder", "folder_requested"),
@@ -60,11 +62,13 @@ class ModSummaryPanel(QFrame):
         self._cached_metadata = None
         self._cached_file_info = None
         self._cached_mod_id = None
+        self._current_readme_files = []
         self._mod_size_cache = {}
         self._size_threads = {}
         self._cache_lock = threading.Lock()
         self.setObjectName("summaryPanel")
         self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAutoFillBackground(True)
         self._build_ui()
 
     def _get_config(self):
@@ -123,10 +127,14 @@ class ModSummaryPanel(QFrame):
         root.addWidget(self._empty_label, 1)
 
         self._scroll = QScrollArea()
+        self._scroll.setObjectName("summaryScrollArea")
+        self._scroll.setAutoFillBackground(True)
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._content = QWidget()
+        self._content.setObjectName("summaryContent")
+        self._content.setAutoFillBackground(True)
         cl = QVBoxLayout(self._content)
         cl.setContentsMargins(16, 16, 16, 16)
         cl.setSpacing(12)
@@ -137,6 +145,11 @@ class ModSummaryPanel(QFrame):
         self._use_button.setObjectName("summaryUseButton")
         self._use_button.clicked.connect(self._on_use_clicked)
         top_row.addWidget(self._use_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self._readme_button = QPushButton("README")
+        self._readme_button.setObjectName("summaryReadmeButton")
+        self._readme_button.clicked.connect(self._on_readme_clicked)
+        self._readme_button.hide()
+        top_row.addWidget(self._readme_button, 0, Qt.AlignmentFlag.AlignLeft)
         self._playtime_widget = QWidget()
         playtime_layout = QHBoxLayout(self._playtime_widget)
         playtime_layout.setContentsMargins(0, 0, 0, 0)
@@ -158,7 +171,9 @@ class ModSummaryPanel(QFrame):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         )
         top_row.addStretch()
-        actions = QHBoxLayout()
+        self._actions_widget = QWidget(self._content)
+        actions = QHBoxLayout(self._actions_widget)
+        actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(4)
         self._action_buttons = {}
         for icon_name, tooltip_key, signal_name in self._ACTION_DEFS:
@@ -171,7 +186,7 @@ class ModSummaryPanel(QFrame):
             )
             actions.addWidget(btn)
             self._action_buttons[icon_name] = btn
-        top_row.addLayout(actions)
+        top_row.addWidget(self._actions_widget, 0, Qt.AlignmentFlag.AlignRight)
         cl.addLayout(top_row)
 
         hero = QHBoxLayout()
@@ -220,6 +235,8 @@ class ModSummaryPanel(QFrame):
 
         cl.addStretch()
         self._scroll.setWidget(self._content)
+        if self._scroll.viewport():
+            self._scroll.viewport().setAutoFillBackground(True)
         root.addWidget(self._scroll, 1)
         self._scroll.hide()
 
@@ -231,13 +248,19 @@ class ModSummaryPanel(QFrame):
         if self._current_mod:
             self.use_requested.emit(self._current_mod)
 
+    def _on_readme_clicked(self):
+        if self._current_mod:
+            self.readme_requested.emit(self._current_mod)
+
     def show_empty(self):
         self._current_mod = None
         self._current_mod_folder = None
         self._cached_mod_id = None
         self._cached_metadata = None
         self._cached_file_info = None
+        self._current_readme_files = []
         self._playtime_widget.hide()
+        self._readme_button.hide()
         with self._cache_lock:
             self._mod_size_cache.clear()
             self._size_threads.clear()
@@ -248,10 +271,11 @@ class ModSummaryPanel(QFrame):
         from utils.patching.mod_resolve_utils import get_mod_id
 
         self._current_mod = mod_data
-        self._current_mod_folder = mod_folder
+        self._current_mod_folder = self._resolve_mod_folder(mod_data, mod_folder)
         self._cached_mod_id = get_mod_id(mod_data) if mod_data else None
         self._cached_metadata = None
         self._cached_file_info = None
+        self._current_readme_files = find_mod_readme_files(self._current_mod_folder)
         self._empty_label.hide()
         self._scroll.show()
         self._name_label.setText(getattr(mod_data, "name", "") or "")
@@ -270,16 +294,28 @@ class ModSummaryPanel(QFrame):
             border_width=2 if bc else 0,
             border_color=bc,
         )
-        self._update_metadata(mod_data, mod_folder)
-        self._populate_file_info(mod_data, mod_folder)
+        self._update_metadata(mod_data, self._current_mod_folder)
+        self._populate_file_info(mod_data, self._current_mod_folder)
         self._update_playtime(mod_data)
-        ext_url = getattr(mod_data, "external_url", None) or getattr(
-            mod_data, "description_url", None
-        )
-        if "external" in self._action_buttons:
-            self._action_buttons["external"].setVisible(bool(ext_url))
+        self._update_action_visibility(mod_data, self._current_mod_folder)
         self.update_use_button_state(is_active)
         self.apply_theme()
+
+    def _update_action_visibility(self, mod_data, mod_folder) -> None:
+        is_local_mod = bool(mod_folder) and os.path.isdir(mod_folder)
+        ext_url = getattr(mod_data, "homepage", None) or getattr(
+            mod_data, "description_url", None
+        )
+        local_management_buttons = ("edit", "export", "folder", "filerestore", "delete")
+        if "external" in self._action_buttons:
+            self._action_buttons["external"].setVisible(bool(ext_url))
+        for icon_name in local_management_buttons:
+            if icon_name in self._action_buttons:
+                self._action_buttons[icon_name].setVisible(is_local_mod)
+        self._actions_widget.setVisible(
+            any(button.isVisible() for button in self._action_buttons.values())
+        )
+        self._readme_button.setVisible(is_local_mod and bool(self._current_readme_files))
 
     def _update_metadata(self, mod_data, mod_folder, cache_result=False):
         config = self._get_config()
@@ -341,16 +377,14 @@ class ModSummaryPanel(QFrame):
                 )
 
         metadata_text = "<br>".join(parts)
-        if cache_result:
-            self._cached_metadata = metadata_text
+        self._cached_metadata = metadata_text if cache_result else None
         self._meta_label.setText(metadata_text)
 
     def _populate_file_info(self, mod_data, mod_folder, cache_result=False):
         files = getattr(mod_data, "files", None)
         if not files or not isinstance(files, dict):
             data_text = f"<span style='color:{get_theme_color(self._get_config(), 'secondary_text', DEFAULT_COLORS['secondary_text']) if self._get_config() else DEFAULT_COLORS['secondary_text']}'>{tr('ui.no_data_files')}</span>"
-            if cache_result:
-                self._cached_file_info = (data_text, False)
+            self._cached_file_info = (data_text, False) if cache_result else None
             self._data_label.setText(data_text)
             self._extra_label.hide()
             return
@@ -381,26 +415,24 @@ class ModSummaryPanel(QFrame):
             chapter_label = self._format_chapter_label(chapter_key)
             if data_file:
                 size_str = ""
+                raw_data_file = str(data_file).replace("\\", "/")
+                display_name = os.path.basename(raw_data_file)
                 if mod_folder:
                     try:
-                        from utils.mod_config_parser import resolve_chapter_folder
+                        data_path = self._resolve_data_file_path(
+                            mod_folder, chapter_key, raw_data_file
+                        )
+                        if data_path:
+                            from ui.utils.ui_utils import format_size
 
-                        ch_folder = resolve_chapter_folder(chapter_key, mod_folder)
-                        if ch_folder:
-                            data_path = os.path.join(ch_folder, data_file)
-                            if os.path.isfile(data_path):
-                                from ui.utils.ui_utils import format_size
-
-                                size_str = (
-                                    f" - {format_size(os.path.getsize(data_path))}"
-                                )
+                            size_str = f" - {format_size(os.path.getsize(data_path))}"
                     except Exception as e:
                         logging.debug(
                             f"ModSummaryPanel: failed to calculate file size for chapter {chapter_key}: {e}",
                             exc_info=True,
                         )
                 data_lines.append(
-                    f"<span style='color:{tc}'>{chapter_label}:</span> <span style='color:{sc}'>{data_file}{size_str}</span>"
+                    f"<span style='color:{tc}'>{chapter_label}:</span> <span style='color:{sc}'>{display_name}{size_str}</span>"
                 )
             groups = self._collect_extra_groups(extra_files)
             ch_count = sum(c for _, c in groups)
@@ -431,18 +463,24 @@ class ModSummaryPanel(QFrame):
             extra_text = "<br>".join(lines)
             self._extra_label.setText(extra_text)
             self._extra_label.show()
-            if cache_result:
-                self._cached_file_info = (
+            self._cached_file_info = (
+                (
                     f"<span style='color:{tc}; font-weight:600;'>{tr('ui.changed_data_files_label')}</span><br><br>{data_text}",
                     extra_text,
                 )
+                if cache_result
+                else None
+            )
         else:
             self._extra_label.hide()
-            if cache_result:
-                self._cached_file_info = (
+            self._cached_file_info = (
+                (
                     f"<span style='color:{tc}; font-weight:600;'>{tr('ui.changed_data_files_label')}</span><br><br>{data_text}",
                     False,
                 )
+                if cache_result
+                else None
+            )
 
     @staticmethod
     def _format_playtime_hours(hours: float) -> str:
@@ -491,6 +529,17 @@ class ModSummaryPanel(QFrame):
 
     @staticmethod
     def _format_chapter_label(chapter_key) -> str:
+        if isinstance(chapter_key, str) and chapter_key.startswith("deltarune_"):
+            suffix = chapter_key.removeprefix("deltarune_")
+            try:
+                ch_id = int(suffix)
+                if ch_id == 0:
+                    return tr("tabs.menu_root")
+                return tr("ui.chapter_title", chapter_num=ch_id)
+            except (ValueError, TypeError):
+                pass
+        if chapter_key == "deltarune":
+            return tr("tabs.menu_root")
         try:
             ch_id = int(chapter_key)
             if ch_id == 0:
@@ -498,6 +547,48 @@ class ModSummaryPanel(QFrame):
             return tr("ui.chapter_title", chapter_num=ch_id)
         except (ValueError, TypeError):
             return chapter_key.capitalize()
+
+    def _resolve_data_file_path(
+        self, mod_folder: str | None, chapter_key, data_file: str
+    ) -> str:
+        if not data_file:
+            return ""
+        data_file_str = str(data_file)
+        if os.path.isfile(data_file_str):
+            return data_file_str
+        if not mod_folder or not os.path.isdir(mod_folder):
+            return ""
+        file_name = os.path.basename(data_file_str.replace("\\", "/"))
+        candidates = [os.path.join(mod_folder, file_name)]
+        try:
+            from utils.mod_config_parser import resolve_chapter_folder
+
+            ch_folder = resolve_chapter_folder(chapter_key, mod_folder)
+            if ch_folder:
+                candidates.insert(0, os.path.join(ch_folder, file_name))
+        except ImportError as e:
+            from src.utils.logging_utils import log_warning
+            log_warning(f"resolve_chapter_folder not available: {e}")
+        except Exception as e:
+            from src.utils.logging_utils import log_warning
+            log_warning(f"Failed to resolve chapter folder for {chapter_key}: {e}")
+        for candidate in candidates:
+            if os.path.isfile(candidate):
+                return candidate
+        for root, _, files in os.walk(mod_folder):
+            if file_name in files:
+                return os.path.join(root, file_name)
+        return ""
+
+    @staticmethod
+    def _resolve_mod_folder(mod_data, mod_folder: str | None) -> str | None:
+        if mod_folder and os.path.isdir(mod_folder):
+            return mod_folder
+        for attr in ("folder_path",):
+            candidate = getattr(mod_data, attr, None)
+            if candidate and os.path.isdir(candidate):
+                return candidate
+        return mod_folder
 
     def update_use_button_state(self, is_active=False):
         config = self._get_config()
@@ -548,8 +639,32 @@ class ModSummaryPanel(QFrame):
         secondary = get_theme_color(config, "secondary_text")
         border = get_theme_color(config, "border")
         button_hover = get_theme_color(config, "hover")
+        background = get_theme_color(config, "background")
+        elements = get_theme_color(config, "elements", "#202326")
         br = get_border_radius(config)
         title_fs = max(14, round(16 * self._layout_scale()))
+        apply_stylesheet_if_changed(
+            self,
+            f"""
+            QFrame#summaryPanel {{
+                background-color: {background};
+                border: none;
+            }}
+            QScrollArea#summaryScrollArea {{
+                background-color: {background};
+                border: none;
+            }}
+            QWidget#summaryContent {{
+                background-color: {background};
+            }}
+            """,
+            cache_attr="_panel_ss_cache",
+        )
+        apply_stylesheet_if_changed(
+            self._scroll.viewport(),
+            f"background-color: {background}; border: none;",
+            cache_attr="_scroll_viewport_ss_cache",
+        )
         for name, btn in self._action_buttons.items():
             btn.setIcon(colored_icon(name, text_color))
             apply_stylesheet_if_changed(
@@ -564,6 +679,22 @@ class ModSummaryPanel(QFrame):
             """,
                 cache_attr=f"_action_{name}_ss_cache",
             )
+        apply_stylesheet_if_changed(
+            self._readme_button,
+            build_button_style(
+                "summaryReadmeButton",
+                elements,
+                button_hover,
+                text_color,
+                border,
+                width=None,
+                height=32,
+                font_size=max(11, round(12 * self._layout_scale())),
+                border_radius=min(br, 10),
+                padding="0 12px",
+            ),
+            cache_attr="_readme_btn_ss_cache",
+        )
         apply_stylesheet_if_changed(
             self._empty_label,
             f"color: {secondary}; font-size: 16px; font-weight: 600;",
@@ -584,7 +715,7 @@ class ModSummaryPanel(QFrame):
             f"color: {text_color}; font-weight: 600;",
             cache_attr="_playtime_ss_cache",
         )
-        meta_bg = get_theme_color(config, "elements", "#202326")
+        meta_bg = background
         apply_stylesheet_if_changed(
             self._meta_label,
             f"""
@@ -620,31 +751,19 @@ class ModSummaryPanel(QFrame):
                 border_width=2,
                 border_color=border,
             )
-            if self._cached_metadata is not None:
-                self._meta_label.setText(self._cached_metadata)
-            else:
-                self._update_metadata(
-                    self._current_mod, self._current_mod_folder, cache_result=True
-                )
-
-            if self._cached_file_info is not None:
-                data_text, extra_text = self._cached_file_info
-                self._data_label.setText(data_text)
-                if extra_text is not False:
-                    self._extra_label.setText(extra_text)
-                    self._extra_label.show()
-                else:
-                    self._extra_label.hide()
-            else:
-                self._populate_file_info(
-                    self._current_mod, self._current_mod_folder, cache_result=True
-                )
+            self._update_metadata(
+                self._current_mod, self._current_mod_folder, cache_result=True
+            )
+            self._populate_file_info(
+                self._current_mod, self._current_mod_folder, cache_result=True
+            )
             self._update_playtime(self._current_mod)
         self.update_use_button_state(self._use_button.text() == tr("ui.remove_button"))
 
     def refresh_theme(self):
         self._cached_metadata = None
         self._cached_file_info = None
+        self._current_readme_files = find_mod_readme_files(self._current_mod_folder)
         self.apply_theme()
 
     def update_labels_text(self):
@@ -654,4 +773,5 @@ class ModSummaryPanel(QFrame):
             if icon_name in self._action_buttons:
                 self._action_buttons[icon_name].setToolTip(tr(tooltip_key))
         if self._current_mod:
+            self._update_action_visibility(self._current_mod, self._current_mod_folder)
             self._update_playtime(self._current_mod)

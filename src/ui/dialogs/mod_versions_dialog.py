@@ -286,6 +286,7 @@ class ModVersionsDialog(QDialog):
         self._mod_folder = mod_folder
         self._mod_data = mod_data
         self._app_state = app_state
+        self._mod_service = self._resolve_mod_service(parent)
         self._version_widgets: dict[str, _VersionItemWidget] = {}
         self._worker: _ModVersionWorker | None = None
         self.setWindowTitle(tr("mod_versions.title"))
@@ -589,7 +590,7 @@ class ModVersionsDialog(QDialog):
             self,
             all_files,
             self._get_mod_attr("name", ""),
-            self._get_mod_attr("external_url"),
+            self._get_mod_attr("homepage"),
         )
         if picker.exec() != QDialog.DialogCode.Accepted:
             return
@@ -654,6 +655,22 @@ class ModVersionsDialog(QDialog):
             return self._mod_data.get(attr, default)
         return getattr(self._mod_data, attr, default)
 
+    @staticmethod
+    def _resolve_mod_service(parent):
+        if parent and hasattr(parent, "mod_service"):
+            return parent.mod_service
+        parent_app = getattr(parent, "parent_app", None)
+        if parent_app and hasattr(parent_app, "mod_service"):
+            return parent_app.mod_service
+        return None
+
+    def _refresh_mods_after_change(self) -> None:
+        if not self._mod_service:
+            return
+        self._mod_service.invalidate_mods_cache()
+        self._mod_service.load_local_mods()
+        self._mod_service.mod_list_updated.emit()
+
     def _on_switch(self, version_info: dict):
         reply = QMessageBox.question(
             self,
@@ -666,6 +683,7 @@ class ModVersionsDialog(QDialog):
         try:
             self.setCursor(Qt.CursorShape.WaitCursor)
             _apply_version_zip(self._mod_folder, version_info["path"])
+            self._refresh_mods_after_change()
             QMessageBox.information(
                 self,
                 tr("mod_versions.title"),

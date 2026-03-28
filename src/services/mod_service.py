@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QDialog, QMessageBox
 import models.mod_models as mod_models
 from config.config import MOD_CONFIG_FILENAME, UI_COLORS
 from models.exceptions import ModUninstallationError
-from models.mod_models import ModFileData
+from models.mod_models import LocalModInfo, ModFileData
 from services.localization_service import tr
 from services.migration_service import migrate_mod_metadata
 from utils.file_utils import (
@@ -177,17 +177,11 @@ class ModManager(QObject):
             "game_version": config_data.get(
                 "game_version", tr("defaults.not_specified")
             ),
-            "description_url": "",
-            "downloads": 0,
             "game": config_data.get("game", "deltarune"),
-                        "icon": icon_path,
+            "icon": icon_path,
             "tags": tags,
-            "hide_mod": False,
-            "ban_status": False,
-            "demo_url": None,
-            "demo_version": "1.0.0",
             "last_updated": config_data.get("last_updated"),
-            "external_url": config_data.get("external_url"),
+            "homepage": config_data.get("homepage"),
         }
 
     def _get_mods_cache(self, use_async: bool = False) -> dict[str, ModFolderInfo]:
@@ -311,6 +305,7 @@ class ModManager(QObject):
                     "version",
                     "game",
                     "game_version",
+                    "homepage",
                 ):
                     val = config_data.get(field)
                     if val:
@@ -344,12 +339,12 @@ class ModManager(QObject):
                     safe_mod_info = self._build_safe_mod_info(
                         mod_id, config_data, icon_path
                     )
-                    mod = mod_models.ModInfo(**safe_mod_info)
+                    mod = LocalModInfo(**safe_mod_info)
                     self._parse_chapter_files(mod, config_data, mod_id)
                     self._append_mod_if_valid(mod, mod_id)
                 except Exception as e:
                     logging.warning(
-                        f"Failed to create ModInfo for installed mod {mod_id}: {e}",
+                        f"Failed to create LocalModInfo for installed mod {mod_id}: {e}",
                         exc_info=True,
                     )
             self.app_state.all_mods = list(self.app_state.all_mods)
@@ -366,6 +361,7 @@ class ModManager(QObject):
                             "version",
                             "game",
                             "game_version",
+                            "homepage",
                         ):
                             setattr(
                                 existing_mod,
@@ -391,13 +387,13 @@ class ModManager(QObject):
                         default_name=tr("defaults.local_mod"),
                         tags=["local"],
                     )
-                    mod = mod_models.ModInfo(**safe_mod_info)
+                    mod = LocalModInfo(**safe_mod_info)
                     self._parse_local_chapter_files(
                         mod, config_data, mod_id, mod_folder_path
                     )
                     self._append_mod_if_valid(mod, mod_id)
                 except Exception as e:
-                    logging.warning(f"Failed to build local ModInfo: {e}")
+                    logging.warning(f"Failed to build LocalModInfo: {e}")
                     continue
             installed_gb_ids = set(installed_gamebanana_by_id)
             for mod in self.app_state.all_mods:
@@ -527,14 +523,40 @@ class ModManager(QObject):
         return {}
 
     def get_mod_folder_path(self, mod_id: str) -> str:
-        mod_info = self._get_mods_cache().get(mod_id)
-        if not mod_info:
+        if not mod_id:
             return ""
-        return (
-            mod_info.get("folder_path", "")
-            if isinstance(mod_info, dict)
-            else mod_info.folder_path
-        )
+        mod_info = self._get_mods_cache().get(mod_id)
+        if mod_info:
+            folder_path = (
+                mod_info.get("folder_path", "")
+                if isinstance(mod_info, dict)
+                else mod_info.folder_path
+            )
+            if folder_path and os.path.isdir(folder_path):
+                return folder_path
+        for cached_info in self._get_mods_cache().values():
+            folder_path = (
+                cached_info.get("folder_path", "")
+                if isinstance(cached_info, dict)
+                else cached_info.folder_path
+            )
+            config_data = (
+                cached_info.get("config_data", {})
+                if isinstance(cached_info, dict)
+                else cached_info.config_data
+            )
+            if config_data.get("id") == mod_id and folder_path and os.path.isdir(folder_path):
+                return folder_path
+        for folder_name, folder_path, _config_path, config_data in self._iter_mod_configs():
+            if config_data.get("id") != mod_id:
+                continue
+            if folder_path and os.path.isdir(folder_path):
+                return folder_path
+            if folder_name:
+                candidate = os.path.join(self.app_state.mods_dir, folder_name)
+                if os.path.isdir(candidate):
+                    return candidate
+        return ""
 
     @staticmethod
     def resolve_gamebanana_file(mod_info, api, selected_file=None) -> dict | None:
@@ -832,7 +854,7 @@ class ModManager(QObject):
             logging.error(f"delete_mod_files: cleanup failed: {e}", exc_info=True)
             raise
 
-    def get_mod_status(self, mod: mod_models.ModInfo, chapter_id: str) -> str:
+    def get_mod_status(self, mod: mod_models.AnyModInfo, chapter_id: str) -> str:
         if mod.is_gamebanana_mod():
             return "ready"
         cache = self._get_mods_cache()
@@ -1001,21 +1023,6 @@ class ModManager(QObject):
 
     def create_mod_object_from_info(self, mod_info: dict, all_mods: list | None = None):
         mod_id = mod_info.get("id", "")
-        if all_mods:
-            for mod in all_mods:
-                existing_mod_id = get_mod_id(mod)
-                if existing_mod_id == mod_id and hasattr(mod, "files") and mod.files:
-                    if isinstance(mod_info, dict):
-                        added_date = mod_info.get("added_date")
-                        if added_date is not None:
-                            mod.added_date = added_date
-                        mod.playtime_hours = self._normalize_playtime_hours(
-                            mod_info.get(
-                                "playtime_hours",
-                                getattr(mod, "playtime_hours", 0.0),
-                            )
-                        )
-                    return mod
         mod_info = dict(mod_info)
         normalize_mod_config_data(mod_info)
         if not (mod_id and isinstance(mod_id, str) and mod_id.startswith("gb_")):
@@ -1027,7 +1034,35 @@ class ModManager(QObject):
             mod_info["files"] = normalize_files_data(
                 files_data, mod_info.get("game")
             )
-        return mod_models.ModInfo.from_dict(mod_info)
+        if all_mods:
+            for mod in all_mods:
+                existing_mod_id = get_mod_id(mod)
+                if existing_mod_id == mod_id and hasattr(mod, "files") and mod.files:
+                    refreshed_mod = mod_models.LocalModInfo.from_dict(mod_info)
+                    for attr in (
+                        "name",
+                        "version",
+                        "author",
+                        "description",
+                        "game",
+                        "game_version",
+                        "icon",
+                        "tags",
+                        "homepage",
+                        "files",
+                        "added_date",
+                        "last_updated",
+                    ):
+                        if hasattr(refreshed_mod, attr):
+                            setattr(mod, attr, getattr(refreshed_mod, attr))
+                    mod.playtime_hours = self._normalize_playtime_hours(
+                        mod_info.get(
+                            "playtime_hours",
+                            getattr(mod, "playtime_hours", 0.0),
+                        )
+                    )
+                    return mod
+        return mod_models.LocalModInfo.from_dict(mod_info)
 
     def _iter_mod_configs(self):
         if not os.path.exists(self.app_state.mods_dir):

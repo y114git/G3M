@@ -46,7 +46,7 @@ class PluginManifest:
     entry: str
     api_version: str = ""
     icon: str = ""
-    external_link: str = ""
+    homepage: str = ""
     tags: list[str] = field(default_factory=list)
     relations: dict[str, str] = field(default_factory=dict)
     hooks: list[str] = field(default_factory=list)
@@ -62,7 +62,7 @@ class CatalogPluginEntry:
     version: str
     api_version: str
     icon: str = ""
-    external_link: str = ""
+    homepage: str = ""
     download_link: str = ""
     tags: list[str] = field(default_factory=list)
     relations: dict[str, str] = field(default_factory=dict)

@@ -7,7 +7,7 @@ from typing import Any
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from models.game_modes import DeltaruneGame, GameDefinition
-from models.mod_models import ModInfo
+from models.mod_models import AnyModInfo
 from utils.mod_utils import get_mod_id
 
 
@@ -60,7 +60,7 @@ class AppState(QObject):
         self.mods_dir: str = ""
         self.mods_metadata_path: str = ""
         self.config_path: str = ""
-        self._all_mods: list[ModInfo] = []
+        self._all_mods: list[AnyModInfo] = []
         self.mods_loaded: bool = False
         self.library_initialized: bool = False
         self.is_settings_view: bool = False
@@ -77,7 +77,7 @@ class AppState(QObject):
         self.game_is_running: bool = False
         self.pending_dialogs: list[Any] = []
         self._operation_cancelled: bool = False
-        self._filtered_mods: list[ModInfo] = []
+        self._filtered_mods: list[AnyModInfo] = []
         self._current_page: int = 1
         self._search_text: str = ""
         self._library_search_text: str = ""
@@ -106,20 +106,20 @@ class AppState(QObject):
         else:
             super().__setattr__(name, value)
 
-    def get_all_mods(self) -> list[ModInfo]:
+    def get_all_mods(self) -> list[AnyModInfo]:
         with self._mods_metadata_lock:
             return list(self._all_mods)
 
-    def set_all_mods(self, mods: list[ModInfo]) -> None:
+    def set_all_mods(self, mods: list[AnyModInfo]) -> None:
         with self._mods_metadata_lock:
             self._all_mods = list(mods) if mods else []
 
-    def append_mod(self, mod: ModInfo) -> None:
+    def append_mod(self, mod: AnyModInfo) -> None:
         with self._mods_metadata_lock:
             if mod not in self._all_mods:
                 self._all_mods.append(mod)
 
-    def extend_all_mods(self, mods: list[ModInfo]) -> None:
+    def extend_all_mods(self, mods: list[AnyModInfo]) -> None:
         with self._mods_metadata_lock:
             existing_keys = {get_mod_id(m) for m in self._all_mods}
             for mod in mods:
@@ -129,11 +129,11 @@ class AppState(QObject):
                     existing_keys.add(key)
 
     @property
-    def all_mods(self) -> list[ModInfo]:
+    def all_mods(self) -> list[AnyModInfo]:
         return self.get_all_mods()
 
     @all_mods.setter
-    def all_mods(self, value: list[ModInfo]) -> None:
+    def all_mods(self, value: list[AnyModInfo]) -> None:
         self.set_all_mods(value)
 
     @property
@@ -185,11 +185,11 @@ class AppState(QObject):
         self._operation_cancelled = value
 
     @property
-    def filtered_mods(self) -> list[ModInfo]:
+    def filtered_mods(self) -> list[AnyModInfo]:
         return self._filtered_mods
 
     @filtered_mods.setter
-    def filtered_mods(self, value: list[ModInfo]) -> None:
+    def filtered_mods(self, value: list[AnyModInfo]) -> None:
         self._filtered_mods = value
 
     @property

@@ -437,6 +437,7 @@ class LibraryDisplayController:
                             )
                         self.update_mod_widgets_active_status()
                         self.app.game_launch.update_button_state()
+                        self._refresh_summary_from_selection()
                         self._last_render_signature = render_signature
                         _finish_display()
                     else:
@@ -453,6 +454,7 @@ class LibraryDisplayController:
                             )
                         self.update_mod_widgets_active_status()
                         self.app.game_launch.update_button_state()
+                        self._refresh_summary_from_selection()
                     except Exception as e2:
                         logging.debug(
                             "Cleanup after _build_next_batch failure failed",
@@ -528,6 +530,16 @@ class LibraryDisplayController:
             return
         key = get_mod_id(mod_data)
         mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
+        if (not mod_folder or not os.path.isdir(mod_folder)) and hasattr(mod_data, "folder_path"):
+            candidate = getattr(mod_data, "folder_path", None)
+            if candidate and os.path.isdir(candidate):
+                mod_folder = candidate
+        if (not mod_folder or not os.path.isdir(mod_folder)) and hasattr(mod_data, "folder_name"):
+            folder_name = getattr(mod_data, "folder_name", None)
+            if folder_name:
+                candidate = os.path.join(self.app_state.mods_dir, folder_name)
+                if os.path.isdir(candidate):
+                    mod_folder = candidate
         is_chapter_mode = (
             hasattr(self.app, "chapter_mode_checkbox")
             and self.app.chapter_mode_checkbox.isChecked()
@@ -543,6 +555,35 @@ class LibraryDisplayController:
             else False
         )
         summary.show_mod(mod_data, mod_folder=mod_folder, is_active=is_active)
+
+    def _get_selected_widget(self):
+        for i in range(self.app.installed_mods_layout.count() - 1):
+            item = self.app.installed_mods_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if isinstance(widget, InstalledModWidget) and getattr(widget, "is_selected", False):
+                return widget
+        return None
+
+    def _refresh_summary_from_selection(self):
+        summary = getattr(self.app, "mod_summary_panel", None)
+        if not summary:
+            return
+        selected_widget = self._get_selected_widget()
+        if selected_widget and getattr(selected_widget, "mod_data", None):
+            self._show_mod_in_summary(selected_widget.mod_data)
+            return
+        current_mod = getattr(summary, "_current_mod", None)
+        current_mod_id = get_mod_id(current_mod)
+        if not current_mod_id:
+            return
+        for i in range(self.app.installed_mods_layout.count() - 1):
+            item = self.app.installed_mods_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if not isinstance(widget, InstalledModWidget):
+                continue
+            if get_mod_id(getattr(widget, "mod_data", None)) == current_mod_id:
+                self._show_mod_in_summary(widget.mod_data)
+                return
 
     def _clear_summary(self):
         summary = getattr(self.app, "mod_summary_panel", None)
@@ -560,7 +601,8 @@ class LibraryDisplayController:
         summary.folder_requested.connect(self._on_summary_folder)
         summary.versions_requested.connect(self._on_summary_versions)
         summary.delete_requested.connect(self._on_summary_delete)
-        summary.external_requested.connect(self._on_summary_external)
+        summary.homepage_requested.connect(self._on_summary_homepage)
+        summary.readme_requested.connect(self._on_summary_readme)
 
     def _on_summary_edit(self, mod_data):
         try:
@@ -633,9 +675,9 @@ class LibraryDisplayController:
         except Exception as e:
             logging.error(f"Failed to delete mod: {e}", exc_info=True)
 
-    def _on_summary_external(self, mod_data):
+    def _on_summary_homepage(self, mod_data):
         try:
-            url = getattr(mod_data, "external_url", None) or getattr(
+            url = getattr(mod_data, "homepage", None) or getattr(
                 mod_data, "description_url", None
             )
             if url:
@@ -643,7 +685,38 @@ class LibraryDisplayController:
 
                 webbrowser.open(url)
         except Exception as e:
-            logging.error(f"Failed to open external URL: {e}", exc_info=True)
+            logging.error(f"Failed to open homepage: {e}", exc_info=True)
+
+    def _on_summary_readme(self, mod_data):
+        try:
+            key = get_mod_id(mod_data)
+            mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
+            if not mod_folder or not os.path.isdir(mod_folder):
+                return
+            from PyQt6.QtWidgets import QMessageBox
+
+            from utils.mod_readme_utils import find_mod_readme_files
+
+            readme_files = find_mod_readme_files(mod_folder)
+            if not readme_files:
+                mod_name = getattr(mod_data, "name", "") or "Mod"
+                QMessageBox.information(
+                    self.app,
+                    tr("dialogs.information"),
+                    f"No README was found for {mod_name}.",
+                )
+                return
+            from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+            dialog = ModReadmeDialog(
+                self.app_state,
+                getattr(mod_data, "name", "") or "Mod",
+                readme_files,
+                parent=self.app,
+            )
+            dialog.exec()
+        except Exception as e:
+            logging.error(f"Failed to open mod README dialog: {e}", exc_info=True)
 
     def _refresh_mod_list_targeted(self):
         """Refresh the mod list by only adding/removing changed widgets for smooth animation"""
@@ -734,6 +807,7 @@ class LibraryDisplayController:
             )
             self.update_mod_widgets_active_status()
             self.app.game_launch.update_button_state()
+            self._refresh_summary_from_selection()
 
         except Exception as e:
             logging.error(f"Error in targeted refresh: {e}", exc_info=True)

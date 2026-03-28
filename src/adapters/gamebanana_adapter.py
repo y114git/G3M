@@ -16,7 +16,7 @@ from config.config import (
     NETWORK_TIMEOUT_MEDIUM,
 )
 from models.game_modes import get_gamebanana_reverse_map
-from models.mod_models import ModInfo
+from models.mod_models import BrowserModInfo
 from utils.network_utils import get_session
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ class GameBananaAPI:
             return (None, [])
         records = data.get("_aRecords", [])
         game_name = get_gamebanana_reverse_map().get(int(game_id), "deltarune")
-        mapped_mods: list[ModInfo] = []
+        mapped_mods: list[BrowserModInfo] = []
         for record in records:
             model_name = record.get("_sModelName")
             if model_name not in ("Mod", "Wip", "WIP"):
@@ -642,14 +642,14 @@ class GameBananaAPI:
                 or ("18+" in str(tag).casefold())
                 for tag in tags
             )
-        external_url = (
+        homepage = (
             gb_data.get("_sProfileUrl")
             or f"https://gamebanana.com/{'wips' if is_wip else 'mods'}/{mod_id}"
         )
         preview_media = gb_data.get("_aPreviewMedia", {})
         raw_has_files = gb_data.get("_bHasFiles", True)
         has_files = raw_has_files not in (False, 0, "0", "false", "False", None)
-        return ModInfo(
+        return BrowserModInfo(
             id=f"gb_{'wip' if is_wip else 'mod'}_{mod_id}",
             name=gb_data.get("_sName", "Unknown Mod"),
             version=gb_data.get("_sVersion", "") or "1.0.0",
@@ -677,7 +677,7 @@ class GameBananaAPI:
                 gb_data.get("_tsDateModified") or gb_data.get("_tsDateUpdated")
             )
             or "N/A",
-            external_url=external_url,
+            homepage=homepage,
             screenshots_url=self._extract_preview_urls(preview_media, is_wip=is_wip),
             full_description=None,
             gamebanana_category=category,

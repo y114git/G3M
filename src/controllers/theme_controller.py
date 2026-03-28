@@ -288,7 +288,9 @@ class ThemeController:
             if hasattr(self.app, "library_tab_builder"):
                 self.app.library_tab_builder.update_priority_button_style()
             summary = getattr(self.app, "mod_summary_panel", None)
-            if summary and hasattr(summary, "apply_theme"):
+            if summary and hasattr(summary, "refresh_theme"):
+                summary.refresh_theme()
+            elif summary and hasattr(summary, "apply_theme"):
                 summary.apply_theme()
             for dialog_attr in (
                 "_game_versions_dialog",

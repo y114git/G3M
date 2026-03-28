@@ -40,7 +40,13 @@ from utils.file_utils import (
     get_file_filter,
     get_unique_mod_dir,
 )
-from utils.mod_config_parser import build_mod_config_data, normalize_mod_config_data
+from utils.mod_config_parser import (
+    MOD_ALLOWED_TAGS,
+    MOD_FIELD_LIMITS,
+    build_mod_config_data,
+    normalize_mod_config_data,
+    parse_extra_files_raw,
+)
 from utils.path_utils import colored_icon, resource_path
 
 
@@ -266,11 +272,11 @@ class ModEditorDialog(QDialog):
         parent.addWidget(self.description_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr("ui.external_url")))
-        self.external_url_edit = QLineEdit()
-        self.external_url_edit.setPlaceholderText("https://example.com/mod-page")
-        self.external_url_edit.setToolTip(tr("tooltips.mod_editor_external_url"))
-        parent.addWidget(self.external_url_edit)
+        parent.addWidget(QLabel(tr("ui.homepage")))
+        self.homepage_edit = QLineEdit()
+        self.homepage_edit.setPlaceholderText("https://example.com/mod-page")
+        self.homepage_edit.setToolTip(tr("tooltips.mod_editor_homepage"))
+        parent.addWidget(self.homepage_edit)
 
         parent.addWidget(QLabel(tr("files.icon_label")))
         icon_row = QHBoxLayout()
@@ -480,13 +486,6 @@ class ModEditorDialog(QDialog):
             lambda: self._browse_file(path_edit, browse_title, file_filter, file_type)
         )
         fl.addWidget(browse_btn)
-        if file_type == "data":
-            fl.addWidget(QLabel(tr("files.version_label", file_type="DATA")))
-            version_edit = QLineEdit()
-            version_edit.setPlaceholderText("1.0.0")
-            version_edit.setToolTip(tr("tooltips.mod_editor_data_version"))
-            version_edit.setProperty("is_data_version", True)
-            fl.addWidget(version_edit)
         del_btn = self._make_icon_text_button(
             "delete_icon.svg", tr("buttons.delete"), tr("buttons.delete")
         )
@@ -727,7 +726,7 @@ class ModEditorDialog(QDialog):
         if not self.name_edit.text().strip():
             QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_name_empty"))
             return False
-        url = self.external_url_edit.text().strip()
+        url = self.homepage_edit.text().strip()
         if url:
             from urllib.parse import urlparse
 
@@ -755,18 +754,24 @@ class ModEditorDialog(QDialog):
                     QMessageBox.warning(
                         self,
                         tr("errors.error"),
-                        tr("dialogs.invalid_external_url_direct_download"),
+                        tr("dialogs.invalid_homepage_direct_download"),
                     )
                     return False
             except Exception:
                 QMessageBox.warning(
-                    self, tr("errors.error"), tr("dialogs.invalid_external_url")
+                    self, tr("errors.error"), tr("dialogs.invalid_homepage")
                 )
                 return False
-        if len(self.version_edit.text().strip()) > 10:
+        if len(self.name_edit.text().strip()) > MOD_FIELD_LIMITS["name"]:
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_name_too_long"))
+            return False
+        if len(self.version_edit.text().strip()) > MOD_FIELD_LIMITS["version"]:
             QMessageBox.warning(
                 self, tr("errors.error"), tr("dialogs.mod_version_too_long")
             )
+            return False
+        if len((self.game_combo.currentData() or "").strip()) > MOD_FIELD_LIMITS["game"]:
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_game_too_long"))
             return False
         if not any(
             [
@@ -855,7 +860,7 @@ class ModEditorDialog(QDialog):
             ("gameplay", self.tag_gameplay),
             ("other", self.tag_other),
         ]
-        tags = [name for name, cb in tag_map if cb.isChecked()]
+        tags = [name for name, cb in tag_map if cb.isChecked() and name in MOD_ALLOWED_TAGS]
         author = self.author_edit.text().strip() or tr("defaults.local_author")
         return {
             "name": self.name_edit.text().strip(),
@@ -863,7 +868,7 @@ class ModEditorDialog(QDialog):
             "author": author,
             "description": self.description_edit.text().strip()
             or tr("defaults.no_description"),
-            "external_url": self.external_url_edit.text().strip(),
+            "homepage": self.homepage_edit.text().strip(),
             "icon": self.icon_edit.text().strip(),
             "tags": tags,
             "game": self.game_combo.currentData() or "deltarune",
@@ -894,7 +899,6 @@ class ModEditorDialog(QDialog):
                     continue
                 if data["type"] == "data" and data.get("path"):
                     tab_files["data_file_url"] = data["path"]
-                    tab_files["data_file_version"] = data.get("version", "1.0.0")
                 elif data["type"] == "extra" and data.get("paths"):
                     extra_files = tab_files.setdefault("extra_files", {})
                     if data["key"] in extra_files:
@@ -918,19 +922,15 @@ class ModEditorDialog(QDialog):
         ftype = title_w.property("file_type")
         if ftype == "data":
             path_edit = None
-            ver_edit = None
             for i in range(fl.count()):
                 w = fl.itemAt(i).widget() if fl.itemAt(i) else None
                 if isinstance(w, QLineEdit):
                     if w.property("is_local_path"):
                         path_edit = w
-                    elif w.property("is_data_version"):
-                        ver_edit = w
             if path_edit and path_edit.text():
                 return {
                     "type": "data",
                     "path": path_edit.text(),
-                    "version": ver_edit.text() if ver_edit else "1.0.0",
                 }
         elif ftype == "extra":
             paths = []
@@ -998,7 +998,6 @@ class ModEditorDialog(QDialog):
                         else:
                             shutil.copy2(resolved, dest)
                     new_fd["data_file_url"] = os.path.basename(resolved)
-                    new_fd["data_file_version"] = fd.get("data_file_version", "1.0.0")
             for group_key, paths in fd.get("extra_files", {}).items():
                 if not (group_key and paths):
                     continue
@@ -1043,7 +1042,7 @@ class ModEditorDialog(QDialog):
                     "name": data["name"],
                     "description": data["description"],
                     "author": data["author"],
-                    "external_url": data["external_url"],
+                    "homepage": data["homepage"],
                     "game": data["game"],
                     "game_version": data["game_version"],
                     "files": processed_files,
@@ -1116,7 +1115,7 @@ class ModEditorDialog(QDialog):
                     "name": data["name"],
                     "description": data["description"],
                     "author": data["author"],
-                    "external_url": data["external_url"],
+                    "homepage": data["homepage"],
                     "game": data["game"],
                     "game_version": data["game_version"],
                     "tags": data["tags"],
@@ -1249,7 +1248,7 @@ class ModEditorDialog(QDialog):
         self.name_edit.setText(d.get("name", ""))
         self.author_edit.setText(d.get("author", ""))
         self.description_edit.setText(d.get("description", ""))
-        self.external_url_edit.setText(d.get("external_url", ""))
+        self.homepage_edit.setText(d.get("homepage", ""))
         icon_val = d.get("icon", "")
         mod_folder = self._find_mod_folder()
         if (
@@ -1307,7 +1306,7 @@ class ModEditorDialog(QDialog):
                 layout = getattr(tab, "_file_layout", None) if tab else None
                 if tab and layout and fi.get("data_file_url"):
                     self._create_file_frame(layout, "data")
-                    self._fill_data_in_tab(layout, fi["data_file_url"], fi.get("data_file_version"))
+                    self._fill_data_in_tab(layout, fi["data_file_url"])
             return
         for ti, tab_def in enumerate(game_def.tabs):
             fi = files_data.get(tab_def.files_key) or files_data.get(tab_def.tab_id)
@@ -1318,8 +1317,15 @@ class ModEditorDialog(QDialog):
                     continue
                 if fi.get("data_file_url"):
                     self._create_file_frame(layout, "data")
-                    self._fill_data_in_tab(layout, fi["data_file_url"], fi.get("data_file_version"))
-                for ek, fnames in fi.get("extra_files", {}).items():
+                    self._fill_data_in_tab(layout, fi["data_file_url"])
+                extra_files = {}
+                for extra_file in parse_extra_files_raw(
+                    fi.get("extra_files", []),
+                    fi,
+                    as_dicts=True,
+                ):
+                    extra_files.setdefault(extra_file["key"], []).append(extra_file["url"])
+                for ek, fnames in extra_files.items():
                     if fnames:
                         self._create_file_frame(layout, "extra", ek)
                         self._fill_extra_in_tab(layout, ek, fnames)
@@ -1345,7 +1351,7 @@ class ModEditorDialog(QDialog):
                 return candidate
         return file_path
 
-    def _fill_data_in_tab(self, layout, path, version):
+    def _fill_data_in_tab(self, layout, path):
         for i in range(layout.count() - 1, -1, -1):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
             if not w or not hasattr(w, "layout") or not (fl := w.layout()):
@@ -1355,11 +1361,8 @@ class ModEditorDialog(QDialog):
                 continue
             for j in range(fl.count()):
                 sub = fl.itemAt(j).widget() if fl.itemAt(j) else None
-                if isinstance(sub, QLineEdit):
-                    if sub.property("is_local_path"):
-                        sub.setText(path)
-                    elif sub.property("is_data_version"):
-                        sub.setText(version or "1.0.0")
+                if isinstance(sub, QLineEdit) and sub.property("is_local_path"):
+                    sub.setText(path)
             return
 
     def _fill_extra_in_tab(self, layout, key_name, filenames):

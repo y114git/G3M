@@ -26,7 +26,7 @@ class ConfirmExternalDownloadDialog(QDialog):
         msg = QLabel(tr("downloads.confirm_external_message"))
         msg.setWordWrap(True)
         layout.addWidget(msg)
-        link_label = QLabel(tr("downloads.confirm_external_link", link=self._url))
+        link_label = QLabel(tr("downloads.confirm_link", link=self._url))
         link_label.setWordWrap(True)
         link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(link_label)

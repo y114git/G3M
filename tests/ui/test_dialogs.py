@@ -235,4 +235,22 @@ class TestManualInstallDialog:
         assert dialog.files_summary_label.toolTip() == tr("tooltips.manual_install_summary")
         dialog.close()
 
+    def test_manual_install_dialog_ignores_gamebanana_game_for_default_selection(
+        self, qapp, tmp_path
+    ):
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        (prepared / "README.md").write_text("# guide", encoding="utf-8")
+
+        dialog = ManualModInstallDialog(
+            None,
+            str(prepared),
+            gamebanana_metadata={"game": "pizzatower"},
+        )
+
+        assert dialog.game_combo.currentData() != "pizzatower"
+        dialog.close()
+
 

@@ -187,8 +187,6 @@ class InstallModsThread(QThread):
                         continue
                     validated_files.setdefault(key, {})[chapter_id] = {
                         "data_file_url": os.path.basename(mod.demo_url),
-                        "data_file_version": mod.demo_version or "1.0.0",
-                        "versions": {"demo": mod.demo_version or "1.0.0"},
                     }
                 elif chapter_data:
                     file_info = {}
@@ -206,11 +204,6 @@ class InstallModsThread(QThread):
                         file_info["data_file_url"] = os.path.basename(
                             chapter_data.data_file_url
                         )
-                        if chapter_data.data_file_version:
-                            file_info["data_file_version"] = chapter_data.data_file_version
-                            file_info["versions"] = {
-                                "data": chapter_data.data_file_version
-                            }
                     elif chapter_data.data_file_url:
                         logging.warning(
                             f"InstallModsThread: Invalid URL for data file: {chapter_data.data_file_url}"
@@ -229,10 +222,6 @@ class InstallModsThread(QThread):
                             extra_files_dict.setdefault(extra_file.key, []).append(
                                 os.path.basename(extra_file.url)
                             )
-                            if extra_file.version:
-                                file_info.setdefault("versions", {})[extra_file.key] = (
-                                    extra_file.version
-                                )
                         else:
                             logging.warning(
                                 f"InstallModsThread: Invalid URL for extra file {extra_file.key}: {extra_file.url}"

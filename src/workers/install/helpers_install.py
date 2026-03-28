@@ -5,7 +5,7 @@ import os
 
 from config.config import MOD_CONFIG_FILENAME
 from utils.file_utils import load_json, sanitize_filename, save_json
-from utils.mod_config_parser import normalize_mod_config_data
+from utils.mod_config_parser import MOD_FIELD_LIMITS, normalize_mod_config_data
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def normalize_mod_id(config_data: dict) -> str:
     if not mod_id:
         mod_name = config_data.get("name", "imported_mod")
         mod_id = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
-    config_data["id"] = mod_id
+    config_data["id"] = str(mod_id).strip()[: MOD_FIELD_LIMITS["id"]]
     config_data.pop("key", None)
     config_data.pop("mod_key", None)
     return mod_id

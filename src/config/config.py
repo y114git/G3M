@@ -38,7 +38,7 @@ STEAM_APP_ID_PIZZA_TOWER = "2231450"
 """Plugin and profile runtime configuration."""
 PLUGIN_API_VERSION = "1.0.0"
 PLUGIN_CATALOG_URL = (
-    "https://github.com/y114git/DELTAHUB/raw/refs/heads/stable/catalog/plugins/plugins.json"
+    "https://raw.githubusercontent.com/y114git/DELTAHUB/stable/catalog/plugins/plugins.json"
 )
 PLUGIN_HOOKS = {
     "app_ready",
@@ -104,6 +104,9 @@ ARROW_UP_SVG_TEMPLATE = shared_styles.ARROW_UP_SVG_TEMPLATE
 RICH_HTML_CSS_CLASS_MAP = shared_styles.RICH_HTML_CSS_CLASS_MAP
 BASE_TAG_NAMES = ("textedit", "customization", "gameplay", "other")
 LIBRARY_IMPORT_ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma", ".gz")
+MOD_README_EXTENSIONS = (".md", ".txt")
+MOD_README_ENCODINGS = ("utf-8-sig", "utf-16", "cp1251", "latin-1")
+MOD_ROOT_DOC_EXTENSIONS = (".md", ".markdown", ".txt")
 RICH_HTML_IMG_RE = re.compile(r"<img\b([^>]*)/?>", re.IGNORECASE | re.DOTALL)
 RICH_HTML_ATTR_RE = re.compile(r'(\w[\w-]*)=["\']([^"\']*)["\']')
 RICH_HTML_CLASS_RE = re.compile(

@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from config.config import MOD_CONFIG_FILENAME
-from utils.file_utils import load_json
+from utils.file_utils import load_json, save_json
+from utils.mod_config_parser import (
+    MOD_ALLOWED_TAGS,
+    MOD_CONFIG_VERSION,
+    MOD_FIELD_LIMITS,
+    normalize_mod_config_data,
+)
 
 
 @dataclass(slots=True)
@@ -50,26 +56,57 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
             },
         )
         return False
-    has_name = bool(config_data.get("name"))
-    mod_id = config_data.get("id")
-    has_id = isinstance(mod_id, str) and bool(mod_id.strip())
-    if not has_id:
+    required_string_fields = (
+        ("config_version", MOD_CONFIG_VERSION, None),
+        ("id", None, MOD_FIELD_LIMITS["id"]),
+        ("name", None, MOD_FIELD_LIMITS["name"]),
+        ("version", None, MOD_FIELD_LIMITS["version"]),
+        ("game", None, MOD_FIELD_LIMITS["game"]),
+    )
+    for field_name, expected_value, max_len in required_string_fields:
+        value = config_data.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            logging.warning(
+                "validate_mod_config: Missing required string field %s in %s, skipping mod",
+                field_name,
+                config_path,
+                extra={"mod_folder": folder_name, "config_path": config_path},
+            )
+            return False
+        if expected_value is not None and value != expected_value:
+            logging.warning(
+                "validate_mod_config: Invalid %s=%s in %s, skipping mod",
+                field_name,
+                value,
+                config_path,
+                extra={"mod_folder": folder_name, "config_path": config_path},
+            )
+            return False
+        if max_len is not None and len(value) > max_len:
+            logging.warning(
+                "validate_mod_config: Field %s exceeds limit in %s, skipping mod",
+                field_name,
+                config_path,
+                extra={"mod_folder": folder_name, "config_path": config_path},
+            )
+            return False
+    if len(str(config_data.get("description", ""))) > MOD_FIELD_LIMITS["description"]:
         logging.warning(
-            f"validate_mod_config: Config missing usable id in {config_path}, skipping mod",
-            extra={
-                "mod_folder": folder_name,
-                "config_path": config_path,
-                "has_name": has_name,
-            },
+            'validate_mod_config: Config field "description" exceeds max length in %s',
+            config_path,
+            extra={"mod_folder": folder_name, "config_path": config_path},
         )
         return False
-    if "name" in config_data and (not isinstance(config_data["name"], str)):
+    if "homepage" in config_data and (
+        not isinstance(config_data["homepage"], str)
+        or len(config_data["homepage"]) > MOD_FIELD_LIMITS["homepage"]
+    ):
         logging.warning(
-            f'validate_mod_config: Config field "name" has invalid type in {config_path}, expected string',
+            'validate_mod_config: Config field "homepage" is invalid in %s',
+            config_path,
             extra={
                 "mod_folder": folder_name,
                 "config_path": config_path,
-                "name_type": type(config_data["name"]).__name__,
             },
         )
         return False
@@ -95,6 +132,45 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
             },
         )
         return False
+    if isinstance(config_data.get("tags"), list) and any(
+        tag not in MOD_ALLOWED_TAGS for tag in config_data["tags"]
+    ):
+        logging.warning(
+            'validate_mod_config: Config field "tags" contains invalid values in %s',
+            config_path,
+            extra={"mod_folder": folder_name, "config_path": config_path},
+        )
+        return False
+    for file_key, file_info in (config_data.get("files") or {}).items():
+        if len(str(file_key)) > MOD_FIELD_LIMITS["file_value"] or not isinstance(
+            file_info, dict
+        ):
+            logging.warning(
+                "validate_mod_config: Invalid file entry %s in %s",
+                file_key,
+                config_path,
+                extra={"mod_folder": folder_name, "config_path": config_path},
+            )
+            return False
+        for field_name in ("description", "data_file_url"):
+            field_value = file_info.get(field_name)
+            if field_value not in (None, "") and (
+                not isinstance(field_value, str)
+                or len(field_value) > MOD_FIELD_LIMITS["file_value"]
+            ):
+                return False
+        extra_files = file_info.get("extra_files", [])
+        if not isinstance(extra_files, list):
+            return False
+        for extra_file in extra_files:
+            if not isinstance(extra_file, dict):
+                return False
+            if any(
+                not isinstance(extra_file.get(key), str)
+                or len(extra_file.get(key, "")) > MOD_FIELD_LIMITS["file_value"]
+                for key in ("key", "url")
+            ):
+                return False
     return True
 
 
@@ -177,6 +253,8 @@ def scan_mods_directory(
                                 },
                             )
                             continue
+                        if normalize_mod_config_data(config_data):
+                            save_json(config_path, config_data, indent=4)
                         if not validate_mod_config(
                             config_data, config_path, folder_name
                         ):

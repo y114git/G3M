@@ -94,7 +94,13 @@ class DownloadsManager(QObject):
         if canonical_key:
             existing = self._store.find_by_canonical_key(canonical_key)
             if existing:
-                return existing.id, True
+                if (
+                    target_kind == TargetKind.PLUGIN
+                    and not existing.is_active
+                ):
+                    self._replace_existing_plugin_record(existing.id)
+                else:
+                    return existing.id, True
 
         settings = self._settings()
         record = DownloadRecord(
@@ -114,6 +120,21 @@ class DownloadsManager(QObject):
         self._start_download(record)
         self._emit_badge()
         return record.id, False
+
+    def _replace_existing_plugin_record(self, record_id: str) -> None:
+        record = self._store.find(record_id)
+        if not record:
+            return
+        worker = self._workers.pop(record_id, None)
+        if worker and hasattr(worker, "cancel"):
+            worker.cancel()
+            with contextlib.suppress(Exception):
+                worker.requestInterruption()
+            with contextlib.suppress(Exception):
+                worker.finished.connect(worker.deleteLater)
+        self._store.delete_file_for_record(record)
+        self._store.remove(record_id)
+        self.record_removed.emit(record_id)
 
     def _start_download(self, record: DownloadRecord):
         record.download_status = DownloadStatus.DOWNLOADING
@@ -426,8 +447,7 @@ class DownloadsManager(QObject):
             "item_type": m.get("item_type", "mod"),
             "name": record.display_name,
             "author": m.get("author"),
-            "profile_url": m.get("profile_url"),
-            "external_url": m.get("profile_url"),
+            "homepage": m.get("homepage") or m.get("profile_url"),
             "icon": m.get("icon"),
             "tags": m.get("tags") or [],
             "category": m.get("category"),

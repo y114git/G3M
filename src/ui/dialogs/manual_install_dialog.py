@@ -22,7 +22,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.config import DATA_FILE_EXTENSIONS, MOD_CONFIG_FILENAME
+from config.config import (
+    DATA_FILE_EXTENSIONS,
+    MOD_CONFIG_FILENAME,
+    MOD_ROOT_DOC_EXTENSIONS,
+)
 from models.game_modes import get_all_game_entries, get_game
 from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values
@@ -195,7 +199,7 @@ class ManualModInstallDialog(QDialog):
         self._center_combo_text(self.game_combo)
         for entry in get_all_game_entries():
             self.game_combo.addItem(entry.display_name, entry.id)
-        game_value = self.initial_game_type or self.gamebanana_metadata.get("game")
+        game_value = self.initial_game_type
         if not game_value and self.app_state and hasattr(self.app_state, "game_mode"):
             from services.game_detection_service import get_game_type_string
 
@@ -1011,6 +1015,19 @@ class ManualModInstallDialog(QDialog):
                 return suffix
         return chapter_id
 
+    def _copy_root_docs_to_mod(self, target_mod_dir: str) -> None:
+        for file_path, relative_path in self.all_files:
+            if os.path.dirname(relative_path):
+                continue
+            if os.path.splitext(file_path)[1].lower() not in MOD_ROOT_DOC_EXTENSIONS:
+                continue
+            if not os.path.isfile(file_path):
+                continue
+            shutil.copy2(
+                file_path,
+                os.path.join(target_mod_dir, os.path.basename(file_path)),
+            )
+
     def _create_mod_from_files(self):
         if not self.app_state or not self.mod_service:
             raise ValueError("app_state or mod_service not available")
@@ -1138,7 +1155,7 @@ class ManualModInstallDialog(QDialog):
                 "author",
                 "description",
                 "icon",
-                "external_url",
+                "homepage",
                 "tags",
                 "version",
             ):
@@ -1148,6 +1165,7 @@ class ManualModInstallDialog(QDialog):
         else:
             config_data["author"] = "Unknown"
             config_data["version"] = "1.0.0"
+        self._copy_root_docs_to_mod(target_mod_dir)
         config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         save_json(config_path, build_mod_config_data(config_data), indent=2)
         logging.info(f"Manual mod created: {target_mod_dir}")

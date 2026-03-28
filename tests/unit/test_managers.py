@@ -41,9 +41,11 @@ class TestModManager:
         from utils.mod_scan_utils import validate_mod_config
 
         valid_config = {
+            "config_version": "1.0.0",
             "id": "test_mod",
             "name": "Test Mod",
             "version": "1.0.0",
+            "game": "deltarune",
             "files": {},
             "tags": [],
         }

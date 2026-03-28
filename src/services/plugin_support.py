@@ -117,7 +117,7 @@ def load_manifest(path: str) -> PluginManifest:
         api_version=_normalized_text(data.get("api_version")),
         entry=_normalized_text(data.get("entry")),
         icon=_normalized_text(data.get("icon")),
-        external_link=_normalized_text(data.get("external_link")),
+        homepage=_normalized_text(data.get("homepage")),
         tags=[_normalized_text(tag) for tag in data.get("tags", []) if str(tag).strip()],
         relations={
             _normalized_text(key): _normalized_text(value)

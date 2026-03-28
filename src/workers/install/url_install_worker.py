@@ -389,6 +389,7 @@ class UrlInstallThread(BaseInstallWorker):
                             redirect_config = json.load(f)
                         redirect_url = (
                             redirect_config.get("dm_url")
+                            or redirect_config.get("homepage")
                             or redirect_config.get("external_url")
                             or redirect_config.get("download_url")
                         )

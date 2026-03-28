@@ -11,9 +11,18 @@ from typing import Any
 
 from defusedxml import ElementTree
 
+from config.config import MOD_ROOT_DOC_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file, get_unique_mod_dir
 from utils.mod_config_parser import build_mod_config_data
+
+DELTAMOD_GAME_MAP: dict[str, str] = {
+    "toby.deltarune": "deltarune",
+    "toby.deltarune.demo": "deltarunedemo",
+    "toby.undertale": "undertale",
+    "fans.utyellow": "undertaleyellow",
+    "other.pizzatower": "pizzatower",
+}
 
 
 class DeltamodConverter:
@@ -27,6 +36,7 @@ class DeltamodConverter:
         self.gamebanana_metadata = gamebanana_metadata or {}
         self.deltamod_info: dict[str, Any] = {}
         self.modding_xml: ElementTree.Element | None = None
+        self._target_game = "deltarune"
 
     def convert(self) -> str | None:
         try:
@@ -203,6 +213,37 @@ class DeltamodConverter:
             return [self.modding_xml]
         return list(self.modding_xml.findall("patch"))
 
+    def _map_deltamod_game(self, game_id: Any) -> str | None:
+        if not isinstance(game_id, str):
+            return None
+        return DELTAMOD_GAME_MAP.get(game_id.strip().lower())
+
+    def _resolve_target_game(self, meta: dict[str, Any]) -> str:
+        mapped_game = self._map_deltamod_game(meta.get("game"))
+        if mapped_game:
+            return mapped_game
+        if meta.get("demoMod"):
+            return "deltarunedemo"
+        return "deltarune"
+
+    def _resolve_game_version(self, game_value: str) -> str:
+        if game_value != "deltarune":
+            return ""
+        return self.deltamod_info.get("deltaruneTargetVersion", tr("defaults.not_specified"))
+
+    def _normalize_content_key(self, chapter_key: str) -> str:
+        from models.game_modes import get_game
+
+        game_def = get_game(self._target_game)
+        if not game_def:
+            return chapter_key
+        if chapter_key == "demo":
+            return game_def.default_tab
+        if game_def.is_multi_tab:
+            tab = game_def.get_tab(chapter_key)
+            return tab.tab_id if tab else chapter_key
+        return game_def.default_tab
+
     def _generate_config_json(self) -> dict[str, Any] | None:
         if not self.deltamod_info or self.modding_xml is None:
             return None
@@ -218,24 +259,21 @@ class DeltamodConverter:
             else:
                 mod_id = f"local_{meta.get('name', 'unnamed')}_{uuid.uuid4().hex[:8]}"
 
-        game_value = "deltarune"
-        if self.gamebanana_metadata and self.gamebanana_metadata.get("game"):
-            game_value = self.gamebanana_metadata["game"]
-        elif meta.get("demoMod"):
-            game_value = "deltarunedemo"
+        game_value = self._resolve_target_game(meta)
+        self._target_game = game_value
         config = {
             "id": mod_id,
             "version": meta.get("version", "1.0.0"),
             "name": meta.get("name", tr("defaults.local_mod")),
             "description": meta.get("description", tr("defaults.no_description")),
             "author": ", ".join(meta.get("author", [tr("defaults.unknown")])),
-            "external_url": self.gamebanana_metadata.get("profile_url")
-            if self.gamebanana_metadata.get("profile_url")
-            else meta.get("url", ""),
-            "game": game_value,
-            "game_version": self.deltamod_info.get(
-                "deltaruneTargetVersion", tr("defaults.not_specified")
+            "homepage": (
+                self.gamebanana_metadata.get("homepage")
+                or self.gamebanana_metadata.get("profile_url")
+                or meta.get("url", "")
             ),
+            "game": game_value,
+            "game_version": self._resolve_game_version(game_value),
             "files": self._generate_files_structure(patches),
             "tags": meta.get("tags", []),
         }
@@ -273,28 +311,29 @@ class DeltamodConverter:
                     f"DeltamodConverter: could not determine chapter for path: {to_path}"
                 )
                 continue
-            if chapter_key not in files_structure:
-                files_structure[chapter_key] = {}
+            content_key = self._normalize_content_key(chapter_key)
+            if content_key not in files_structure:
+                files_structure[content_key] = {}
             if patch_type == "xdelta":
-                files_structure[chapter_key]["data_file_url"] = os.path.basename(
+                files_structure[content_key]["data_file_url"] = os.path.basename(
                     patch_file
                 )
             elif patch_type == "override":
-                if "extra_files" not in files_structure[chapter_key]:
-                    files_structure[chapter_key]["extra_files"] = {}
+                if "extra_files" not in files_structure[content_key]:
+                    files_structure[content_key]["extra_files"] = {}
                 archive_key = (
                     (relative_path + filename).replace("/", "_").replace("\\", "_")
                 )
                 if not archive_key:
                     archive_key = filename
-                if archive_key not in files_structure[chapter_key]["extra_files"]:
-                    files_structure[chapter_key]["extra_files"][archive_key] = []
+                if archive_key not in files_structure[content_key]["extra_files"]:
+                    files_structure[content_key]["extra_files"][archive_key] = []
                 archive_name = f"extra_file_{archive_key}.zip"
                 if (
                     archive_name
-                    not in files_structure[chapter_key]["extra_files"][archive_key]
+                    not in files_structure[content_key]["extra_files"][archive_key]
                 ):
-                    files_structure[chapter_key]["extra_files"][archive_key].append(
+                    files_structure[content_key]["extra_files"][archive_key].append(
                         archive_name
                     )
         return files_structure
@@ -343,6 +382,7 @@ class DeltamodConverter:
         if self.modding_xml is None:
             return
         patches = self._collect_patches()
+        self._copy_root_docs(target_mod_dir)
         icon_path = os.path.join(self.source_path, "_icon.png")
         if not os.path.exists(icon_path):
             icon_path = os.path.join(self.source_path, "icon.png")
@@ -369,9 +409,10 @@ class DeltamodConverter:
                     f"DeltamodConverter: could not determine chapter for path: {to_path}"
                 )
                 continue
-            chapter_dir_name = (
-                "demo" if chapter_key == "demo" else f"chapter_{chapter_key}"
-            )
+            content_key = self._normalize_content_key(chapter_key)
+            from utils.file_utils import get_chapter_folder_name
+
+            chapter_dir_name = get_chapter_folder_name(content_key, game=self._target_game)
             target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
             os.makedirs(target_chapter_dir, exist_ok=True)
             if patch_type == "override":
@@ -412,3 +453,20 @@ class DeltamodConverter:
                 )
             else:
                 logging.warning(f"DeltamodConverter: unknown patch type: {patch_type}")
+
+    def _copy_root_docs(self, target_mod_dir: str) -> None:
+        try:
+            for item in os.listdir(self.source_path):
+                source_path = os.path.join(self.source_path, item)
+                if not os.path.isfile(source_path):
+                    continue
+                if os.path.splitext(item)[1].lower() not in MOD_ROOT_DOC_EXTENSIONS:
+                    continue
+                shutil.copy2(source_path, os.path.join(target_mod_dir, item))
+        except Exception as e:
+            logging.debug(
+                "DeltamodConverter: failed to copy root docs from %s: %s",
+                self.source_path,
+                e,
+                exc_info=True,
+            )

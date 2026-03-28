@@ -9,7 +9,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_game_ids
-from models.mod_models import ModInfo
+from models.mod_models import AnyModInfo, BrowserModInfo
 from services.localization_service import tr
 from utils.mod_utils import get_mod_id
 
@@ -117,7 +117,7 @@ class FetchModsThread(QThread):
                         start_page: int = 1,
                         num_pages: int = 3,
                         sort: str = "relevant",
-                    ) -> list[ModInfo]:
+                    ) -> list[BrowserModInfo]:
                         mods = []
                         try:
                             if not self.api:
@@ -241,6 +241,7 @@ class FetchModsThread(QThread):
                         "description_url",
                         "downloads",
                         "icon",
+                        "homepage",
                         "is_nsfw",
                     ]:
                         if hasattr(mod, attr):
@@ -261,6 +262,7 @@ class FetchModsThread(QThread):
                             "description_url",
                             "downloads",
                             "icon",
+                            "homepage",
                             "is_nsfw",
                         ]:
                             if hasattr(mod, attr):
@@ -285,7 +287,7 @@ class FetchModsThread(QThread):
             self.status.emit(str(e), UI_COLORS["status_error"])
             self.result.emit(False)
 
-    def _get_local_mods(self) -> list[ModInfo]:
+    def _get_local_mods(self) -> list[AnyModInfo]:
         local_mods = []
         app_state = getattr(self.main_window, "app_state", None)
         if app_state and hasattr(app_state, "all_mods"):
@@ -301,7 +303,7 @@ class FetchModsThread(QThread):
             )
         return local_mods
 
-    def _update_remote_exists_flags(self, all_mods: list[ModInfo]):
+    def _update_remote_exists_flags(self, all_mods: list[BrowserModInfo]):
         app_state = getattr(self.main_window, "app_state", None)
         mod_service = getattr(self.main_window, "mod_service", None)
         settings_service = getattr(self.main_window, "settings_service", None)

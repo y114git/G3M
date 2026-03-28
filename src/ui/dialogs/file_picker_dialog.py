@@ -18,12 +18,12 @@ from services.localization_service import tr
 
 class GameBananaFilePickerDialog(QDialog):
     def __init__(
-        self, parent, files: list[dict], mod_name: str, external_url: str | None = None
+        self, parent, files: list[dict], mod_name: str, homepage: str | None = None
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialogs.gamebanana_picker_title", mod_name=mod_name))
         self.files = files or []
-        self.external_url = external_url
+        self.homepage = homepage
         self.selected_file: dict | None = None
         self.resize(720, 420)
         main_layout = QVBoxLayout(self)
@@ -49,9 +49,9 @@ class GameBananaFilePickerDialog(QDialog):
         main_layout.addLayout(content_layout)
         button_row = QHBoxLayout()
         button_row.addStretch()
-        if self.external_url:
+        if self.homepage:
             open_btn = QPushButton(tr("dialogs.gamebanana_picker_open_page"))
-            open_btn.clicked.connect(self._open_external_page)
+            open_btn.clicked.connect(self._open_homepage)
             button_row.addWidget(open_btn)
         main_layout.addLayout(button_row)
         button_box = QDialogButtonBox(
@@ -136,9 +136,9 @@ class GameBananaFilePickerDialog(QDialog):
             return tr("dialogs.gamebanana_picker_auto_install_yes")
         return tr("dialogs.gamebanana_picker_auto_install_no")
 
-    def _open_external_page(self):
-        if self.external_url:
-            webbrowser.open(self.external_url)
+    def _open_homepage(self):
+        if self.homepage:
+            webbrowser.open(self.homepage)
 
     def _accept_if_selection(self):
         if self.selected_file:

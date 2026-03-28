@@ -1,4 +1,5 @@
 {
+  "config_version": "1.0.0",
   "id": "test_mod_001",
   "name": "Test Mod",
   "version": "1.0.0",

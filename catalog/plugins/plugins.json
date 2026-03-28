@@ -7,9 +7,9 @@
         "author": "Y114",
         "version": "1.0.0",
         "api_version": ">=1.0.0",
-        "icon": "https://raw.githubusercontent.com/y114git/DELTAHUB/refs/heads/stable/catalog/plugins/deltarune_save_manager/icon.png",
-        "external_link": "https://github.com/y114git/DELTAHUB/tree/stable/catalog/plugins/deltarune_save_manager",
-        "download_link": "https://github.com/y114git/DELTAHUB/raw/refs/heads/stable/catalog/plugins/deltarune_save_manager.zip",
+        "icon": "https://raw.githubusercontent.com/y114git/DELTAHUB/stable/catalog/plugins/deltarune_save_manager/icon.png",
+        "homepage": "https://github.com/y114git/DELTAHUB/tree/stable/catalog/plugins/deltarune_save_manager",
+        "download_link": "https://raw.githubusercontent.com/y114git/DELTAHUB/stable/catalog/plugins/deltarune_save_manager.zip",
         "tags": [
             "tool",
             "game_experience"
