@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Any
 
-from utils.file_utils import get_chapter_folder_name, load_json, sanitize_filename
+from utils.file_utils import get_chapter_folder_name, load_json
 from utils.mod_utils import get_mod_id, get_mod_name
 from utils.patching import mod_content_utils as mod_content
 from utils.path_utils import find_chapter_resource_dir
@@ -45,30 +45,31 @@ def get_mod_source_dir(
     if mod_folder_path and os.path.isdir(mod_folder_path):
         source_dir = mod_folder_path
     else:
-        mod_name = get_mod_name(mod_data, mod_id)
-        folder_name = sanitize_filename(mod_name)
-        source_dir = os.path.join(app_state.mods_dir, folder_name)
-        if not os.path.isdir(source_dir):
-            source_dir = None
-            if os.path.exists(app_state.mods_dir):
-                for folder_name in os.listdir(app_state.mods_dir):
-                    folder_path = os.path.join(app_state.mods_dir, folder_name)
-                    if not os.path.isdir(folder_path):
-                        continue
-                    config_path = os.path.join(folder_path, "mod_config.json")
-                    if os.path.exists(config_path):
-                        try:
-                            config_data = load_json(config_path)
-                            if config_data.get("id") == mod_id:
-                                source_dir = folder_path
-                                break
-                        except Exception as e:
-                            caller_logger.debug(
-                                f"get_mod_source_dir: failed to inspect {config_path}: {e}",
-                                exc_info=True,
-                            )
-            if not source_dir:
-                return None
+        source_dir = None
+        if os.path.exists(app_state.mods_dir):
+            for folder_name in os.listdir(app_state.mods_dir):
+                folder_path = os.path.join(app_state.mods_dir, folder_name)
+                if not os.path.isdir(folder_path):
+                    continue
+                config_path = os.path.join(folder_path, "mod_config.json")
+                if os.path.exists(config_path):
+                    try:
+                        config_data = load_json(config_path)
+                        if config_data.get("id") == mod_id:
+                            source_dir = folder_path
+                            break
+                    except Exception as e:
+                        caller_logger.debug(
+                            f"get_mod_source_dir: failed to inspect {config_path}: {e}",
+                            exc_info=True,
+                        )
+        if not source_dir:
+            caller_logger.warning(
+                "_get_mod_source_dir: source dir not found for mod_id=%s mod_name=%s",
+                mod_id,
+                get_mod_name(mod_data, mod_id),
+            )
+            return None
     game = resolve_mod_game(mod_data, source_dir)
     chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
     chapter_dir = os.path.join(source_dir, chapter_folder_name)

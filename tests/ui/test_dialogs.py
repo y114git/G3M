@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import QMimeData, QUrl, Qt
+from PyQt6.QtCore import QMimeData, Qt, QUrl
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 
@@ -303,7 +303,6 @@ class TestReadmeUi:
 
     def test_mod_versions_dialog_drop_queues_multiple_imports(self, qapp, app_state, tmp_path):
         """Checks that mod versions dialog drop queues multiple imports."""
-        import os
 
         from ui.dialogs.mod_versions_dialog import ModVersionsDialog
 

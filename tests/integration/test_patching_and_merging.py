@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -48,6 +49,139 @@ class TestG3MToolAdapter:
             "Applying patch",
         )
         assert G3MToolManager._parse_progress("not progress") is None
+
+    def test_run_returns_stdout_stderr_and_progress(self, monkeypatch):
+        """Checks that runing returns stdout stderr and progress."""
+
+        class _FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = io.StringIO("Applying patch: 25%\nok\n")
+                self.stderr = io.StringIO("warn\n")
+                self.returncode = 0
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+            def poll(self):
+                return self.returncode
+
+            def kill(self):
+                self.returncode = -1
+
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "g3mtool"
+        progress = []
+        monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.subprocess.Popen", lambda *_args, **_kwargs: _FakeProcess()
+        )
+
+        result = g3mtool._run(
+            ["g3mtool", "info", "target"],
+            progress_callback=lambda percent, label: progress.append((percent, label)),
+        )
+
+        assert result == (0, "Applying patch: 25%\nok\n", "warn\n")
+        assert progress == [(25, "Applying patch")]
+        assert g3mtool._active_processes == []
+
+    @pytest.mark.parametrize(
+        ("caller", "expected_cmd"),
+        [
+            (
+                lambda g3mtool: g3mtool.merge_patches(
+                    "original.win",
+                    ["a.g3mpatch", "b.g3mpatch"],
+                    "out.win",
+                    report_path="report.md",
+                    log_path="g3mtool.log",
+                    merge_code=True,
+                    merge_properties=True,
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "merge",
+                    "original.win",
+                    "a.g3mpatch",
+                    "b.g3mpatch",
+                    "--apply",
+                    "out.win",
+                    "--code",
+                    "--properties",
+                    "--report",
+                    "report.md",
+                    "--log",
+                    "g3mtool.log",
+                ],
+            ),
+            (
+                lambda g3mtool: g3mtool.apply_patch(
+                    "original.win", "patch.g3mpatch", "out.win", log_path="g3mtool.log"
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "apply",
+                    "original.win",
+                    "patch.g3mpatch",
+                    "out.win",
+                    "--log",
+                    "g3mtool.log",
+                ],
+            ),
+            (
+                lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
+                ["g3mtool", "xpatch", "apply", "original.win", "patch.xdelta", "out.win"],
+            ),
+            (
+                lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
+                ["g3mtool", "xpatch", "create", "original.win", "modified.win", "out.xdelta"],
+            ),
+            (
+                lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
+                ["g3mtool", "patch", "create", "original.win", "modified.win", "out.g3mpatch"],
+            ),
+            (
+                lambda g3mtool: g3mtool.info("target.win", verbose=True),
+                ["g3mtool", "info", "target.win", "--verbose"],
+            ),
+            (
+                lambda g3mtool: g3mtool.diff("left.win", "right.win", "diff-out"),
+                ["g3mtool", "diff", "left.win", "right.win", "diff-out"],
+            ),
+        ],
+    )
+    def test_public_commands_forward_expected_contract(
+        self, monkeypatch, caller, expected_cmd
+    ):
+        """Checks that public commands forward expected contract."""
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "g3mtool"
+        run = Mock(return_value=(7, "stdout", "stderr"))
+        monkeypatch.setattr(g3mtool, "_run", run)
+
+        assert caller(g3mtool) == (7, "stdout", "stderr")
+        assert run.call_args.args[0] == expected_cmd
+
+    @pytest.mark.parametrize(
+        "caller",
+        [
+            lambda g3mtool: g3mtool.merge_patches("original.win", ["a.g3mpatch"], "out.win"),
+            lambda g3mtool: g3mtool.apply_patch("original.win", "patch.g3mpatch", "out.win"),
+            lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
+            lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
+            lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
+            lambda g3mtool: g3mtool.info("target.win"),
+            lambda g3mtool: g3mtool.diff("left.win", "right.win"),
+        ],
+    )
+    def test_public_commands_share_unavailable_contract(self, caller):
+        """Checks that public commands share unavailable contract."""
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = None
+
+        assert caller(g3mtool) == (-1, "", "G3MTool is not available")
 
 
 class TestModClassification:

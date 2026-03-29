@@ -5,10 +5,18 @@ import os
 import shutil
 import tempfile
 from collections.abc import Callable
+from typing import override
 
 from PyQt6.QtCore import QMimeData, QTimer, QUrl
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_local_path(path: str) -> str:
+    path = (path or "").strip()
+    if len(path) > 3 and path[0] == "/" and path[2] == ":":
+        path = path[1:]
+    return os.path.normpath(path)
 
 
 class LazyFileExportMimeData(QMimeData):
@@ -33,6 +41,7 @@ class LazyFileExportMimeData(QMimeData):
     def formats(self) -> list[str]:
         return [self._internal_format, "text/uri-list"]
 
+    @override
     def hasUrls(self) -> bool:
         return True
 
@@ -40,6 +49,7 @@ class LazyFileExportMimeData(QMimeData):
         path = self._ensure_export_ready()
         return [QUrl.fromLocalFile(path)] if path else []
 
+    @override
     def retrieveData(self, mime_type, meta_type):
         if mime_type == self._internal_format:
             return b"1"
@@ -84,8 +94,10 @@ def collect_drop_file_paths(mime_data: QMimeData) -> list[str]:
     if not mime_data.hasUrls():
         return paths
     for url in mime_data.urls():
-        path = url.toLocalFile()
-        if path and os.path.exists(path):
+        if not url.isLocalFile():
+            continue
+        path = normalize_local_path(url.toLocalFile())
+        if path and path != "." and os.path.exists(path):
             paths.append(path)
     return paths
 

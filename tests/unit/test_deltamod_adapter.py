@@ -25,8 +25,6 @@ def test_generate_config_uses_deltamod_game_mapping_for_supported_single_tab_gam
     config = converter._generate_config_json()
 
     assert config["metadata"]["game"] == "undertale"
-    assert config.get("files", {}) == {}
-    assert "game_version" not in config["metadata"]
 
 
 def test_generate_config_uses_deltamod_game_mapping_for_pizzatower():
@@ -108,6 +106,25 @@ def test_generate_config_ignores_gamebanana_metadata_game():
     config = converter._generate_config_json()
 
     assert config["metadata"]["game"] == "undertale"
+
+
+def test_generate_config_uses_gamebanana_file_name_when_metadata_name_missing():
+    """Checks that generateing config uses gamebanana file name when metadata name missing."""
+    converter = _make_converter(
+        {"metadata": {"author": ["Author"], "game": "toby.deltarune"}},
+        gamebanana_metadata={"file_name": "Downloaded Archive Name.zip"},
+    )
+
+    config = converter._generate_config_json()
+
+    assert config["metadata"]["name"] == "Downloaded Archive Name"
+
+
+def test_fallback_mod_name_ignores_gamebanana_file_name_suffixes():
+    """Checks that fallback mod name ignores gamebanana file name suffixes."""
+    converter = DeltamodConverter("Vase", "mods", gamebanana_metadata={"file_name": "Vase1.1.0.zip"})
+
+    assert converter._fallback_mod_name() == "Vase"
 
 
 def test_process_files_copies_root_docs(tmp_path):

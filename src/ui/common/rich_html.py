@@ -69,7 +69,7 @@ def _browser_available_width(browser: QTextBrowser) -> int:
     viewport = None
     try:
         viewport = browser.viewport()
-    except AttributeError, RuntimeError, TypeError:
+    except (AttributeError, RuntimeError, TypeError):
         viewport = None
     width_candidates = []
     if viewport is not None:
@@ -84,7 +84,7 @@ def _browser_available_width(browser: QTextBrowser) -> int:
     available_width = next((width for width in width_candidates if width > 0), 600)
     try:
         document_margin = int(browser.document().documentMargin())
-    except AttributeError, TypeError, ValueError:
+    except (AttributeError, TypeError, ValueError):
         document_margin = 0
     return max(available_width - (document_margin * 2), 200)
 

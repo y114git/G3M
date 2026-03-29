@@ -233,41 +233,19 @@ class FetchModsThread(QThread):
                     all_mods_filtered.append(mod)
                 elif mod_id and mod_id in existing_mods_with_files:
                     existing_mod = existing_mods_with_files[mod_id]
-                    for attr in [
-                        "name",
-                        "author",
-                        "description",
-                        "game_version",
-                        "description_url",
-                        "downloads",
-                        "icon",
-                        "homepage",
-                        "is_nsfw",
-                    ]:
-                        if hasattr(mod, attr):
-                            setattr(existing_mod, attr, getattr(mod, attr))
-                    all_mods_filtered.append(existing_mod)
+                    if hasattr(existing_mod, "files") and existing_mod.files:
+                        mod.files = existing_mod.files
+                    all_mods_filtered.append(mod)
                 elif mod_id and mod_id in installed_mods_with_files:
                     installed_mod_config = installed_mods_with_files[mod_id]
                     mod_service = getattr(self.main_window, "mod_service", None)
                     if mod_service:
-                        mod_with_files = mod_service.create_mod_object_from_info(
-                            installed_mod_config, all_mods_filtered
+                        temp_mod = mod_service.create_mod_object_from_info(
+                            installed_mod_config, []
                         )
-                        for attr in [
-                            "name",
-                            "author",
-                            "description",
-                            "game_version",
-                            "description_url",
-                            "downloads",
-                            "icon",
-                            "homepage",
-                            "is_nsfw",
-                        ]:
-                            if hasattr(mod, attr):
-                                setattr(mod_with_files, attr, getattr(mod, attr))
-                        all_mods_filtered.append(mod_with_files)
+                        if hasattr(temp_mod, "files") and temp_mod.files:
+                            mod.files = temp_mod.files
+                        all_mods_filtered.append(mod)
                     else:
                         all_mods_filtered.append(mod)
                 else:
@@ -337,7 +315,7 @@ class FetchModsThread(QThread):
                     )
                     if not mod_id or is_local_mod_id:
                         continue
-                except OSError, json.JSONDecodeError:
+                except (OSError, json.JSONDecodeError):
                     continue
         except Exception as e:
             logging.warning(f"Failed to update remote exists flags in metadata: {e}")

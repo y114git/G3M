@@ -44,7 +44,7 @@ class DeltamodConverter:
             config_data = self._generate_config_json()
             if not config_data:
                 return None
-            mod_name = config_data.get("name", "unnamed_mod")
+            mod_name = self._normalize_folder_name(config_data.get("name") or self._fallback_mod_name())
             folder_name = get_unique_mod_dir(self.mods_dir, mod_name)
             target_mod_dir = os.path.join(self.mods_dir, folder_name)
             if os.path.exists(target_mod_dir):
@@ -247,6 +247,17 @@ class DeltamodConverter:
             return tab.tab_id if tab else chapter_key
         return game_def.default_tab
 
+    def _fallback_mod_name(self) -> str:
+        file_name = str(self.gamebanana_metadata.get("file_name") or "").strip()
+        if file_name:
+            return self._normalize_folder_name(os.path.splitext(file_name)[0])
+        source_name = os.path.basename(os.path.normpath(self.source_path))
+        return source_name or "imported_mod"
+
+    @staticmethod
+    def _normalize_folder_name(name: str) -> str:
+        return re.sub(r"[\s._-]*v?\d+(?:[._-]\d+)*$", "", name, flags=re.IGNORECASE).strip() or name
+
     def _generate_config_json(self) -> dict[str, Any] | None:
         if not self.deltamod_info or self.modding_xml is None:
             return None
@@ -267,7 +278,7 @@ class DeltamodConverter:
         config = {
             "id": mod_id,
             "version": meta.get("version", "1.0.0"),
-            "name": meta.get("name", tr("defaults.local_mod")),
+            "name": meta.get("name") or self._fallback_mod_name(),
             "description": meta.get("description", tr("defaults.no_description")),
             "author": ", ".join(meta.get("author", [tr("defaults.unknown")])),
             "homepage": (
@@ -329,10 +340,12 @@ class DeltamodConverter:
             content_key = self._normalize_content_key(chapter_key)
             if content_key not in files_structure:
                 files_structure[content_key] = {}
-            stored_path = self._build_stored_path(relative_path, filename)
             if patch_type == "xdelta":
-                files_structure[content_key]["data_file_path"] = stored_path
+                files_structure[content_key]["data_file_path"] = patch_file.lstrip("./").replace(
+                    "\\", "/"
+                )
             elif patch_type == "override":
+                stored_path = self._build_stored_path(relative_path, filename)
                 files_structure[content_key].setdefault("extra_files", []).append(
                     stored_path
                 )

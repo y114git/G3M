@@ -213,7 +213,7 @@ class LocalizationManager:
                     system_locale, _ = getter()
                     if system_locale:
                         break
-                except AttributeError, TypeError, ValueError:
+                except (AttributeError, TypeError, ValueError):
                     pass
             if not system_locale:
                 lang_env = (
@@ -263,7 +263,7 @@ class LocalizationManager:
                 return None
             value = self._process_escape_sequences(value)
             return value.format(**kwargs) if kwargs else value
-        except KeyError, TypeError, AttributeError:
+        except (KeyError, TypeError, AttributeError):
             return None
 
     def get_text(self, key: str, **kwargs) -> str:

@@ -152,6 +152,7 @@ class UseWorker(QThread):
         return {
             "mod_id": self._metadata["gb_mod_id"],
             "item_type": self._metadata.get("item_type", "mod"),
+            "file_name": self._metadata.get("file_name"),
             "homepage": self._metadata.get("homepage") or self._metadata.get("profile_url"),
             "icon": self._metadata.get("icon"),
             "tags": self._metadata.get("tags") or [],

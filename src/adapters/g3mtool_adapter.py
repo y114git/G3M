@@ -43,6 +43,19 @@ class G3MToolManager:
     def is_available(self) -> bool:
         return self.g3mtool_path is not None
 
+    @staticmethod
+    def _unavailable_result() -> tuple[int, str, str]:
+        return (-1, "", "G3MTool is not available")
+
+    def _run_command(
+        self,
+        args: list[str],
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
+        if not self.g3mtool_path:
+            return self._unavailable_result()
+        return self._run([self.g3mtool_path, *args], progress_callback=progress_callback)
+
     def merge_patches(
         self,
         original_data_win: str,
@@ -55,7 +68,7 @@ class G3MToolManager:
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch merge <original> <patch1> <patch2> ... --apply <output> [--report <path>] [--log <path>]"""
-        cmd = [self.g3mtool_path, "patch", "merge", original_data_win, *mod_patches]
+        cmd = ["patch", "merge", original_data_win, *mod_patches]
         cmd.extend(["--apply", output_path])
         for flag, enabled in [
             ("--code", merge_code),
@@ -67,7 +80,7 @@ class G3MToolManager:
             cmd.extend(["--report", report_path])
         if log_path:
             cmd.extend(["--log", log_path])
-        return self._run(cmd, progress_callback=progress_callback)
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def apply_patch(
         self,
@@ -79,7 +92,6 @@ class G3MToolManager:
     ) -> tuple[int, str, str]:
         """Call g3mtool patch apply <original> <patch> <output> [--log <path>]"""
         cmd = [
-            self.g3mtool_path,
             "patch",
             "apply",
             original_data_win,
@@ -88,7 +100,7 @@ class G3MToolManager:
         ]
         if log_path:
             cmd.extend(["--log", log_path])
-        return self._run(cmd, progress_callback=progress_callback)
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def xpatch_apply(
         self,
@@ -99,14 +111,13 @@ class G3MToolManager:
     ) -> tuple[int, str, str]:
         """Call g3mtool xpatch apply <original> <patch> <output> for xdelta/vcdiff patches."""
         cmd = [
-            self.g3mtool_path,
             "xpatch",
             "apply",
             original_file,
             patch_path,
             output_path,
         ]
-        return self._run(cmd, progress_callback=progress_callback)
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def xpatch_create(
         self,
@@ -117,14 +128,13 @@ class G3MToolManager:
     ) -> tuple[int, str, str]:
         """Call g3mtool xpatch create <original> <modified> <output>."""
         cmd = [
-            self.g3mtool_path,
             "xpatch",
             "create",
             original_file,
             modified_file,
             output_path,
         ]
-        return self._run(cmd, progress_callback=progress_callback)
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def patch_create(
         self,
@@ -133,17 +143,9 @@ class G3MToolManager:
         output_path: str,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch create <original> <modified> [output]."""
-        if not self.g3mtool_path:
-            return (-1, "", "G3MTool is not available")
-        cmd = [
-            self.g3mtool_path,
-            "patch",
-            "create",
-            original_file,
-            modified_file,
-            output_path,
-        ]
-        return self._run(cmd)
+        return self._run_command(
+            ["patch", "create", original_file, modified_file, output_path]
+        )
 
     def info(
         self,
@@ -151,12 +153,10 @@ class G3MToolManager:
         verbose: bool = False,
     ) -> tuple[int, str, str]:
         """Call g3mtool info <target> [--verbose]."""
-        if not self.g3mtool_path:
-            return (-1, "", "G3MTool is not available")
-        cmd = [self.g3mtool_path, "info", target]
+        cmd = ["info", target]
         if verbose:
             cmd.append("--verbose")
-        return self._run(cmd)
+        return self._run_command(cmd)
 
     def diff(
         self,
@@ -165,12 +165,10 @@ class G3MToolManager:
         output_dir: str | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool diff <file1> <file2> [output-dir]."""
-        if not self.g3mtool_path:
-            return (-1, "", "G3MTool is not available")
-        cmd = [self.g3mtool_path, "diff", file1, file2]
+        cmd = ["diff", file1, file2]
         if output_dir:
             cmd.append(output_dir)
-        return self._run(cmd)
+        return self._run_command(cmd)
 
     def cancel_active_processes(self):
         for process in list(self._active_processes):

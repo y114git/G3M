@@ -109,7 +109,7 @@ def download_file(
                 url, allow_redirects=True, timeout=NETWORK_TIMEOUT_HEAD
             ).headers.get("content-length", 0)
         )
-    except requests.RequestException, ValueError:
+    except (requests.RequestException, ValueError):
         expected_size = 0
     for attempt in range(1, max_retries + 1):
         try:
@@ -175,7 +175,7 @@ def download_file(
             ):
                 continue
             return
-        except requests.RequestException, OSError:
+        except (requests.RequestException, OSError):
             if attempt >= max_retries:
                 raise
             time.sleep(min(2.0, 0.2 * attempt))

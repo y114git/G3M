@@ -217,7 +217,7 @@ def _move_tree_safely(src_root: str, dst_root: str) -> None:
             os.makedirs(os.path.dirname(dst_path), exist_ok=True)
             try:
                 shutil.move(src_path, dst_path)
-            except OSError, shutil.Error:
+            except (OSError, shutil.Error):
                 try:
                     shutil.copy2(src_path, dst_path)
                 except OSError as e:

@@ -118,12 +118,12 @@ def apply_rounded_mask(widget, radius, inset=0):
     try:
         if sip.isdeleted(widget):
             return
-    except RuntimeError, AttributeError, TypeError:
+    except (RuntimeError, AttributeError, TypeError):
         return
     try:
         width = max(0, int(widget.width()))
         height = max(0, int(widget.height()))
-    except RuntimeError, AttributeError, TypeError, ValueError:
+    except (RuntimeError, AttributeError, TypeError, ValueError):
         return
     inset_value = max(0, int(inset))
     if width <= (inset_value * 2) or height <= (inset_value * 2):
@@ -193,11 +193,11 @@ def get_widget_dimensions(widget):
         return width, height
     try:
         width = widget.width() or widget.sizeHint().width() or None
-    except RuntimeError, AttributeError, TypeError, ValueError:
+    except (RuntimeError, AttributeError, TypeError, ValueError):
         width = None
     try:
         height = widget.height() or widget.sizeHint().height() or None
-    except RuntimeError, AttributeError, TypeError, ValueError:
+    except (RuntimeError, AttributeError, TypeError, ValueError):
         height = None
     return width, height
 

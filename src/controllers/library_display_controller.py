@@ -317,6 +317,7 @@ class LibraryDisplayController:
             and self.app._installed_scan_thread.isRunning()
         ):
             return
+        self._last_render_signature = None
         is_chapter_mode = (
             hasattr(self.app, "chapter_mode_checkbox")
             and self.app.chapter_mode_checkbox.isChecked()

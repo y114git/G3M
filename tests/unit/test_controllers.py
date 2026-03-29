@@ -4,6 +4,8 @@ import time
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from utils.file_utils import save_json
+
 
 class TestModOperationsController:
     """Tests for controllers."""
@@ -25,6 +27,21 @@ class TestModOperationsController:
         assert controller is not None
         assert controller.app_state == app_state
         assert controller.mod_service == mod_service
+
+
+class TestTabHandler:
+    def test_handle_tab_changed_clears_search_selection_on_switch(self):
+        from app.tab_handler import handle_tab_changed
+
+        w = Mock()
+        w._suppress_tab_handlers = False
+        w.app_state = Mock(library_initialized=False)
+        w.search_display = Mock()
+        w.library_display = Mock()
+
+        handle_tab_changed(w, 0)
+
+        w.search_display.clear_all_selections.assert_called_once_with()
 
 
 class TestLibraryDisplayController:
@@ -132,6 +149,44 @@ class TestLibraryDisplayController:
         controller.update_display()
         controller.refresh_async.assert_called_once()
 
+    def test_library_display_refresh_async_clears_render_signature(self, app_state, feedback_service):
+        """Checks that librarying refresh async clears cached render signature."""
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.chapter_mode_checkbox.isChecked.return_value = False
+        app_window.library_sort_combo.currentIndex.return_value = 0
+        app_window.library_sort_ascending = True
+        app_window.library_tag_textedit = Mock()
+        app_window.library_tag_textedit.isChecked.return_value = False
+        app_window.library_tag_customization = Mock()
+        app_window.library_tag_customization.isChecked.return_value = False
+        app_window.library_tag_gameplay = Mock()
+        app_window.library_tag_gameplay.isChecked.return_value = False
+        app_window.library_tag_other = Mock()
+        app_window.library_tag_other.isChecked.return_value = False
+        app_window.library_tag_gamebanana = Mock()
+        app_window.library_tag_gamebanana.isChecked.return_value = False
+        app_window.installed_mods_layout = Mock()
+        app_window.installed_mods_layout.count.return_value = 0
+        app_window.installed_mods_container = Mock()
+        app_window.game_launch = Mock()
+        app_window.game_type_combo.currentData.return_value = "deltarune"
+        app_window._installed_scan_thread = None
+
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        controller._last_render_signature = (1,)
+
+        controller.refresh_async()
+
+        assert controller._last_render_signature is None
+
     def test_library_display_refresh_async_accepts_non_qobject_controller_parent(
         self, app_state, feedback_service
     ):
@@ -204,6 +259,42 @@ class TestModImportExportController:
             content_path = controller._materialize_local_import(source_file, extract_dir)
             assert content_path == extract_dir
             assert os.path.isfile(os.path.join(extract_dir, "sample.png"))
+
+    def test_install_mod_from_file_uses_config_name_for_target_folder(self, temp_dir):
+        """Checks that installing mod from file uses config name for target folder."""
+        from controllers.mod_import_export_controller import ModImportExportController
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        mod_service = Mock()
+        controller = ModImportExportController(app_state, mod_service, Mock())
+        content_path = os.path.join(temp_dir, "extract")
+        os.makedirs(content_path, exist_ok=True)
+        save_json(
+            os.path.join(content_path, "mod_config.json"),
+            {
+                "id": "test_mod",
+                "name": "Real Mod Name",
+                "author": "Author",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "files": {"deltarune_1": {"data_file_path": "patch.xdelta"}},
+            },
+            indent=2,
+        )
+        with open(os.path.join(content_path, "patch.xdelta"), "w", encoding="utf-8") as handle:
+            handle.write("patch")
+
+        controller._materialize_local_import = Mock(return_value=content_path)
+        controller._refresh_mod_list = Mock()
+
+        with (
+            patch("controllers.mod_import_export_controller.QMessageBox.information"),
+            patch("controllers.mod_import_export_controller.find_deltamod_info_file", return_value=False),
+        ):
+            controller._install_mod_from_file(os.path.join(temp_dir, "archive-name.zip"))
+
+        assert os.path.isdir(os.path.join(temp_dir, "Real Mod Name"))
+        assert not os.path.exists(os.path.join(temp_dir, "archive-name"))
 
     def test_library_sort_order_name_ascending_and_date_descending(
         self, app_state, feedback_service
@@ -370,7 +461,7 @@ class TestSearchDisplayController:
 
         controller._queue_layout_refresh.assert_called_once_with(force=True)
 
-    def test_refresh_visible_layout_skips_relayout_when_grid_metrics_do_not_change(
+    def test_search_display_refresh_visible_layout_skips_relayout_when_grid_metrics_do_not_change(
         self, app_state, feedback_service
     ):
         """Checks that refreshing visible layout skips relayout when grid metrics do not change."""

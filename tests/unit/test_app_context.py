@@ -13,8 +13,6 @@ def test_build_application_context_creates_services_and_session(qapp, temp_dir):
     mock_presence_response = Mock()
     mock_presence_response.status_code = 200
     mock_presence_response.json.return_value = {"online": 0}
-    mock_presence_session = Mock()
-    mock_presence_session.post.return_value = mock_presence_response
     with (
         patch("app_context.application_context.get_user_data_root", return_value=user_root),
         patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
@@ -23,7 +21,10 @@ def test_build_application_context_creates_services_and_session(qapp, temp_dir):
             return_value=user_root,
         ),
         patch("services.profile_service.get_user_profiles_dir", return_value=profiles_dir),
-        patch("workers.presence_worker.get_session", return_value=mock_presence_session),
+        patch(
+            "workers.presence_worker.cloud_function_request",
+            return_value=mock_presence_response,
+        ),
     ):
         context = build_application_context()
     assert context.app_state.mods_dir

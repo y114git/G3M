@@ -622,7 +622,7 @@ class ChatWindow(QDialog):
                     with contextlib.suppress(TypeError, RuntimeError):
                         sig.disconnect()
                 self.chat_request_thread.blockSignals(False)
-            except TypeError, RuntimeError, AttributeError:
+            except (TypeError, RuntimeError, AttributeError):
                 pass
         self.messages = []
         self._message_widgets.clear()

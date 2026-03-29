@@ -19,7 +19,7 @@ def is_game_running(pid: int | None = None):
     if pid is not None:
         try:
             return psutil.pid_exists(pid)
-        except psutil.NoSuchProcess, psutil.AccessDenied, ValueError:
+        except (TypeError, OverflowError):
             return False
     return any(
         proc.info["name"] in get_all_process_names()

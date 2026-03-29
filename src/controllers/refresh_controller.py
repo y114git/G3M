@@ -62,7 +62,7 @@ class RefreshController:
                 thread.deleteLater()
             else:
                 thread.finished.connect(lambda: thread.deleteLater())
-        except RuntimeError, TypeError, AttributeError:
+        except (RuntimeError, TypeError, AttributeError):
             pass
 
     def _stop_worker_thread(

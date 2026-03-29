@@ -59,7 +59,9 @@ class GameBananaConverter:
                 self._remove_existing_mod_folder(target_mod_id)
             from adapters.deltamod_adapter import DeltamodConverter
 
-            deltamod_converter = DeltamodConverter(self.temp_extract_dir, self.mods_dir)
+            deltamod_converter = DeltamodConverter(
+                self.temp_extract_dir, self.mods_dir, self.gamebanana_metadata
+            )
             result_path = deltamod_converter.convert()
             if result_path:
                 result_path = self._update_config_with_gb_metadata(result_path)

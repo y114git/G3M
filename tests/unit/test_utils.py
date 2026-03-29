@@ -164,6 +164,23 @@ class TestGameUtils:
         assert is_game_running() is True
         mock_process_iter.return_value = []
 
+    @patch('services.game_detection_service.psutil.pid_exists', side_effect=TypeError)
+    def test_is_game_running_invalid_pid_returns_false(self, mock_pid_exists):
+        """Checks that invalid pid input returns false."""
+        from services.game_detection_service import is_game_running
+
+        assert is_game_running("bad") is False
+        mock_pid_exists.assert_called_once_with("bad")
+
+    @patch('services.game_detection_service.psutil.pid_exists', side_effect=OverflowError)
+    def test_is_game_running_overflow_pid_returns_false(self, mock_pid_exists):
+        """Checks that overflow pid input returns false."""
+        from services.game_detection_service import is_game_running
+        large_pid = 10**100
+
+        assert is_game_running(large_pid) is False
+        mock_pid_exists.assert_called_once_with(large_pid)
+
 
 class TestNetworkUtils:
     """Tests for utils."""

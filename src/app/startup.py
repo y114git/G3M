@@ -31,7 +31,7 @@ def check_game_processes():
         try:
             if proc.info["name"] in get_all_process_names():
                 return proc.info["name"]
-        except psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess:
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
     return None
 
@@ -219,15 +219,15 @@ def cleanup_old_temp_directories():
         )
 
 
-def run_app():
+def run_app(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    user_root = ""
     try:
         user_root = get_user_data_root()
         configure_logging("DELTAHUB", user_root)
         install_excepthook()
         cleanup_old_temp_directories()
     except Exception:
-        import traceback
-
         traceback.print_exc(file=sys.stderr)
     parser = argparse.ArgumentParser(description="DELTAHUB")
     parser.add_argument(
@@ -235,8 +235,8 @@ def run_app():
         action="store_true",
         help="Force start even if another instance is detected",
     )
-    args, _ = parser.parse_known_args()
-    url_arg = next((arg for arg in sys.argv[1:] if arg.startswith("deltahub://")), None)
+    args, _ = parser.parse_known_args(argv)
+    url_arg = next((arg for arg in argv if arg.startswith("deltahub://")), None)
     if platform.system() == "Linux":
         os.environ.setdefault("NO_AT_BRIDGE", "1")
     app = setup_app()
@@ -248,7 +248,7 @@ def run_app():
             socket.flush()
             socket.waitForBytesWritten(1000)
         socket.disconnectFromServer()
-        sys.exit(0)
+        return 0
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     if not args.force_start:
         running_game = check_game_processes()
@@ -256,7 +256,7 @@ def run_app():
             error_msg = tr("errors.game_running_message", game_name=running_game)
             logging.error(f"STARTUP ERROR: {error_msg}")
             QMessageBox.critical(None, tr("errors.game_running_title"), error_msg)
-            sys.exit(1)
+            return 1
     try:
         register_url_protocol()
     except Exception as e:
@@ -275,9 +275,9 @@ def run_app():
     app._bootstrap_coordinator = coordinator
     coordinator.launch()
     try:
-        sys.exit(app.exec())
+        return app.exec()
     except Exception as e:
         error_msg = tr("errors.unexpected_startup_error", details=str(e))
         logging.exception(f"STARTUP ERROR: {error_msg}")
         QMessageBox.critical(None, tr("errors.startup_error_title"), error_msg)
-        sys.exit(1)
+        return 1

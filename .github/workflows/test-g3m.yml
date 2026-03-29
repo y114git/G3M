@@ -13,6 +13,8 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.14"
+  G3MTOOL_REPO: https://github.com/y114git/G3MTool.git
+  G3MTOOL_BRANCH: main
 
 jobs:
   test:
@@ -72,25 +74,48 @@ jobs:
           python -m pip install --upgrade pip wheel
           pip install -e ".[test]"
 
-      - name: Build G3MTool from source
-        if: runner.os != 'Windows'
+      - name: Get latest G3MTool commit hash
+        id: g3mtool-commit
+        run: |
+          COMMIT_HASH=$(git ls-remote "${{ env.G3MTOOL_REPO }}" "${{ env.G3MTOOL_BRANCH }}" | cut -f1)
+          echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "Latest G3MTool commit: $COMMIT_HASH"
+
+      - name: Restore G3MTool cache
+        id: g3mtool-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.g3mtool_dir }}
+          key: g3mtool-${{ runner.os }}-${{ matrix.g3mtool_runtime }}-${{ steps.g3mtool-commit.outputs.commit_hash }}
+
+      - name: Build G3MTool from latest source
+        if: runner.os != 'Windows' && steps.g3mtool-cache.outputs.cache-hit != 'true'
         run: |
           rm -rf g3mtool-src
-          git clone --depth 1 https://github.com/y114git/G3MTool.git g3mtool-src
+          git init g3mtool-src
+          git -C g3mtool-src remote add origin "${{ env.G3MTOOL_REPO }}"
+          git -C g3mtool-src fetch --depth 1 origin "${{ steps.g3mtool-commit.outputs.commit_hash }}"
+          git -C g3mtool-src checkout FETCH_HEAD
           mkdir -p "${{ matrix.g3mtool_dir }}"
           dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
-          chmod +x "${{ matrix.g3mtool_dir }}"/* 2>/dev/null || true
           rm -rf g3mtool-src
 
-      - name: Build G3MTool from source (Windows)
-        if: runner.os == 'Windows'
+      - name: Build G3MTool from latest source (Windows)
+        if: runner.os == 'Windows' && steps.g3mtool-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           if (Test-Path g3mtool-src) { Remove-Item g3mtool-src -Recurse -Force }
-          git clone --depth 1 https://github.com/y114git/G3MTool.git g3mtool-src
+          git init g3mtool-src
+          git -C g3mtool-src remote add origin "${{ env.G3MTOOL_REPO }}"
+          git -C g3mtool-src fetch --depth 1 origin "${{ steps.g3mtool-commit.outputs.commit_hash }}"
+          git -C g3mtool-src checkout FETCH_HEAD
           New-Item -ItemType Directory -Force -Path "${{ matrix.g3mtool_dir }}" | Out-Null
           dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
           Remove-Item g3mtool-src -Recurse -Force
+
+      - name: Ensure G3MTool is executable
+        if: runner.os != 'Windows'
+        run: chmod +x "${{ matrix.g3mtool_dir }}"/* 2>/dev/null || true
 
       - name: Build UnRAR from source
         if: runner.os != 'Windows'

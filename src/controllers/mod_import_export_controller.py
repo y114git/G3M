@@ -158,8 +158,9 @@ class ModImportExportController:
                         )
                         return
 
-                    archive_name = remove_archive_extension(os.path.basename(file_path))
-                    folder_name = sanitize_filename(archive_name)
+                    folder_name = sanitize_filename(mod_name) or remove_archive_extension(
+                        os.path.basename(file_path)
+                    )
                     target_mod_dir = os.path.join(self.app_state.mods_dir, folder_name)
                     counter = 1
                     while os.path.exists(target_mod_dir):

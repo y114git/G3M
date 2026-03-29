@@ -147,13 +147,48 @@ def test_run_app_startup_path_imports(monkeypatch):
     monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "")
     monkeypatch.setattr(startup_module, "install_excepthook", lambda: None)
     monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", lambda: None)
-    monkeypatch.setattr(startup_module.sys, "argv", ["main.py"])
     monkeypatch.setitem(sys.modules, "app.window", types.SimpleNamespace(AppWindow=object))
 
-    with pytest.raises(SystemExit) as exc:
-        startup_module.run_app()
+    assert startup_module.run_app([]) == 0
 
-    assert exc.value.code == 0
+
+def test_main_routes_shortcut_without_startup(monkeypatch):
+    """Checks that main routes shortcut without startup."""
+    import main as main_module
+
+    run_shortcut = Mock()
+    monkeypatch.setitem(
+        sys.modules, "services.game_runner", types.SimpleNamespace(run_shortcut=run_shortcut)
+    )
+
+    assert main_module.main(["main.py", "--shortcut", "cfg"]) == 0
+    run_shortcut.assert_called_once_with("cfg")
+
+
+def test_main_shortcut_requires_argument(capsys):
+    """Checks that main shortcut requires argument."""
+    import main as main_module
+
+    assert main_module.main(["main.py", "--shortcut"]) == 2
+    assert "--shortcut requires a config argument" in capsys.readouterr().err
+
+
+def test_main_runs_startup_with_cleaned_argv(monkeypatch):
+    """Checks that main runs startup with cleaned argv."""
+    import main as main_module
+
+    cleanup_old_updater_files = Mock()
+    run_app = Mock(return_value=7)
+    monkeypatch.setitem(
+        sys.modules,
+        "utils.path_utils",
+        types.SimpleNamespace(cleanup_old_updater_files=cleanup_old_updater_files),
+    )
+    monkeypatch.setitem(sys.modules, "app.startup", types.SimpleNamespace(run_app=run_app))
+
+    assert main_module.main(["main.py", "--force-start"]) == 7
+    cleanup_old_updater_files.assert_called_once_with()
+    run_app.assert_called_once_with(["--force-start"])
 
 
 def test_close_splash_and_show_launcher_delays_splash_close():
@@ -297,8 +332,6 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
     mock_presence_response = Mock()
     mock_presence_response.status_code = 200
     mock_presence_response.json.return_value = {"online": 0}
-    mock_presence_session = Mock()
-    mock_presence_session.post.return_value = mock_presence_response
     with (
         patch(
             "app_context.application_context.get_user_data_root",
@@ -322,8 +355,8 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
             return_value=str(profiles_dir),
         ),
         patch(
-            "workers.presence_worker.get_session",
-            return_value=mock_presence_session,
+            "workers.presence_worker.cloud_function_request",
+            return_value=mock_presence_response,
         ),
     ):
         window = AppWindow()

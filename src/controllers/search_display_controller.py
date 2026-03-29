@@ -1125,6 +1125,8 @@ class SearchDisplayController(QObject):
 
     def update_search_cards(self):
         try:
+            for card in self.card_widget_cache.values():
+                self._refresh_card(card)
             self.update_display()
         except Exception as e:
             logger.error(

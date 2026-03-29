@@ -19,7 +19,6 @@ from utils.file_utils import (
     get_chapter_folder_name,
     load_json,
     normalize_chapter_id,
-    sanitize_filename,
     save_json,
 )
 from utils.mod_config_parser import (
@@ -876,12 +875,6 @@ class ModManager(QObject):
             for mod_info_cached in cache.values():
                 if mod_info_cached.folder_name == folder_name:
                     return True
-        mod_name = mod_info.get("name", "")
-        if mod_name:
-            safe_name = sanitize_filename(mod_name)
-            for mod_info_cached in cache.values():
-                if mod_info_cached.folder_name == safe_name:
-                    return True
         return False
 
     def mod_has_files_for_chapter(self, mod_data, chapter_id):
@@ -1020,7 +1013,12 @@ class ModManager(QObject):
         if all_mods:
             for mod in all_mods:
                 existing_mod_id = get_mod_id(mod)
-                if existing_mod_id == mod_id and hasattr(mod, "files") and mod.files:
+                if (
+                    existing_mod_id == mod_id
+                    and isinstance(mod, mod_models.LocalModInfo)
+                    and hasattr(mod, "files")
+                    and mod.files
+                ):
                     refreshed_mod = mod_models.LocalModInfo.from_dict(mod_info)
                     for attr in (
                         "name",

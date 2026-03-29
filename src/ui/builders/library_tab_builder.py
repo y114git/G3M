@@ -21,6 +21,7 @@ from config.config import (
     QSS_TRANSPARENT_SCROLL,
 )
 from models.game_modes import get_visible_game_entries
+from presentation.drag_drop import normalize_local_path
 from services.localization_service import tr
 from ui.builders.shared_filters_builder import (
     apply_filters_frame_style,
@@ -82,7 +83,11 @@ class _DropAreaWidget(QWidget):
 
     def dropEvent(self, e):
         if self._is_external_file_drag(e):
-            paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
+            paths = [
+                normalize_local_path(u.toLocalFile())
+                for u in e.mimeData().urls()
+                if u.isLocalFile()
+            ]
             if paths:
                 e.acceptProposedAction()
                 self.files_dropped.emit(paths)

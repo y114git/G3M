@@ -187,6 +187,7 @@ class WindowComposition:
     def _connect_cross_service_signals(self) -> None:
         window = self.window
         window.mod_service.mod_list_updated.connect(window.library_display.update_display)
+        window.mod_service.mod_list_updated.connect(window.search_display.update_search_cards)
         window.mod_service.mod_list_updated.connect(
             lambda: window._load_used_mods_debounce.call(
                 window.used_mods_service.load_used_mods_state

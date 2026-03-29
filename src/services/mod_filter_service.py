@@ -132,7 +132,7 @@ def _date_tuple_to_sortable(dt) -> int:
         return 0
     try:
         return dt[0] * 100000000 + dt[1] * 1000000 + dt[2] * 10000 + dt[3] * 100 + dt[4]
-    except ValueError, TypeError, IndexError:
+    except (ValueError, TypeError, IndexError):
         return 0
 
 

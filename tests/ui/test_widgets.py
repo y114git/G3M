@@ -552,32 +552,22 @@ class TestCommonWidgets:
         mime = QMimeData()
         mime.setUrls([QUrl.fromLocalFile('C:/Mods/test_mod.zip')])
 
-        class _Event:
-            def __init__(self, source):
-                self._source = source
-                self.accepted = False
-                self.ignored = False
+        def _event(source):
+            event = SimpleNamespace(_source=source, accepted=False, ignored=False)
+            event.mimeData = lambda: mime
+            event.source = lambda: event._source
+            event.acceptProposedAction = lambda: setattr(event, 'accepted', True)
+            event.ignore = lambda: setattr(event, 'ignored', True)
+            return event
 
-            def mimeData(self):
-                return mime
-
-            def source(self):
-                return self._source
-
-            def acceptProposedAction(self):
-                self.accepted = True
-
-            def ignore(self):
-                self.ignored = True
-
-        internal_event = _Event(source=object())
+        internal_event = _event(source=object())
         drop_area.dragEnterEvent(internal_event)
         drop_area.dropEvent(internal_event)
         assert internal_event.accepted is False
         assert internal_event.ignored is True
         assert dropped_paths == []
 
-        external_event = _Event(source=None)
+        external_event = _event(source=None)
         drop_area.dragEnterEvent(external_event)
         drop_area.dropEvent(external_event)
         assert external_event.accepted is True
@@ -589,7 +579,7 @@ class TestCommonWidgets:
         from unittest.mock import Mock, patch
 
         from models.mod_models import ModInfo
-        from presentation.drag_drop import LazyFileExportMimeData
+        from presentation.drag_drop import LazyFileExportMimeData, normalize_local_path
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 
         host = QWidget()
@@ -619,7 +609,7 @@ class TestCommonWidgets:
         with patch.object(mime, '_ensure_export_ready', return_value='C:/Temp/Lazy Export Mod.zip') as ensure_ready:
             urls = mime.urls()
             assert ensure_ready.call_count == 1
-            assert [url.toLocalFile() for url in urls] == ['C:/Temp/Lazy Export Mod.zip']
+            assert [normalize_local_path(url.toLocalFile()) for url in urls] == ['C:/Temp/Lazy Export Mod.zip']
         assert host.mod_import_export_controller.export_mod_to_path.call_count == 0
         widget.deleteLater()
         host.deleteLater()

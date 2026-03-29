@@ -12,6 +12,7 @@ from models.download_models import (
 )
 from services.downloads_manager import DownloadsManager, _safe_filename
 from services.downloads_store import DownloadsStore
+from workers.use_worker import UseWorker
 
 
 class TestDownloadRecord:
@@ -234,6 +235,28 @@ class TestDownloadsStore:
         store2 = DownloadsStore(self.base_dir)
         store2.load()
         assert store2.find('r10').display_name == 'After'
+
+
+def test_use_worker_build_gb_metadata_includes_file_name(tmp_path):
+    """Checks that use worker build gb metadata includes file name."""
+    worker = UseWorker(
+        record_id='r1',
+        file_path=os.path.join(tmp_path, 'archive.zip'),
+        target_kind=TargetKind.MOD,
+        mods_dir=str(tmp_path),
+        metadata={
+            'gb_mod_id': 123,
+            'item_type': 'mod',
+            'file_name': 'vase1_1_0.zip',
+            'homepage': 'https://gamebanana.com/mods/123',
+            'icon': 'https://example.com/icon.jpg',
+            'tags': [],
+            'category': 'Game Files',
+            'game': 'deltarune',
+        },
+    )
+
+    assert worker._build_gb_metadata()['file_name'] == 'vase1_1_0.zip'
 
 
 class TestSafeFilename:

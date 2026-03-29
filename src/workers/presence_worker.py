@@ -51,7 +51,7 @@ class PresenceWorker(QObject):
             if resp.status_code == 200:
                 try:
                     count = max(int((resp.json() or {}).get("online", 0)), 0)
-                except json.JSONDecodeError, ValueError, TypeError:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     count = 0
         except (
             requests.Timeout,
