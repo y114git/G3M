@@ -120,19 +120,28 @@ class GameBananaConverter:
 
     def _extract_archive(self) -> None:
         try:
-            from utils.archive_utils import extract_any_archive
+            from utils.archive_utils import (
+                extract_any_archive,
+                unwrap_single_directory_chain,
+            )
 
             extract_any_archive(self.archive_path, self.temp_extract_dir)
-            extracted_items = os.listdir(self.temp_extract_dir)
-            if len(extracted_items) == 1:
-                single_item = os.path.join(self.temp_extract_dir, extracted_items[0])
-                if os.path.isdir(single_item):
-                    for item in os.listdir(single_item):
-                        shutil.move(
-                            os.path.join(single_item, item),
-                            os.path.join(self.temp_extract_dir, item),
-                        )
-                    os.rmdir(single_item)
+            nested_root = unwrap_single_directory_chain(self.temp_extract_dir)
+            if os.path.normcase(os.path.normpath(nested_root)) != os.path.normcase(
+                os.path.normpath(self.temp_extract_dir)
+            ):
+                for item in os.listdir(nested_root):
+                    shutil.move(
+                        os.path.join(nested_root, item),
+                        os.path.join(self.temp_extract_dir, item),
+                    )
+                current = nested_root
+                while os.path.normcase(os.path.normpath(current)) != os.path.normcase(
+                    os.path.normpath(self.temp_extract_dir)
+                ):
+                    parent = os.path.dirname(current)
+                    os.rmdir(current)
+                    current = parent
         except Exception as e:
             logger.error(f"Error extracting archive: {e}")
             raise
@@ -226,19 +235,18 @@ class GameBananaConverter:
                     config_data["homepage"] = homepage
             if self.gamebanana_metadata.get("icon"):
                 config_data["icon"] = self.gamebanana_metadata["icon"]
+            from adapters.gamebanana_adapter import GameBananaAPI
+
             tags = []
             if self.gamebanana_metadata.get("tags"):
                 tags = self.gamebanana_metadata["tags"]
                 if not isinstance(tags, list):
                     tags = [tags] if tags else []
-            elif self.gamebanana_metadata.get("category"):
-                from adapters.gamebanana_adapter import GameBananaAPI
-
-                category_tag = GameBananaAPI.category_to_tag(
-                    self.gamebanana_metadata["category"]
-                )
-                if category_tag:
-                    tags = [category_tag]
+            category_tag = GameBananaAPI.category_to_tag(
+                self.gamebanana_metadata.get("category")
+            )
+            if category_tag and category_tag not in tags:
+                tags.append(category_tag)
             if tags:
                 existing_tags = config_data.get("tags", [])
                 if not isinstance(existing_tags, list):

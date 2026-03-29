@@ -10,9 +10,9 @@ from models.game_modes import (
 
 
 class TestGetTab:
-    """get_tab should match by tab_id first, then by files_key."""
-
+    """Tests for game modes."""
     def test_match_by_tab_id(self):
+        """Checks that matching  by tab id."""
         game = DeltaruneGame()
         tab = game.get_tab("deltarune_1")
         assert tab is not None
@@ -20,6 +20,7 @@ class TestGetTab:
         assert tab.files_key == "1"
 
     def test_match_by_files_key(self):
+        """Checks that matching  by files key."""
         game = DeltaruneGame()
         tab = game.get_tab("1")
         assert tab is not None
@@ -27,10 +28,12 @@ class TestGetTab:
         assert tab.files_key == "1"
 
     def test_no_match_returns_none(self):
+        """Checks that noing match returns none."""
         game = DeltaruneGame()
         assert game.get_tab("nonexistent") is None
 
     def test_all_deltarune_chapters_by_files_key(self):
+        """Checks that alling deltarune chapters by files key."""
         game = DeltaruneGame()
         for fk in ("0", "1", "2", "3", "4"):
             tab = game.get_tab(fk)
@@ -39,22 +42,24 @@ class TestGetTab:
 
 
 class TestGetFolderName:
-    """get_folder_name should resolve folder via files_key when tab_id doesn't match."""
-
+    """Tests for game modes."""
     def test_folder_by_tab_id(self):
+        """Checks that foldering  by tab id."""
         game = DeltaruneGame()
         assert game.get_folder_name("deltarune_1") == "chapter_1"
 
     def test_folder_by_files_key(self):
+        """Checks that foldering  by files key."""
         game = DeltaruneGame()
         assert game.get_folder_name("1") == "chapter_1"
 
     def test_folder_unknown_returns_raw(self):
+        """Checks that foldering unknown returns raw."""
         game = DeltaruneGame()
         assert game.get_folder_name("unknown") == "unknown"
 
     def test_single_tab_game_folder_by_files_key(self):
-        """Single-tab games should also resolve by files_key."""
+        """Checks that singleing tab game folder by files key."""
         game = GameDefinition()
         game.game_id = "testgame"
         game.tabs = [
@@ -70,7 +75,9 @@ class TestGetFolderName:
 
 
 class TestCustomSingleTabGame:
+    """Tests for game modes."""
     def test_custom_game_uses_generated_runtime_keys(self):
+        """Checks that customing game uses generated runtime keys."""
         record = CustomGameRecord(
             id="custom_test",
             display_name="Test Game",

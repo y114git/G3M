@@ -336,7 +336,7 @@ class _DataConvertWorkerThread(QThread):
     def run(self):
         try:
             from models.game_modes import get_game
-            from utils.mod_config_parser import resolve_chapter_folder
+            from utils.mod_config_parser import resolve_mod_file_path
             from utils.mod_version_utils import (
                 create_version_zip,
                 get_unique_version_name,
@@ -351,21 +351,20 @@ class _DataConvertWorkerThread(QThread):
             for file_key, ch_info in files_data.items():
                 if not isinstance(ch_info, dict):
                     continue
-                data_url = ch_info.get("data_file_url", "")
-                if not data_url:
+                data_path = ch_info.get("data_file_path") or ch_info.get("data_file_url", "")
+                if not data_path:
                     continue
-                is_xdelta = data_url.lower().endswith((".xdelta", ".vcdiff"))
-                is_g3m = data_url.lower().endswith(".g3mpatch")
+                is_xdelta = data_path.lower().endswith((".xdelta", ".vcdiff"))
+                is_g3m = data_path.lower().endswith(".g3mpatch")
                 if self._target_xdelta and is_xdelta:
                     continue
                 if not self._target_xdelta and is_g3m:
                     continue
                 if not is_xdelta and not is_g3m:
                     continue
-                ch_folder = resolve_chapter_folder(file_key, self._mod_folder, game)
-                if not ch_folder:
+                patch_path = resolve_mod_file_path(self._mod_folder, data_path)
+                if not patch_path:
                     continue
-                patch_path = os.path.join(ch_folder, data_url)
                 if not os.path.isfile(patch_path):
                     continue
                 tab = game_def.get_tab(file_key) if game_def else None
@@ -451,7 +450,7 @@ class _DataConvertWorkerThread(QThread):
                             return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
                         os.remove(patch_path)
-                    ch_info["data_file_url"] = new_name
+                    ch_info["data_file_path"] = new_name
                     converted += 1
 
                 from utils.mod_config_parser import build_mod_config_data
@@ -608,7 +607,7 @@ class _DataConvertTab(QWidget):
             for ch in files_data.values():
                 if not isinstance(ch, dict):
                     continue
-                url = ch.get("data_file_url", "")
+                url = ch.get("data_file_path") or ch.get("data_file_url", "")
                 if not url:
                     continue
                 low = url.lower()
@@ -1074,6 +1073,7 @@ class ModdingToolsDialog(QDialog):
         main.addLayout(header)
 
         self._tabs = QTabWidget()
+        self._tabs.setDocumentMode(True)
         self._data_convert_tab = _DataConvertTab(self._g3m, self._app_state)
         self._patch_tab = _PatchTab(self._g3m, self._app_state)
         self._merge_tab = _MergeTab(self._g3m, self._app_state)
@@ -1109,10 +1109,16 @@ class ModdingToolsDialog(QDialog):
                 font-size: 12px;
                 padding: 6px;
             }}
+            QTabWidget::tab-bar {{
+                alignment: center;
+                top: 4px;
+            }}
             QTabWidget::pane {{
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
                 background-color: {theme["background"]};
+                padding-top: 10px;
+                top: -2px;
             }}
             QTabBar::tab {{
                 background-color: {theme["elements"]};
@@ -1120,13 +1126,14 @@ class ModdingToolsDialog(QDialog):
                 border: 2px solid {theme["border"]};
                 border-bottom: none;
                 padding: 6px 14px;
-                margin-right: 2px;
+                margin: 0 3px 6px 3px;
                 border-top-left-radius: {theme["button_radius"]}px;
                 border-top-right-radius: {theme["button_radius"]}px;
             }}
             QTabBar::tab:selected {{
                 background-color: {theme["hover"]};
                 border-bottom: 2px solid {theme["background"]};
+                margin-bottom: 2px;
             }}
             QTabBar::tab:hover {{
                 background-color: {theme["hover"]};

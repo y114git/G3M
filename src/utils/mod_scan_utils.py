@@ -12,6 +12,7 @@ from utils.mod_config_parser import (
     MOD_ALLOWED_TAGS,
     MOD_CONFIG_VERSION,
     MOD_FIELD_LIMITS,
+    build_mod_config_data,
     normalize_mod_config_data,
 )
 
@@ -152,7 +153,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
                 extra={"mod_folder": folder_name, "config_path": config_path},
             )
             return False
-        for field_name in ("description", "data_file_url"):
+        for field_name in ("description", "data_file_path"):
             field_value = file_info.get(field_name)
             if field_value not in (None, "") and (
                 not isinstance(field_value, str)
@@ -163,13 +164,9 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         if not isinstance(extra_files, list):
             return False
         for extra_file in extra_files:
-            if not isinstance(extra_file, dict):
-                return False
-            if any(
-                not isinstance(extra_file.get(key), str)
-                or len(extra_file.get(key, "")) > MOD_FIELD_LIMITS["file_value"]
-                for key in ("key", "url")
-            ):
+            if not isinstance(extra_file, str) or len(extra_file) > MOD_FIELD_LIMITS[
+                "file_value"
+            ]:
                 return False
     return True
 
@@ -253,8 +250,14 @@ def scan_mods_directory(
                                 },
                             )
                             continue
-                        if normalize_mod_config_data(config_data):
-                            save_json(config_path, config_data, indent=4)
+                        if normalize_mod_config_data(
+                            config_data, mod_root_path=folder_path
+                        ):
+                            save_json(
+                                config_path,
+                                build_mod_config_data(config_data),
+                                indent=4,
+                            )
                         if not validate_mod_config(
                             config_data, config_path, folder_name
                         ):

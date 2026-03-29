@@ -20,11 +20,14 @@ from services.g3mtool_patching_service import (
 
 
 class TestG3MToolAdapter:
+    """Tests for patching and merging."""
     def test_adapter_initialization(self):
+        """Checks that adaptering initialization."""
         g3mtool = G3MToolManager()
         assert g3mtool.platform in ("windows", "linux", "macos")
 
     def test_adapter_availability(self):
+        """Checks that adaptering availability."""
         g3mtool = G3MToolManager()
         if g3mtool.g3mtool_path:
             assert os.path.exists(g3mtool.g3mtool_path)
@@ -33,11 +36,13 @@ class TestG3MToolAdapter:
             assert not g3mtool.is_available()
 
     def test_cancel_active_processes(self):
+        """Checks that canceling active processes."""
         g3mtool = G3MToolManager()
         g3mtool.cancel_active_processes()
         assert len(g3mtool._active_processes) == 0
 
     def test_parse_progress(self):
+        """Checks that parsing progress."""
         assert G3MToolManager._parse_progress("Applying patch: 67%") == (
             67,
             "Applying patch",
@@ -46,7 +51,9 @@ class TestG3MToolAdapter:
 
 
 class TestModClassification:
+    """Tests for patching and merging."""
     def test_classify_g3mpatch(self, tmp_path):
+        """Checks that classifying g3mpatch."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "patch.g3mpatch").write_bytes(b"fake")
@@ -56,6 +63,7 @@ class TestModClassification:
         assert patch_file.endswith(".g3mpatch")
 
     def test_classify_xdelta(self, tmp_path):
+        """Checks that classifying xdelta."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "data.xdelta").write_bytes(b"fake")
@@ -65,6 +73,7 @@ class TestModClassification:
         assert patch_file.endswith(".xdelta")
 
     def test_classify_vcdiff(self, tmp_path):
+        """Checks that classifying vcdiff."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "data.vcdiff").write_bytes(b"fake")
@@ -74,6 +83,7 @@ class TestModClassification:
         assert patch_file.endswith(".vcdiff")
 
     def test_classify_datafile(self, tmp_path):
+        """Checks that classifying datafile."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "data.win").write_bytes(b"FORM" + b"\x00" * 100)
@@ -83,6 +93,7 @@ class TestModClassification:
         assert patch_file.endswith("data.win")
 
     def test_classify_overrides_only(self, tmp_path):
+        """Checks that classifying overrides only."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "sound.ogg").write_bytes(b"fake")
@@ -92,6 +103,7 @@ class TestModClassification:
         assert patch_file is None
 
     def test_classify_g3mpatch_priority_over_xdelta(self, tmp_path):
+        """Checks that classifying g3mpatch priority over xdelta."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "patch.g3mpatch").write_bytes(b"fake")
@@ -101,6 +113,7 @@ class TestModClassification:
         assert mod_type == MOD_TYPE_G3MPATCH
 
     def test_classify_plain_zip_is_not_g3mpatch(self, tmp_path):
+        """Checks that classifying plain zip is not g3mpatch."""
         mod_dir = tmp_path / "mod"
         mod_dir.mkdir()
         (mod_dir / "random.zip").write_bytes(b"fake")
@@ -109,6 +122,7 @@ class TestModClassification:
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
 
     def test_classify_empty_dir(self, tmp_path):
+        """Checks that classifying empty dir."""
         mod_dir = tmp_path / "empty"
         mod_dir.mkdir()
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -116,33 +130,40 @@ class TestModClassification:
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
 
     def test_classify_nonexistent(self, tmp_path):
+        """Checks that classifying nonexistent."""
         patcher = G3MToolPatchingService(Mock(), Mock())
         _patch_file, mod_type = patcher._classify_mod(str(tmp_path / "nope"))
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
 
 
 class TestServiceInitialization:
+    """Tests for patching and merging."""
     def test_service_has_g3mtool(self):
+        """Checks that serviceing has g3mtool."""
         patcher = G3MToolPatchingService(Mock(), Mock())
         assert hasattr(patcher, "g3mtool")
         assert isinstance(patcher.g3mtool, G3MToolManager)
 
     def test_service_has_patching_logger(self):
+        """Checks that serviceing has patching logger."""
         patcher = G3MToolPatchingService(Mock(), Mock())
         assert patcher.patching_logger is not None
         assert patcher.patching_logger.name == "patching"
 
     def test_cleanup_processes_method_exists(self):
+        """Checks that cleanuping processes method exists."""
         patcher = G3MToolPatchingService(Mock(), Mock())
         assert hasattr(patcher, "cleanup_processes_and_temp_files")
         patcher.cleanup_processes_and_temp_files()
 
     def test_cancel(self):
+        """Checks that canceling works."""
         patcher = G3MToolPatchingService(Mock(), Mock())
         patcher.cancel()
         assert patcher._cancelled is True
 
     def test_warning_handler_can_abort(self):
+        """Checks that warninging handler can abort."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -152,6 +173,7 @@ class TestServiceInitialization:
         patcher.warning_handler.assert_called_once()
 
     def test_skip_patching_warnings_bypasses_handler(self):
+        """Checks that skipping patching warnings bypasses handler."""
         app_state = Mock()
         app_state.local_config = {"skip_patching_warnings": True}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -162,7 +184,9 @@ class TestServiceInitialization:
 
 
 class TestBackupFlow:
+    """Tests for patching and merging."""
     def test_backup_and_restore(self, tmp_path):
+        """Checks that backuping and restore."""
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger("test"))
@@ -179,6 +203,7 @@ class TestBackupFlow:
         assert test_file.read_bytes() == b"ORIGINAL_CONTENT"
 
     def test_backup_manifest_tracking(self, tmp_path):
+        """Checks that backuping manifest tracking."""
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger("test"))
@@ -195,6 +220,7 @@ class TestBackupFlow:
         assert str(test_file) in manifest_data["modification_order"][chapter_id]
 
     def test_multi_chapter_backup_restore(self, tmp_path):
+        """Checks that multiing chapter backup restore."""
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger("test"))
@@ -212,13 +238,16 @@ class TestBackupFlow:
 
 
 class TestReportParsing:
+    """Tests for patching and merging."""
     def test_no_report(self):
+        """Checks that noing report."""
         patcher = G3MToolPatchingService(Mock(), Mock())
         assert patcher.get_report_path() is None
         assert patcher.report_has_conflicts() is False
         assert patcher.get_report_stats() == (0, 0)
 
     def test_report_with_conflicts(self, tmp_path):
+        """Checks that reporting  with conflicts."""
         report = tmp_path / "report.md"
         report.write_text("## Merge Report\n\nTotal conflicts: 3\nAuto-resolved: 1\n")
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -229,6 +258,7 @@ class TestReportParsing:
         assert auto == 1
 
     def test_report_without_conflicts(self, tmp_path):
+        """Checks that reporting  without conflicts."""
         report = tmp_path / "report.md"
         report.write_text("## Merge Report\n\nAll patches applied cleanly.\n")
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -237,9 +267,11 @@ class TestReportParsing:
 
 
 class TestXdeltaPatchApplication:
+    """Tests for patching and merging."""
     def test_xdelta_patch_with_g3mtool(
         self, game_data_dir, patches_game_dirs, deltarune_chapter_dirs
     ):
+        """Checks that xdeltaing patch with g3mtool."""
         chapter1_dir = deltarune_chapter_dirs["chapter1"]
         data_win_path = Path(chapter1_dir) / "data.win"
         if not data_win_path.exists():
@@ -271,6 +303,7 @@ class TestXdeltaPatchApplication:
             assert patched_size > 0
 
     def test_xdelta_missing_output_uses_warning_fallback(self, tmp_path):
+        """Checks that xdeltaing missing output uses warning fallback."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -298,7 +331,9 @@ class TestXdeltaPatchApplication:
 
 
 class TestFileOverrideProgress:
+    """Tests for patching and merging."""
     def test_apply_file_overrides_reports_incremental_progress(self, tmp_path):
+        """Checks that applying file overrides reports incremental progress."""
         from utils.patching.file_override_utils import apply_file_overrides
 
         mod_dir = tmp_path / "mod"
@@ -331,6 +366,7 @@ class TestFileOverrideProgress:
         assert progress_updates[-1][0] == 1
 
     def test_xdelta_without_matching_target_does_not_warn(self, tmp_path):
+        """Checks that xdeltaing  without matching target does not warn."""
         from utils.patching.file_override_utils import apply_file_overrides
 
         mod_dir = tmp_path / "mod"
@@ -352,9 +388,11 @@ class TestFileOverrideProgress:
 
 
 class TestG3MPatchProgressText:
+    """Tests for patching and merging."""
     def test_multi_patch_progress_uses_generic_patching_text(
         self, monkeypatch, tmp_path
     ):
+        """Checks that multiing patch progress uses generic patching text."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())

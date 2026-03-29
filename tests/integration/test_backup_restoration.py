@@ -6,8 +6,9 @@ from services.g3mtool_patching_service import G3MToolPatchingService
 
 
 class TestBackupRestoration:
-
+    """Tests for backup restoration."""
     def test_complete_backup_restoration_flow(self, temp_dir, app_state, feedback_service):
+        """Checks that completeing backup restoration flow."""
         from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         patcher = G3MToolPatchingService(app_state, mod_service)
@@ -38,6 +39,7 @@ class TestBackupRestoration:
             assert f.read() == b'ORIGINAL_BANK_FILE'
 
     def test_file_integrity_after_restoration(self, temp_dir):
+        """Checks that fileing integrity after restoration."""
         backup_dir = os.path.join(temp_dir, 'backups')
         backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'
@@ -58,6 +60,7 @@ class TestBackupRestoration:
             assert restored_content == original_content
 
     def test_restoration_order(self, temp_dir):
+        """Checks that restorationing order."""
         backup_dir = os.path.join(temp_dir, 'backups')
         backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'
@@ -80,6 +83,7 @@ class TestBackupRestoration:
                 assert content == f'original{i}', f'File {file_path} not restored correctly'
 
     def test_sound_file_restoration(self, temp_dir):
+        """Checks that sounding file restoration."""
         backup_dir = os.path.join(temp_dir, 'backups')
         backup_service = BackupManager(backup_dir, patching_logger=logging.getLogger('test'))
         chapter_id = 'deltarune_1'

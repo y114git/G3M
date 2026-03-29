@@ -625,7 +625,11 @@ class ThemeController:
 
     def update_dynamic_elements(self):
         from ui.builders.shared_filters_builder import apply_filters_frame_style
-        from ui.common.styling import apply_panel_style, refresh_themed_button_icon
+        from ui.common.styling import (
+            apply_panel_style,
+            refresh_panel_style,
+            refresh_themed_button_icon,
+        )
 
         for builder_name, widget_key in (
             ("search_tab_builder", "filters_widget"),
@@ -639,7 +643,7 @@ class ThemeController:
                 apply_filters_frame_style(filters, self.app_state)
         for container_attr in ("mods_browser_container", "installed_mods_container"):
             container = getattr(self.app, container_attr, None)
-            if container:
+            if container and not refresh_panel_style(container):
                 apply_panel_style(container, self.app_state.local_config)
         mod_list = getattr(self.app, "mod_list_widget", None)
         installed_mods = getattr(self.app, "installed_mods_widget", None)
@@ -687,6 +691,8 @@ class ThemeController:
         summary = getattr(self.app, "mod_summary_panel", None)
         if summary and hasattr(summary, "refresh_theme"):
             summary.refresh_theme()
+        elif summary and hasattr(summary, "apply_theme"):
+            summary.apply_theme()
 
     def on_background_button_click(self):
         self.settings_service.on_background_button_click()

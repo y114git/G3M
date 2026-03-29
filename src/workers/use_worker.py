@@ -79,6 +79,8 @@ class UseWorker(QThread):
                 success = self._install_via_deltamod(content_path, gb_metadata)
             elif find_mod_config(content_path):
                 success = self._install_deltahub_mod(content_path, gb_metadata)
+            elif self._is_afom_archive(extract_dir, gb_metadata):
+                success = self._install_afom_archive(extract_dir, gb_metadata)
             elif gb_metadata:
                 success = self._install_via_gamebanana_converter(gb_metadata)
             else:
@@ -140,12 +142,9 @@ class UseWorker(QThread):
 
     @staticmethod
     def _resolve_content_root(extract_dir: str) -> str:
-        contents = os.listdir(extract_dir)
-        if len(contents) == 1:
-            single = os.path.join(extract_dir, contents[0])
-            if os.path.isdir(single):
-                return single
-        return extract_dir
+        from utils.archive_utils import unwrap_single_directory_chain
+
+        return unwrap_single_directory_chain(extract_dir)
 
     def _build_gb_metadata(self) -> dict:
         if not self._metadata.get("gb_mod_id"):
@@ -255,8 +254,38 @@ class UseWorker(QThread):
             logger.error("UseWorker: deltahub mod install failed: %s", e, exc_info=True)
             return False
 
+    def _is_afom_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
+        game = str((gb_metadata or {}).get("game") or self._metadata.get("game") or "").strip().lower()
+        if game and game != "pizzatower":
+            return False
+        try:
+            from services.pizza_tower_afom_service import PizzaTowerAFOMService
+
+            inspection = PizzaTowerAFOMService().inspect_extracted_archive(extract_dir)
+            return inspection.eligible
+        except Exception as e:
+            logger.debug("UseWorker: AFOM inspection failed: %s", e, exc_info=True)
+            return False
+
+    def _install_afom_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
+        try:
+            from services.pizza_tower_afom_service import PizzaTowerAFOMService
+
+            result = PizzaTowerAFOMService().convert_extracted_archive(
+                extract_dir,
+                self._mods_dir,
+                source_file_path=self._file_path,
+                gamebanana_metadata=gb_metadata or None,
+            )
+            return bool(result)
+        except Exception as e:
+            logger.error("UseWorker: AFOM conversion failed: %s", e, exc_info=True)
+            return False
+
     @staticmethod
     def _apply_gb_metadata(config_data: dict, gb_metadata: dict) -> None:
+        from adapters.gamebanana_adapter import GameBananaAPI
+
         mod_id = gb_metadata.get("mod_id")
         if mod_id:
             item_type = gb_metadata.get("item_type", "mod")
@@ -273,6 +302,14 @@ class UseWorker(QThread):
             for t in tags:
                 if t and t not in existing:
                     existing.append(t)
+            config_data["tags"] = existing
+        category_tag = GameBananaAPI.category_to_tag(gb_metadata.get("category"))
+        if category_tag:
+            existing = config_data.get("tags", [])
+            if not isinstance(existing, list):
+                existing = [existing] if existing else []
+            if category_tag not in existing:
+                existing.append(category_tag)
             config_data["tags"] = existing
 
     @staticmethod

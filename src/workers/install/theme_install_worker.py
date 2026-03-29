@@ -9,8 +9,9 @@ import os
 import shutil
 import tempfile
 
-from config.config import UI_COLORS
+from config.config import THEME_CONFIG_FILENAME, UI_COLORS
 from services.localization_service import tr
+from utils.path_utils import find_theme_config_path
 from workers.base_install_worker import BaseInstallWorker
 
 
@@ -31,7 +32,8 @@ class ThemeInstallWorker(BaseInstallWorker):
 
     def _apply_theme_settings(self, theme_settings: dict, source_dir: str) -> None:
         for key, value in theme_settings.items():
-            self.app_state.local_config[key] = value
+            if key != "config_version":
+                self.app_state.local_config[key] = value
         for old_file in [
             "custom_background_music.mp3",
             "custom_background_music.wav",
@@ -76,7 +78,10 @@ class ThemeInstallWorker(BaseInstallWorker):
                 with tempfile.TemporaryDirectory(
                     prefix="dh-theme-extract-"
                 ) as extract_dir:
-                    from utils.archive_utils import extract_any_archive
+                    from utils.archive_utils import (
+                        extract_any_archive,
+                        unwrap_single_directory_chain,
+                    )
 
                     try:
                         extract_any_archive(content_path, extract_dir)
@@ -85,20 +90,21 @@ class ThemeInstallWorker(BaseInstallWorker):
                             f"ThemeInstallWorker: Failed to extract theme archive: {e}"
                         )
                         return False
-                    theme_json_path = os.path.join(extract_dir, "theme.json")
-                    if not os.path.exists(theme_json_path):
+                    content_root = unwrap_single_directory_chain(extract_dir)
+                    theme_json_path = find_theme_config_path(content_root)
+                    if not theme_json_path:
                         logging.error(
-                            "ThemeInstallWorker: theme.json not found after extraction"
+                            f"ThemeInstallWorker: {THEME_CONFIG_FILENAME} not found after extraction"
                         )
                         return False
                     with open(theme_json_path, encoding="utf-8") as f:
                         theme_settings = json.load(f)
-                    self._apply_theme_settings(theme_settings, extract_dir)
+                    self._apply_theme_settings(theme_settings, content_root)
             else:
-                theme_json_path = os.path.join(content_path, "theme.json")
-                if not os.path.exists(theme_json_path):
+                theme_json_path = find_theme_config_path(content_path)
+                if not theme_json_path:
                     logging.error(
-                        "ThemeInstallWorker: theme.json not found in theme directory"
+                        f"ThemeInstallWorker: {THEME_CONFIG_FILENAME} not found in theme directory"
                     )
                     return False
                 with open(theme_json_path, encoding="utf-8") as f:

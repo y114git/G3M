@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -56,6 +57,11 @@ class _ReadmeTab(QWidget):
         self.viewer.clear()
         self._loaded = False
 
+    def _open_link(self, url: QUrl) -> None:
+        allowed_schemes = {"http", "https", "mailto"}
+        if url and url.isValid() and url.scheme().lower() in allowed_schemes:
+            QDesktopServices.openUrl(url)
+
 
 class ModReadmeDialog(QDialog):
     """Tabbed README viewer with lazy per-tab loading."""
@@ -81,6 +87,7 @@ class ModReadmeDialog(QDialog):
 
         self._title_label = QLabel(self)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_label.setObjectName("readmeTitle")
         layout.addWidget(self._title_label)
 
         self._tabs = QTabWidget(self)
@@ -160,11 +167,16 @@ class ModReadmeDialog(QDialog):
                 font-size: 18px;
                 font-weight: 700;
             }}
+            QTabWidget::tab-bar {{
+                alignment: center;
+                top: 4px;
+            }}
             QTabWidget::pane {{
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["border_radius"]}px;
                 background-color: {theme["background"]};
-                margin-top: 10px;
+                padding-top: 10px;
+                top: -2px;
             }}
             QTabBar::tab {{
                 background-color: {theme["elements"]};
@@ -172,15 +184,13 @@ class ModReadmeDialog(QDialog):
                 border: 2px solid {theme["border"]};
                 border-bottom: none;
                 padding: 8px 16px;
-                margin: 0 4px;
+                margin: 0 4px 6px 4px;
                 border-top-left-radius: {theme["button_radius"]}px;
                 border-top-right-radius: {theme["button_radius"]}px;
             }}
             QTabBar::tab:selected {{
                 background-color: {theme["hover"]};
-            }}
-            QTabWidget::tab-bar {{
-                alignment: center;
+                margin-bottom: 2px;
             }}
             QTextBrowser {{
                 background-color: {theme["elements"]};

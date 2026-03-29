@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 
 from config.config import (
     BASE_TAG_NAMES,
+    CYOP_AFOM_TAG,
     QSS_TRANSPARENT_SCROLL,
 )
 from models.game_modes import get_visible_game_entries
@@ -31,6 +32,7 @@ from ui.builders.shared_filters_builder import (
     create_search_button,
     create_sort_controls,
     create_tag_checkboxes,
+    set_pizzatower_only_tag_visibility,
 )
 from ui.common.styling import (
     apply_scroll_area_chrome,
@@ -56,22 +58,36 @@ class _DropAreaWidget(QWidget):
         super().__init__(parent)
         self.setAcceptDrops(True)
 
+    @staticmethod
+    def _is_external_file_drag(event) -> bool:
+        mime = event.mimeData()
+        return (
+            getattr(event, "source", lambda: None)() is None
+            and not mime.hasFormat("application/x-deltahub-installed-mod-export")
+            and mime.hasUrls()
+            and any(url.isLocalFile() for url in mime.urls())
+        )
+
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls() and any(u.isLocalFile() for u in e.mimeData().urls()):
+        if self._is_external_file_drag(e):
             e.acceptProposedAction()
+        else:
+            e.ignore()
 
     def dragMoveEvent(self, e):
-        if e.mimeData().hasUrls() and any(u.isLocalFile() for u in e.mimeData().urls()):
+        if self._is_external_file_drag(e):
             e.acceptProposedAction()
         else:
             e.ignore()
 
     def dropEvent(self, e):
-        if e.mimeData().hasUrls():
+        if self._is_external_file_drag(e):
             paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
             if paths:
                 e.acceptProposedAction()
                 self.files_dropped.emit(paths)
+                return
+        e.ignore()
 
 
 class LibraryTabBuilder(QObject):
@@ -416,9 +432,20 @@ class LibraryTabBuilder(QObject):
         layout.addSpacing(20)
         tags_lbl = QLabel(tr("ui.tags_label"))
         layout.addWidget(tags_lbl, 0, align_vcenter)
-        tags = create_tag_checkboxes(self.app_state, (*BASE_TAG_NAMES, "gamebanana"))
+        tags = create_tag_checkboxes(
+            self.app_state,
+            (
+                *BASE_TAG_NAMES,
+                ("cyop_afom", CYOP_AFOM_TAG, "tags.cyop_afom"),
+                "gamebanana",
+            ),
+        )
         for t in tags.values():
             layout.addWidget(t, 0, align_vcenter)
+        set_pizzatower_only_tag_visibility(
+            tags.get("cyop_afom"),
+            (self.app_state.game_mode.game_id or "deltarune") == "pizzatower",
+        )
         layout.addStretch()
         modding_tools_btn = create_modding_tools_button(self.app_state)
         layout.addWidget(modding_tools_btn, 0, align_vcenter)

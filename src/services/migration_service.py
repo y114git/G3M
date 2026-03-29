@@ -78,6 +78,10 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
     if not isinstance(config_data, dict):
         return False
     changed = False
+    metadata = config_data.get("metadata")
+    if isinstance(metadata, dict):
+        if migrate_mod_config_legacy_fields(metadata):
+            changed = True
 
     description_value = config_data.get("description")
     if description_value in (None, "") and LEGACY_DESCRIPTION_KEY in config_data:
@@ -123,10 +127,44 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
         elif key == "homepage":
             value = homepage_value
         elif key == "files" and isinstance(value, dict):
-            migrated_files = {
-                migrate_legacy_chapter_id(file_key): file_info
-                for file_key, file_info in value.items()
-            }
+            migrated_files = {}
+            for file_key, file_info in value.items():
+                migrated_key = migrate_legacy_chapter_id(file_key)
+                migrated_info = file_info
+                if isinstance(file_info, dict):
+                    migrated_info = dict(file_info)
+                    data_file_path = migrated_info.pop("data_file_url", None)
+                    if data_file_path not in (None, "") and not migrated_info.get(
+                        "data_file_path"
+                    ):
+                        migrated_info["data_file_path"] = data_file_path
+                    extra_files = migrated_info.get("extra_files")
+                    normalized_extra_files = []
+                    if isinstance(extra_files, list):
+                        for extra_file in extra_files:
+                            if isinstance(extra_file, str):
+                                file_path = extra_file
+                            elif isinstance(extra_file, dict):
+                                file_path = extra_file.get("file_path") or extra_file.get(
+                                    "url"
+                                )
+                            else:
+                                continue
+                            if not file_path:
+                                continue
+                            normalized_extra_files.append(file_path)
+                    elif isinstance(extra_files, dict):
+                        for filenames in extra_files.values():
+                            if not isinstance(filenames, list):
+                                continue
+                            for file_path in filenames:
+                                if file_path:
+                                    normalized_extra_files.append(file_path)
+                    if normalized_extra_files:
+                        migrated_info["extra_files"] = normalized_extra_files
+                    elif extra_files not in (None, [], {}):
+                        migrated_info["extra_files"] = []
+                migrated_files[migrated_key] = migrated_info
             if migrated_files != value:
                 changed = True
             value = migrated_files

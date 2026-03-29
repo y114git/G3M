@@ -1,5 +1,6 @@
 """Summary panel for displaying selected mod details in the Library tab."""
 
+import html
 import logging
 import os
 import threading
@@ -26,6 +27,7 @@ from ui.common.styling import (
     get_card_layout_scale,
     get_theme_color,
     load_mod_icon_universal,
+    rgba_from_color,
 )
 from utils.mod_readme_utils import find_mod_readme_files
 from utils.path_utils import colored_icon
@@ -117,6 +119,7 @@ class ModSummaryPanel(QFrame):
             self.apply_theme()
 
     def _build_ui(self):
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -128,12 +131,16 @@ class ModSummaryPanel(QFrame):
 
         self._scroll = QScrollArea()
         self._scroll.setObjectName("summaryScrollArea")
+        self._scroll.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._scroll.setAutoFillBackground(True)
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.viewport().setObjectName("summaryViewport")
+        self._scroll.viewport().setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._content = QWidget()
         self._content.setObjectName("summaryContent")
+        self._content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._content.setAutoFillBackground(True)
         cl = QVBoxLayout(self._content)
         cl.setContentsMargins(16, 16, 16, 16)
@@ -145,7 +152,7 @@ class ModSummaryPanel(QFrame):
         self._use_button.setObjectName("summaryUseButton")
         self._use_button.clicked.connect(self._on_use_clicked)
         top_row.addWidget(self._use_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self._readme_button = QPushButton("README")
+        self._readme_button = QPushButton(tr("dialogs.info"))
         self._readme_button.setObjectName("summaryReadmeButton")
         self._readme_button.clicked.connect(self._on_readme_clicked)
         self._readme_button.hide()
@@ -407,16 +414,16 @@ class ModSummaryPanel(QFrame):
             if ch_info is None:
                 continue
             if isinstance(ch_info, dict):
-                data_file = ch_info.get("data_file_url")
+                data_file = ch_info.get("data_file_path") or ch_info.get("data_file_url")
                 extra_files = ch_info.get("extra_files", [])
             else:
-                data_file = getattr(ch_info, "data_file_url", None)
+                data_file = getattr(ch_info, "data_file_path", None)
                 extra_files = getattr(ch_info, "extra_files", [])
             chapter_label = self._format_chapter_label(chapter_key)
             if data_file:
                 size_str = ""
                 raw_data_file = str(data_file).replace("\\", "/")
-                display_name = os.path.basename(raw_data_file)
+                display_name = self._format_display_path(raw_data_file)
                 if mod_folder:
                     try:
                         data_path = self._resolve_data_file_path(
@@ -427,22 +434,21 @@ class ModSummaryPanel(QFrame):
 
                             size_str = f" - {format_size(os.path.getsize(data_path))}"
                     except Exception as e:
-                        logging.debug(
+                        logger.debug(
                             f"ModSummaryPanel: failed to calculate file size for chapter {chapter_key}: {e}",
                             exc_info=True,
                         )
                 data_lines.append(
-                    f"<span style='color:{tc}'>{chapter_label}:</span> <span style='color:{sc}'>{display_name}{size_str}</span>"
+                    f"<span style='color:{tc}'>{html.escape(chapter_label)}:</span> <span style='color:{sc}'>{html.escape(display_name)}{size_str}</span>"
                 )
-            groups = self._collect_extra_groups(extra_files)
-            ch_count = sum(c for _, c in groups)
-            if ch_count > 0:
-                extra_total += ch_count
-                group_lines = [
-                    f"&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{tc}'>{gn}:</span> <span style='color:{sc}'>{gc}</span>"
-                    for gn, gc in groups
+            extra_paths = self._collect_extra_paths(extra_files)
+            if extra_paths:
+                extra_total += len(extra_paths)
+                file_lines = [
+                    f"&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{sc}'>{html.escape(self._format_display_path(file_path))}</span>"
+                    for file_path in extra_paths
                 ]
-                extra_chapters.append((chapter_label, ch_count, group_lines))
+                extra_chapters.append((chapter_label, len(extra_paths), file_lines))
         data_text = (
             "<br>".join(data_lines)
             if data_lines
@@ -455,11 +461,11 @@ class ModSummaryPanel(QFrame):
             lines = [
                 f"<span style='color:{tc}; font-weight:600;'>{tr('ui.extra_files_label')}</span> <span style='color:{sc}'>{extra_total}</span>"
             ]
-            for ch_label, ch_count, grp_lines in extra_chapters:
+            for ch_label, ch_count, file_lines in extra_chapters:
                 lines.append(
-                    f"<br><span style='color:{tc}'>&nbsp;&nbsp;{ch_label}:</span> <span style='color:{sc}'>{ch_count}</span>"
+                    f"<br><span style='color:{tc}'>&nbsp;&nbsp;{html.escape(ch_label)}:</span> <span style='color:{sc}'>{ch_count}</span>"
                 )
-                lines.extend(grp_lines)
+                lines.extend(file_lines)
             extra_text = "<br>".join(lines)
             self._extra_label.setText(extra_text)
             self._extra_label.show()
@@ -504,28 +510,33 @@ class ModSummaryPanel(QFrame):
         self._playtime_widget.show()
 
     @staticmethod
-    def _get_extra_file_key(ef) -> str:
-        if hasattr(ef, "key"):
-            return ef.key
-        if isinstance(ef, dict):
-            return ef.get("key", "")
-        return str(ef)
-
-    @staticmethod
-    def _collect_extra_groups(extra_files) -> list[tuple[str, int]]:
-        """Return list of (group_name, count) from extra_files (list or dict)."""
+    def _collect_extra_paths(extra_files) -> list[str]:
+        """Return a flat list of extra file paths."""
         if isinstance(extra_files, dict):
-            return [
-                (gn, len(gv) if isinstance(gv, list) else 1)
-                for gn, gv in extra_files.items()
-            ]
+            result: list[str] = []
+            for values in extra_files.values():
+                if isinstance(values, list):
+                    result.extend(str(value) for value in values if value)
+            return result
         if not isinstance(extra_files, list) or not extra_files:
             return []
-        groups = {}
+        result = []
         for ef in extra_files:
-            key = ModSummaryPanel._get_extra_file_key(ef)
-            groups[key] = groups.get(key, 0) + 1
-        return list(groups.items())
+            if ef:
+                result.append(str(ef))
+        return result
+
+    @staticmethod
+    def _format_display_path(path: str) -> str:
+        normalized = str(path or "").replace("\\", "/")
+        if not normalized:
+            return ""
+        is_dir = normalized.endswith("/")
+        trimmed = normalized.rstrip("/")
+        if not trimmed:
+            return "/"
+        name = os.path.basename(trimmed) or trimmed
+        return f"{name}/" if is_dir else name
 
     @staticmethod
     def _format_chapter_label(chapter_key) -> str:
@@ -558,23 +569,19 @@ class ModSummaryPanel(QFrame):
             return data_file_str
         if not mod_folder or not os.path.isdir(mod_folder):
             return ""
-        file_name = os.path.basename(data_file_str.replace("\\", "/"))
-        candidates = [os.path.join(mod_folder, file_name)]
         try:
-            from utils.mod_config_parser import resolve_chapter_folder
+            from utils.mod_config_parser import resolve_mod_file_path
 
-            ch_folder = resolve_chapter_folder(chapter_key, mod_folder)
-            if ch_folder:
-                candidates.insert(0, os.path.join(ch_folder, file_name))
+            resolved = resolve_mod_file_path(mod_folder, data_file_str)
+            if resolved and os.path.isfile(resolved):
+                return resolved
         except ImportError as e:
-            from src.utils.logging_utils import log_warning
-            log_warning(f"resolve_chapter_folder not available: {e}")
+            from utils.logging_utils import log_warning
+            log_warning(f"resolve_mod_file_path not available: {e}")
         except Exception as e:
-            from src.utils.logging_utils import log_warning
+            from utils.logging_utils import log_warning
             log_warning(f"Failed to resolve chapter folder for {chapter_key}: {e}")
-        for candidate in candidates:
-            if os.path.isfile(candidate):
-                return candidate
+        file_name = os.path.basename(data_file_str.replace("\\", "/"))
         for root, _, files in os.walk(mod_folder):
             if file_name in files:
                 return os.path.join(root, file_name)
@@ -639,7 +646,7 @@ class ModSummaryPanel(QFrame):
         secondary = get_theme_color(config, "secondary_text")
         border = get_theme_color(config, "border")
         button_hover = get_theme_color(config, "hover")
-        background = get_theme_color(config, "background")
+        background = rgba_from_color(get_theme_color(config, "background"))
         elements = get_theme_color(config, "elements", "#202326")
         br = get_border_radius(config)
         title_fs = max(14, round(16 * self._layout_scale()))
@@ -649,20 +656,28 @@ class ModSummaryPanel(QFrame):
             QFrame#summaryPanel {{
                 background-color: {background};
                 border: none;
+                border-radius: {br}px;
             }}
             QScrollArea#summaryScrollArea {{
                 background-color: {background};
                 border: none;
+                border-radius: {br}px;
+            }}
+            QWidget#summaryViewport {{
+                background-color: {background};
+                border: none;
+                border-radius: {br}px;
             }}
             QWidget#summaryContent {{
                 background-color: {background};
+                border-radius: {br}px;
             }}
             """,
             cache_attr="_panel_ss_cache",
         )
         apply_stylesheet_if_changed(
             self._scroll.viewport(),
-            f"background-color: {background}; border: none;",
+            f"background-color: {background}; border: none; border-radius: {br}px;",
             cache_attr="_scroll_viewport_ss_cache",
         )
         for name, btn in self._action_buttons.items():
@@ -719,13 +734,13 @@ class ModSummaryPanel(QFrame):
         apply_stylesheet_if_changed(
             self._meta_label,
             f"""
-            background: {meta_bg}; border: 2px solid {border};
+            background-color: {meta_bg}; border: 2px solid {border};
             border-radius: {min(br, 10)}px; padding: 8px 10px;
         """,
             cache_attr="_meta_ss_cache",
         )
         block_ss = f"""
-            background: {meta_bg}; border: 2px solid {border};
+            background-color: {meta_bg}; border: 2px solid {border};
             border-radius: {min(br, 14)}px; padding: 14px 16px;
         """
         apply_stylesheet_if_changed(
@@ -737,7 +752,7 @@ class ModSummaryPanel(QFrame):
         apply_stylesheet_if_changed(
             self._mod_icon,
             f"""
-            background: {meta_bg}; border: 2px solid {border};
+            background-color: {meta_bg}; border: 2px solid {border};
             border-radius: {min(br, 18)}px;
         """,
             cache_attr="_icon_ss_cache",
@@ -769,6 +784,7 @@ class ModSummaryPanel(QFrame):
     def update_labels_text(self):
         self._empty_label.setText(tr("ui.select_mod"))
         self._use_button.setText(tr("ui.use_button"))
+        self._readme_button.setText(tr("dialogs.info"))
         for icon_name, tooltip_key, _ in self._ACTION_DEFS:
             if icon_name in self._action_buttons:
                 self._action_buttons[icon_name].setToolTip(tr(tooltip_key))

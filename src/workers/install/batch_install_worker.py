@@ -84,13 +84,14 @@ class InstallModsThread(QThread):
         total_size: int,
         downloaded_ref: list[int],
         session=None,
+        output_name: str | None = None,
     ):
         import platform
 
         if session is None:
             session = get_session()
         parsed_url = urlparse(url)
-        filename = unquote(os.path.basename(parsed_url.path))
+        filename = output_name or unquote(os.path.basename(parsed_url.path))
         if component_type == "data":
             if not filename.lower().endswith(DATA_FILE_EXTENSIONS):
                 if platform.system() == "Darwin":
@@ -152,6 +153,27 @@ class InstallModsThread(QThread):
             total_bytes = 0
             mod_folders = {}
             validated_files = {}
+            reserved_relative_paths: dict[str, set[str]] = {}
+
+            def reserve_relative_path(
+                mod_key: str, preferred_name: str, chapter_id: str
+            ) -> str:
+                clean_name = preferred_name.strip().replace("\\", "/").strip("/")
+                if not clean_name:
+                    clean_name = f"{chapter_id}_file"
+                used = reserved_relative_paths.setdefault(mod_key, set())
+                if clean_name not in used:
+                    used.add(clean_name)
+                    return clean_name
+                base_name, ext = os.path.splitext(clean_name)
+                candidate = f"{chapter_id}_{base_name}{ext}"
+                suffix = 1
+                while candidate in used:
+                    candidate = f"{chapter_id}_{base_name}_{suffix}{ext}"
+                    suffix += 1
+                used.add(candidate)
+                return candidate
+
             for mod, chapter_id in self.install_tasks:
                 key = get_mod_id(mod)
                 if key not in mod_folders:
@@ -172,12 +194,18 @@ class InstallModsThread(QThread):
                 )
                 if chapter_id == "deltarunedemo" and mod.is_valid_for_demo():
                     if is_valid_url(mod.demo_url):
+                        stored_relative_path = reserve_relative_path(
+                            key,
+                            os.path.basename(urlparse(mod.demo_url).path),
+                            "deltarunedemo",
+                        )
                         tasks.append(
                             {
                                 "mod": mod,
                                 "url": mod.demo_url,
                                 "chapter_id": "deltarunedemo",
                                 "component": "demo",
+                                "stored_relative_path": stored_relative_path,
                             }
                         )
                     else:
@@ -186,50 +214,57 @@ class InstallModsThread(QThread):
                         )
                         continue
                     validated_files.setdefault(key, {})[chapter_id] = {
-                        "data_file_url": os.path.basename(mod.demo_url),
+                        "data_file_path": stored_relative_path,
                     }
                 elif chapter_data:
                     file_info = {}
                     if chapter_data.data_file_url and is_valid_url(
                         chapter_data.data_file_url
                     ):
+                        stored_relative_path = reserve_relative_path(
+                            key,
+                            os.path.basename(urlparse(chapter_data.data_file_url).path),
+                            chapter_id,
+                        )
                         tasks.append(
                             {
                                 "mod": mod,
                                 "url": chapter_data.data_file_url,
                                 "chapter_id": chapter_id,
                                 "component": "data",
+                                "stored_relative_path": stored_relative_path,
                             }
                         )
-                        file_info["data_file_url"] = os.path.basename(
-                            chapter_data.data_file_url
-                        )
+                        file_info["data_file_path"] = stored_relative_path
                     elif chapter_data.data_file_url:
                         logging.warning(
                             f"InstallModsThread: Invalid URL for data file: {chapter_data.data_file_url}"
                         )
-                    extra_files_dict = {}
+                    extra_files_list = []
                     for extra_file in chapter_data.extra_files:
-                        if is_valid_url(extra_file.url):
+                        if is_valid_url(extra_file):
+                            stored_relative_path = reserve_relative_path(
+                                key,
+                                os.path.basename(urlparse(extra_file).path),
+                                chapter_id,
+                            )
                             tasks.append(
                                 {
                                     "mod": mod,
-                                    "url": extra_file.url,
+                                    "url": extra_file,
                                     "chapter_id": chapter_id,
-                                    "component": extra_file.key,
-                                    }
-                                )
-                            extra_files_dict.setdefault(extra_file.key, []).append(
-                                os.path.basename(extra_file.url)
+                                    "component": "extra",
+                                    "stored_relative_path": stored_relative_path,
+                                }
                             )
+                            extra_files_list.append(stored_relative_path)
                         else:
                             logging.warning(
-                                f"InstallModsThread: Invalid URL for extra file {extra_file.key}: {extra_file.url}"
+                                f"InstallModsThread: Invalid URL for extra file: {extra_file}"
                             )
-                    if file_info or extra_files_dict:
-                        file_info.update(
-                            {"extra_files": extra_files_dict} if extra_files_dict else {}
-                        )
+                    if file_info or extra_files_list:
+                        if extra_files_list:
+                            file_info["extra_files"] = extra_files_list
                         validated_files.setdefault(key, {})[chapter_id] = file_info
             if not tasks:
                 self.finished.emit(True)
@@ -282,11 +317,17 @@ class InstallModsThread(QThread):
                 chapter_id = task.get("chapter_id")
                 mod_folder_name = mod_folders[mod.id]
                 mod_dir = os.path.join(self.temp_root, mod_folder_name)
-                game_value = getattr(mod, "game", None)
-                from utils.file_utils import get_chapter_folder_name
-
-                folder_name = get_chapter_folder_name(chapter_id, game=game_value)
-                cache_dir = os.path.join(mod_dir, folder_name)
+                stored_relative_path = str(task.get("stored_relative_path", "")).replace(
+                    "\\", "/"
+                )
+                cache_dir = (
+                    os.path.join(
+                        mod_dir,
+                        os.path.dirname(stored_relative_path).replace("/", os.sep),
+                    )
+                    if os.path.dirname(stored_relative_path)
+                    else mod_dir
+                )
                 if task.get("delete"):
                     try:
                         if os.path.exists(cache_dir):
@@ -323,6 +364,7 @@ class InstallModsThread(QThread):
                 if not url:
                     continue
                 current_index += 1
+                mod_key = get_mod_id(mod)
                 file_size_mb = tr("status.unknown_size")
                 file_size_bytes = file_sizes_cache.get(url, 0)
                 if file_size_bytes > 0:
@@ -359,10 +401,18 @@ class InstallModsThread(QThread):
                             total_bytes,
                             downloaded_ref,
                             session,
+                            output_name=os.path.basename(stored_relative_path) or None,
                         )
                     else:
                         from utils.file_utils import download_and_extract_archive
 
+                        before_files = {
+                            os.path.relpath(os.path.join(root, file), mod_dir).replace(
+                                "\\", "/"
+                            )
+                            for root, _dirs, files in os.walk(mod_dir)
+                            for file in files
+                        }
                         progress_callback = self._make_progress_callback(
                             mod.name,
                             current_index,
@@ -379,6 +429,22 @@ class InstallModsThread(QThread):
                             session,
                             cancel_check=lambda: self._cancelled,
                         )
+                        extracted_files = {
+                            os.path.relpath(os.path.join(root, file), mod_dir).replace(
+                                "\\", "/"
+                            )
+                            for root, _dirs, files in os.walk(mod_dir)
+                            for file in files
+                        } - before_files
+                        extracted_data_files = sorted(
+                            rel_path
+                            for rel_path in extracted_files
+                            if rel_path.lower().endswith(DATA_FILE_EXTENSIONS)
+                        )
+                        if extracted_data_files:
+                            validated_files.setdefault(mod_key, {}).setdefault(
+                                chapter_id, {}
+                            )["data_file_path"] = extracted_data_files[0]
                         if self._cancelled:
                             self.finished.emit(False)
                             return
@@ -398,11 +464,11 @@ class InstallModsThread(QThread):
                         total_bytes,
                         downloaded_ref,
                         session,
+                        output_name=os.path.basename(stored_relative_path) or None,
                     )
-                key = get_mod_id(mod)
-                if key not in installed_mods:
-                    installed_mods[key] = {"mod": mod, "chapters": set(), "files": {}}
-                installed_mods[key]["chapters"].add(chapter_id)
+                if mod_key not in installed_mods:
+                    installed_mods[mod_key] = {"mod": mod, "chapters": set(), "files": {}}
+                installed_mods[mod_key]["chapters"].add(chapter_id)
                 if url and total_bytes == 0:
                     done_files += 1
                     progress = int(done_files / max(1, len(download_tasks)) * 100)

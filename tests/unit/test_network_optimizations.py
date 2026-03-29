@@ -5,6 +5,7 @@ from services.chat_service import ChatManager
 
 
 def test_chat_manager_caches_messages_per_channel():
+    """Checks that chating manager caches messages per channel."""
     manager = ChatManager()
     manager.base_url = "https://example.test"
     response = Mock()
@@ -25,6 +26,7 @@ def test_chat_manager_caches_messages_per_channel():
 
 
 def test_reload_global_settings_skips_refresh_when_cached():
+    """Checks that reloading global settings skips refresh when cached."""
     app = Mock()
     app.app_state = Mock()
     app.app_state.has_internet = True
@@ -44,6 +46,7 @@ def test_reload_global_settings_skips_refresh_when_cached():
 
 
 def test_reload_global_settings_force_refresh_ignores_cache():
+    """Checks that reloading global settings force refresh ignores cache."""
     app = Mock()
     app.app_state = Mock()
     app.app_state.has_internet = True

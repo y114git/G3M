@@ -16,7 +16,6 @@ SRC_DIR = Path(__file__).resolve().parent.parent.parent / "src"
 
 
 class _ScopeTracker(ast.NodeVisitor):
-    """AST visitor that detects imports trapped inside conditional blocks."""
 
     def __init__(self) -> None:
         self.issues: list[str] = []
@@ -40,7 +39,6 @@ class _ScopeTracker(ast.NodeVisitor):
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
-    # ------------------------------------------------------------------
     def _analyze_function(self, func: ast.FunctionDef) -> None:
         cond_imports: dict[str, list[tuple[int, ast.AST]]] = {}
         fallback_names: set[str] = set()
@@ -81,7 +79,6 @@ class _ScopeTracker(ast.NodeVisitor):
                 )
                 break
 
-    # ------------------------------------------------------------------
     def _scan_body(self, stmts, cond_imports, fallback_names, uncond_imports, depth):
         for stmt in stmts:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -157,14 +154,13 @@ class _ScopeTracker(ast.NodeVisitor):
 
 
 def _collect_all_python_files():
-    """Return all .py files under src/."""
     return sorted(SRC_DIR.rglob("*.py"))
 
 
 class TestConditionalImports:
-    """Ensure no import is trapped inside a conditional block without fallback."""
-
+    """Tests for conditional imports."""
     def test_no_conditional_import_leaks(self):
+        """Checks that noing conditional import leaks."""
         """Scan all src/ files for imports that only exist inside
         conditional blocks but are referenced outside them.
 

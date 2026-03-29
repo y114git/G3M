@@ -20,7 +20,6 @@ TEST_TIMEOUT = 10
 
 
 def _contains_startup_errors(output: str) -> bool:
-    """Check if output contains any startup error markers."""
     error_markers = [
         "STARTUP ERROR",
         "CRITICAL ERROR",
@@ -32,7 +31,7 @@ def _contains_startup_errors(output: str) -> bool:
 
 
 def test_startup_from_environment():
-    """Test startup using environment variables (CI) or local main.py (dev)."""
+    """Checks that startuping  from environment."""
     if "ARCHIVE_PATH" not in os.environ or "STARTUP_TARGET" not in os.environ:
         project_root = pathlib.Path(__file__).parent.parent
         main_py = project_root / "src" / "main.py"
@@ -60,8 +59,7 @@ def test_startup_from_environment():
 
 
 def test_startup_with_sample_archive(tmp_path):
-    """Test startup with a sample archive (for local testing)."""
-
+    """Checks that startuping  with sample archive."""
     project_root = pathlib.Path(__file__).parent.parent
     main_py_path = project_root / "src" / "main.py"
 
@@ -87,8 +85,7 @@ def test_startup_with_sample_archive(tmp_path):
 
 
 def test_local_startup():
-    """Test local application startup by running main.py initialization."""
-
+    """Checks that localing startup."""
     project_root = pathlib.Path(__file__).parent.parent
     main_py_path = project_root / "src" / "main.py"
 
@@ -117,8 +114,7 @@ def test_local_startup():
 
 
 def test_run_app_startup_path_imports(monkeypatch):
-    """Ensure run_app reaches the normal startup path without runtime import errors."""
-
+    """Checks that runing app startup path imports."""
     from app import startup as startup_module
 
     class _Socket:
@@ -161,6 +157,7 @@ def test_run_app_startup_path_imports(monkeypatch):
 
 
 def test_close_splash_and_show_launcher_delays_splash_close():
+    """Checks that closing splash and show launcher delays splash close."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 
     coordinator = BootstrapCoordinator(
@@ -184,6 +181,7 @@ def test_close_splash_and_show_launcher_delays_splash_close():
 
 
 def test_finalize_window_reveal_closes_splash_after_front_refresh():
+    """Checks that finalizeing window reveal closes splash after front refresh."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 
     coordinator = BootstrapCoordinator(
@@ -205,6 +203,7 @@ def test_finalize_window_reveal_closes_splash_after_front_refresh():
 
 
 def test_play_startup_sound_skips_when_disabled():
+    """Checks that playing startup sound skips when disabled."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 
     coordinator = BootstrapCoordinator(
@@ -224,6 +223,7 @@ def test_play_startup_sound_skips_when_disabled():
 
 
 def test_play_startup_sound_uses_enabled_flag():
+    """Checks that playing startup sound uses enabled flag."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 
     coordinator = BootstrapCoordinator(
@@ -243,6 +243,7 @@ def test_play_startup_sound_uses_enabled_flag():
 
 
 def test_show_launcher_window_schedules_post_show_after_reveal_delay():
+    """Checks that showing launcher window schedules post show after reveal delay."""
     from PyQt6.QtCore import Qt
 
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
@@ -285,6 +286,7 @@ def test_show_launcher_window_schedules_post_show_after_reveal_delay():
 
 
 def test_startup_window_creation_smoke(qapp, tmp_path):
+    """Checks that startuping window creation smoke."""
     from app.window import AppWindow
 
     user_root = tmp_path / "user"
@@ -333,7 +335,6 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
 
 
 def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) -> bool:
-    """Core startup testing logic."""
     try:
         with tempfile.TemporaryDirectory() as extract_dir:
             extract_path = pathlib.Path(extract_dir)
@@ -379,7 +380,6 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
 
 
 def main():
-    """Main function for standalone script usage."""
     if "ARCHIVE_PATH" not in os.environ or "STARTUP_TARGET" not in os.environ:
         raise SystemExit(1)
 

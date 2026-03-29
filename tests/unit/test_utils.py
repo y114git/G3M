@@ -8,8 +8,9 @@ from utils.mod_utils import get_mod_id, get_mod_name
 
 
 class TestUiUtils:
-
+    """Tests for utils."""
     def test_stop_existing_fade_clears_animation_reference_and_deletes_anim(self, qapp):
+        """Checks that stoping existing fade clears animation reference and deletes anim."""
         from PyQt6.QtWidgets import QWidget
 
         from ui.utils.ui_utils import UIAnimator
@@ -24,8 +25,9 @@ class TestUiUtils:
 
 
 class TestModUtils:
-
+    """Tests for utils."""
     def test_get_mod_id_from_dict(self):
+        """Checks that getting mod id from dict."""
         mod_data = {'id': 'test_key_001'}
         assert get_mod_id(mod_data) == 'test_key_001'
         mod_data = {'id': 'test_mod_002'}
@@ -34,7 +36,7 @@ class TestModUtils:
         assert get_mod_id(mod_data) == 'test_mod_003'
 
     def test_get_mod_id_from_object(self):
-
+        """Checks that getting mod id from object."""
         class ModObject:
 
             def __init__(self) -> None:
@@ -50,9 +52,11 @@ class TestModUtils:
         assert get_mod_id(mod_obj2) == 'test_key_005'
 
     def test_get_mod_id_none(self):
+        """Checks that getting mod id none."""
         assert get_mod_id(None) is None
 
     def test_get_mod_name_from_dict(self):
+        """Checks that getting mod name from dict."""
         mod_data = {'name': 'Test Mod'}
         assert get_mod_name(mod_data) == 'Test Mod'
         mod_data = {}
@@ -60,7 +64,7 @@ class TestModUtils:
         assert get_mod_name(mod_data, 'Default') == 'Default'
 
     def test_get_mod_name_from_object(self):
-
+        """Checks that getting mod name from object."""
         class ModObject:
 
             def __init__(self) -> None:
@@ -69,13 +73,15 @@ class TestModUtils:
         assert get_mod_name(mod_obj) == 'Test Mod Object'
 
     def test_get_mod_name_none(self):
+        """Checks that getting mod name none."""
         assert get_mod_name(None) == 'Unknown'
         assert get_mod_name(None, 'Custom Default') == 'Custom Default'
 
 
 class TestFileUtils:
-
+    """Tests for utils."""
     def test_sanitize_filename(self):
+        """Checks that sanitizeing filename."""
         assert sanitize_filename('test_file.txt') == 'test_file.txt'
         assert sanitize_filename('test/file.txt') == 'testfile.txt'
         assert sanitize_filename('test\\file.txt') == 'testfile.txt'
@@ -90,6 +96,7 @@ class TestFileUtils:
         assert sanitize_filename('AUX.txt') == 'AUX.txt'
 
     def test_safe_rmtree_default_params(self, temp_dir, qapp):
+        """Checks that safeing rmtree default params."""
         from utils.file_utils import safe_rmtree
 
         test_dir = os.path.join(temp_dir, 'test_rmtree')
@@ -109,6 +116,7 @@ class TestFileUtils:
         assert not os.path.exists(test_dir2)
 
     def test_has_deltamod_info_file(self):
+        """Checks that hasing deltamod info file."""
         file_list = ['file1.txt', '_deltamodInfo.json', 'file2.txt']
         assert has_deltamod_info_file(file_list) is True
         file_list = ['file1.txt', 'meta.json', 'file2.txt']
@@ -119,8 +127,9 @@ class TestFileUtils:
 
 
 class TestPathUtils:
-
+    """Tests for utils."""
     def test_get_user_data_root(self):
+        """Checks that getting user data root."""
         from utils.path_utils import get_user_data_root
         root = get_user_data_root()
         assert root is not None
@@ -128,6 +137,7 @@ class TestPathUtils:
         assert 'DELTAHUB' in root
 
     def test_get_user_mods_dir(self):
+        """Checks that getting user mods dir."""
         from utils.path_utils import get_user_mods_dir
         mods_dir = get_user_mods_dir()
         assert mods_dir is not None
@@ -135,6 +145,7 @@ class TestPathUtils:
         assert 'mods' in mods_dir
 
     def test_resource_path(self):
+        """Checks that resourceing path."""
         from utils.path_utils import resource_path
         path = resource_path('assets/test.txt')
         assert path is not None
@@ -142,9 +153,10 @@ class TestPathUtils:
 
 
 class TestGameUtils:
-
+    """Tests for utils."""
     @patch('psutil.process_iter')
     def test_is_game_running(self, mock_process_iter):
+        """Checks that ising game running."""
         from services.game_detection_service import is_game_running
         mock_process = Mock()
         mock_process.info = {'name': 'DELTARUNE.exe'}
@@ -154,8 +166,9 @@ class TestGameUtils:
 
 
 class TestNetworkUtils:
-
+    """Tests for utils."""
     def test_get_session(self):
+        """Checks that getting session."""
         from utils.network_utils import get_session
         session = get_session()
         assert session is not None
@@ -163,6 +176,7 @@ class TestNetworkUtils:
 
     @patch('requests.get')
     def test_download_file(self, mock_get):
+        """Checks that downloading file."""
         from utils.network_utils import download_file
         mock_response = Mock()
         mock_response.iter_content.return_value = [b'chunk1', b'chunk2']
@@ -172,8 +186,9 @@ class TestNetworkUtils:
 
 
 class TestImageLoader:
-
+    """Tests for utils."""
     def test_image_loader_exists(self):
+        """Checks that imageing loader exists."""
         import importlib.util
         spec = importlib.util.find_spec('ui.utils.image_loader')
         if spec is None:
@@ -182,8 +197,9 @@ class TestImageLoader:
 
 
 class TestCache:
-
+    """Tests for utils."""
     def test_cache_basic_operations(self, qapp):
+        """Checks that cacheing basic operations."""
         try:
             from PyQt6.QtGui import QImage
 

@@ -2,8 +2,9 @@ from unittest.mock import Mock, patch
 
 
 class TestRefreshModList:
-
+    """Tests for refresh updates."""
     def test_refresh_updates_mod_list(self, app_state):
+        """Checks that refreshing updates mod list."""
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
@@ -21,6 +22,7 @@ class TestRefreshModList:
             assert mock_thread.start.called
 
     def test_refresh_calls_relocalize(self, app_state):
+        """Checks that refreshing calls relocalize."""
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()
@@ -39,8 +41,9 @@ class TestRefreshModList:
 
 
 class TestRefreshLanguageCombo:
-
+    """Tests for refresh updates."""
     def test_refresh_updates_language_combo(self, app_state):
+        """Checks that refreshing updates language combo."""
         from PyQt6.QtWidgets import QComboBox
 
         from controllers.refresh_controller import RefreshController
@@ -63,8 +66,9 @@ class TestRefreshLanguageCombo:
 
 
 class TestRefreshLibraryDisplay:
-
+    """Tests for refresh updates."""
     def test_library_display_updates_on_refresh(self, app_state):
+        """Checks that librarying display updates on refresh."""
         from controllers.library_display_controller import LibraryDisplayController
         feedback_service = Mock()
         mod_service = Mock()
@@ -78,8 +82,9 @@ class TestRefreshLibraryDisplay:
 
 
 class TestRefreshMetadataLoading:
-
+    """Tests for refresh updates."""
     def test_refresh_controller_has_expected_attributes(self, app_state):
+        """Checks that refreshing controller has expected attributes."""
         from controllers.refresh_controller import RefreshController
         feedback_service = Mock()
         mod_service = Mock()

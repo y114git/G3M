@@ -1,23 +1,34 @@
 import os
+import time
 from unittest.mock import Mock, patch
 
 
-class TestAppWindow:
-    def test_app_window_creation(self, qapp, temp_dir):
-        from app.window import AppWindow
-
-        user_root = os.path.join(temp_dir, "user")
-        profiles_dir = os.path.join(temp_dir, "profiles")
-        themes_dir = os.path.join(temp_dir, "themes")
-        for path in (user_root, profiles_dir, themes_dir):
-            os.makedirs(path, exist_ok=True)
-        mock_presence_response = Mock()
-        mock_presence_response.status_code = 200
-        mock_presence_response.json.return_value = {"online": 0}
-        mock_presence_session = Mock()
-        mock_presence_session.post.return_value = mock_presence_response
-        with (
-            patch("app_context.application_context.get_user_data_root", return_value=user_root),
+def _window_test_patches(temp_dir):
+    user_root = os.path.join(temp_dir, "user")
+    profiles_dir = os.path.join(temp_dir, "profiles")
+    themes_dir = os.path.join(temp_dir, "themes")
+    for path in (user_root, profiles_dir, themes_dir):
+        os.makedirs(path, exist_ok=True)
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"online": 0}
+    mock_response.text = ""
+    mock_response.content = b""
+    mock_response.raise_for_status = Mock()
+    mock_session = Mock()
+    mock_session.get.return_value = mock_response
+    mock_session.post.return_value = mock_response
+    return (
+        user_root,
+        profiles_dir,
+        themes_dir,
+        mock_response,
+        mock_session,
+        (
+            patch(
+                "app_context.application_context.get_user_data_root",
+                return_value=user_root,
+            ),
             patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
             patch(
                 "services.g3mtool_patching_service.get_user_data_root",
@@ -32,11 +43,22 @@ class TestAppWindow:
                 "services.profile_service.get_user_profiles_dir",
                 return_value=profiles_dir,
             ),
-            patch(
-                "workers.presence_worker.get_session",
-                return_value=mock_presence_session,
-            ),
-        ):
+            patch("requests.get", return_value=mock_response),
+            patch("requests.post", return_value=mock_response),
+            patch("requests.Session", return_value=mock_session),
+            patch("ui.widgets.mod.base_mod_widget.load_mod_icon_universal"),
+        ),
+    )
+
+
+class TestAppWindow:
+    """Tests for main window."""
+    def test_app_window_creation(self, qapp, temp_dir):
+        """Checks that apping window creation."""
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
             window = AppWindow()
             try:
                 assert window is not None
@@ -53,38 +75,21 @@ class TestAppWindow:
                 window.close()
 
     def test_post_show_initialization_runs_once(self, qapp, temp_dir):
+        """Checks that posting show initialization runs once."""
         from app.window import AppWindow
 
-        user_root = os.path.join(temp_dir, "user")
-        profiles_dir = os.path.join(temp_dir, "profiles")
-        themes_dir = os.path.join(temp_dir, "themes")
-        for path in (user_root, profiles_dir, themes_dir):
-            os.makedirs(path, exist_ok=True)
-        mock_presence_response = Mock()
-        mock_presence_response.status_code = 200
-        mock_presence_response.json.return_value = {"online": 0}
-        mock_presence_session = Mock()
-        mock_presence_session.post.return_value = mock_presence_response
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
         with (
-            patch("app_context.application_context.get_user_data_root", return_value=user_root),
-            patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
-            patch(
-                "services.g3mtool_patching_service.get_user_data_root",
-                return_value=user_root,
-            ),
-            patch(
-                "services.blocklist_service.get_user_data_root",
-                return_value=user_root,
-            ),
-            patch("utils.path_utils.get_user_themes_dir", return_value=themes_dir),
-            patch(
-                "services.profile_service.get_user_profiles_dir",
-                return_value=profiles_dir,
-            ),
-            patch(
-                "workers.presence_worker.get_session",
-                return_value=mock_presence_session,
-            ),
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
             patch("bootstrap.bootstrap_coordinator.BootstrapCoordinator.post_show_initialization") as post_init,
         ):
             window = AppWindow()
@@ -95,9 +100,63 @@ class TestAppWindow:
             finally:
                 window.close()
 
+    def test_mods_browser_updates_cards_without_tab_switch_when_tag_changes(
+        self, qapp, temp_dir
+    ):
+        """Checks that modsing browser updates cards without tab switch when tag changes."""
+        from app.window import AppWindow
+        from models.mod_models import BrowserModInfo
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
+            window = AppWindow()
+            try:
+                window.search_display._load_more_gamebanana_mods_if_needed = (
+                    lambda *args, **kwargs: None
+                )
+                window.app_state.mods_loaded = True
+                window.app_state.gamebanana_loading = False
+                window.app_state.search_text = ""
+                pizzatower_index = window.modgame_combo.findData("pizzatower")
+                window.modgame_combo.setCurrentIndex(pizzatower_index)
+                window.show()
+                for _ in range(12):
+                    qapp.processEvents()
+                    time.sleep(0.05)
+                window.app_state.all_mods = [
+                    BrowserModInfo(
+                        id="gb_mod_3",
+                        name="P",
+                        version="1",
+                        author="x",
+                        description="x",
+                        game="pizzatower",
+                        tags=["CYOP/AFOM"],
+                        gamebanana_category="CYOP/AFOM",
+                    )
+                ]
+                window.search_display.update_filtered_mods()
+                for _ in range(12):
+                    qapp.processEvents()
+                    time.sleep(0.05)
+
+                assert [mod.name for mod in window.app_state.filtered_mods] == ["P"]
+                assert window.mod_list_layout.count() == 1
+
+                window.tag_textedit.setChecked(True)
+                for _ in range(12):
+                    qapp.processEvents()
+                    time.sleep(0.05)
+
+                assert window.app_state.filtered_mods == []
+                assert window.mod_list_layout.count() == 0
+            finally:
+                window.close()
+
     def test_sync_chapter_tab_buttons_hides_extra_buttons_for_single_tab_game(
         self, qapp
     ):
+        """Checks that syncing chapter tab buttons hides extra buttons for single tab game."""
         from PyQt6.QtWidgets import QPushButton, QWidget
 
         from app.game_ui import sync_chapter_tab_buttons
@@ -127,7 +186,9 @@ class TestAppWindow:
 
 
 class TestTabBuilders:
+    """Tests for main window."""
     def test_library_tab_builder_creation(self, qapp, app_state, feedback_service):
+        """Checks that librarying tab builder creation."""
         from services.localization_service import tr
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
@@ -150,6 +211,7 @@ class TestTabBuilders:
         widget.deleteLater()
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
+        """Checks that modsing browser tab builder creation."""
         from PyQt6.QtWidgets import QGridLayout
 
         from services.localization_service import tr
@@ -172,6 +234,7 @@ class TestTabBuilders:
     def test_mods_browser_show_nsfw_checkbox_scales_with_ui_scale(
         self, qapp, app_state, feedback_service
     ):
+        """Checks that modsing browser show nsfw checkbox scales with ui scale."""
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
 
         app_state.local_config["ui_scale"] = 1.5
@@ -187,6 +250,7 @@ class TestTabBuilders:
         widget.deleteLater()
 
     def test_settings_view_builder_creation(self, qapp, app_state, feedback_service):
+        """Checks that settingsing view builder creation."""
         from services.localization_service import tr
         from ui.builders.settings_view_builder import SettingsViewBuilder
 

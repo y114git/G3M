@@ -18,6 +18,7 @@ from app.game_ui import (
     show_chapter_mode_instruction,
     update_change_path_button_text,
     update_checkbox_visibility,
+    update_special_tag_visibility,
     update_steam_launch_checkbox_state,
 )
 from models.game_modes import DeltaruneGame, get_game
@@ -64,6 +65,7 @@ def setup_search_tab(w):
             "tag_customization",
             "tag_gameplay",
             "tag_other",
+            "tag_cyop_afom",
             "search_button",
         ),
         optional=("downloads_button", "blocklist_button"),
@@ -78,6 +80,7 @@ def setup_search_tab(w):
         selected_game = w.modgame_combo.currentData() or "deltarune"
         w.app_state.local_config["selected_search_game"] = selected_game
         w.settings_service.write_local_config()
+        update_special_tag_visibility(w)
         w.app_state.current_page = 1
         w.search_display.load_mods_for_selected_game()
 
@@ -87,6 +90,7 @@ def setup_search_tab(w):
         w.tag_customization,
         w.tag_gameplay,
         w.tag_other,
+        w.tag_cyop_afom,
     ):
         tag_cb.stateChanged.connect(
             lambda: (
@@ -94,6 +98,7 @@ def setup_search_tab(w):
                 w.search_display.update_filtered_mods(),
             )
         )
+    update_special_tag_visibility(w)
 
     def on_show_nsfw_changed(state):
         w.app_state.local_config["show_nsfw"] = bool(state)
@@ -110,6 +115,11 @@ def setup_search_tab(w):
         w.mods_browser_scroll.verticalScrollBar().valueChanged.connect(
             w.search_display.on_scroll_value_changed
         )
+    with contextlib.suppress(AttributeError, RuntimeError):
+        w.mods_browser_scroll.installEventFilter(w.search_display)
+        viewport = w.mods_browser_scroll.viewport()
+        if viewport:
+            viewport.installEventFilter(w.search_display)
 
 
 def setup_library_tab(w):
@@ -141,6 +151,7 @@ def setup_library_tab(w):
             "library_tag_customization",
             "library_tag_gameplay",
             "library_tag_other",
+            "library_tag_cyop_afom",
             "library_tag_gamebanana",
             "library_tag_widgets",
             "library_search_button",

@@ -3,12 +3,14 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from PyQt6.QtCore import QMimeData, QUrl
 from PyQt6.QtWidgets import QLabel, QWidget
 
 
 class TestModWidgets:
-
+    """Tests for widgets."""
     def test_base_mod_widget_creation(self, qapp):
+        """Checks that baseing mod widget creation."""
         from unittest.mock import patch
 
         from ui.widgets.mod.base_mod_widget import BaseModWidget
@@ -22,6 +24,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_search_mod_card_widget_recalculates_metrics_when_ui_scale_changes(self, qapp):
+        """Checks that searching mod card widget recalculates metrics when ui scale changes."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -52,6 +55,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_installed_mod_widget_scales_with_ui_scale(self, qapp):
+        """Checks that installeding mod widget scales with ui scale."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -70,6 +74,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_mod_card_widget_scales_with_ui_scale(self, qapp):
+        """Checks that moding card widget scales with ui scale."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -89,6 +94,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_search_mod_card_widget_expands_on_selection_and_hides_on_focus_loss(self, qapp):
+        """Checks that searching mod card widget expands on selection and hides on focus loss."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -125,6 +131,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_search_mod_card_widget_metadata_icons_keep_padding_when_scaled(self, qapp):
+        """Checks that searching mod card widget metadata icons keep padding when scaled."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -146,6 +153,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_search_display_controller_does_not_reselect_already_selected_card(self):
+        """Checks that searching display controller does not reselect already selected card."""
         from unittest.mock import Mock
 
         from controllers.search_display_controller import SearchDisplayController
@@ -159,6 +167,7 @@ class TestModWidgets:
         card.set_selected.assert_not_called()
 
     def test_mod_card_widget_has_likes_label(self, qapp):
+        """Checks that moding card widget has likes label."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -175,6 +184,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_installed_mod_widget_creation(self, qapp):
+        """Checks that installeding mod widget creation."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -190,6 +200,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_mod_card_widget_creation(self, qapp):
+        """Checks that moding card widget creation."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -220,6 +231,7 @@ class TestModWidgets:
             time.sleep(0.05)
 
     def test_selected_mod_card_keeps_select_border_on_hover(self, qapp):
+        """Checks that selecteding mod card keeps select border on hover."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -245,8 +257,9 @@ class TestModWidgets:
 
 
 class TestCommonWidgets:
-
+    """Tests for widgets."""
     def test_custom_controls_creation(self, qapp):
+        """Checks that customing controls creation."""
         from ui.widgets.shared.custom_controls import NoScrollComboBox
         combo = NoScrollComboBox()
         assert combo is not None
@@ -257,6 +270,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_creation(self, qapp):
+        """Checks that moding details overlay creation."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune')
@@ -274,6 +288,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_hidden_during_construction(self, qapp):
+        """Checks that moding details overlay hidden during construction."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         host = QWidget()
@@ -287,6 +302,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_preloaded_screenshot_displays_on_navigate(self, qapp):
+        """Checks that moding details overlay preloaded screenshot displays on navigate."""
         from PyQt6.QtGui import QImage
 
         from models.mod_models import ModInfo
@@ -311,6 +327,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_metadata_order(self, qapp):
+        """Checks that moding details overlay metadata order."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='1.0', description_url='', downloads=42, game='deltarune', created_date='2024-01-01', gamebanana_category='Category')
@@ -336,6 +353,7 @@ class TestCommonWidgets:
 
     @pytest.mark.parametrize(('downloads', 'expected'), [(0, '0'), (None, '0')])
     def test_mod_details_overlay_shows_downloads(self, qapp, downloads, expected):
+        """Checks that moding details overlay shows downloads."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='1.0', description_url='', downloads=downloads, game='deltarune', created_date='2024-01-01', gamebanana_category='Category')
@@ -348,6 +366,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_uses_custom_hover_color(self, qapp):
+        """Checks that moding details overlay uses custom hover color."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         parent = QWidget()
@@ -362,6 +381,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_uses_custom_select_color(self, qapp):
+        """Checks that moding details overlay uses custom select color."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         parent = QWidget()
@@ -376,6 +396,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_update_screenshots(self, qapp):
+        """Checks that moding details overlay update screenshots."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
@@ -393,6 +414,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_initializes_screenshots_from_mod_data(self, qapp):
+        """Checks that moding details overlay initializes screenshots from mod data."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', screenshots_url=['https://example.com/1.png', 'https://example.com/2.png'])
@@ -404,6 +426,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_nav(self, qapp):
+        """Checks that moding details overlay nav."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
@@ -426,6 +449,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_details_overlay_reuses_dot_labels_during_navigation(self, qapp):
+        """Checks that moding details overlay reuses dot labels during navigation."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
@@ -441,6 +465,7 @@ class TestCommonWidgets:
             time.sleep(0.05)
 
     def test_mod_summary_panel_keeps_zero_playtime_visible(self, qapp):
+        """Checks that moding summary panel keeps zero playtime visible."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -472,7 +497,135 @@ class TestCommonWidgets:
             qapp.processEvents()
             time.sleep(0.05)
 
+    def test_mod_summary_panel_shows_only_final_file_and_folder_names(self, qapp):
+        """Checks that moding summary panel shows only final file and folder names."""
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
+
+        host = QWidget()
+        host.local_config = {}
+        mod_data = ModInfo(
+            id='test_mod',
+            name='Test Mod',
+            version='1.0.0',
+            author='Test Author',
+            description='Test description',
+            game_version='1.0',
+            description_url='',
+            downloads=0,
+            game='deltarune',
+            files={
+                'deltarune_1': {
+                    'data_file_path': 'folder/something.thing',
+                    'extra_files': [
+                        'older/somefolder/',
+                        'nested/final.bin',
+                    ],
+                }
+            },
+        )
+        with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):
+            panel = ModSummaryPanel(host)
+            panel.show_mod(mod_data, is_active=False)
+            assert 'something.thing' in panel._data_label.text()
+            assert 'folder/something.thing' not in panel._data_label.text()
+            assert 'somefolder/' in panel._extra_label.text()
+            assert 'older/somefolder/' not in panel._extra_label.text()
+            assert 'final.bin' in panel._extra_label.text()
+            assert 'nested/final.bin' not in panel._extra_label.text()
+        panel.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_library_drop_area_ignores_internal_file_drags_and_accepts_external_ones(self, qapp):
+        """Checks that librarying drop area ignores internal file drags and accepts external ones."""
+        from ui.builders.library_tab_builder import _DropAreaWidget
+
+        drop_area = _DropAreaWidget()
+        dropped_paths = []
+        drop_area.files_dropped.connect(dropped_paths.extend)
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile('C:/Mods/test_mod.zip')])
+
+        class _Event:
+            def __init__(self, source):
+                self._source = source
+                self.accepted = False
+                self.ignored = False
+
+            def mimeData(self):
+                return mime
+
+            def source(self):
+                return self._source
+
+            def acceptProposedAction(self):
+                self.accepted = True
+
+            def ignore(self):
+                self.ignored = True
+
+        internal_event = _Event(source=object())
+        drop_area.dragEnterEvent(internal_event)
+        drop_area.dropEvent(internal_event)
+        assert internal_event.accepted is False
+        assert internal_event.ignored is True
+        assert dropped_paths == []
+
+        external_event = _Event(source=None)
+        drop_area.dragEnterEvent(external_event)
+        drop_area.dropEvent(external_event)
+        assert external_event.accepted is True
+        assert dropped_paths == ['C:/Mods/test_mod.zip']
+        drop_area.deleteLater()
+
+    def test_installed_mod_drag_export_is_materialized_only_when_urls_are_requested(self, qapp):
+        """Checks that installed mod drag export stays lazy until the drop target requests URLs."""
+        from unittest.mock import Mock, patch
+
+        from models.mod_models import ModInfo
+        from presentation.drag_drop import LazyFileExportMimeData
+        from ui.widgets.mod.installed_mod_widget import InstalledModWidget
+
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={'ui_scale': 1.0})
+        host.mod_import_export_controller = Mock()
+        mod_data = ModInfo(
+            id='test_mod',
+            name='Lazy Export Mod',
+            version='1.0.0',
+            author='Test Author',
+            description='Test description',
+            game_version='',
+            description_url='',
+            downloads=0,
+            game='deltarune',
+        )
+        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
+            widget = InstalledModWidget(mod_data, parent=host, parent_app=host)
+        mime = LazyFileExportMimeData(
+            lambda path: host.mod_import_export_controller.export_mod_to_path(mod_data, path),
+            'Lazy Export Mod.zip',
+            internal_format='application/x-deltahub-installed-mod-export',
+        )
+        assert host.mod_import_export_controller.export_mod_to_path.call_count == 0
+        assert mime.hasUrls() is True
+        assert host.mod_import_export_controller.export_mod_to_path.call_count == 0
+        with patch.object(mime, '_ensure_export_ready', return_value='C:/Temp/Lazy Export Mod.zip') as ensure_ready:
+            urls = mime.urls()
+            assert ensure_ready.call_count == 1
+            assert [url.toLocalFile() for url in urls] == ['C:/Temp/Lazy Export Mod.zip']
+        assert host.mod_import_export_controller.export_mod_to_path.call_count == 0
+        widget.deleteLater()
+        host.deleteLater()
+
     def test_rich_html_reserves_safe_width_for_inline_media(self):
+        """Checks that riching html reserves safe width for inline media."""
         from ui.common.rich_html import (
             _build_img_tag,
             _placeholder_resource_width,
@@ -485,6 +638,7 @@ class TestCommonWidgets:
         assert 'width="290"' in img_tag
 
     def test_rich_html_loading_placeholder_keeps_outer_edges_transparent(self):
+        """Checks that riching html loading placeholder keeps outer edges transparent."""
         from ui.common.rich_html import _create_loading_placeholder
         placeholder = _create_loading_placeholder(300, 120, 'Loading image...')
         center_y = placeholder.height() // 2
@@ -493,5 +647,3 @@ class TestCommonWidgets:
         assert placeholder.pixelColor(placeholder.width() - 8, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() - 16, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() // 2, center_y).alpha() > 0
-
-

@@ -21,6 +21,7 @@ class _FakeG3M:
 
 
 def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
+    """Checks that dataing convert tab blocks controls while busy."""
     app = QApplication.instance() or QApplication([])
 
     monkeypatch.setattr(_DataConvertTab, "_populate_profiles", lambda self: None)
@@ -51,12 +52,12 @@ def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
 def test_data_convert_creates_new_version_without_overwriting_mod(
     tmp_path, monkeypatch
 ):
+    """Checks that dataing convert creates new version without overwriting mod."""
     mod_folder = tmp_path / "mod"
-    chapter_dir = mod_folder / "chapter1"
     versions_dir = mod_folder / "mod_versions"
-    chapter_dir.mkdir(parents=True)
+    mod_folder.mkdir(parents=True)
     versions_dir.mkdir()
-    patch_path = chapter_dir / "data.xdelta"
+    patch_path = mod_folder / "data.xdelta"
     patch_path.write_text("old patch", encoding="utf-8")
     config_path = mod_folder / "mod_config.json"
     config_path.write_text(
@@ -64,7 +65,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
             {
                 "version": "1.2.3",
                 "game": "deltarune",
-                "files": {"deltarune_1": {"data_file_url": "data.xdelta"}},
+                "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
             }
         ),
         encoding="utf-8",
@@ -81,8 +82,8 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
         ),
     )
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_chapter_folder",
-        lambda file_key, folder, game: str(chapter_dir),
+        "utils.mod_config_parser.resolve_mod_file_path",
+        lambda folder, stored_path: str(mod_folder / stored_path),
     )
     monkeypatch.setattr(
         "utils.path_utils.find_chapter_resource_dir",
@@ -95,7 +96,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
         {
             "version": "1.2.3",
             "game": "deltarune",
-            "files": {"deltarune_1": {"data_file_url": "data.xdelta"}},
+            "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
         },
         str(tmp_path / "game_root"),
         False,
@@ -110,7 +111,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     assert patch_path.read_text(encoding="utf-8") == "old patch"
     assert (
         json.loads(config_path.read_text(encoding="utf-8"))["files"]["deltarune_1"][
-            "data_file_url"
+            "data_file_path"
         ]
         == "data.xdelta"
     )
@@ -118,6 +119,6 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
     version_zip = versions_dir / "1.2.3 - g3mpatch.zip"
     assert version_zip.is_file()
     with zipfile.ZipFile(version_zip) as zf:
-        assert "chapter1/data.g3mpatch" in zf.namelist()
+        assert "data.g3mpatch" in zf.namelist()
         converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
-    assert converted_config["files"]["deltarune_1"]["data_file_url"] == "data.g3mpatch"
+    assert converted_config["files"]["deltarune_1"]["data_file_path"] == "data.g3mpatch"

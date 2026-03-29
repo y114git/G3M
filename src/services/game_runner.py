@@ -27,6 +27,11 @@ from utils.path_utils import (
     get_user_data_root,
     resolve_game_executable,
 )
+from utils.pizzatower_afom_utils import (
+    apply_afom_towers_from_mod_source,
+    is_top_level_towers_archive,
+    is_towers_subpath,
+)
 
 logger = logging.getLogger("shortcut_runner")
 
@@ -130,11 +135,29 @@ def _apply_file_overrides(
 
     if not os.path.isdir(mod_source_dir):
         return
+    if str(chapter_id).strip().lower() == "pizzatower":
+        from utils.archive_utils import extract_any_archive
+
+        if not apply_afom_towers_from_mod_source(
+            mod_source_dir,
+            backup_or_mark=lambda target_file: (
+                backup_mgr.backup_file(chapter_id, target_file)
+                if os.path.exists(target_file)
+                else backup_mgr.mark_file_added(chapter_id, target_file)
+            ),
+            logger=logger,
+            extract_archive=extract_any_archive,
+        ):
+            logger.error(f"Failed to apply AFOM towers from {mod_source_dir}")
+            return
     for root, _dirs, files in os.walk(mod_source_dir):
         for file in files:
             if file.lower() in SKIP_FILES:
                 continue
             source_path = os.path.join(root, file)
+            rel_path = os.path.relpath(source_path, mod_source_dir)
+            if is_towers_subpath(rel_path) or is_top_level_towers_archive(rel_path):
+                continue
             file_lower = file.lower()
             if file_lower.endswith((".xdelta", ".vcdiff")):
                 from utils.patching import mod_content_utils as mod_content
@@ -158,7 +181,6 @@ def _apply_file_overrides(
                 continue
             if file_lower.endswith(ARCHIVE_EXTENSIONS):
                 continue
-            rel_path = os.path.relpath(source_path, mod_source_dir)
             target_path = os.path.join(target_dir, rel_path)
             backup_mgr.backup_file(chapter_id, target_path)
             os.makedirs(os.path.dirname(target_path), exist_ok=True)

@@ -8,11 +8,17 @@ import tempfile
 
 from PyQt6.QtCore import pyqtSignal
 
-from config.config import MOD_CONFIG_FILENAME, UI_COLORS
+from config.config import (
+    MOD_CONFIG_FILENAME,
+    THEME_CONFIG_FILENAME,
+    THEME_CONFIG_FILENAMES,
+    UI_COLORS,
+)
 from models.exceptions import AppError
 from services.localization_service import tr
 from utils.file_utils import check_filename_is_deltamod_info, has_deltamod_info_file
 from utils.network_utils import download_file, get_session
+from utils.path_utils import find_theme_config_path
 from workers.base_install_worker import BaseInstallWorker
 from workers.install.helpers_install import (
     find_mod_config,
@@ -29,19 +35,15 @@ class UrlInstallThread(BaseInstallWorker):
     def _unpack_content_path(
         archive_path: str, unpack_dir: str, use_shutil: bool = True
     ) -> str:
+        from utils.archive_utils import unwrap_single_directory_chain
+
         if use_shutil:
             shutil.unpack_archive(archive_path, unpack_dir)
         else:
             from utils.archive_utils import extract_any_archive
 
             extract_any_archive(archive_path, unpack_dir)
-        content_path = unpack_dir
-        unpacked_items = os.listdir(unpack_dir)
-        if len(unpacked_items) == 1 and os.path.isdir(
-            os.path.join(unpack_dir, unpacked_items[0])
-        ):
-            content_path = os.path.join(unpack_dir, unpacked_items[0])
-        return content_path
+        return unwrap_single_directory_chain(unpack_dir)
 
     def __init__(self, main_window, url: str) -> None:
         super().__init__(main_window)
@@ -193,7 +195,7 @@ class UrlInstallThread(BaseInstallWorker):
     @staticmethod
     def _classify_filename(name: str) -> str | None:
         n = name.replace("\\", "/").strip("/")
-        if n == "theme.json" or n.endswith("/theme.json"):
+        if any(n == filename or n.endswith(f"/{filename}") for filename in THEME_CONFIG_FILENAMES):
             return "theme"
         if n == MOD_CONFIG_FILENAME or n.endswith(f"/{MOD_CONFIG_FILENAME}"):
             return "mod"
@@ -251,19 +253,16 @@ class UrlInstallThread(BaseInstallWorker):
     def _detect_content_type_from_extracted(self, archive_path: str) -> str | None:
         with tempfile.TemporaryDirectory(prefix="dh-detect-type-") as unpack_dir:
             try:
-                from utils.archive_utils import extract_any_archive
+                from utils.archive_utils import (
+                    extract_any_archive,
+                    unwrap_single_directory_chain,
+                )
 
                 extract_any_archive(archive_path, unpack_dir)
-                items = os.listdir(unpack_dir)
-                content_path = (
-                    os.path.join(unpack_dir, items[0])
-                    if len(items) == 1
-                    and os.path.isdir(os.path.join(unpack_dir, items[0]))
-                    else unpack_dir
-                )
+                content_path = unwrap_single_directory_chain(unpack_dir)
                 for _root, _, files in os.walk(content_path):
                     for f in files:
-                        if f == "theme.json":
+                        if f in THEME_CONFIG_FILENAMES:
                             return "theme"
                         if f == MOD_CONFIG_FILENAME or check_filename_is_deltamod_info(
                             f
@@ -291,12 +290,9 @@ class UrlInstallThread(BaseInstallWorker):
                 extract_dir = os.path.join(persistent_temp_dir, "extracted")
                 os.makedirs(extract_dir, exist_ok=True)
                 extract_archive(preserved_archive_path, extract_dir)
-                content_path = extract_dir
-                contents = os.listdir(extract_dir)
-                if len(contents) == 1 and os.path.isdir(
-                    os.path.join(extract_dir, contents[0])
-                ):
-                    content_path = os.path.join(extract_dir, contents[0])
+                from utils.archive_utils import unwrap_single_directory_chain
+
+                content_path = unwrap_single_directory_chain(extract_dir)
                 self.status.emit(
                     tr("status.manual_install_ready"), UI_COLORS["status_info"]
                 )
@@ -325,13 +321,14 @@ class UrlInstallThread(BaseInstallWorker):
             config_dir = self.main_window.app_state.config_dir
             app_state = self.main_window.app_state
             settings_service = self.main_window.settings_service
-            theme_json_path = os.path.join(theme_dir, "theme.json")
-            if not os.path.exists(theme_json_path):
-                raise ValueError("Missing theme.json")
+            theme_json_path = find_theme_config_path(theme_dir)
+            if not theme_json_path:
+                raise ValueError(f"Missing {THEME_CONFIG_FILENAME}")
             with open(theme_json_path, encoding="utf-8") as f:
                 theme_settings = json.load(f)
             for key, value in theme_settings.items():
-                app_state.local_config[key] = value
+                if key != "config_version":
+                    app_state.local_config[key] = value
             for old_file in [
                 "custom_background_music.mp3",
                 "custom_background_music.wav",
@@ -357,11 +354,7 @@ class UrlInstallThread(BaseInstallWorker):
         with tempfile.TemporaryDirectory(prefix="dh-theme-extract-") as unpack_dir:
             try:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
-                theme_json_path = None
-                for root, _dirs, files in os.walk(content_path):
-                    if "theme.json" in files:
-                        theme_json_path = os.path.join(root, "theme.json")
-                        break
+                theme_json_path = find_theme_config_path(content_path)
                 if not theme_json_path:
                     raise AppError("themes.archive_not_found")
                 self._install_theme_from_dir(os.path.dirname(theme_json_path))

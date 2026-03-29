@@ -24,6 +24,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config.config import MOD_VERSIONS_DIR
+from presentation.drag_drop import (
+    collect_drop_file_paths,
+    collect_drop_urls,
+)
 from services.localization_service import tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
@@ -85,14 +89,14 @@ def _clear_mod_folder(mod_folder: str):
 
 def _resolve_content_path(temp_dir: str) -> str:
     """Resolve single directory layers and convert deltamod if present."""
+    from utils.file_utils import has_deltamod_info_file
+
     content_path = temp_dir
     contents = os.listdir(temp_dir)
     if len(contents) == 1:
         single = os.path.join(temp_dir, contents[0])
         if os.path.isdir(single):
             content_path = single
-    from utils.file_utils import has_deltamod_info_file
-
     files_in_root = os.listdir(content_path)
     if has_deltamod_info_file(files_in_root):
         from adapters.deltamod_adapter import DeltamodConverter
@@ -289,6 +293,7 @@ class ModVersionsDialog(QDialog):
         self._mod_service = self._resolve_mod_service(parent)
         self._version_widgets: dict[str, _VersionItemWidget] = {}
         self._worker: _ModVersionWorker | None = None
+        self._import_queue: list[tuple[str, str]] = []
         self.setWindowTitle(tr("mod_versions.title"))
         self.setMinimumSize(500, 380)
         self.resize(540, 460)
@@ -508,15 +513,23 @@ class ModVersionsDialog(QDialog):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if dialog.import_method == "file" and dialog.selected_file:
-            self._import_from_path(dialog.selected_file)
+            self._import_from_path(dialog.selected_file, prompt_for_name=True)
         elif dialog.import_method == "url" and dialog.selected_url:
-            self._start_url_worker(dialog.selected_url)
+            self._start_url_worker(dialog.selected_url, prompt_for_name=True)
 
-    def _import_from_path(self, archive_path: str):
+    def _import_from_path(
+        self,
+        archive_path: str,
+        version_name: str | None = None,
+        prompt_for_name: bool = True,
+    ):
         base = os.path.splitext(os.path.basename(archive_path))[0]
-        version_name = self._ask_version_name(default=base)
-        if not version_name:
-            return
+        if version_name is None:
+            version_name = (
+                self._ask_version_name(default=base) if prompt_for_name else base
+            )
+            if not version_name:
+                return
         self._set_busy(True)
         self._progress_bar.setValue(50)
         try:
@@ -529,15 +542,24 @@ class ModVersionsDialog(QDialog):
             QMessageBox.warning(self, tr("errors.error"), str(e))
         finally:
             self._set_busy(False)
+            self._process_next_import()
 
-    def _start_url_worker(self, url: str, version_name: str | None = None):
+    def _start_url_worker(
+        self,
+        url: str,
+        version_name: str | None = None,
+        prompt_for_name: bool = True,
+    ):
         if self._is_busy():
+            self._import_queue.append(("url", url))
             return
         if not version_name:
             base = (
                 os.path.splitext(os.path.basename(url.split("?")[0]))[0] or "download"
             )
-            version_name = self._ask_version_name(default=base)
+            version_name = (
+                self._ask_version_name(default=base) if prompt_for_name else base
+            )
             if not version_name:
                 return
         self._set_busy(True)
@@ -555,8 +577,21 @@ class ModVersionsDialog(QDialog):
         self._set_busy(False)
         if success:
             self._populate()
+            self._process_next_import()
         elif error and error != "cancelled":
             QMessageBox.warning(self, tr("errors.error"), error)
+            self._process_next_import()
+        else:
+            self._process_next_import()
+
+    def _process_next_import(self):
+        if self._is_busy() or not self._import_queue:
+            return
+        kind, value = self._import_queue.pop(0)
+        if kind == "file":
+            self._import_from_path(value, prompt_for_name=False)
+        elif kind == "url":
+            self._start_url_worker(value, prompt_for_name=False)
 
     def _on_download_from_gb(self):
         if self._is_busy():
@@ -712,31 +747,37 @@ class ModVersionsDialog(QDialog):
             QMessageBox.warning(self, tr("errors.error"), str(e))
 
     def dragEnterEvent(self, event):
-        md = event.mimeData()
-        if md.hasUrls() or md.hasText():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if self._is_busy():
+        if getattr(event, "source", lambda: None)() is not None:
+            event.ignore()
             return
         md = event.mimeData()
-        if md.hasUrls():
-            for u in md.urls():
-                path = u.toLocalFile()
-                if path and os.path.isfile(path):
-                    event.acceptProposedAction()
-                    self._import_from_path(path)
-                    return
-                s = u.toString()
-                if s.startswith(("http://", "https://")):
-                    event.acceptProposedAction()
-                    self._start_url_worker(s)
-                    return
-        if md.hasText():
-            text = md.text().strip()
-            if text.startswith(("http://", "https://")):
-                event.acceptProposedAction()
-                self._start_url_worker(text)
+        if collect_drop_file_paths(md) or collect_drop_urls(md):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if getattr(event, "source", lambda: None)() is not None:
+            event.ignore()
+            return
+        if self._is_busy():
+            md = event.mimeData()
+            for path in collect_drop_file_paths(md):
+                self._import_queue.append(("file", path))
+            for url in collect_drop_urls(md):
+                self._import_queue.append(("url", url))
+            event.acceptProposedAction()
+            return
+        md = event.mimeData()
+        paths = collect_drop_file_paths(md)
+        urls = collect_drop_urls(md)
+        if paths or urls:
+            event.acceptProposedAction()
+            for path in paths:
+                self._import_queue.append(("file", path))
+            for url in urls:
+                self._import_queue.append(("url", url))
+            self._process_next_import()
 
     def closeEvent(self, event):
         if self._worker and self._worker.isRunning():

@@ -6,7 +6,6 @@ import os
 import re
 import shutil
 import uuid
-import zipfile
 from typing import Any
 
 from defusedxml import ElementTree
@@ -161,6 +160,10 @@ class DeltamodConverter:
         relative_path = dir_part.replace("\\", "/") + "/" if dir_part else ""
         return (chapter_key, relative_path, filename)
 
+    @staticmethod
+    def _build_stored_path(relative_path: str | None, filename: str) -> str:
+        return f"{relative_path}{filename}" if relative_path else filename
+
     def _validate_source(self) -> bool:
         info_path = find_deltamod_info_file(self.source_path)
         xml_path = os.path.join(self.source_path, "modding.xml")
@@ -207,7 +210,7 @@ class DeltamodConverter:
         return True
 
     def _collect_patches(self) -> list:
-        if self.modding_xml is None:
+        if self.modding_xml is None or not hasattr(self.modding_xml, "tag"):
             return []
         if self.modding_xml.tag == "patch":
             return [self.modding_xml]
@@ -279,6 +282,8 @@ class DeltamodConverter:
         }
 
         if self.gamebanana_metadata:
+            from adapters.gamebanana_adapter import GameBananaAPI
+
             if self.gamebanana_metadata.get("icon"):
                 config["icon"] = self.gamebanana_metadata["icon"]
             if self.gamebanana_metadata.get("tags"):
@@ -289,6 +294,16 @@ class DeltamodConverter:
                         if tag and tag not in existing_tags:
                             existing_tags.append(tag)
                     config["tags"] = existing_tags
+            category_tag = GameBananaAPI.category_to_tag(
+                self.gamebanana_metadata.get("category")
+            )
+            if category_tag:
+                existing_tags = config.get("tags", [])
+                if not isinstance(existing_tags, list):
+                    existing_tags = [existing_tags] if existing_tags else []
+                if category_tag not in existing_tags:
+                    existing_tags.append(category_tag)
+                config["tags"] = existing_tags
 
         return build_mod_config_data(config)
 
@@ -314,51 +329,14 @@ class DeltamodConverter:
             content_key = self._normalize_content_key(chapter_key)
             if content_key not in files_structure:
                 files_structure[content_key] = {}
+            stored_path = self._build_stored_path(relative_path, filename)
             if patch_type == "xdelta":
-                files_structure[content_key]["data_file_url"] = os.path.basename(
-                    patch_file
-                )
+                files_structure[content_key]["data_file_path"] = stored_path
             elif patch_type == "override":
-                if "extra_files" not in files_structure[content_key]:
-                    files_structure[content_key]["extra_files"] = {}
-                archive_key = (
-                    (relative_path + filename).replace("/", "_").replace("\\", "_")
+                files_structure[content_key].setdefault("extra_files", []).append(
+                    stored_path
                 )
-                if not archive_key:
-                    archive_key = filename
-                if archive_key not in files_structure[content_key]["extra_files"]:
-                    files_structure[content_key]["extra_files"][archive_key] = []
-                archive_name = f"extra_file_{archive_key}.zip"
-                if (
-                    archive_name
-                    not in files_structure[content_key]["extra_files"][archive_key]
-                ):
-                    files_structure[content_key]["extra_files"][archive_key].append(
-                        archive_name
-                    )
         return files_structure
-
-    def _create_extra_file_archive(
-        self, source_file: str, archive_path: str, relative_path: str, filename: str
-    ) -> bool:
-        try:
-            if not os.path.exists(source_file):
-                logging.error(f"Source file does not exist: {source_file}")
-                return False
-            os.makedirs(os.path.dirname(archive_path), exist_ok=True)
-            with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                archive_internal_path = relative_path + filename
-                zipf.write(source_file, archive_internal_path)
-            logging.debug(
-                f"Created extra_file archive: {archive_path} with internal path: {archive_internal_path}"
-            )
-            return True
-        except Exception as e:
-            logging.error(
-                f"Failed to create extra_file archive {archive_path}: {e}",
-                exc_info=True,
-            )
-            return False
 
     def _resolve_patch_file(self, patch_file_rel: str) -> str | None:
         for variant in (
@@ -409,12 +387,7 @@ class DeltamodConverter:
                     f"DeltamodConverter: could not determine chapter for path: {to_path}"
                 )
                 continue
-            content_key = self._normalize_content_key(chapter_key)
-            from utils.file_utils import get_chapter_folder_name
-
-            chapter_dir_name = get_chapter_folder_name(content_key, game=self._target_game)
-            target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
-            os.makedirs(target_chapter_dir, exist_ok=True)
+            stored_path = self._build_stored_path(relative_path, filename)
             if patch_type == "override":
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
@@ -422,34 +395,25 @@ class DeltamodConverter:
                         f"DeltamodConverter: override patch file not found: {patch_file_rel}"
                     )
                     continue
-                archive_key = (
-                    (relative_path + filename).replace("/", "_").replace("\\", "_")
+                target_override_path = os.path.join(
+                    target_mod_dir, stored_path.replace("/", os.sep)
                 )
-                if not archive_key:
-                    archive_key = filename
-                archive_name = f"extra_file_{archive_key}.zip"
-                archive_path = os.path.join(target_chapter_dir, archive_name)
-                if self._create_extra_file_archive(
-                    patch_file_abs, archive_path, relative_path, filename
-                ):
-                    logging.info(
-                        f"Created override archive: {archive_name} for chapter {chapter_key} with path {relative_path}{filename}"
-                    )
-                else:
-                    logging.error(f"Failed to create override archive for: {to_path}")
+                os.makedirs(os.path.dirname(target_override_path), exist_ok=True)
+                shutil.copy2(patch_file_abs, target_override_path)
             elif patch_type == "xdelta":
-                patch_file_abs = os.path.join(self.source_path, patch_file_rel)
-                if not os.path.exists(patch_file_abs):
+                patch_file_abs = self._resolve_patch_file(patch_file_rel)
+                if not patch_file_abs:
                     logging.warning(
-                        f"DeltamodConverter: xdelta patch file not found: {patch_file_abs}"
+                        f"DeltamodConverter: xdelta patch file not found: {patch_file_rel}"
                     )
                     continue
                 target_patch_path = os.path.join(
-                    target_chapter_dir, os.path.basename(patch_file_abs)
+                    target_mod_dir, stored_path.replace("/", os.sep)
                 )
+                os.makedirs(os.path.dirname(target_patch_path), exist_ok=True)
                 shutil.copy2(patch_file_abs, target_patch_path)
                 logging.info(
-                    f"Copied xdelta patch: {os.path.basename(patch_file_abs)} for chapter {chapter_key}, target: {to_path}"
+                    f"Copied xdelta patch: {os.path.basename(patch_file_abs)} for chapter {chapter_key}, target: {stored_path}"
                 )
             else:
                 logging.warning(f"DeltamodConverter: unknown patch type: {patch_type}")

@@ -332,6 +332,13 @@ class SettingsUiController:
             self.app._num_main_tabs_visible = main_tabs_visible
 
             if tab_widget.count() > 0:
+                if hasattr(self.app, "_restore_main_tabs_bar"):
+                    self.app._restore_main_tabs_bar()
                 tab_widget.setCurrentIndex(min(current_index, tab_widget.count() - 1))
+            elif hasattr(self.app, "_show_empty_main_tabs_placeholder"):
+                self.app._show_empty_main_tabs_placeholder()
         finally:
             self.app._suppress_tab_handlers = old_suppress
+
+
+SettingsController = SettingsUiController

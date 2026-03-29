@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QDialog, QHBoxLayout, QMessageBox, QPushButton, QVBo
 
 from config.config import MOD_CONFIG_FILENAME
 from services.localization_service import tr
-from utils.archive_utils import extract_archive
+from utils.archive_utils import extract_archive, unwrap_single_directory_chain
 from utils.file_utils import find_deltamod_info_file, save_json
 from utils.mod_utils import get_mod_id
 
@@ -175,32 +175,6 @@ class ModImportExportController:
                         )
                         config_path = target_config_path
                         config_updated = False
-                        if "files" in config:
-                            for chapter_key, chapter_data in config["files"].items():
-                                from utils.file_utils import get_chapter_folder_name
-
-                                folder_name = get_chapter_folder_name(
-                                    chapter_key, game=config.get("game")
-                                )
-                                if not folder_name:
-                                    continue
-                                chapter_folder = os.path.join(
-                                    target_mod_dir, folder_name
-                                )
-                                if os.path.exists(
-                                    chapter_folder
-                                ) and not chapter_data.get("data_file_url"):
-                                    from utils.patching.mod_content_utils import (
-                                        find_ready_data_win_files,
-                                    )
-
-                                    if files := find_ready_data_win_files(
-                                        chapter_folder
-                                    ):
-                                        chapter_data["data_file_url"] = (
-                                            os.path.basename(files[0])
-                                        )
-                                        config_updated = True
                         icon_path = os.path.join(target_mod_dir, "_icon.png")
                         if not os.path.exists(icon_path):
                             icon_path = os.path.join(target_mod_dir, "icon.png")
@@ -213,9 +187,9 @@ class ModImportExportController:
                             config_updated = True
                         from utils.mod_config_parser import normalize_mod_config_data
 
-                        config_updated = (
-                            normalize_mod_config_data(config) or config_updated
-                        )
+                        config_updated = normalize_mod_config_data(
+                            config, mod_root_path=target_mod_dir
+                        ) or config_updated
                         if config_updated:
                             save_json(config_path, config, indent=2)
                         self._refresh_mod_list()
@@ -349,36 +323,6 @@ class ModImportExportController:
                 "error", "errors.error", tr("mods.installation_error", error=str(e))
             )
 
-    def _open_manual_install_dialog(
-        self, prepared_path, source_file_path, temp_dir, on_accept=None
-    ):
-        from services.game_detection_service import get_game_type_string
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-
-        initial_game_type = None
-        if self.app_state and hasattr(self.app_state, "game_mode"):
-            initial_game_type = get_game_type_string(self.app_state.game_mode)
-        dialog = ManualModInstallDialog(
-            self.app_window,
-            prepared_path,
-            gamebanana_metadata=None,
-            source_file_path=source_file_path,
-            initial_game_type=initial_game_type,
-        )
-        dialog.temp_dir_to_cleanup = temp_dir
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            if on_accept:
-                on_accept()
-            else:
-                self._refresh_mod_list()
-            QMessageBox.information(
-                self.app_window,
-                tr("dialogs.success"),
-                tr("dialogs.mod_created_successfully"),
-            )
-            return True
-        return False
-
     def _on_manual_install_required(
         self, prepared_path: str, archive_path: str, temp_dir: str
     ):
@@ -390,8 +334,19 @@ class ModImportExportController:
 
                 refresh_ui_after_mod_install(self.app_window, self.mod_service)
 
-            self._open_manual_install_dialog(
-                prepared_path, archive_path, temp_dir, on_accept=_on_accept
+            presenter = getattr(self.app_window, "pizza_oven_conversion_presenter", None)
+            if presenter is None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return
+            presenter.prompt_with_manual_options(
+                self.app_window,
+                error_title=tr("errors.mod_not_compatible_title"),
+                error_text=tr("errors.mod_requires_manual_installation"),
+                informative_text=tr("dialogs.manual_install_available"),
+                prepared_path=prepared_path,
+                source_file_path=archive_path,
+                temp_dir=temp_dir,
+                on_success=_on_accept,
             )
         except Exception as e:
             logging.error(
@@ -407,27 +362,27 @@ class ModImportExportController:
     def _show_import_error_with_manual_install(
         self, file_path: str, error_message: str
     ):
-        msg_box = QMessageBox(self.app_window)
-        msg_box.setIcon(QMessageBox.Icon.Critical)
-        msg_box.setWindowTitle(tr("errors.error"))
-        msg_box.setText(error_message)
-        msg_box.setInformativeText(tr("dialogs.manual_install_available"))
-        manual_install_btn = msg_box.addButton(
-            tr("ui.manual_install"), QMessageBox.ButtonRole.AcceptRole
-        )
-        ok_btn = msg_box.addButton(tr("buttons.ok"), QMessageBox.ButtonRole.RejectRole)
-        msg_box.setDefaultButton(ok_btn)
-        msg_box.exec()
-        if msg_box.clickedButton() == manual_install_btn:
-            self._start_manual_install_from_file(file_path)
-
-    def _start_manual_install_from_file(self, file_path: str):
         try:
             prepared_path, temp_dir = self._prepare_local_files_for_manual_install(
                 file_path
             )
-            if prepared_path:
-                self._open_manual_install_dialog(prepared_path, file_path, temp_dir)
+            if not prepared_path:
+                if temp_dir:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                return
+            presenter = getattr(self.app_window, "pizza_oven_conversion_presenter", None)
+            if presenter is None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return
+            presenter.prompt_with_manual_options(
+                self.app_window,
+                error_title=tr("errors.error"),
+                error_text=error_message,
+                informative_text=tr("dialogs.manual_install_available"),
+                prepared_path=prepared_path,
+                source_file_path=file_path,
+                temp_dir=temp_dir,
+            )
         except Exception as e:
             logging.error(f"Manual install from file failed: {e}", exc_info=True)
             QMessageBox.critical(
@@ -436,7 +391,9 @@ class ModImportExportController:
                 tr("errors.manual_install_failed", error=str(e)),
             )
 
-    def _prepare_local_files_for_manual_install(self, file_path: str) -> str:
+    def _prepare_local_files_for_manual_install(
+        self, file_path: str
+    ) -> tuple[str, str]:
         temp_dir = tempfile.mkdtemp(prefix="deltahub_manual_install_")
         try:
             return (self._materialize_local_import(file_path, temp_dir), temp_dir)
@@ -448,11 +405,7 @@ class ModImportExportController:
 
     def _materialize_local_import(self, file_path: str, temp_dir: str) -> str:
         if os.path.isdir(file_path):
-            content_path = file_path
-            contents = os.listdir(file_path)
-            if len(contents) == 1 and os.path.isdir(os.path.join(file_path, contents[0])):
-                content_path = os.path.join(file_path, contents[0])
-            return content_path
+            return unwrap_single_directory_chain(file_path)
         try:
             extract_archive(file_path, temp_dir)
         except shutil.ReadError:
@@ -461,11 +414,7 @@ class ModImportExportController:
             raise ValueError(
                 f"_materialize_local_import failed to extract archive '{file_path}': {exc}"
             ) from exc
-        content_path = temp_dir
-        contents = os.listdir(temp_dir)
-        if len(contents) == 1 and os.path.isdir(os.path.join(temp_dir, contents[0])):
-            content_path = os.path.join(temp_dir, contents[0])
-        return content_path
+        return unwrap_single_directory_chain(temp_dir)
 
     def _on_mod_install_finished(self, success: bool, message: str):
         self.app_state.reset_install_state()

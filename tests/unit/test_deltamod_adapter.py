@@ -11,6 +11,7 @@ def _make_converter(metadata: dict, gamebanana_metadata: dict | None = None) -> 
 
 
 def test_generate_config_uses_deltamod_game_mapping_for_supported_single_tab_games():
+    """Checks that generateing config uses deltamod game mapping for supported single tab games."""
     converter = _make_converter(
         {
             "metadata": {
@@ -23,12 +24,13 @@ def test_generate_config_uses_deltamod_game_mapping_for_supported_single_tab_gam
 
     config = converter._generate_config_json()
 
-    assert config["game"] == "undertale"
-    assert config["files"] == {}
-    assert "game_version" not in config
+    assert config["metadata"]["game"] == "undertale"
+    assert config.get("files", {}) == {}
+    assert "game_version" not in config["metadata"]
 
 
 def test_generate_config_uses_deltamod_game_mapping_for_pizzatower():
+    """Checks that generateing config uses deltamod game mapping for pizzatower."""
     converter = _make_converter(
         {
             "metadata": {
@@ -41,11 +43,12 @@ def test_generate_config_uses_deltamod_game_mapping_for_pizzatower():
 
     config = converter._generate_config_json()
 
-    assert config["game"] == "pizzatower"
-    assert "game_version" not in config
+    assert config["metadata"]["game"] == "pizzatower"
+    assert "game_version" not in config["metadata"]
 
 
 def test_generate_config_keeps_deltarune_target_version_only_for_deltarune():
+    """Checks that generateing config keeps deltarune target version only for deltarune."""
     converter = _make_converter(
         {
             "metadata": {
@@ -59,11 +62,12 @@ def test_generate_config_keeps_deltarune_target_version_only_for_deltarune():
 
     config = converter._generate_config_json()
 
-    assert config["game"] == "deltarune"
-    assert config["game_version"] == "1.04"
+    assert config["metadata"]["game"] == "deltarune"
+    assert config["metadata"]["game_version"] == "1.04"
 
 
 def test_generate_files_structure_uses_single_tab_game_key():
+    """Checks that generateing files structure uses single tab game key."""
     converter = _make_converter(
         {
             "metadata": {
@@ -85,10 +89,11 @@ def test_generate_files_structure_uses_single_tab_game_key():
     files = converter._generate_files_structure(patches)
 
     assert list(files) == ["undertaleyellow"]
-    assert files["undertaleyellow"]["data_file_url"] == "patch.xdelta"
+    assert files["undertaleyellow"]["data_file_path"] == "patch.xdelta"
 
 
 def test_generate_config_ignores_gamebanana_metadata_game():
+    """Checks that generateing config ignores gamebanana metadata game."""
     converter = _make_converter(
         {
             "metadata": {
@@ -102,10 +107,11 @@ def test_generate_config_ignores_gamebanana_metadata_game():
 
     config = converter._generate_config_json()
 
-    assert config["game"] == "undertale"
+    assert config["metadata"]["game"] == "undertale"
 
 
 def test_process_files_copies_root_docs(tmp_path):
+    """Checks that processing files copies root docs."""
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "README.md").write_text("# Guide", encoding="utf-8")

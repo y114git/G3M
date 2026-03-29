@@ -13,7 +13,7 @@ from utils.path_utils import find_chapter_resource_dir, resolve_game_executable
 
 
 class TestGameLaunchSimulation:
-
+    """Tests for game launch simulation."""
     @pytest.fixture
     def mock_game_executable(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'game')
@@ -38,26 +38,31 @@ class TestGameLaunchSimulation:
         return game_dir
 
     def test_resolve_game_executable_deltarune(self, mock_game_executable):
+        """Checks that resolving game executable deltarune."""
         exe_path = resolve_game_executable(mock_game_executable, 'deltarune')
         assert exe_path is not None
         assert 'DELTARUNE' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_resolve_game_executable_undertale(self, mock_game_executable):
+        """Checks that resolving game executable undertale."""
         exe_path = resolve_game_executable(mock_game_executable, 'undertale')
         assert exe_path is not None
         assert 'UNDERTALE' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_resolve_game_executable_pizzatower(self, mock_game_executable):
+        """Checks that resolving game executable pizzatower."""
         exe_path = resolve_game_executable(mock_game_executable, 'pizzatower')
         assert exe_path is not None
         assert 'PIZZATOWER' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_resolve_game_executable_sugaryspire(self, mock_game_executable):
+        """Checks that resolving game executable sugaryspire."""
         exe_path = resolve_game_executable(mock_game_executable, 'sugaryspire')
         assert exe_path is not None
         assert 'SUGARYSPIRE' in exe_path.upper() or os.path.exists(exe_path)
 
     def test_find_chapter_resource_dir(self, temp_dir):
+        """Checks that finding chapter resource dir."""
         game_dir = os.path.join(temp_dir, 'game')
         system = platform.system()
         if system == 'Darwin':
@@ -76,6 +81,7 @@ class TestGameLaunchSimulation:
 
     @patch('services.game_detection_service.psutil.process_iter')
     def test_is_game_running_simulation(self, mock_process_iter):
+        """Checks that ising game running simulation."""
         mock_process_iter.return_value = []
         assert not is_game_running()
         mock_process = MagicMock()
@@ -83,6 +89,7 @@ class TestGameLaunchSimulation:
         mock_process_iter.return_value = [mock_process]
 
     def test_get_game_type_string(self):
+        """Checks that getting game type string."""
         from models.game_modes import (
             PizzaTowerGame,
             SugarySpireGame,
@@ -103,6 +110,7 @@ class TestGameLaunchSimulation:
         assert game_type == 'sugaryspire'
 
     def test_get_game_name_string(self):
+        """Checks that getting game name string."""
         from models.game_modes import (
             PizzaTowerGame,
             SugarySpireGame,
@@ -130,8 +138,9 @@ class TestGameLaunchSimulation:
 
 
 class TestPathResolution:
-
+    """Tests for game launch simulation."""
     def test_path_resolution_linux(self, temp_dir):
+        """Checks that pathing resolution linux."""
         test_path = os.path.join(temp_dir, 'test', 'path')
         os.makedirs(test_path, exist_ok=True)
         resolved = os.path.abspath(test_path)
@@ -139,6 +148,7 @@ class TestPathResolution:
         assert os.path.isabs(resolved)
 
     def test_path_resolution_windows(self, temp_dir):
+        """Checks that pathing resolution windows."""
         test_path = os.path.join(temp_dir, 'test', 'path')
         os.makedirs(test_path, exist_ok=True)
         if os.name == 'nt':
@@ -149,6 +159,7 @@ class TestPathResolution:
             assert os.path.exists(resolved)
 
     def test_path_with_special_chars(self, temp_dir):
+        """Checks that pathing  with special chars."""
         special_path = os.path.join(temp_dir, 'test path with spaces')
         os.makedirs(special_path, exist_ok=True)
         assert os.path.exists(special_path)
@@ -159,7 +170,7 @@ class TestPathResolution:
 
 
 class TestGameExecutableSimulation:
-
+    """Tests for game launch simulation."""
     @pytest.fixture
     def simulated_game_dir(self, temp_dir):
         game_dir = os.path.join(temp_dir, 'simulated_game')
@@ -195,6 +206,7 @@ class TestGameExecutableSimulation:
         return game_dir
 
     def test_simulated_game_structure(self, simulated_game_dir):
+        """Checks that simulateding game structure."""
         assert os.path.exists(simulated_game_dir)
         system = platform.system()
         if system == 'Darwin':
@@ -209,17 +221,20 @@ class TestGameExecutableSimulation:
             assert os.path.exists(os.path.join(simulated_game_dir, 'chapter1_', 'data.win'))
 
     def test_find_executable_in_simulated_dir(self, simulated_game_dir):
+        """Checks that finding executable in simulated dir."""
         exe_path = resolve_game_executable(simulated_game_dir, 'deltarune')
         assert exe_path is not None
         assert os.path.exists(exe_path) or 'DELTARUNE' in exe_path.upper()
 
     def test_find_chapter_in_simulated_dir(self, simulated_game_dir):
+        """Checks that finding chapter in simulated dir."""
         chapter_dir = find_chapter_resource_dir(simulated_game_dir, 'deltarune_1')
         assert chapter_dir is not None
         assert os.path.exists(chapter_dir)
         assert 'chapter1' in chapter_dir.lower()
 
     def test_find_chapter_resource_dir_multiple_chapters(self, temp_dir):
+        """Checks that finding chapter resource dir multiple chapters."""
         game_dir = os.path.join(temp_dir, 'game')
         system = platform.system()
         if system == 'Darwin':
@@ -240,6 +255,7 @@ class TestGameExecutableSimulation:
             assert f'chapter{chapter_num}' in resource_dir.lower()
 
     def test_pizzatower_path_validation(self, temp_dir):
+        """Checks that pizzatowering path validation."""
         from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
@@ -272,6 +288,7 @@ class TestGameExecutableSimulation:
         assert is_valid is True
 
     def test_pizzatower_custom_executable_validation(self, temp_dir):
+        """Checks that pizzatowering custom executable validation."""
         from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)
@@ -304,6 +321,7 @@ class TestGameExecutableSimulation:
         assert is_valid is True
 
     def test_sugaryspire_path_validation(self, temp_dir):
+        """Checks that sugaryspireing path validation."""
         from services.game_detection_service import is_valid_game_path
         game_dir = os.path.join(temp_dir, 'game')
         os.makedirs(game_dir, exist_ok=True)

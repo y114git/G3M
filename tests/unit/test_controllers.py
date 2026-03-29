@@ -1,13 +1,16 @@
 import os
 import tempfile
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 
 class TestModOperationsController:
+    """Tests for controllers."""
     def test_mod_operations_controller_initialization(
         self, app_state, feedback_service
     ):
+        """Checks that moding operations controller initialization."""
         from controllers.mod_operations_controller import ModOperationsController
         from services.mod_service import ModManager
 
@@ -25,9 +28,11 @@ class TestModOperationsController:
 
 
 class TestLibraryDisplayController:
+    """Tests for controllers."""
     def test_library_display_controller_initialization(
         self, app_state, feedback_service
     ):
+        """Checks that librarying display controller initialization."""
         from controllers.library_display_controller import LibraryDisplayController
         from services.localization_service import localization_service
         from services.mod_service import ModManager
@@ -58,6 +63,7 @@ class TestLibraryDisplayController:
     def test_library_display_skips_refresh_for_unchanged_valid_cached_view(
         self, app_state, feedback_service
     ):
+        """Checks that librarying display skips refresh for unchanged valid cached view."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -94,6 +100,7 @@ class TestLibraryDisplayController:
     def test_library_display_refreshes_when_installed_cache_is_invalid(
         self, app_state, feedback_service
     ):
+        """Checks that librarying display refreshes when installed cache is invalid."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -125,9 +132,66 @@ class TestLibraryDisplayController:
         controller.update_display()
         controller.refresh_async.assert_called_once()
 
+    def test_library_display_refresh_async_accepts_non_qobject_controller_parent(
+        self, app_state, feedback_service
+    ):
+        """Checks that librarying display refresh async accepts non qobject controller parent."""
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.chapter_mode_checkbox.isChecked.return_value = False
+        app_window._installed_scan_thread = None
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = []
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        controller.update_display_from_list = Mock()
+
+        def _slow_scan():
+            time.sleep(0.2)
+            return []
+
+        mod_service.get_installed_mods_list.side_effect = _slow_scan
+        controller.refresh_async()
+
+        assert app_window._installed_scan_thread is not None
+        controller.update_display_from_list.assert_not_called()
+        app_window._installed_scan_thread.wait(1000)
+
+    def test_library_display_clears_summary_when_selected_mod_disappears(
+        self, app_state, feedback_service
+    ):
+        """Checks that librarying display clears summary when selected mod disappears."""
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.mod_summary_panel = Mock()
+        app_window.installed_mods_layout.count.return_value = 1
+        app_window.installed_mods_layout.itemAt.return_value = None
+        app_window.game_launch = Mock()
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        app_window.mod_summary_panel._current_mod = Mock()
+
+        controller._refresh_summary_from_selection()
+
+        app_window.mod_summary_panel.show_empty.assert_called_once()
+
 
 class TestModImportExportController:
+    """Tests for controllers."""
     def test_materialize_local_import_keeps_plain_files(self, temp_dir):
+        """Checks that materializeing local import keeps plain files."""
         from controllers.mod_import_export_controller import ModImportExportController
 
         source_file = os.path.join(temp_dir, "sample.png")
@@ -144,7 +208,7 @@ class TestModImportExportController:
     def test_library_sort_order_name_ascending_and_date_descending(
         self, app_state, feedback_service
     ):
-        """Default ascending=True should sort names A→Z and dates newest→oldest."""
+        """Checks that librarying sort order name ascending and date descending."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -206,10 +270,46 @@ class TestModImportExportController:
         ], f"Date sort ascending should be newest first, got {dates}"
 
 
+class TestSettingsController:
+    """Tests for controllers."""
+    def test_update_tab_visibility_shows_placeholder_when_no_main_tabs_remain(
+        self, app_state
+    ):
+        """Checks that updating tab visibility shows placeholder when no main tabs remain."""
+        from controllers.settings_controller import SettingsController
+
+        app_window = Mock()
+        app_window.main_tab_widget.count.return_value = 0
+        app_window.main_tab_widget.currentIndex.return_value = 0
+        app_window.main_tab_widget.removeTab = Mock()
+        app_window.main_tab_widget.addTab = Mock()
+        app_window.main_tab_widget.tabBar.return_value = Mock()
+        app_window._show_empty_main_tabs_placeholder = Mock()
+        app_window._restore_main_tabs_bar = Mock()
+        app_state.local_config["hide_mods_browser_tab"] = True
+        app_state.local_config["hide_library_tab"] = True
+
+        controller = SettingsController(
+            app_state=app_state,
+            feedback_service=Mock(),
+            settings_service=Mock(),
+            used_mods_service=Mock(),
+            customization_service=Mock(),
+            app_window=app_window,
+        )
+
+        controller._update_tab_visibility()
+
+        app_window._show_empty_main_tabs_placeholder.assert_called_once()
+        app_window._restore_main_tabs_bar.assert_not_called()
+
+
 class TestSearchDisplayController:
+    """Tests for controllers."""
     def test_search_display_controller_initialization(
         self, app_state, feedback_service
     ):
+        """Checks that searching display controller initialization."""
         from controllers.mod_operations_controller import ModOperationsController
         from controllers.search_display_controller import SearchDisplayController
         from services.mod_service import ModManager
@@ -245,9 +345,35 @@ class TestSearchDisplayController:
         assert hasattr(controller, "card_widget_cache")
         assert hasattr(controller, "_update_display_debounce")
 
+    def test_event_filter_queues_layout_refresh_on_viewport_show(
+        self, app_state, feedback_service
+    ):
+        """Checks that eventing filter queues layout refresh on viewport show."""
+        from PyQt6.QtCore import QEvent
+
+        from controllers.search_display_controller import SearchDisplayController
+
+        viewport = Mock()
+        scroll = Mock()
+        scroll.viewport.return_value = viewport
+        app_window = Mock(mods_browser_scroll=scroll)
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        controller._queue_layout_refresh = Mock()
+
+        controller.eventFilter(viewport, Mock(type=Mock(return_value=QEvent.Type.Show)))
+
+        controller._queue_layout_refresh.assert_called_once_with(force=True)
+
     def test_refresh_visible_layout_skips_relayout_when_grid_metrics_do_not_change(
         self, app_state, feedback_service
     ):
+        """Checks that refreshing visible layout skips relayout when grid metrics do not change."""
         from controllers.search_display_controller import SearchDisplayController
 
         controller = SearchDisplayController(
@@ -268,9 +394,46 @@ class TestSearchDisplayController:
         controller.update_pagination.assert_not_called()
         controller.ui_widget_updates_enabled.emit.assert_not_called()
 
-    def test_maybe_load_more_for_short_viewport_skips_when_tag_filter_active(
+    def test_update_display_finalizes_layout_refresh_after_processing(
         self, app_state, feedback_service
     ):
+        """Checks that update display finalizes layout refresh after processing cards."""
+        from controllers.search_display_controller import SearchDisplayController
+
+        layout = Mock()
+        layout.count.return_value = 0
+        layout.itemAt.return_value = None
+        mod_list_widget = Mock()
+        scroll = Mock()
+        scroll.viewport.return_value = Mock()
+        app_window = Mock(
+            mod_list_layout=layout,
+            mod_list_widget=mod_list_widget,
+            mods_browser_scroll=scroll,
+        )
+        app_state.filtered_mods = []
+        app_state.mods_loaded = True
+        app_state.gamebanana_loading = False
+
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        controller._sync_mod_grid_metrics = Mock(return_value=False)
+        controller._finalize_mod_list_layout_refresh = Mock()
+        controller.ui_widget_updates_enabled = Mock()
+
+        controller._do_update_display()
+
+        controller._finalize_mod_list_layout_refresh.assert_called_once_with()
+
+    def test_maybe_load_more_for_short_viewport_loads_when_tag_filter_active(
+        self, app_state, feedback_service
+    ):
+        """Checks that maybeing load more for short viewport still loads when tag filter active."""
         from controllers.search_display_controller import SearchDisplayController
 
         scroll = Mock()
@@ -278,6 +441,10 @@ class TestSearchDisplayController:
         app_window = Mock(
             mods_browser_scroll=scroll, mod_list_widget=Mock(), mod_list_layout=Mock()
         )
+        app_window.tag_textedit = Mock()
+        app_window.tag_customization = Mock()
+        app_window.tag_gameplay = Mock()
+        app_window.tag_other = Mock()
         app_window.tag_textedit.isChecked.return_value = True
         app_window.tag_customization.isChecked.return_value = False
         app_window.tag_gameplay.isChecked.return_value = False
@@ -294,13 +461,104 @@ class TestSearchDisplayController:
 
         controller._maybe_load_more_for_short_viewport()
 
-        controller._load_more_gamebanana_mods_if_needed.assert_not_called()
+        controller._load_more_gamebanana_mods_if_needed.assert_called_once_with()
+
+    def test_search_filters_include_cyop_afom_only_for_pizzatower(
+        self, app_state, feedback_service
+    ):
+        from controllers.search_display_controller import SearchDisplayController
+
+        app_window = Mock()
+        app_window.tag_textedit = Mock()
+        app_window.tag_customization = Mock()
+        app_window.tag_gameplay = Mock()
+        app_window.tag_other = Mock()
+        app_window.tag_cyop_afom = Mock()
+        app_window.show_nsfw_checkbox = Mock()
+        app_window.modgame_combo = Mock()
+        app_window.modgame_combo.currentData = Mock(return_value="pizzatower")
+        for attr in (
+            "tag_textedit",
+            "tag_customization",
+            "tag_gameplay",
+            "tag_other",
+        ):
+            getattr(app_window, attr).isChecked.return_value = False
+        app_window.tag_cyop_afom.isChecked.return_value = True
+        app_window.show_nsfw_checkbox.isChecked.return_value = False
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+
+        filters, _ = controller._build_filters_and_sort()
+        assert filters["tags"] == ["CYOP/AFOM"]
+
+        app_window.modgame_combo.currentData.return_value = "deltarune"
+        filters, _ = controller._build_filters_and_sort()
+        assert filters["tags"] == []
+
+
+class TestLibraryCyopAfomFilter:
+    def test_library_filters_include_cyop_afom_only_for_pizzatower(
+        self, app_state, feedback_service
+    ):
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.library_tag_widgets = []
+        app_window.library_tag_textedit = Mock()
+        app_window.library_tag_customization = Mock()
+        app_window.library_tag_gameplay = Mock()
+        app_window.library_tag_other = Mock()
+        app_window.library_tag_cyop_afom = Mock()
+        app_window.library_tag_gamebanana = Mock()
+        app_window.game_type_combo = Mock()
+        app_window.library_search_text = ""
+        app_window.game_launch = Mock()
+        for attr in (
+            "library_tag_textedit",
+            "library_tag_customization",
+            "library_tag_gameplay",
+            "library_tag_other",
+            "library_tag_gamebanana",
+        ):
+            getattr(app_window, attr).isChecked.return_value = False
+        app_window.library_tag_cyop_afom.isChecked.return_value = True
+        app_window.library_tag_widgets = [
+            app_window.library_tag_textedit,
+            app_window.library_tag_customization,
+            app_window.library_tag_gameplay,
+            app_window.library_tag_other,
+            app_window.library_tag_cyop_afom,
+            app_window.library_tag_gamebanana,
+        ]
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+
+        app_window.game_type_combo.currentData.return_value = "pizzatower"
+        filters, _ = controller._build_library_filters_and_sort()
+        assert filters["tags"] == ["CYOP/AFOM"]
+
+        app_window.game_type_combo.currentData.return_value = "deltarune"
+        filters, _ = controller._build_library_filters_and_sort()
+        assert filters["tags"] == []
 
 
 class TestSettingsUiController:
+    """Tests for controllers."""
     def test_settings_ui_controller_initialization(
         self, app_state, feedback_service, qapp
     ):
+        """Checks that settingsing ui controller initialization."""
         from controllers.settings_controller import SettingsUiController
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
@@ -334,7 +592,9 @@ class TestSettingsUiController:
 
 
 class TestThemeController:
+    """Tests for controllers."""
     def test_theme_controller_initialization(self, app_state, feedback_service, qapp):
+        """Checks that themeing controller initialization."""
         from controllers.theme_controller import ThemeController
         from services.customization_service import CustomizationManager
         from services.localization_service import localization_service
@@ -361,6 +621,7 @@ class TestThemeController:
     def test_apply_theme_skips_cache_invalidation_when_params_unchanged(
         self, app_state, feedback_service
     ):
+        """Checks that applying theme skips cache invalidation when params unchanged."""
         from PyQt6.QtWidgets import QApplication as RealQApplication
 
         from controllers.theme_controller import ThemeController
@@ -436,6 +697,7 @@ class TestThemeController:
     def test_apply_theme_resets_tooltip_size_cache_key(
         self, app_state, feedback_service
     ):
+        """Checks that applying theme resets tooltip size cache key."""
         from PyQt6.QtWidgets import QApplication as RealQApplication
 
         from controllers.theme_controller import ThemeController
@@ -501,6 +763,7 @@ class TestThemeController:
     def test_apply_theme_refreshes_open_version_dialogs(
         self, app_state, feedback_service
     ):
+        """Checks that applying theme refreshes open version dialogs."""
         from PyQt6.QtWidgets import QApplication as RealQApplication
 
         from controllers.theme_controller import ThemeController
@@ -577,6 +840,7 @@ class TestThemeController:
     def test_update_dynamic_elements_refreshes_theme_dependent_widgets(
         self, app_state, feedback_service
     ):
+        """Checks that updating dynamic elements refreshes theme dependent widgets."""
         from controllers.theme_controller import ThemeController
 
         settings_service = Mock()
@@ -673,6 +937,7 @@ class TestThemeController:
     def test_reload_custom_font_skips_reloading_unchanged_file(
         self, app_state, feedback_service, tmp_path
     ):
+        """Checks that reloading custom font skips reloading unchanged file."""
         from controllers.theme_controller import ThemeController
 
         font_path = tmp_path / "custom_font.ttf"
@@ -705,9 +970,11 @@ class TestThemeController:
 
 
 class TestGameLaunchController:
+    """Tests for controllers."""
     def test_game_launch_controller_initialization(
         self, app_state, feedback_service, qapp
     ):
+        """Checks that gameing launch controller initialization."""
         from controllers.game_launch_controller import GameLaunchController
         from services.customization_service import CustomizationManager
         from services.launch_service import GameLauncher
@@ -745,6 +1012,7 @@ class TestGameLaunchController:
     def test_hide_window_with_dont_hide_updates_close_text_and_border_status_color(
         self,
     ):
+        """Checks that hideing window with dont hide updates close text and border status color."""
         from controllers.game_launch_controller import GameLaunchController
         from services.localization_service import tr
 
@@ -791,9 +1059,11 @@ class TestGameLaunchController:
 
 
 class TestAppWindowRestore:
+    """Tests for controllers."""
     def test_on_window_restore_requested_uses_show_maximized_for_saved_maximized_state(
         self,
     ):
+        """Checks that oning window restore requested uses show maximized for saved maximized state."""
         from PyQt6.QtCore import Qt
 
         from app.window import AppWindow
@@ -822,3 +1092,17 @@ class TestAppWindowRestore:
         window.activateWindow.assert_called_once_with()
         window.raise_.assert_called_once_with()
         assert window._restoring_window_geometry is True
+
+    def test_restore_last_active_main_tab_clamps_saved_index(self):
+        """Checks that restoring last active main tab clamps saved index."""
+        from app.window import AppWindow
+
+        window = Mock()
+        window.main_tab_widget.count.return_value = 2
+        window.app_state.local_config = {"last_active_tab": 5}
+        window.previous_tab_index = 0
+
+        AppWindow._restore_last_active_main_tab(window)
+
+        window.main_tab_widget.setCurrentIndex.assert_called_once_with(1)
+        assert window.previous_tab_index == 1

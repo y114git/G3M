@@ -15,6 +15,9 @@ from config.config import (
     CURRENT_PLATFORM,
     GAME_DATA_FILE_EXTENSIONS,
     GAME_DATA_FILENAMES,
+    LEGACY_THEME_CONFIG_FILENAME,
+    THEME_CONFIG_FILENAME,
+    THEME_CONFIG_FILENAMES,
 )
 
 _WINDOWS_RESERVED_NAMES = {
@@ -94,6 +97,24 @@ def get_user_plugins_dir():
 
 def get_user_themes_dir():
     return os.path.join(get_user_data_root(), "themes")
+
+
+def find_theme_config_path(root_path: str) -> str | None:
+    direct_path = os.path.join(root_path, THEME_CONFIG_FILENAME)
+    if os.path.exists(direct_path):
+        return direct_path
+
+    legacy_path = os.path.join(root_path, LEGACY_THEME_CONFIG_FILENAME)
+    if os.path.exists(legacy_path):
+        return legacy_path
+
+    walker = os.walk(root_path)
+    next(walker, None)
+    for current_root, _, files in walker:
+        for filename in THEME_CONFIG_FILENAMES:
+            if filename in files:
+                return os.path.join(current_root, filename)
+    return None
 
 
 def resource_path(relative_path):

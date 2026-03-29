@@ -9,6 +9,7 @@ from services.game_registry_service import GameRegistryService
 from services.game_versions_manager import GameVersionsManager
 from services.launch_service import GameLauncher
 from services.mod_service import ModManager
+from services.pizza_oven_conversion_service import PizzaOvenConversionService
 from services.plugin_catalog_service import PluginCatalogService
 from services.plugin_install_service import PluginInstallService
 from services.plugin_runtime_service import PluginRuntimeService
@@ -34,6 +35,7 @@ class ServiceContainer:
     used_mods_service: UsedModsManager
     downloads_manager: DownloadsManager
     game_versions_manager: GameVersionsManager
+    pizza_oven_conversion_service: PizzaOvenConversionService
     plugin_state_service: PluginStateService | None
     plugin_catalog_service: PluginCatalogService | None
     plugin_runtime_service: PluginRuntimeService | None

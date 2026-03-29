@@ -8,7 +8,6 @@ import time
 from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QDialog, QMessageBox
 
 import models.mod_models as mod_models
 from config.config import MOD_CONFIG_FILENAME
@@ -24,10 +23,11 @@ from utils.file_utils import (
     save_json,
 )
 from utils.mod_config_parser import (
+    build_mod_config_data,
     normalize_mod_config_data,
     parse_extra_files_raw,
-    resolve_chapter_folder,
     resolve_local_icon_path,
+    resolve_mod_file_path,
 )
 from utils.mod_scan_utils import (
     ModFolderInfo,
@@ -462,12 +462,11 @@ class ModManager(QObject):
                 continue
             try:
                 normalized_key = normalize_chapter_id(file_key, game)
-                extra_files_list = parse_extra_files_raw(
-                    ch_info.get("extra_files", []), ch_info
-                )
+                extra_files_list = parse_extra_files_raw(ch_info.get("extra_files", []))
                 mod.files[normalized_key] = ModFileData(
                     description=ch_info.get("description"),
-                    data_file_url=ch_info.get("data_file_url"),
+                    data_file_path=ch_info.get("data_file_path")
+                    or ch_info.get("data_file_url"),
                     extra_files=extra_files_list,
                 )
             except Exception as e:
@@ -488,22 +487,19 @@ class ModManager(QObject):
                 )
                 continue
             normalized_key = normalize_chapter_id(file_key, game)
-            chapter_folder = resolve_chapter_folder(
-                normalized_key, mod_folder_path, game
+            data_file_path = ""
+            stored_data_path = ch_info.get("data_file_path") or ch_info.get(
+                "data_file_url"
             )
-            if not chapter_folder and mod_folder_path:
-                continue
-            data_file_url = ""
-            if ch_info.get("data_file_url") and mod_folder_path and chapter_folder:
-                data_file_url = os.path.join(chapter_folder, ch_info["data_file_url"])
+            if stored_data_path:
+                data_file_path = resolve_mod_file_path(mod_folder_path, stored_data_path)
             extra_files = parse_extra_files_raw(
                 ch_info.get("extra_files", []),
-                ch_info,
-                chapter_folder=chapter_folder if mod_folder_path else None,
+                mod_root_path=mod_folder_path if mod_folder_path else None,
             )
             mod.files[normalized_key] = ModFileData(
-                description=config_data.get("description", ""),
-                data_file_url=data_file_url,
+                description=ch_info.get("description") or config_data.get("description", ""),
+                data_file_path=data_file_path,
                 extra_files=extra_files,
             )
 
@@ -615,47 +611,22 @@ class ModManager(QObject):
             self.app_state.is_installing = False
             self.status_changed.emit(tr("status.ready"), "status_info")
             parent = self.parent()
-            msg_box = QMessageBox(parent)
-            msg_box.setIcon(QMessageBox.Icon.Information)
-            msg_box.setWindowTitle(tr("errors.mod_not_compatible_title"))
-            msg_box.setText(tr("errors.mod_requires_manual_installation"))
-            msg_box.setInformativeText(tr("dialogs.manual_install_available"))
-            manual_install_btn = msg_box.addButton(
-                tr("ui.manual_install"), QMessageBox.ButtonRole.AcceptRole
-            )
-            msg_box.addButton(tr("buttons.close"), QMessageBox.ButtonRole.RejectRole)
-            msg_box.setDefaultButton(manual_install_btn)
-            msg_box.exec()
-            if msg_box.clickedButton() != manual_install_btn:
+            presenter = getattr(parent, "pizza_oven_conversion_presenter", None)
+            if presenter is None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 return
-            from services.game_detection_service import get_game_type_string
-            from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+            from ui.utils.ui_utils import refresh_ui_after_mod_install
 
-            initial_game_type = None
-            if (
-                hasattr(parent, "app_state")
-                and parent.app_state
-                and hasattr(parent.app_state, "game_mode")
-            ):
-                initial_game_type = get_game_type_string(parent.app_state.game_mode)
-            dialog = ManualModInstallDialog(
+            presenter.prompt_with_manual_options(
                 parent,
-                prepared_path,
-                gamebanana_metadata=None,
+                error_title=tr("errors.mod_not_compatible_title"),
+                error_text=tr("errors.mod_requires_manual_installation"),
+                informative_text=tr("dialogs.manual_install_available"),
+                prepared_path=prepared_path,
                 source_file_path=archive_path,
-                initial_game_type=initial_game_type,
+                temp_dir=temp_dir,
+                on_success=lambda: refresh_ui_after_mod_install(parent, self),
             )
-            dialog.temp_dir_to_cleanup = temp_dir
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                from ui.utils.ui_utils import refresh_ui_after_mod_install
-
-                refresh_ui_after_mod_install(parent, self)
-                QMessageBox.information(
-                    parent,
-                    tr("dialogs.success"),
-                    tr("dialogs.mod_created_successfully"),
-                )
         except Exception as e:
             logging.error(
                 f"ModManager: Error handling manual install request: {e}", exc_info=True
@@ -867,7 +838,7 @@ class ModManager(QObject):
         files_data = config_data.get("files", {})
         if file_key in files_data:
             file_info = files_data[file_key]
-            if file_info.get("data_file_url") or file_info.get("extra_files"):
+            if file_info.get("data_file_path") or file_info.get("extra_files"):
                 return "ready"
         return "install"
 
@@ -1024,7 +995,19 @@ class ModManager(QObject):
     def create_mod_object_from_info(self, mod_info: dict, all_mods: list | None = None):
         mod_id = mod_info.get("id", "")
         mod_info = dict(mod_info)
+        transient_fields = {
+            "playtime_hours": mod_info.get("playtime_hours", 0.0),
+            "added_date": mod_info.get("added_date"),
+            "last_updated": mod_info.get("last_updated"),
+        }
         normalize_mod_config_data(mod_info)
+        mod_info.update(
+            {
+                key: value
+                for key, value in transient_fields.items()
+                if value not in (None, "")
+            }
+        )
         if not (mod_id and isinstance(mod_id, str) and mod_id.startswith("gb_")):
             mod_info.pop(self._BROWSER_ONLY_DATE_FIELD, None)
         files_data = mod_info.get("files", {})
@@ -1077,8 +1060,14 @@ class ModManager(QObject):
             try:
                 config_data = load_json(config_path)
                 if config_data and isinstance(config_data, dict):
-                    if normalize_mod_config_data(config_data):
-                        save_json(config_path, config_data, indent=4)
+                    if normalize_mod_config_data(
+                        config_data, mod_root_path=folder_path
+                    ):
+                        save_json(
+                            config_path,
+                            build_mod_config_data(config_data),
+                            indent=4,
+                        )
                     yield folder_name, folder_path, config_path, config_data
             except Exception as e:
                 logging.warning(
@@ -1120,14 +1109,14 @@ class ModManager(QObject):
                 }
                 metadata_updated = True
                 mod_meta = mods_metadata[mod_id]
-            cfg = dict(config_data)
-            normalize_mod_config_data(cfg)
-            cfg.pop(self._BROWSER_ONLY_DATE_FIELD, None)
             mod_folder_path = (
                 os.path.join(self.app_state.mods_dir, folder_name)
                 if folder_name
                 else ""
             )
+            cfg = dict(config_data)
+            normalize_mod_config_data(cfg, mod_root_path=mod_folder_path)
+            cfg.pop(self._BROWSER_ONLY_DATE_FIELD, None)
             if mod_folder_path:
                 resolved_icon = resolve_mod_icon(cfg, mod_folder_path)
                 if resolved_icon:
@@ -1197,7 +1186,7 @@ class ModManager(QObject):
             try:
                 _mod_id, changed = migrate_mod_metadata(config_data, mods_metadata)
                 if changed:
-                    save_json(config_path, config_data, indent=4)
+                    save_json(config_path, build_mod_config_data(config_data), indent=4)
                     updated = True
             except Exception as e:
                 logging.warning(

@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 
 class TestModInstallation:
+    """Tests for mod operations."""
     def test_install_mod_from_archive(self, app_state, feedback_service, temp_mods_dir):
+        """Checks that installing mod from archive."""
         from services.mod_service import ModManager
 
         _ = ModManager(app_state, feedback_service)
@@ -31,6 +33,7 @@ class TestModInstallation:
             os.unlink(archive_path)
 
     def test_install_mod_with_files(self, app_state, feedback_service, temp_mods_dir):
+        """Checks that installing mod with files."""
         from services.mod_service import ModManager
 
         _ = ModManager(app_state, feedback_service)
@@ -58,7 +61,9 @@ class TestModInstallation:
 
 
 class TestModRemoval:
+    """Tests for mod operations."""
     def test_remove_mod(self, app_state, feedback_service, sample_mod_folder):
+        """Checks that removing mod."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
@@ -68,7 +73,9 @@ class TestModRemoval:
 
 
 class TestModMerge:
+    """Tests for mod operations."""
     def test_merge_multiple_mods(self, app_state, feedback_service, temp_mods_dir):
+        """Checks that merging multiple mods."""
         from services.g3mtool_patching_service import G3MToolPatchingService
 
         mods = []
@@ -89,7 +96,9 @@ class TestModMerge:
 
 
 class TestModImportExport:
+    """Tests for mod operations."""
     def test_export_mod(self, app_state, feedback_service, sample_mod_folder):
+        """Checks that exporting mod."""
         from unittest.mock import Mock
 
         from controllers.mod_import_export_controller import ModImportExportController
@@ -103,6 +112,7 @@ class TestModImportExport:
         assert controller is not None
 
     def test_import_mod_from_url(self, app_state, feedback_service):
+        """Checks that importing mod from url."""
         from unittest.mock import Mock
 
         from controllers.mod_import_export_controller import ModImportExportController
@@ -117,7 +127,9 @@ class TestModImportExport:
 
 
 class TestManualInstall:
+    """Tests for mod operations."""
     def test_chapter_display_name(self, tmp_path):
+        """Checks that chaptering display name."""
         from unittest.mock import MagicMock, patch
 
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
@@ -136,6 +148,7 @@ class TestManualInstall:
             assert dialog._chapter_display_name("deltarunedemo") == "deltarunedemo"
 
     def test_chapter_folder_name(self):
+        """Checks that chaptering folder name."""
         from utils.file_utils import get_chapter_folder_name
 
         assert get_chapter_folder_name("deltarune_0") == "chapter_0"
@@ -150,6 +163,7 @@ class TestManualInstall:
         assert get_chapter_folder_name("deltarune_1") == "chapter_1"
 
     def test_instruction_file_detection(self):
+        """Checks that instructioning file detection."""
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
 
         assert ManualModInstallDialog._is_openable_doc("README.md") is True
@@ -157,6 +171,7 @@ class TestManualInstall:
         assert ManualModInstallDialog._is_openable_doc("sprite.png") is False
 
     def test_open_local_file_uses_native_open(self, tmp_path):
+        """Checks that opening local file uses native open."""
         from unittest.mock import patch
 
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
@@ -178,6 +193,7 @@ class TestManualInstall:
                 assert Path(called_url.toLocalFile()) == file_path
 
     def test_create_mod_from_files_uses_chapter_ids_as_file_keys(self, tmp_path):
+        """Checks that creating mod from files uses chapter ids as file keys."""
         from ui.dialogs.manual_install_dialog import ManualModInstallDialog
 
         source_dir = tmp_path / "prepared"
@@ -207,4 +223,5 @@ class TestManualInstall:
         config = json.loads((mod_folders[0] / "mod_config.json").read_text("utf-8"))
         assert "deltarune_4" in config["files"]
         assert "4" not in config["files"]
-        assert (mod_folders[0] / "chapter_4" / "BOSSRUSH.win").exists()
+        assert config["files"]["deltarune_4"]["data_file_path"] == "BOSSRUSH.win"
+        assert (mod_folders[0] / "BOSSRUSH.win").exists()

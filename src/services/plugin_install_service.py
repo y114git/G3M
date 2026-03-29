@@ -13,6 +13,7 @@ from services.plugin_support import (
     load_manifest,
     safe_extract_zip,
 )
+from utils.archive_utils import unwrap_single_directory_chain
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,8 @@ class PluginInstallService:
         source: str,
         catalog_plugin_version: str = "",
     ) -> str:
+        source_dir = unwrap_single_directory_chain(source_dir)
         manifest_path = os.path.join(source_dir, "plugin_config.json")
-        if not os.path.isfile(manifest_path):
-            root_entries = os.listdir(source_dir)
-            if len(root_entries) == 1:
-                single_dir = os.path.join(source_dir, root_entries[0])
-                manifest_path = os.path.join(single_dir, "plugin_config.json")
-                source_dir = single_dir
         manifest = load_manifest(manifest_path)
         if not is_plugin_manifest_compatible(manifest):
             raise PluginValidationError("incompatible_api_version")

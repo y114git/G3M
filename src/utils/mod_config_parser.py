@@ -5,13 +5,14 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
-from models.mod_models import ModExtraFile
+from config.config import CYOP_AFOM_TAG
+from models.game_modes import get_all_games
 from services.migration_service import migrate_mod_config_legacy_fields
 from utils.file_utils import normalize_chapter_id
 from utils.mod_utils import resolve_mod_icon
 
 MOD_CONFIG_VERSION = "1.0.0"
-MOD_ALLOWED_TAGS = ("textedit", "customization", "gameplay", "other")
+MOD_ALLOWED_TAGS = ("textedit", "customization", "gameplay", "other", CYOP_AFOM_TAG)
 MOD_FIELD_LIMITS = {
     "id": 50,
     "name": 50,
@@ -23,8 +24,7 @@ MOD_FIELD_LIMITS = {
     "game_version": 1000,
     "file_value": 1000,
 }
-MOD_CONFIG_KEY_ORDER = (
-    "config_version",
+MOD_METADATA_KEY_ORDER = (
     "id",
     "name",
     "version",
@@ -35,6 +35,10 @@ MOD_CONFIG_KEY_ORDER = (
     "game",
     "game_version",
     "tags",
+)
+MOD_RUNTIME_KEY_ORDER = (
+    "config_version",
+    *MOD_METADATA_KEY_ORDER,
     "files",
 )
 
@@ -43,6 +47,20 @@ def _trim_string(value, limit: int) -> str:
     if value is None:
         return ""
     return str(value).strip()[:limit]
+
+
+def _normalize_extra_file_path(path_value: str) -> str:
+    raw = str(path_value or "")
+    if not raw:
+        return ""
+    preserve_trailing_slash = raw.rstrip().endswith(("/", "\\"))
+    normalized = raw.replace("\\", "/").strip()
+    if not normalized:
+        return ""
+    if preserve_trailing_slash:
+        normalized = normalized.rstrip("/")
+        return f"{normalized}/" if normalized else ""
+    return normalized
 
 
 def _normalize_homepage(value) -> str:
@@ -58,26 +76,85 @@ def _sanitize_tags(tags_raw) -> list[str]:
         tags_raw = [tags_raw] if tags_raw else []
     result: list[str] = []
     for tag in tags_raw:
-        normalized = _trim_string(tag, 100).lower()
+        raw_tag = _trim_string(tag, 100)
+        normalized = (
+            CYOP_AFOM_TAG
+            if raw_tag.casefold() == CYOP_AFOM_TAG.casefold()
+            else raw_tag.lower()
+        )
         if normalized in MOD_ALLOWED_TAGS and normalized not in result:
             result.append(normalized)
     return result
 
 
-def _sanitize_extra_files(extra_files_raw) -> list[dict[str, str]]:
-    result: list[dict[str, str]] = []
-    for extra_file in parse_extra_files_raw(extra_files_raw, {}, as_dicts=True):
-        key = _trim_string(extra_file.get("key"), MOD_FIELD_LIMITS["file_value"])
-        url = _trim_string(extra_file.get("url"), MOD_FIELD_LIMITS["file_value"])
-        if not key or not url:
+def _sanitize_extra_files(extra_files_raw) -> list[str]:
+    result: list[str] = []
+    for extra_file in parse_extra_files_raw(extra_files_raw):
+        file_path = _normalize_extra_file_path(
+            _trim_string(extra_file, MOD_FIELD_LIMITS["file_value"])
+        )
+        if not file_path:
             continue
-        payload = {"key": key, "url": url}
-        if payload not in result:
-            result.append(payload)
+        if file_path not in result:
+            result.append(file_path)
     return result
 
 
-def _sanitize_files(files_data: dict, game: str) -> dict[str, dict]:
+def _get_metadata_value(config_data: dict, key: str):
+    metadata = config_data.get("metadata")
+    if key in config_data and config_data.get(key) not in (None, "", [], {}):
+        return config_data.get(key)
+    if isinstance(metadata, dict):
+        return metadata.get(key)
+    return config_data.get(key)
+
+
+def _get_legacy_layout_prefixes(mod_root_path: str | None) -> list[str]:
+    if not mod_root_path or not os.path.isdir(mod_root_path):
+        return []
+    known_game_dirs = {game.game_id for game in get_all_games()}
+    candidates: list[str] = []
+    for entry in sorted(os.listdir(mod_root_path)):
+        entry_path = os.path.join(mod_root_path, entry)
+        if not os.path.isdir(entry_path):
+            continue
+        if (
+            entry.startswith("chapter_")
+            or entry in {"demo", "menu", "universal"}
+            or entry in known_game_dirs
+        ):
+            candidates.append(entry)
+    return candidates
+
+
+def _migrate_legacy_layout_path(path_value: str, mod_root_path: str | None) -> str:
+    preserve_trailing_slash = str(path_value or "").rstrip().endswith(("/", "\\"))
+    normalized_path = _normalize_extra_file_path(path_value)
+    if preserve_trailing_slash and normalized_path.endswith("/"):
+        lookup_path = normalized_path[:-1]
+    else:
+        lookup_path = normalized_path
+    if not normalized_path or not mod_root_path or os.path.isabs(normalized_path):
+        return normalized_path
+    direct_path = os.path.join(mod_root_path, lookup_path)
+    if os.path.exists(direct_path):
+        return normalized_path
+    matches = []
+    for prefix in _get_legacy_layout_prefixes(mod_root_path):
+        candidate = os.path.join(mod_root_path, prefix, lookup_path)
+        if os.path.exists(candidate):
+            migrated = f"{prefix}/{lookup_path}" if lookup_path else prefix
+            if preserve_trailing_slash:
+                migrated = migrated.rstrip("/") + "/"
+            matches.append(migrated)
+    return matches[0] if len(matches) == 1 else normalized_path
+
+
+def _sanitize_files(
+    files_data: dict,
+    game: str,
+    mod_root_path: str | None = None,
+) -> dict[str, dict]:
     normalized: dict[str, dict] = {}
     if not isinstance(files_data, dict):
         return normalized
@@ -96,48 +173,69 @@ def _sanitize_files(files_data: dict, game: str) -> dict[str, dict]:
         )
         if description:
             entry["description"] = description
-        data_file_url = _trim_string(
-            ch_info.get("data_file_url"), MOD_FIELD_LIMITS["file_value"]
+        data_file_path = _trim_string(
+            ch_info.get("data_file_path") or ch_info.get("data_file_url"),
+            MOD_FIELD_LIMITS["file_value"],
         )
-        if data_file_url:
-            entry["data_file_url"] = data_file_url
+        if data_file_path:
+            entry["data_file_path"] = _migrate_legacy_layout_path(
+                data_file_path, mod_root_path
+            )
         extra_files = _sanitize_extra_files(ch_info.get("extra_files", []))
         if extra_files:
-            entry["extra_files"] = extra_files
-        if entry:
-            normalized[file_key] = entry
+            entry["extra_files"] = [
+                _migrate_legacy_layout_path(extra_file, mod_root_path)
+                for extra_file in extra_files
+                if extra_file
+            ]
+            if not entry["extra_files"]:
+                entry.pop("extra_files", None)
+        normalized[file_key] = entry
     return normalized
 
 
-def normalize_mod_config_data(config_data: dict) -> bool:
+def normalize_mod_config_data(
+    config_data: dict,
+    mod_root_path: str | None = None,
+) -> bool:
     """Normalize config keys and values to the canonical 1.0.0 schema."""
     if not isinstance(config_data, dict):
         return False
     changed = migrate_mod_config_legacy_fields(config_data)
     canonical = {
         "config_version": MOD_CONFIG_VERSION,
-        "id": _trim_string(config_data.get("id"), MOD_FIELD_LIMITS["id"]),
-        "name": _trim_string(config_data.get("name"), MOD_FIELD_LIMITS["name"]),
-        "version": _trim_string(config_data.get("version"), MOD_FIELD_LIMITS["version"])
+        "id": _trim_string(_get_metadata_value(config_data, "id"), MOD_FIELD_LIMITS["id"]),
+        "name": _trim_string(_get_metadata_value(config_data, "name"), MOD_FIELD_LIMITS["name"]),
+        "version": _trim_string(
+            _get_metadata_value(config_data, "version"), MOD_FIELD_LIMITS["version"]
+        )
         or "1.0.0",
-        "author": _trim_string(config_data.get("author"), MOD_FIELD_LIMITS["file_value"]),
-        "description": _trim_string(
-            config_data.get("description"), MOD_FIELD_LIMITS["description"]
+        "author": _trim_string(
+            _get_metadata_value(config_data, "author"), MOD_FIELD_LIMITS["file_value"]
         ),
-        "homepage": _normalize_homepage(config_data.get("homepage")),
-        "icon": _trim_string(config_data.get("icon"), MOD_FIELD_LIMITS["icon"]),
-        "game": _trim_string(config_data.get("game"), MOD_FIELD_LIMITS["game"])
+        "description": _trim_string(
+            _get_metadata_value(config_data, "description"),
+            MOD_FIELD_LIMITS["description"],
+        ),
+        "homepage": _normalize_homepage(_get_metadata_value(config_data, "homepage")),
+        "icon": _trim_string(_get_metadata_value(config_data, "icon"), MOD_FIELD_LIMITS["icon"]),
+        "game": _trim_string(_get_metadata_value(config_data, "game"), MOD_FIELD_LIMITS["game"])
         or "deltarune",
         "game_version": _trim_string(
-            config_data.get("game_version"), MOD_FIELD_LIMITS["file_value"]
+            _get_metadata_value(config_data, "game_version"),
+            MOD_FIELD_LIMITS["file_value"],
         ),
-        "tags": _sanitize_tags(config_data.get("tags")),
+        "tags": _sanitize_tags(_get_metadata_value(config_data, "tags")),
         "files": {},
     }
-    canonical["files"] = _sanitize_files(config_data.get("files", {}), canonical["game"])
+    canonical["files"] = _sanitize_files(
+        config_data.get("files", {}),
+        canonical["game"],
+        mod_root_path,
+    )
     ordered = {
         key: canonical[key]
-        for key in MOD_CONFIG_KEY_ORDER
+        for key in MOD_RUNTIME_KEY_ORDER
         if canonical[key] not in (None, "", [], {})
     }
     if list(config_data.items()) != list(ordered.items()):
@@ -148,47 +246,62 @@ def normalize_mod_config_data(config_data: dict) -> bool:
 
 
 def build_mod_config_data(config_data: dict) -> dict:
-    """Build a strict ordered mod config payload."""
+    """Build the canonical on-disk mod config payload."""
     normalized = dict(config_data or {})
     normalize_mod_config_data(normalized)
-    return normalized
+    metadata = {
+        key: normalized[key]
+        for key in MOD_METADATA_KEY_ORDER
+        if normalized.get(key) not in (None, "", [], {})
+    }
+    files = normalized.get("files", {})
+    return {
+        key: value
+        for key, value in (
+            ("config_version", MOD_CONFIG_VERSION),
+            ("metadata", metadata),
+            ("files", files),
+        )
+        if value not in (None, "", [], {})
+    }
 
 
 def parse_extra_files_raw(
     extra_files_raw,
-    ch_info: dict,
-    chapter_folder: str | None = None,
-    as_dicts: bool = False,
-) -> list:
+    mod_root_path: str | None = None,
+    ) -> list[str]:
     """Parse extra_files data from a chapter config into a list."""
-    result = []
+    result: list[str] = []
     if not extra_files_raw:
         return result
 
-    def _make_entry(key: str, url: str):
-        if as_dicts:
-            return {"key": key, "url": url}
-        return ModExtraFile(key=key, url=url)
+    def _resolve_runtime_path(file_path: str) -> str:
+        normalized_path = _normalize_extra_file_path(file_path)
+        if not normalized_path or not mod_root_path or os.path.isabs(normalized_path):
+            return normalized_path
+        preserve_trailing_slash = normalized_path.endswith("/")
+        join_path = normalized_path[:-1] if preserve_trailing_slash else normalized_path
+        resolved = os.path.normpath(os.path.join(mod_root_path, join_path))
+        return resolved + os.sep if preserve_trailing_slash else resolved
+
+    def _append_entry(file_path: str):
+        resolved_path = _resolve_runtime_path(file_path)
+        if resolved_path:
+            result.append(resolved_path)
 
     if isinstance(extra_files_raw, list):
         for ef_data in extra_files_raw:
             if isinstance(ef_data, dict):
-                url = ef_data.get("url", "")
-                if url and chapter_folder and not os.path.isabs(url):
-                    url = os.path.join(chapter_folder, url)
-                result.append(_make_entry(key=ef_data.get("key", ""), url=url))
-            elif isinstance(ef_data, ModExtraFile):
-                result.append(
-                    {"key": ef_data.key, "url": ef_data.url} if as_dicts else ef_data
-                )
+                file_path = ef_data.get("file_path") or ef_data.get("url", "")
+                if file_path:
+                    _append_entry(file_path)
+            elif isinstance(ef_data, str):
+                _append_entry(ef_data)
     elif isinstance(extra_files_raw, dict):
-        for group_key, filenames in extra_files_raw.items():
+        for _group_key, filenames in extra_files_raw.items():
             if isinstance(filenames, list):
                 for filename in filenames:
-                    url = filename
-                    if chapter_folder and filename and not os.path.isabs(filename):
-                        url = os.path.join(chapter_folder, filename)
-                    result.append(_make_entry(key=group_key, url=url))
+                    _append_entry(filename)
     return result
 
 
@@ -202,6 +315,21 @@ def resolve_chapter_folder(
 
     folder_name = get_chapter_folder_name(file_key, game)
     return os.path.join(mod_folder_path, folder_name) if folder_name else None
+
+
+def resolve_mod_file_path(mod_folder_path: str | None, stored_path: str | None) -> str:
+    """Resolve a stored mod-relative path against the mod root."""
+    if not stored_path:
+        return ""
+    path_value = str(stored_path).replace("\\", "/").strip()
+    if not path_value:
+        return ""
+    if os.path.isabs(path_value):
+        return path_value
+    if not mod_folder_path:
+        return path_value
+    migrated_path = _migrate_legacy_layout_path(path_value, mod_folder_path)
+    return os.path.normpath(os.path.join(mod_folder_path, migrated_path))
 
 
 def resolve_local_icon_path(config_data: dict, mod_folder_path: str | None) -> str:
@@ -228,15 +356,14 @@ def resolve_local_icon_path(config_data: dict, mod_folder_path: str | None) -> s
 def normalize_files_data(files_data: dict, game: str | None = None) -> dict:
     """Normalize files data for runtime models."""
     normalized = {}
-    for raw_file_key, ch_info in _sanitize_files(files_data, game or "deltarune").items():
-        extra_files_list = parse_extra_files_raw(
-            ch_info.get("extra_files", []),
-            ch_info,
-            as_dicts=True,
-        )
+    for raw_file_key, ch_info in _sanitize_files(
+        files_data, game or "deltarune"
+    ).items():
         normalized[raw_file_key] = {
             "description": ch_info.get("description"),
-            "data_file_url": ch_info.get("data_file_url"),
-            "extra_files": extra_files_list,
+            "data_file_path": ch_info.get("data_file_path"),
+            "extra_files": parse_extra_files_raw(
+                ch_info.get("extra_files", [])
+            ),
         }
     return normalized

@@ -17,6 +17,7 @@ from models.download_models import (
     UseStatus,
 )
 from services.downloads_store import DownloadsStore
+from services.localization_service import tr
 from utils.time_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -382,38 +383,57 @@ class DownloadsManager(QObject):
             return
         self._open_manual_install_dialog(record, parent_widget)
 
+    def _resolve_presenter_parent(self, parent_widget=None):
+        current = parent_widget or self.parent()
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            presenter = getattr(current, "pizza_oven_conversion_presenter", None)
+            if presenter is not None:
+                return current, presenter
+            next_parent = None
+            for attr_name in ("parentWidget", "parent"):
+                parent_getter = getattr(current, attr_name, None)
+                if not callable(parent_getter):
+                    continue
+                try:
+                    next_parent = parent_getter()
+                except Exception:
+                    next_parent = None
+                if next_parent is not None:
+                    break
+            current = next_parent
+        return parent_widget or self.parent(), None
+
     def _open_manual_install_dialog(self, record: DownloadRecord, parent_widget=None):
+        temp_dir = None
         try:
             import tempfile
 
-            from PyQt6.QtWidgets import QDialog
+            from utils.archive_utils import (
+                extract_archive,
+                unwrap_single_directory_chain,
+            )
 
-            from ui.dialogs.manual_install_dialog import ManualModInstallDialog
-            from utils.archive_utils import extract_archive
-
+            parent = parent_widget or self.parent()
             temp_dir = tempfile.mkdtemp(prefix="dh_manual_")
             extract_archive(record.file_path, temp_dir)
-            contents = os.listdir(temp_dir)
-            content_path = temp_dir
-            if len(contents) == 1 and os.path.isdir(
-                os.path.join(temp_dir, contents[0])
-            ):
-                content_path = os.path.join(temp_dir, contents[0])
+            content_path = unwrap_single_directory_chain(temp_dir)
             gb_metadata = self._build_dialog_metadata(record)
             initial_game_type = (
                 (record.metadata.get("game") or "deltarune")
                 if record.metadata
                 else None
             )
-            dialog = ManualModInstallDialog(
-                parent_widget or self.parent(),
-                content_path,
-                gamebanana_metadata=gb_metadata,
-                source_file_path=record.file_path,
-                initial_game_type=initial_game_type,
-            )
-            dialog.temp_dir_to_cleanup = temp_dir
-            if dialog.exec() == QDialog.DialogCode.Accepted:
+            parent, presenter = self._resolve_presenter_parent(parent)
+            if presenter is None:
+                logger.warning(
+                    "DownloadsManager: pizza_oven_conversion_presenter not found for Continue Setup"
+                )
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return
+
+            def _on_success():
                 record.ever_installed = True
                 record.use_status = UseStatus.READY
                 if record.delete_after_use:
@@ -425,8 +445,19 @@ class DownloadsManager(QObject):
                     self.record_updated.emit(record)
                 self._emit_badge()
                 self.use_completed.emit()
-            else:
-                shutil.rmtree(temp_dir, ignore_errors=True)
+
+            presenter.prompt_with_manual_options(
+                parent,
+                error_title=tr("errors.mod_not_compatible_title"),
+                error_text=tr("errors.mod_requires_manual_installation"),
+                informative_text=tr("dialogs.manual_install_available"),
+                prepared_path=content_path,
+                source_file_path=record.file_path,
+                temp_dir=temp_dir,
+                initial_game_type=initial_game_type,
+                gamebanana_metadata=gb_metadata,
+                on_success=_on_success,
+            )
         except Exception as e:
             logger.error(
                 "DownloadsManager: manual install dialog failed: %s", e, exc_info=True

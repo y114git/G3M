@@ -208,15 +208,11 @@ class PluginsController:
 
     def _on_download_record_removed(self, record) -> None:
         if getattr(record, "target_kind", None) != TargetKind.PLUGIN:
-            if self._loaded:
-                self.render()
             return
         self.plugin_runtime_service.scan_installed_plugins(
             resolve_catalog=self.plugin_catalog_service.is_loaded()
         )
         self.refresh_main_tabs()
-        if self._loaded:
-            self.render()
 
     def handle_external_refresh(self) -> None:
         self.plugin_runtime_service.scan_installed_plugins(

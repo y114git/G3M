@@ -574,6 +574,14 @@ def install_panel_style_handler(
     margin: int = 5,
     attr_name="_panel_style_filter",
 ):
+    if widget:
+        widget._panel_style_params = {
+            "config": config,
+            "color_key": color_key,
+            "fallback": fallback,
+            "alpha": alpha,
+            "margin": margin,
+        }
     install_widget_update_handler(
         widget,
         lambda target=widget: apply_panel_style(
@@ -586,6 +594,21 @@ def install_panel_style_handler(
         ),
         attr_name=attr_name,
     )
+
+
+def refresh_panel_style(widget) -> bool:
+    params = getattr(widget, "_panel_style_params", None)
+    if not params:
+        return False
+    apply_panel_style(
+        widget,
+        params.get("config"),
+        color_key=params.get("color_key", "background"),
+        fallback=params.get("fallback", "#282828"),
+        alpha=params.get("alpha", 128),
+        margin=params.get("margin", 5),
+    )
+    return True
 
 
 def refresh_themed_button_icon(button) -> None:

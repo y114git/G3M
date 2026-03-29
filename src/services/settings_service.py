@@ -14,7 +14,13 @@ from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
 from PyQt6.QtWidgets import QFileDialog, QWidget
 
-from config.config import APP_VERSION, UI_COLORS
+from config.config import (
+    APP_VERSION,
+    THEME_CONFIG_FILENAME,
+    THEME_CONFIG_FILENAMES,
+    THEME_CONFIG_VERSION,
+    UI_COLORS,
+)
 from config.settings_schema import (
     get_theme_color_key,
 )
@@ -23,6 +29,7 @@ from services.localization_service import LocalizationManager, localization_serv
 from services.migration_service import migrate_settings_payload
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
+from utils.path_utils import find_theme_config_path
 
 
 class SettingsManager(QObject):
@@ -289,6 +296,7 @@ class SettingsManager(QObject):
 
     def on_background_button_click(self):
         if self.app_state.local_config.get("custom_background_path"):
+            self._remove_custom_background_file()
             self.app_state.local_config["custom_background_path"] = ""
         else:
             filepath, _ = QFileDialog.getOpenFileName(
@@ -299,9 +307,47 @@ class SettingsManager(QObject):
             )
             if not filepath:
                 return
-            self.app_state.local_config["custom_background_path"] = filepath
+            try:
+                os.makedirs(self.app_state.config_dir, exist_ok=True)
+                ext = os.path.splitext(filepath)[1].lower()
+                if ext not in self._IMAGE_EXTENSIONS:
+                    self.feedback_service.show_message(
+                        "warning", "errors.error", tr("errors.invalid_image_format")
+                    )
+                    return
+                self._remove_custom_background_file()
+                dest = os.path.join(self.app_state.config_dir, f"custom_background{ext}")
+                shutil.copy2(filepath, dest)
+                self.app_state.local_config["custom_background_path"] = dest
+            except Exception as e:
+                logging.error(f"Failed to copy background: {e}", exc_info=True)
+                self.feedback_service.show_message(
+                    "warning", "errors.error", tr("errors.copy_logo_failed")
+                )
+                return
         self.write_local_config()
         self.theme_changed.emit()
+
+    def _remove_custom_background_file(self):
+        background_path = self.app_state.local_config.get("custom_background_path", "")
+        if background_path:
+            normalized_background_path = os.path.normcase(os.path.abspath(background_path))
+            normalized_config_dir = os.path.normcase(
+                os.path.abspath(self.app_state.config_dir)
+            )
+            background_name = os.path.basename(normalized_background_path)
+            if (
+                normalized_background_path.startswith(normalized_config_dir + os.sep)
+                and background_name.startswith("custom_background.")
+                and os.path.exists(normalized_background_path)
+            ):
+                with contextlib.suppress(OSError):
+                    os.remove(normalized_background_path)
+
+        self._remove_files(
+            os.path.join(self.app_state.config_dir, f"custom_background{ext}")
+            for ext in self._IMAGE_EXTENSIONS
+        )
 
     def _handle_audio_file_click(
         self,
@@ -556,10 +602,13 @@ class SettingsManager(QObject):
             self.theme_changed.emit()
 
     def build_theme_export_settings(self) -> dict:
-        settings = {
-            key: self.app_state.local_config.get(key, "")
-            for key in self._THEME_COLOR_KEYS
-        }
+        settings = {"config_version": THEME_CONFIG_VERSION}
+        settings.update(
+            {
+                key: self.app_state.local_config.get(key, "")
+                for key in self._THEME_COLOR_KEYS
+            }
+        )
         settings.update(
             {
                 key: self.app_state.local_config.get(key, False)
@@ -592,7 +641,8 @@ class SettingsManager(QObject):
     def write_theme_archive(self, theme_file_path: str):
         with zipfile.ZipFile(theme_file_path, "w") as zipf:
             zipf.writestr(
-                "theme.json", json.dumps(self.build_theme_export_settings(), indent=2)
+                THEME_CONFIG_FILENAME,
+                json.dumps(self.build_theme_export_settings(), indent=2),
             )
             for path, name in self.iter_theme_export_assets():
                 zipf.write(path, f"{name}{os.path.splitext(path)[1]}")
@@ -628,7 +678,7 @@ class SettingsManager(QObject):
     def _install_theme_from_file(self, theme_file_path: str):
         try:
             with zipfile.ZipFile(theme_file_path, "r") as zipf:
-                if "theme.json" not in zipf.namelist():
+                if not any(name in zipf.namelist() for name in THEME_CONFIG_FILENAMES):
                     raise ValueError
         except Exception:
             self.feedback_service.show_message(
@@ -659,24 +709,24 @@ class SettingsManager(QObject):
                     self.parent_widget.theme.init_theme_list()
 
         try:
-            from utils.archive_utils import extract_any_archive
+            from utils.archive_utils import (
+                extract_any_archive,
+                unwrap_single_directory_chain,
+            )
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 extract_any_archive(theme_file_path, temp_dir)
-                theme_json_path = os.path.join(temp_dir, "theme.json")
-                if not os.path.exists(theme_json_path):
-                    for root, _, files in os.walk(temp_dir):
-                        if "theme.json" in files:
-                            theme_json_path = os.path.join(root, "theme.json")
-                            break
-                    else:
-                        raise FileNotFoundError(
-                            "theme.json not found in extracted archive"
-                        )
+                content_root = unwrap_single_directory_chain(temp_dir)
+                theme_json_path = find_theme_config_path(content_root)
+                if not theme_json_path:
+                    raise FileNotFoundError(
+                        f"{THEME_CONFIG_FILENAME} not found in extracted archive"
+                    )
                 with open(theme_json_path, encoding="utf-8") as f:
                     theme_settings = json.load(f)
                 for key, value in theme_settings.items():
-                    self.app_state.local_config[key] = value
+                    if key != "config_version":
+                        self.app_state.local_config[key] = value
 
                 for base in ("background_music", "startup_sound"):
                     self._remove_files(self._get_audio_paths(base))
@@ -692,14 +742,16 @@ class SettingsManager(QObject):
                     "custom_font.": "custom_font",
                 }
 
-                for filename in os.listdir(temp_dir):
+                for filename in os.listdir(content_root):
                     for prefix, dest_name in asset_prefixes.items():
                         if filename.startswith(prefix):
                             ext = os.path.splitext(filename)[1]
                             dest_path = os.path.join(
                                 self.app_state.config_dir, f"{dest_name}{ext}"
                             )
-                            shutil.copy2(os.path.join(temp_dir, filename), dest_path)
+                            shutil.copy2(
+                                os.path.join(content_root, filename), dest_path
+                            )
                             if prefix == "background.":
                                 self.app_state.local_config[
                                     "custom_background_path"

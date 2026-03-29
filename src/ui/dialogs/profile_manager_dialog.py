@@ -1,5 +1,7 @@
 """Dialog for managing library profiles: create, duplicate, rename, delete, reorder."""
 
+import os
+
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -16,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from presentation.drag_drop import collect_drop_file_paths
 from services.localization_service import tr
 from services.profile_service import DEFAULT_PROFILE
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
@@ -23,6 +26,38 @@ from ui.common.styling import build_button_style, clamp_border_radius, get_borde
 from utils.path_utils import colored_icon
 
 _ITEM_HEIGHT = 84
+
+
+class _ProfileListWidget(QListWidget):
+    def __init__(self, owner, parent=None) -> None:
+        super().__init__(parent)
+        self._owner = owner
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if getattr(event, "source", lambda: None)() is None and collect_drop_file_paths(
+            event.mimeData()
+        ):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if getattr(event, "source", lambda: None)() is None and collect_drop_file_paths(
+            event.mimeData()
+        ):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        if getattr(event, "source", lambda: None)() is None:
+            paths = collect_drop_file_paths(event.mimeData())
+            if paths:
+                event.acceptProposedAction()
+                self._owner.import_profiles_from_paths(paths)
+                return
+        super().dropEvent(event)
 
 
 class ProfileManagerDialog(QDialog):
@@ -67,7 +102,7 @@ class ProfileManagerDialog(QDialog):
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
-        self.list_widget = QListWidget()
+        self.list_widget = _ProfileListWidget(self)
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.list_widget.setSelectionMode(
@@ -115,9 +150,8 @@ class ProfileManagerDialog(QDialog):
         v_layout.addWidget(name_label)
         game_name = summary.get("game_display_name", summary["game"].upper())
         parts = [
-            f"{game_name} ({summary['game_mod_count']})",
-            tr("profiles.total_active", count=summary["total_mod_count"]),
-            tr("profiles.total_mods", count=summary["profile_mod_count"]),
+            tr("profiles.game_mods", count=summary["game_mod_count"], game=game_name),
+            tr("profiles.total_mods", count=summary["total_mod_count"]),
         ]
         if summary["chapter_mode"]:
             cm = tr("ui.chapter_mode")
@@ -269,17 +303,36 @@ class ProfileManagerDialog(QDialog):
         )
         if not import_path:
             return
-        try:
-            name = self.profile_service.import_profile(import_path)
-        except Exception as e:
-            QMessageBox.critical(
-                self, tr("errors.error"), tr("profiles.import_failed", error=str(e))
-            )
+        self.import_profiles_from_paths([import_path])
+
+    def import_profiles_from_paths(self, paths: list[str]):
+        imported_names = []
+        for import_path in paths:
+            if not import_path or not os.path.isfile(import_path):
+                continue
+            try:
+                name = self.profile_service.import_profile(import_path)
+            except Exception as e:
+                QMessageBox.critical(
+                    self, tr("errors.error"), tr("profiles.import_failed", error=str(e))
+                )
+                continue
+            imported_names.append(name)
+        if not imported_names:
             return
         self._refresh_list()
-        QMessageBox.information(
-            self, tr("dialogs.success"), tr("profiles.imported_success", name=name)
-        )
+        if len(imported_names) == 1:
+            QMessageBox.information(
+                self,
+                tr("dialogs.success"),
+                tr("profiles.imported_success", name=imported_names[0]),
+            )
+        else:
+            QMessageBox.information(
+                self,
+                tr("dialogs.success"),
+                tr("profiles.imported_success", name=", ".join(imported_names)),
+            )
 
     def _on_rows_moved(self):
         names = []

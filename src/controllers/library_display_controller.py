@@ -5,7 +5,7 @@ import logging
 import os
 import shutil
 
-from PyQt6.QtCore import QEventLoop, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QEventLoop, QObject, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication
 
@@ -17,6 +17,12 @@ from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod_utils import get_mod_id
+
+
+def _bound_checkbox_is_checked(owner, attr_name: str) -> bool:
+    checkbox = getattr(owner, "__dict__", {}).get(attr_name)
+    is_checked = getattr(checkbox, "isChecked", None)
+    return bool(checkbox and callable(is_checked) and is_checked())
 
 
 class LibraryDisplayController:
@@ -35,6 +41,15 @@ class LibraryDisplayController:
         self._pending_view_signature = None
 
     def _current_view_signature(self):
+        current_game = (
+            getattr(
+                self.app,
+                "game_type_combo",
+                type("", (), {"currentData": lambda: "deltarune"}),
+            ).currentData()
+            if hasattr(self.app, "game_type_combo")
+            else "deltarune"
+        ) or "deltarune"
         is_chapter_mode = (
             hasattr(self.app, "chapter_mode_checkbox")
             and self.app.chapter_mode_checkbox.isChecked()
@@ -49,20 +64,22 @@ class LibraryDisplayController:
                 tag
                 for tag in (
                     "textedit"
-                    if hasattr(self.app, "library_tag_textedit")
-                    and self.app.library_tag_textedit.isChecked()
+                    if _bound_checkbox_is_checked(self.app, "library_tag_textedit")
                     else None,
                     "customization"
-                    if hasattr(self.app, "library_tag_customization")
-                    and self.app.library_tag_customization.isChecked()
+                    if _bound_checkbox_is_checked(
+                        self.app, "library_tag_customization"
+                    )
                     else None,
                     "gameplay"
-                    if hasattr(self.app, "library_tag_gameplay")
-                    and self.app.library_tag_gameplay.isChecked()
+                    if _bound_checkbox_is_checked(self.app, "library_tag_gameplay")
                     else None,
                     "other"
-                    if hasattr(self.app, "library_tag_other")
-                    and self.app.library_tag_other.isChecked()
+                    if _bound_checkbox_is_checked(self.app, "library_tag_other")
+                    else None,
+                    "CYOP/AFOM"
+                    if current_game == "pizzatower"
+                    and _bound_checkbox_is_checked(self.app, "library_tag_cyop_afom")
                     else None,
                 )
                 if tag
@@ -83,8 +100,7 @@ class LibraryDisplayController:
             sort_type,
             bool(getattr(self.app, "library_sort_ascending", False)),
             bool(
-                hasattr(self.app, "library_tag_gamebanana")
-                and self.app.library_tag_gamebanana.isChecked()
+                _bound_checkbox_is_checked(self.app, "library_tag_gamebanana")
             ),
             selected_tags,
             getattr(self.app, "library_search_text", "") or "",
@@ -179,6 +195,14 @@ class LibraryDisplayController:
         return chapter_mods
 
     def _build_library_filters_and_sort(self):
+        current_game_type = (
+            getattr(
+                self.app,
+                "game_type_combo",
+                type("", (), {"currentData": lambda: "deltarune"}),
+            ).currentData()
+            or "deltarune"
+        )
         selected_tags = []
         only_gamebanana = False
         if hasattr(self.app, "library_tag_widgets"):
@@ -188,22 +212,15 @@ class LibraryDisplayController:
                 self.app.library_tag_gameplay: "gameplay",
                 self.app.library_tag_other: "other",
             }
+            if current_game_type == "pizzatower":
+                tag_map[self.app.library_tag_cyop_afom] = "CYOP/AFOM"
             selected_tags = [
                 tag for checkbox, tag in tag_map.items() if checkbox.isChecked()
             ]
-            only_gamebanana = (
-                hasattr(self.app, "library_tag_gamebanana")
-                and self.app.library_tag_gamebanana.isChecked()
+            only_gamebanana = _bound_checkbox_is_checked(
+                self.app, "library_tag_gamebanana"
             )
         search_text = getattr(self.app, "library_search_text", "").lower()
-        current_game_type = (
-            getattr(
-                self.app,
-                "game_type_combo",
-                type("", (), {"currentData": lambda: "deltarune"}),
-            ).currentData()
-            or "deltarune"
-        )
         filters = {
             "tags": selected_tags,
             "game": current_game_type,
@@ -316,7 +333,7 @@ class LibraryDisplayController:
             result_ready = pyqtSignal(list)
 
             def __init__(self, outer) -> None:
-                super().__init__(outer)
+                super().__init__(outer if isinstance(outer, QObject) else None)
                 self.outer = outer
 
             def run(self):
@@ -575,6 +592,7 @@ class LibraryDisplayController:
         current_mod = getattr(summary, "_current_mod", None)
         current_mod_id = get_mod_id(current_mod)
         if not current_mod_id:
+            summary.show_empty()
             return
         for i in range(self.app.installed_mods_layout.count() - 1):
             item = self.app.installed_mods_layout.itemAt(i)
@@ -584,6 +602,7 @@ class LibraryDisplayController:
             if get_mod_id(getattr(widget, "mod_data", None)) == current_mod_id:
                 self._show_mod_in_summary(widget.mod_data)
                 return
+        summary.show_empty()
 
     def _clear_summary(self):
         summary = getattr(self.app, "mod_summary_panel", None)
@@ -702,8 +721,8 @@ class LibraryDisplayController:
                 mod_name = getattr(mod_data, "name", "") or "Mod"
                 QMessageBox.information(
                     self.app,
-                    tr("dialogs.information"),
-                    f"No README was found for {mod_name}.",
+                    tr("dialogs.info"),
+                    tr("dialogs.no_readme_files", mod_name=mod_name),
                 )
                 return
             from ui.dialogs.mod_readme_dialog import ModReadmeDialog

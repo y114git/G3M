@@ -8,24 +8,36 @@ from typing import Any
 from services.migration_service import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
 
 
-@dataclass
-class ModExtraFile:
-    """Represents an extra file associated with a mod."""
-
-    key: str
-    url: str
-
-
-@dataclass
+@dataclass(init=False)
 class ModFileData:
     """File data for a game content section (chapter, whole game, etc.)."""
 
-    description: str | None = None
-    data_file_url: str | None = None
-    extra_files: list[ModExtraFile] = field(default_factory=list)
+    description: str | None
+    data_file_path: str | None
+    extra_files: list[str]
+
+    def __init__(
+        self,
+        description: str | None = None,
+        data_file_path: str | None = None,
+        extra_files: list[str] | None = None,
+        *,
+        data_file_url: str | None = None,
+    ) -> None:
+        self.description = description
+        self.data_file_path = data_file_path or data_file_url
+        self.extra_files = [str(value) for value in (extra_files or []) if value]
+
+    @property
+    def data_file_url(self) -> str | None:
+        return self.data_file_path
+
+    @data_file_url.setter
+    def data_file_url(self, value: str | None) -> None:
+        self.data_file_path = value
 
     def is_valid(self) -> bool:
-        return bool(self.data_file_url or self.extra_files)
+        return bool(self.data_file_path or self.extra_files)
 
 
 def _parse_files_dict(data_dict: dict[str, Any]) -> dict[str, ModFileData]:
@@ -36,23 +48,39 @@ def _parse_files_dict(data_dict: dict[str, Any]) -> dict[str, ModFileData]:
     for key, value in raw_files.items():
         if isinstance(value, dict):
             extra_files = value.get("extra_files", [])
-            if extra_files and isinstance(extra_files, list):
-                value = value.copy()
-                value.pop("data_file_version", None)
-                value["extra_files"] = [
-                    ModExtraFile(key=ef.get("key", ""), url=ef.get("url", ""))
-                    if isinstance(ef, dict)
-                    else ef
-                    for ef in extra_files
-                ]
+            value = value.copy()
+            value.pop("data_file_version", None)
+            if isinstance(extra_files, dict):
+                extra_iterable = extra_files.values()
+            elif isinstance(extra_files, (list, tuple, set)):
+                extra_iterable = extra_files
+            else:
+                extra_iterable = []
+            value["extra_files"] = [
+                str(ef.get("file_path", "") or ef.get("url", ""))
+                if isinstance(ef, dict)
+                else str(ef)
+                for ef in extra_iterable
+                if ef
+            ]
             files_dict[key] = ModFileData(
                 description=value.get("description"),
-                data_file_url=value.get("data_file_url"),
+                data_file_path=value.get("data_file_path")
+                or value.get("data_file_url"),
                 extra_files=value.get("extra_files", []),
             )
         elif isinstance(value, ModFileData):
             files_dict[key] = value
     return files_dict
+
+
+def _get_metadata_value(data_dict: dict[str, Any], key: str, default=None):
+    if key in data_dict and data_dict.get(key) not in (None, "", [], {}):
+        return data_dict.get(key)
+    metadata = data_dict.get("metadata")
+    if isinstance(metadata, dict):
+        return metadata.get(key, default)
+    return default
 
 
 @dataclass
@@ -70,6 +98,7 @@ class BaseModInfo:
     tags: list[str] = field(default_factory=list)
     homepage: str | None = None
     files: dict[str, ModFileData] = field(default_factory=dict)
+    playtime_hours: float = 0.0
 
     def get_file_data(self, chapter_id: str) -> ModFileData | None:
         """Get file data by the normalized content section id."""
@@ -111,7 +140,6 @@ class BaseModInfo:
 class LocalModInfo(BaseModInfo):
     """Installed/local mod representation built from local config plus local metadata."""
 
-    playtime_hours: float = 0.0
     added_date: str | None = None
     last_updated: str | None = None
 
@@ -124,21 +152,24 @@ class LocalModInfo(BaseModInfo):
     def from_dict(cls, data_dict: dict[str, Any]) -> LocalModInfo:
         from services.localization_service import tr
 
-        game = data_dict.get("game", "deltarune")
+        game = _get_metadata_value(data_dict, "game", "deltarune")
         return cls(
-            id=data_dict.get("id", ""),
-            name=data_dict.get("name", "Unknown Mod"),
-            version=data_dict.get("version", "1.0.0"),
-            author=data_dict.get("author", tr("defaults.unknown")),
-            description=data_dict.get(
+            id=_get_metadata_value(data_dict, "id", ""),
+            name=_get_metadata_value(data_dict, "name", "Unknown Mod"),
+            version=_get_metadata_value(data_dict, "version", "1.0.0"),
+            author=_get_metadata_value(data_dict, "author", tr("defaults.unknown")),
+            description=_get_metadata_value(
+                data_dict,
                 "description",
                 data_dict.get(LEGACY_DESCRIPTION_KEY, tr("status.no_description_status")),
             ),
             game=game,
-            game_version=data_dict.get("game_version", tr("defaults.not_specified")),
-            icon=data_dict.get("icon", data_dict.get(LEGACY_ICON_KEY)),
-            tags=data_dict.get("tags", []),
-            homepage=data_dict.get("homepage"),
+            game_version=_get_metadata_value(
+                data_dict, "game_version", tr("defaults.not_specified")
+            ),
+            icon=_get_metadata_value(data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)),
+            tags=_get_metadata_value(data_dict, "tags", []),
+            homepage=_get_metadata_value(data_dict, "homepage"),
             files=_parse_files_dict(data_dict),
             playtime_hours=data_dict.get("playtime_hours", 0.0),
             added_date=data_dict.get("added_date"),
@@ -179,23 +210,26 @@ class BrowserModInfo(BaseModInfo):
     def from_dict(cls, data_dict: dict[str, Any]) -> BrowserModInfo:
         from services.localization_service import tr
 
-        game = data_dict.get("game", "deltarune")
+        game = _get_metadata_value(data_dict, "game", "deltarune")
         return cls(
-            id=data_dict.get("id", ""),
-            name=data_dict.get("name", "Unknown Mod"),
-            version=data_dict.get("version", "1.0.0"),
-            author=data_dict.get("author", tr("defaults.unknown")),
-            description=data_dict.get(
+            id=_get_metadata_value(data_dict, "id", ""),
+            name=_get_metadata_value(data_dict, "name", "Unknown Mod"),
+            version=_get_metadata_value(data_dict, "version", "1.0.0"),
+            author=_get_metadata_value(data_dict, "author", tr("defaults.unknown")),
+            description=_get_metadata_value(
+                data_dict,
                 "description",
                 data_dict.get(LEGACY_DESCRIPTION_KEY, tr("status.no_description_status")),
             ),
             game=game,
-            game_version=data_dict.get("game_version", tr("defaults.not_specified")),
-            icon=data_dict.get("icon", data_dict.get(LEGACY_ICON_KEY)),
-            tags=data_dict.get("tags", []),
-            homepage=data_dict.get("homepage"),
+            game_version=_get_metadata_value(
+                data_dict, "game_version", tr("defaults.not_specified")
+            ),
+            icon=_get_metadata_value(data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)),
+            tags=_get_metadata_value(data_dict, "tags", []),
+            homepage=_get_metadata_value(data_dict, "homepage"),
             files=_parse_files_dict(data_dict),
-            description_url=data_dict.get("description_url", ""),
+            description_url=_get_metadata_value(data_dict, "description_url", ""),
             downloads=data_dict.get("downloads"),
             like_count=data_dict.get("like_count"),
             hide_mod=data_dict.get("hide_mod", False),

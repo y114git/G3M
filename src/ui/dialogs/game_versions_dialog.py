@@ -1,7 +1,6 @@
 """Non-modal Game Versions dialog with per-game filtering."""
 
 import logging
-import os
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
@@ -21,6 +20,10 @@ from PyQt6.QtWidgets import (
 
 from models.game_modes import get_visible_game_entries
 from models.game_version_models import GameVersionRecord
+from presentation.drag_drop import (
+    collect_drop_file_paths,
+    collect_drop_urls,
+)
 from services.localization_service import tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
@@ -541,30 +544,27 @@ class GameVersionsDialog(QDialog):
             w.relocalize_ui()
 
     def dragEnterEvent(self, event):
+        if getattr(event, "source", lambda: None)() is not None:
+            event.ignore()
+            return
         md = event.mimeData()
-        if md.hasUrls() or md.hasText():
+        if collect_drop_file_paths(md) or collect_drop_urls(md):
             event.acceptProposedAction()
 
     def dropEvent(self, event):
+        if getattr(event, "source", lambda: None)() is not None:
+            event.ignore()
+            return
         game = self._current_game()
         md = event.mimeData()
-        if md.hasUrls():
-            for u in md.urls():
-                path = u.toLocalFile()
-                if path and os.path.isfile(path):
-                    event.acceptProposedAction()
-                    self._manager.import_game_version_from_file(game, path)
-                    return
-                s = u.toString()
-                if s.startswith(("http://", "https://")):
-                    event.acceptProposedAction()
-                    self._manager.import_game_version_from_url(game, s)
-                    return
-        if md.hasText():
-            text = md.text().strip()
-            if text.startswith(("http://", "https://")):
-                event.acceptProposedAction()
-                self._manager.import_game_version_from_url(game, text)
+        paths = collect_drop_file_paths(md)
+        urls = collect_drop_urls(md)
+        if paths or urls:
+            event.acceptProposedAction()
+            for path in paths:
+                self._manager.import_game_version_from_file(game, path)
+            for url in urls:
+                self._manager.import_game_version_from_url(game, url)
 
     def refresh_theme(self):
         self._apply_theme()

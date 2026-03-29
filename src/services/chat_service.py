@@ -5,7 +5,11 @@ import re
 import time
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_MEDIUM
-from utils.network_utils import cloud_function_request
+from utils.network_utils import (
+    check_internet_connection,
+    cloud_function_request,
+    get_session,
+)
 
 
 class ChatManager:
@@ -39,9 +43,14 @@ class ChatManager:
         return "config_error" if not self.base_url else None
 
     def _safe_request(self, method: str, endpoint: str, action: str, **kwargs):
+        if not check_internet_connection():
+            return None
         return cloud_function_request(
             method,
-            f"{self.base_url}/{endpoint}", timeout=NETWORK_TIMEOUT_MEDIUM, **kwargs
+            f"{self.base_url}/{endpoint}",
+            session=get_session(),
+            timeout=NETWORK_TIMEOUT_MEDIUM,
+            **kwargs,
         )
 
     def get_messages(self, channel: str, *, force_refresh: bool = False):

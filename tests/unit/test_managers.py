@@ -4,7 +4,9 @@ from unittest.mock import Mock, patch
 
 
 class TestModManager:
+    """Tests for managers."""
     def test_mod_service_initialization(self, app_state, feedback_service):
+        """Checks that moding service initialization."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -13,6 +15,7 @@ class TestModManager:
         assert mod_service.feedback_service == feedback_service
 
     def test_mod_service_cache_invalidation(self, app_state, feedback_service):
+        """Checks that moding service cache invalidation."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -20,6 +23,7 @@ class TestModManager:
         assert not mod_service._mods_cache_valid
 
     def test_mod_service_scan_empty_directory(self, app_state, feedback_service):
+        """Checks that moding service scan empty directory."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -30,6 +34,7 @@ class TestModManager:
     def test_mod_service_scan_with_mod(
         self, app_state, feedback_service, sample_mod_folder
     ):
+        """Checks that moding service scan with mod."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -38,6 +43,7 @@ class TestModManager:
         assert "test_mod_001" in cache
 
     def test_mod_service_validate_config_valid(self, app_state, feedback_service):
+        """Checks that moding service validate config valid."""
         from utils.mod_scan_utils import validate_mod_config
 
         valid_config = {
@@ -55,6 +61,7 @@ class TestModManager:
     def test_mod_service_validate_config_invalid_dict(
         self, app_state, feedback_service
     ):
+        """Checks that moding service validate config invalid dict."""
         from utils.mod_scan_utils import validate_mod_config
 
         invalid_config = ["id", "name"]
@@ -64,6 +71,7 @@ class TestModManager:
     def test_mod_service_validate_config_missing_fields(
         self, app_state, feedback_service
     ):
+        """Checks that moding service validate config missing fields."""
         from utils.mod_scan_utils import validate_mod_config
 
         invalid_config = {"version": "1.0.0"}
@@ -73,6 +81,7 @@ class TestModManager:
     def test_mod_service_validate_config_invalid_types(
         self, app_state, feedback_service
     ):
+        """Checks that moding service validate config invalid types."""
         from utils.mod_scan_utils import validate_mod_config
 
         invalid_config = {"id": "test", "name": 123}
@@ -89,7 +98,9 @@ class TestModManager:
 
 
 class TestSettingsManager:
+    """Tests for managers."""
     def test_settings_service_initialization(self, app_state, feedback_service, qapp):
+        """Checks that settingsing service initialization."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -105,6 +116,7 @@ class TestSettingsManager:
     def test_settings_service_load_settings(
         self, app_state, feedback_service, temp_config_dir, qapp
     ):
+        """Checks that settingsing service load settings."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -126,6 +138,7 @@ class TestSettingsManager:
     def test_settings_service_can_restore_normal_geometry_without_applying_maximized_state(
         self, app_state, feedback_service, qapp
     ):
+        """Checks that settingsing service can restore normal geometry without applying maximized state."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -159,15 +172,94 @@ class TestSettingsManager:
         widget.setWindowState.assert_not_called()
         assert manager.was_window_maximized() is True
 
+    def test_build_theme_export_settings_includes_config_version(
+        self, app_state, feedback_service, qapp
+    ):
+        """Checks that building theme export settings includes config version."""
+        from config.config import THEME_CONFIG_VERSION
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+
+        settings = manager.build_theme_export_settings()
+
+        assert settings["config_version"] == THEME_CONFIG_VERSION
+
+    def test_write_theme_archive_uses_theme_config_filename(
+        self, app_state, feedback_service, qapp, tmp_path
+    ):
+        """Checks that writing theme archive uses theme config filename."""
+        import zipfile
+
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        archive_path = tmp_path / "theme.zip"
+
+        manager.write_theme_archive(str(archive_path))
+
+        with zipfile.ZipFile(archive_path, "r") as zipf:
+            names = zipf.namelist()
+            assert "theme_config.json" in names
+            assert "theme.json" not in names
+
+    def test_install_theme_from_file_accepts_legacy_theme_json(
+        self, app_state, feedback_service, qapp, tmp_path
+    ):
+        """Checks that installing theme from file accepts legacy theme json."""
+        import zipfile
+
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        manager.write_local_config = Mock()
+        manager.feedback_service.show_message = Mock()
+        theme_emitted = []
+        settings_emitted = []
+        manager.theme_changed.connect(lambda: theme_emitted.append(True))
+        manager.settings_changed.connect(lambda: settings_emitted.append(True))
+
+        archive_path = tmp_path / "legacy_theme.zip"
+        with zipfile.ZipFile(archive_path, "w") as zipf:
+            zipf.writestr("theme.json", json.dumps({"custom_border_color": "#ABCDEF"}))
+
+        manager._install_theme_from_file(str(archive_path))
+
+        assert app_state.local_config["custom_border_color"] == "#ABCDEF"
+        assert theme_emitted == [True]
+        assert settings_emitted == [True]
+        manager.feedback_service.show_message.assert_called()
+
 
 class TestLocalizationManager:
+    """Tests for managers."""
     def test_localization_service_tr(self):
+        """Checks that localizationing service tr."""
         from services.localization_service import tr
 
         result = tr("test.id")
         assert isinstance(result, str)
 
     def test_localization_service_detect_language(self):
+        """Checks that localizationing service detect language."""
         from services.localization_service import localization_service
 
         language = localization_service.detect_system_language()
@@ -176,7 +268,9 @@ class TestLocalizationManager:
 
 
 class TestLaunchManager:
+    """Tests for managers."""
     def test_launch_service_initialization(self, app_state, feedback_service):
+        """Checks that launching service initialization."""
         from services.launch_service import GameLauncher
         from services.mod_service import ModManager
 
@@ -190,6 +284,7 @@ class TestLaunchManager:
         assert launcher.app_state == app_state
 
     def test_close_game_uses_border_status_color(self, app_state, feedback_service):
+        """Checks that closing game uses border status color."""
         from services.launch_service import GameLauncher
         from services.localization_service import tr
 
@@ -212,6 +307,7 @@ class TestLaunchManager:
     def test_launch_game_with_selections_uses_border_status_color_for_launch_messages(
         self, app_state, feedback_service
     ):
+        """Checks that launching game with selections uses border status color for launch messages."""
         from services.launch_service import GameLauncher
         from services.localization_service import tr
 
@@ -236,6 +332,7 @@ class TestLaunchManager:
     def test_handle_launch_failure_restores_window_and_updates_button(
         self, app_state, feedback_service
     ):
+        """Checks that handling launch failure restores window and updates button."""
         from services.launch_service import GameLauncher
 
         parent = Mock()
@@ -255,6 +352,7 @@ class TestLaunchManager:
     def test_execute_game_uses_detached_steam_launch_on_linux(
         self, app_state, feedback_service
     ):
+        """Checks that executeing game uses detached steam launch on linux."""
         from services.launch_service import GameLauncher
 
         launcher = GameLauncher(
@@ -283,6 +381,7 @@ class TestLaunchManager:
     def test_execute_game_falls_back_to_xdg_open_when_steam_detach_fails_on_linux(
         self, app_state, feedback_service
     ):
+        """Checks that executeing game falls back to xdg open when steam detach fails on linux."""
         from services.launch_service import GameLauncher
 
         launcher = GameLauncher(
@@ -309,8 +408,10 @@ class TestLaunchManager:
 
 
 class TestUpdateCheckManager:
+    """Tests for managers."""
     @patch("requests.get")
     def test_update_checker_initialization(self, mock_get, app_state, feedback_service):
+        """Checks that updating checker initialization."""
         from services.updatecheck_service import UpdateChecker
 
         mock_response = Mock()
@@ -322,7 +423,9 @@ class TestUpdateCheckManager:
 
 
 class TestCustomizationManager:
+    """Tests for managers."""
     def test_customization_service_initialization(self, app_state):
+        """Checks that customizationing service initialization."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -330,6 +433,7 @@ class TestCustomizationManager:
         assert manager.app_state == app_state
 
     def test_customization_service_get_font_path(self, app_state, temp_dir):
+        """Checks that customizationing service get font path."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -344,6 +448,7 @@ class TestCustomizationManager:
     def test_customization_service_get_font_button_text(
         self, mock_tr, app_state, temp_dir
     ):
+        """Checks that customizationing service get font button text."""
         from services.customization_service import CustomizationManager
 
         mock_tr.side_effect = lambda key, **_: key
@@ -357,7 +462,9 @@ class TestCustomizationManager:
 
 
 class TestBackupManager:
+    """Tests for managers."""
     def test_backup_restoration_order(self, temp_dir):
+        """Checks that backuping restoration order."""
         import logging
 
         from services.backup_service import BackupManager
@@ -388,6 +495,7 @@ class TestBackupManager:
                 assert content == "original", f"File {f} was not restored correctly"
 
     def test_backup_restoration_validation(self, temp_dir):
+        """Checks that backuping restoration validation."""
         import logging
 
         from services.backup_service import BackupManager
@@ -416,6 +524,7 @@ class TestBackupManager:
         assert backup_size == restored_size
 
     def test_sound_file_backup_restoration(self, temp_dir):
+        """Checks that sounding file backup restoration."""
         import logging
 
         from services.backup_service import BackupManager
@@ -443,7 +552,9 @@ class TestBackupManager:
 
 
 class TestExpandedFormats:
+    """Tests for managers."""
     def test_customization_service_audio_formats(self, app_state, temp_dir):
+        """Checks that customizationing service audio formats."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -457,6 +568,7 @@ class TestExpandedFormats:
             os.remove(path)
 
     def test_customization_service_webp_logo(self, app_state, temp_dir):
+        """Checks that customizationing service webp logo."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -468,6 +580,7 @@ class TestExpandedFormats:
         assert manager.get_custom_logo_path() == path
 
     def test_settings_manager_audio_paths(self, app_state, feedback_service, qapp):
+        """Checks that settingsing manager audio paths."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -482,6 +595,7 @@ class TestExpandedFormats:
     def test_settings_manager_applies_disable_startup_sound_default(
         self, app_state, feedback_service, qapp
     ):
+        """Checks that settingsing manager applies disable startup sound default."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -490,3 +604,59 @@ class TestExpandedFormats:
         )
         manager.ensure_config_defaults()
         assert app_state.local_config["disable_startup_sound"] is False
+
+    def test_background_selection_copies_file_to_config_dir(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        """Checks that backgrounding selection copies file to config dir."""
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        external_bg = tmp_path / "wallpaper.png"
+        external_bg.write_bytes(b"image")
+        config_dir = tmp_path / "settings"
+        config_dir.mkdir()
+        app_state.config_dir = str(config_dir)
+
+        manager = SettingsManager(
+            app_state, feedback_service, localization_service, parent=qapp
+        )
+        manager.write_local_config = Mock()
+
+        monkeypatch.setattr(
+            "services.settings_service.QFileDialog.getOpenFileName",
+            lambda *args, **kwargs: (str(external_bg), ""),
+        )
+
+        manager.on_background_button_click()
+
+        expected_path = config_dir / "custom_background.png"
+        assert app_state.local_config["custom_background_path"] == str(expected_path)
+        assert expected_path.exists()
+        assert external_bg.exists()
+        manager.write_local_config.assert_called_once()
+
+    def test_background_removal_keeps_external_legacy_file(
+        self, app_state, feedback_service, qapp, tmp_path
+    ):
+        """Checks that backgrounding removal keeps external legacy file."""
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        external_bg = tmp_path / "legacy_wallpaper.png"
+        external_bg.write_bytes(b"image")
+        config_dir = tmp_path / "settings"
+        config_dir.mkdir()
+        app_state.config_dir = str(config_dir)
+        app_state.local_config["custom_background_path"] = str(external_bg)
+
+        manager = SettingsManager(
+            app_state, feedback_service, localization_service, parent=qapp
+        )
+        manager.write_local_config = Mock()
+
+        manager.on_background_button_click()
+
+        assert app_state.local_config["custom_background_path"] == ""
+        assert external_bg.exists()
+        manager.write_local_config.assert_called_once()

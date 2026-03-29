@@ -6,8 +6,9 @@ import pytest
 
 
 class TestModStructure:
-
+    """Tests for mod system."""
     def test_mod_config_parsing(self, mods_dir, full_mod_structure_dir):
+        """Checks that moding config parsing."""
         config_path = Path(full_mod_structure_dir) / 'mod_config.json'
         if not config_path.exists():
             pytest.skip('mod_config.json not found. Please create test mod structure.')
@@ -20,6 +21,7 @@ class TestModStructure:
         assert isinstance(config['files'], dict)
 
     def test_mod_structure_validation(self, full_mod_structure_dir):
+        """Checks that moding structure validation."""
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
         if not config_path.exists():
@@ -38,6 +40,7 @@ class TestModStructure:
                 assert chapter_dir.is_dir()
 
     def test_mod_file_discovery(self, full_mod_structure_dir):
+        """Checks that moding file discovery."""
         mod_path = Path(full_mod_structure_dir)
         if not mod_path.exists():
             pytest.skip(f'Test mod structure not found at {full_mod_structure_dir}. Please create test mod structure.')
@@ -50,8 +53,9 @@ class TestModStructure:
 
 
 class TestModManagerIntegration:
-
+    """Tests for mod system."""
     def test_mod_scanning(self, app_state, feedback_service, mods_dir):
+        """Checks that moding scanning."""
         from services.mod_service import ModManager
         app_state.mods_dir = mods_dir
         mod_service = ModManager(app_state, feedback_service)
@@ -59,6 +63,7 @@ class TestModManagerIntegration:
         assert isinstance(cache, dict)
 
     def test_mod_scanning_all_types(self, app_state, feedback_service, all_test_mods_dirs):
+        """Checks that moding scanning all types."""
         import shutil
         import tempfile
 
@@ -79,6 +84,7 @@ class TestModManagerIntegration:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
     def test_mod_loading(self, app_state, feedback_service, full_mod_structure_dir):
+        """Checks that moding loading."""
         import shutil
         import tempfile
 
@@ -104,8 +110,9 @@ class TestModManagerIntegration:
 
 
 class TestModInstallation:
-
+    """Tests for mod system."""
     def test_mod_installation_structure(self, app_state, feedback_service, full_mod_structure_dir):
+        """Checks that moding installation structure."""
         from services.mod_service import ModManager
         _ = ModManager(app_state, feedback_service)
         mod_path = Path(full_mod_structure_dir)
@@ -118,8 +125,9 @@ class TestModInstallation:
 
 
 class TestModProcessing:
-
+    """Tests for mod system."""
     def test_mod_file_resolution(self, full_mod_structure_dir):
+        """Checks that moding file resolution."""
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
         if not config_path.exists():
@@ -141,6 +149,7 @@ class TestModProcessing:
                     assert file_path.parent == chapter_dir
 
     def test_mod_chapter_mapping(self, full_mod_structure_dir):
+        """Checks that moding chapter mapping."""
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
         if not config_path.exists():
@@ -158,8 +167,9 @@ class TestModProcessing:
 
 
 class TestModMergingWithStructure:
-
+    """Tests for mod system."""
     def test_multiple_mods_merging(self, app_state, feedback_service, mods_dir):
+        """Checks that multipleing mods merging."""
         from unittest.mock import Mock
 
         from services.g3mtool_patching_service import G3MToolPatchingService
@@ -171,6 +181,7 @@ class TestModMergingWithStructure:
         assert patcher.patching_logger.name == 'patching'
 
     def test_mod_priority_with_structure(self, app_state, feedback_service):
+        """Checks that moding priority with structure."""
         from unittest.mock import Mock
 
         from services.g3mtool_patching_service import G3MToolPatchingService
@@ -181,8 +192,9 @@ class TestModMergingWithStructure:
 
 
 class TestModMetadata:
-
+    """Tests for mod system."""
     def test_metadata_read_write(self, app_state, feedback_service):
+        """Checks that metadataing read write."""
         import time
 
         from services.mod_service import ModManager
@@ -204,6 +216,7 @@ class TestModMetadata:
         mod_service._write_metadata({})
 
     def test_metadata_file_creation(self, app_state, feedback_service):
+        """Checks that metadataing file creation."""
         import json
         import os
 
@@ -224,6 +237,7 @@ class TestModMetadata:
             os.remove(app_state.mods_metadata_path)
 
     def test_metadata_with_installed_mods(self, app_state, feedback_service, full_mod_structure_dir):
+        """Checks that metadataing  with installed mods."""
         import json
         import shutil
         import tempfile
@@ -252,7 +266,7 @@ class TestModMetadata:
             shutil.rmtree(temp_mods_dir, ignore_errors=True)
 
     def test_metadata_preserved_after_load_local_mods_cleanup(self, app_state, feedback_service):
-        """Verify that load_local_mods does not destroy existing metadata when processing cleanup keys."""
+        """Checks that metadataing preserved after load local mods cleanup."""
         from services.mod_service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         original_date = '2024-06-15 12:30:00'

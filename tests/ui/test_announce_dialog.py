@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import QWidget
 
 
 class TestAnnounceDialog:
+    """Tests for announce dialog."""
     def test_poll_single_enables_ok_only_after_selection(self, qapp):
+        """Checks that polling single enables ok only after selection."""
         from services.localization_service import tr
         from ui.dialogs.announce_dialog import AnnounceDialog
 
@@ -31,6 +33,7 @@ class TestAnnounceDialog:
         parent.deleteLater()
 
     def test_relocalize_ui_updates_visible_texts(self, qapp):
+        """Checks that relocalizing ui updates visible texts."""
         from services.localization_service import localization_service
         from ui.dialogs.announce_dialog import AnnounceDialog
 
@@ -71,6 +74,7 @@ class TestAnnounceDialog:
         parent.deleteLater()
 
     def test_poll_multiple_allows_multiple_checked_buttons(self, qapp):
+        """Checks that polling multiple allows multiple checked buttons."""
         from ui.dialogs.announce_dialog import AnnounceDialog
 
         parent = QWidget()

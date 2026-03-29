@@ -1,0 +1,60 @@
+"""Worker thread for PizzaOven normal-mod conversion."""
+
+from __future__ import annotations
+
+import logging
+
+from PyQt6.QtCore import QThread, pyqtSignal
+
+from services.pizza_oven_conversion_service import (
+    PizzaOvenConversionError,
+    PizzaOvenConversionService,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class PizzaOvenConversionWorker(QThread):
+    progress = pyqtSignal(int)
+    status = pyqtSignal(str, str)
+    conversion_finished = pyqtSignal(bool, str, object)
+
+    def __init__(
+        self,
+        conversion_service: PizzaOvenConversionService,
+        source_dir: str,
+        mods_dir: str,
+        game_path: str,
+        *,
+        source_file_path: str | None = None,
+        gamebanana_metadata: dict | None = None,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._conversion_service = conversion_service
+        self._source_dir = source_dir
+        self._mods_dir = mods_dir
+        self._game_path = game_path
+        self._source_file_path = source_file_path
+        self._gamebanana_metadata = gamebanana_metadata or {}
+
+    def run(self) -> None:
+        try:
+            result = self._conversion_service.convert(
+                self._source_dir,
+                self._mods_dir,
+                self._game_path,
+                source_file_path=self._source_file_path,
+                gamebanana_metadata=self._gamebanana_metadata,
+                progress_callback=self._on_progress,
+            )
+            self.conversion_finished.emit(True, result.mod_dir, result)
+        except PizzaOvenConversionError as e:
+            self.conversion_finished.emit(False, str(e), None)
+        except Exception as e:
+            logger.error("PizzaOven conversion failed: %s", e, exc_info=True)
+            self.conversion_finished.emit(False, str(e), None)
+
+    def _on_progress(self, value: int, message: str) -> None:
+        self.progress.emit(value)
+        self.status.emit(message, "status_info")

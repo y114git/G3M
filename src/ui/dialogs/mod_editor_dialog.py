@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import uuid
+from contextlib import suppress
 from typing import override
 
 from PyQt6.QtCore import QSize, Qt
@@ -15,12 +16,12 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -36,7 +37,6 @@ from ui.common.styling import (
     round_pixmap,
 )
 from utils.file_utils import (
-    get_chapter_folder_name,
     get_file_filter,
     get_unique_mod_dir,
 )
@@ -46,6 +46,7 @@ from utils.mod_config_parser import (
     build_mod_config_data,
     normalize_mod_config_data,
     parse_extra_files_raw,
+    resolve_mod_file_path,
 )
 from utils.path_utils import colored_icon, resource_path
 
@@ -377,6 +378,7 @@ class ModEditorDialog(QDialog):
         scroll = QScrollArea(tab)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMinimumHeight(round(300 * self._ui_scale()))
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -403,6 +405,9 @@ class ModEditorDialog(QDialog):
         layout.addWidget(row_frame)
         layout.addStretch()
         tab._file_layout = layout
+        tab._data_button = data_btn
+        tab._has_data_frame = False
+        tab._file_scroll = scroll
         scroll.setWidget(content)
         root_layout.addWidget(scroll)
         self.file_tabs.addTab(tab, name)
@@ -420,31 +425,17 @@ class ModEditorDialog(QDialog):
         return tab.layout()
 
     def _on_add_data(self, tab, layout):
-        for i in range(layout.count()):
-            w = layout.itemAt(i).widget() if layout.itemAt(i) else None
-            if w and hasattr(w, "layout") and w.layout():
-                fl = w.layout()
-                if fl.count() > 0:
-                    title = fl.itemAt(0).widget()
-                    if (
-                        isinstance(title, QLabel)
-                        and title.property("file_type") == "data"
-                    ):
-                        return
+        if getattr(tab, "_has_data_frame", False):
+            return
         self._create_file_frame(layout, "data")
 
     def _on_add_extra(self, layout):
         self._create_file_frame(layout, "extra")
 
-    def _create_file_frame(self, tab_layout, file_type, key_name=None):
-        if file_type == "extra" and key_name is None:
-            key_name, ok = QInputDialog.getText(
-                self, tr("dialogs.file_group_name"), tr("dialogs.enter_file_group_key")
-            )
-            if not ok or not key_name.strip():
-                return
+    def _create_file_frame(self, tab_layout, file_type):
+        tab = self._get_tab_for_layout(tab_layout)
         if file_type == "data":
-            self._toggle_data_button(tab_layout, False)
+            self._set_tab_has_data(tab, True)
         frame = QFrame()
         frame.setProperty("fileCard", True)
         frame.setFrameStyle(QFrame.Shape.Box)
@@ -458,24 +449,19 @@ class ModEditorDialog(QDialog):
             )
             browse_title = tr("ui.select_data_file", file_type="data")
         else:
-            title_text = tr("files.extra_files_title", key_name=key_name)
-            file_filter = get_file_filter("archive_files")
-            browse_title = tr("ui.select_archive")
+            title_text = tr("ui.add_extra_files")
+            file_filter = "All Files (*)"
+            browse_title = tr("ui.select_file")
         title_lbl = QLabel(title_text)
         title_lbl.setStyleSheet("font-weight: bold;")
         title_lbl.setProperty("file_type", file_type)
-        if file_type == "extra" and key_name:
-            title_lbl.setProperty("clean_key", key_name)
         fl.addWidget(title_lbl)
         path_edit = QLineEdit()
-        path_edit.setReadOnly(True)
         path_edit.setPlaceholderText(tr("ui.select_file"))
         path_edit.setToolTip(tr("tooltips.mod_editor_selected_file"))
         path_edit.setProperty(
             "is_local_path" if file_type == "data" else "is_local_extra_path", True
         )
-        if file_type == "extra":
-            path_edit.setProperty("extra_key", key_name)
         fl.addWidget(path_edit)
         browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
@@ -485,45 +471,74 @@ class ModEditorDialog(QDialog):
         browse_btn.clicked.connect(
             lambda: self._browse_file(path_edit, browse_title, file_filter, file_type)
         )
-        fl.addWidget(browse_btn)
         del_btn = self._make_icon_text_button(
             "delete_icon.svg", tr("buttons.delete"), tr("buttons.delete")
         )
         del_btn.clicked.connect(
             lambda: self._remove_file_frame(tab_layout, frame, file_type)
         )
-        fl.addWidget(del_btn)
+        actions_row = QHBoxLayout()
+        actions_row.setContentsMargins(0, 4, 0, 0)
+        actions_row.setSpacing(8)
+        actions_row.addStretch()
+        actions_row.addWidget(browse_btn)
+        actions_row.addWidget(del_btn)
+        actions_row.addStretch()
+        fl.addLayout(actions_row)
         tab_layout.insertWidget(tab_layout.count() - 1, frame)
 
     def _make_icon_text_button(self, icon, text, tooltip=None):
         button = QPushButton(text)
         button.setIcon(self._icon(icon))
         button.setIconSize(self._icon_size(18))
+        button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        button.setMinimumWidth(round(112 * self._ui_scale()))
         if tooltip:
             button.setToolTip(tooltip)
         return button
 
-    def _toggle_data_button(self, layout, visible):
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item and item.layout():
-                for j in range(item.layout().count()):
-                    btn_item = item.layout().itemAt(j)
-                    if (
-                        btn_item
-                        and btn_item.widget()
-                        and isinstance(btn_item.widget(), QPushButton)
-                        and btn_item.widget().property("is_data_button")
-                    ):
-                        btn_item.widget().setVisible(visible)
-                        return
+    @staticmethod
+    def _normalize_config_path(path: str) -> str:
+        if not path:
+            return path
+        normalized = path.replace("\\", "/")
+        if normalized.endswith("/"):
+            normalized = normalized.rstrip("/")
+        return normalized
+
+    @classmethod
+    def _format_config_path(cls, path: str, *, is_directory: bool | None = None) -> str:
+        if not path:
+            return path
+        normalized = path.replace("\\", "/")
+        had_trailing_slash = normalized.endswith("/")
+        if is_directory is None:
+            is_directory = had_trailing_slash or os.path.isdir(path)
+        if is_directory:
+            return normalized.rstrip("/") + "/"
+        return normalized.rstrip("/")
+
+    def _get_tab_for_layout(self, layout):
+        for i in range(self.file_tabs.count()):
+            tab = self.file_tabs.widget(i)
+            if getattr(tab, "_file_layout", None) is layout:
+                return tab
+        return None
+
+    def _set_tab_has_data(self, tab, has_data):
+        if tab is None:
+            return
+        tab._has_data_frame = has_data
+        data_button = getattr(tab, "_data_button", None)
+        if isinstance(data_button, QPushButton):
+            data_button.setVisible(not has_data)
 
     def _remove_file_frame(self, layout, frame, file_type):
         frame.hide()
         layout.removeWidget(frame)
         frame.deleteLater()
         if file_type == "data":
-            self._toggle_data_button(layout, True)
+            self._set_tab_has_data(self._get_tab_for_layout(layout), False)
 
     def _browse_file(self, line_edit, title, file_filter, file_type):
         if file_type == "data":
@@ -532,13 +547,13 @@ class ModEditorDialog(QDialog):
             )
             if path:
                 self._last_browse_dir = os.path.dirname(path)
-                line_edit.setText(path)
+                line_edit.setText(self._format_config_path(path))
         else:
             msg = QMessageBox(self)
             msg.setWindowTitle(tr("ui.select"))
             msg.setText(tr("ui.select_file_or_folder"))
-            archive_btn = msg.addButton(
-                tr("file_descriptions.archives"), QMessageBox.ButtonRole.AcceptRole
+            file_btn = msg.addButton(
+                tr("ui.file"), QMessageBox.ButtonRole.AcceptRole
             )
             folder_btn = msg.addButton(
                 tr("ui.folder"), QMessageBox.ButtonRole.ActionRole
@@ -546,20 +561,20 @@ class ModEditorDialog(QDialog):
             msg.addButton(QMessageBox.StandardButton.Cancel)
             msg.exec()
             clicked = msg.clickedButton()
-            if clicked == archive_btn:
+            if clicked == file_btn:
                 path, _ = QFileDialog.getOpenFileName(
                     self, title, self._last_browse_dir, file_filter
                 )
                 if path:
                     self._last_browse_dir = os.path.dirname(path)
-                    line_edit.setText(path)
+                    line_edit.setText(self._format_config_path(path))
             elif clicked == folder_btn:
                 path = QFileDialog.getExistingDirectory(
                     self, title, self._last_browse_dir
                 )
                 if path:
                     self._last_browse_dir = path
-                    line_edit.setText(path)
+                    line_edit.setText(self._format_config_path(path, is_directory=True))
 
     def _browse_icon(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -793,19 +808,20 @@ class ModEditorDialog(QDialog):
         """Resolve a file path, trying the mod folder if it's relative or doesn't exist."""
         if not path:
             return path
-        if os.path.exists(path):
-            return path
+        normalized = self._normalize_config_path(path)
+        if os.path.exists(normalized):
+            return normalized
         mod_folder = self._find_mod_folder()
         if mod_folder:
-            candidate = os.path.normpath(os.path.join(mod_folder, path))
+            candidate = resolve_mod_file_path(mod_folder, normalized)
             if os.path.exists(candidate):
                 return candidate
             game = self.game_combo.currentData()
             for tab_idx in range(self.file_tabs.count()):
-                resolved = self._resolve_path(path, tab_idx, mod_folder, game)
+                resolved = self._resolve_path(normalized, tab_idx, mod_folder, game)
                 if os.path.exists(resolved):
                     return resolved
-        return path
+        return normalized
 
     def _iter_tab_frames(self):
         """Yield (tab_index, tab_name, frame_data) for each file frame across all tabs."""
@@ -898,17 +914,16 @@ class ModEditorDialog(QDialog):
                 if not data:
                     continue
                 if data["type"] == "data" and data.get("path"):
-                    tab_files["data_file_url"] = data["path"]
+                    tab_files["data_file_path"] = data["path"]
                 elif data["type"] == "extra" and data.get("paths"):
-                    extra_files = tab_files.setdefault("extra_files", {})
-                    if data["key"] in extra_files:
-                        existing_paths = set(extra_files[data["key"]])
-                        new_paths = [
-                            p for p in data["paths"] if p not in existing_paths
-                        ]
-                        extra_files[data["key"]].extend(new_paths)
-                    else:
-                        extra_files[data["key"]] = data["paths"]
+                    extra_files = tab_files.setdefault("extra_files", [])
+                    existing_paths = {
+                        extra_file for extra_file in extra_files if isinstance(extra_file, str)
+                    }
+                    for path in data["paths"]:
+                        if path not in existing_paths:
+                            extra_files.append(path)
+                            existing_paths.add(path)
             if tab_files:
                 files[tab_keys[idx]] = tab_files
         return files
@@ -929,11 +944,10 @@ class ModEditorDialog(QDialog):
             if path_edit and path_edit.text():
                 return {
                     "type": "data",
-                    "path": path_edit.text(),
+                    "path": self._format_config_path(path_edit.text()),
                 }
         elif ftype == "extra":
             paths = []
-            extra_key = None
             for i in range(fl.count()):
                 w = fl.itemAt(i).widget() if fl.itemAt(i) else None
                 if (
@@ -941,11 +955,9 @@ class ModEditorDialog(QDialog):
                     and w.property("is_local_extra_path")
                     and w.text()
                 ):
-                    if not extra_key:
-                        extra_key = w.property("extra_key") or "extra_files"
-                    paths.append(w.text())
-            if paths and extra_key:
-                return {"type": "extra", "key": extra_key, "paths": paths}
+                    paths.append(self._format_config_path(w.text()))
+            if paths:
+                return {"type": "extra", "paths": paths}
         return None
 
     def _save_mod(self):
@@ -970,49 +982,98 @@ class ModEditorDialog(QDialog):
             return os.path.basename(resolved)
         return None
 
-    def _get_file_folder(self, base_dir, file_key, game):
-        game_def = get_game(game)
-        tab = game_def.get_tab(file_key) if game_def else None
-        folder = (
-            game_def.get_folder_name(tab.tab_id)
-            if game_def and tab
-            else get_chapter_folder_name(file_key, game=game)
-        )
-        return os.path.join(base_dir, folder)
+    def _collect_managed_file_paths(self, mod_dir, files_data, game):
+        managed_paths = set()
+        for _file_key, file_info in (files_data or {}).items():
+            data_file = file_info.get("data_file_path") or file_info.get("data_file_url")
+            if isinstance(data_file, str):
+                managed_path = self._resolve_managed_mod_path(mod_dir, data_file)
+                if managed_path:
+                    managed_paths.add(managed_path)
+            for extra_file in parse_extra_files_raw(file_info.get("extra_files", [])):
+                managed_path = self._resolve_managed_mod_path(mod_dir, extra_file)
+                if managed_path:
+                    managed_paths.add(managed_path)
+        return managed_paths
+
+    @staticmethod
+    def _resolve_managed_mod_path(file_folder, stored_path) -> str | None:
+        if not isinstance(stored_path, str):
+            return None
+        cleaned_path = stored_path.strip().replace("\\", "/").rstrip("/")
+        if not cleaned_path or os.path.isabs(cleaned_path):
+            return None
+        candidate = resolve_mod_file_path(file_folder, cleaned_path)
+        try:
+            if os.path.commonpath([os.path.abspath(file_folder), os.path.abspath(candidate)]) != os.path.abspath(file_folder):
+                return None
+        except ValueError:
+            return None
+        return candidate
+
+    def _remove_stale_managed_files(self, mod_dir, old_files, new_files, game):
+        previous_paths = self._collect_managed_file_paths(mod_dir, old_files, game)
+        current_paths = self._collect_managed_file_paths(mod_dir, new_files, game)
+        stale_paths = sorted(previous_paths - current_paths, key=len, reverse=True)
+        for stale_path in stale_paths:
+            if os.path.isdir(stale_path):
+                shutil.rmtree(stale_path, ignore_errors=True)
+            elif os.path.isfile(stale_path):
+                with suppress(FileNotFoundError):
+                    os.remove(stale_path)
+            parent_dir = os.path.dirname(stale_path)
+            while parent_dir and os.path.abspath(parent_dir) != os.path.abspath(mod_dir):
+                try:
+                    os.rmdir(parent_dir)
+                except OSError:
+                    break
+                parent_dir = os.path.dirname(parent_dir)
 
     def _copy_files_to_mod_dir(self, mod_dir, files_data, game):
         processed = {}
         for file_key, fd in files_data.items():
-            file_folder = self._get_file_folder(mod_dir, file_key, game)
-            os.makedirs(file_folder, exist_ok=True)
             new_fd = {}
-            data_path = fd.get("data_file_url")
+            data_path = fd.get("data_file_path") or fd.get("data_file_url")
             if data_path:
                 resolved = self._resolve_file_path(data_path)
                 if os.path.exists(resolved):
-                    dest = os.path.join(file_folder, os.path.basename(resolved))
+                    dest = os.path.join(mod_dir, os.path.basename(resolved))
                     if os.path.abspath(resolved) != os.path.abspath(dest):
+                        if os.path.exists(dest):
+                            if os.path.isdir(dest):
+                                shutil.rmtree(dest)
+                            else:
+                                os.remove(dest)
                         if os.path.isdir(resolved):
                             shutil.copytree(resolved, dest)
                         else:
                             shutil.copy2(resolved, dest)
-                    new_fd["data_file_url"] = os.path.basename(resolved)
-            for group_key, paths in fd.get("extra_files", {}).items():
-                if not (group_key and paths):
+                    new_fd["data_file_path"] = self._format_config_path(
+                        os.path.basename(resolved), is_directory=os.path.isdir(resolved)
+                    )
+            for path in parse_extra_files_raw(fd.get("extra_files", [])):
+                if not path:
                     continue
-                new_fd.setdefault("extra_files", {})[group_key] = []
-                for path in paths:
-                    resolved = self._resolve_file_path(path)
-                    if os.path.exists(resolved):
-                        dest = os.path.join(file_folder, os.path.basename(resolved))
-                        if os.path.abspath(resolved) != os.path.abspath(dest):
-                            if os.path.isdir(resolved):
-                                shutil.copytree(resolved, dest)
-                            else:
-                                shutil.copy2(resolved, dest)
-                        new_fd["extra_files"][group_key].append(
-                            os.path.basename(resolved)
-                        )
+                resolved = self._resolve_file_path(path)
+                if not os.path.exists(resolved):
+                    continue
+                dest = os.path.join(mod_dir, os.path.basename(resolved))
+                if os.path.abspath(resolved) != os.path.abspath(dest):
+                    if os.path.exists(dest):
+                        if os.path.isdir(dest):
+                            shutil.rmtree(dest)
+                        else:
+                            os.remove(dest)
+                    if os.path.isdir(resolved):
+                        shutil.copytree(resolved, dest)
+                    else:
+                        shutil.copy2(resolved, dest)
+                new_fd.setdefault("extra_files", []).append(
+                    self._format_config_path(
+                        os.path.basename(resolved),
+                        is_directory=os.path.isdir(resolved),
+                    )
+                )
             if new_fd:
                 processed[file_key] = new_fd
         return processed
@@ -1106,6 +1167,12 @@ class ModEditorDialog(QDialog):
             icon_val = self._process_icon(mod_folder)
             processed_files = self._copy_files_to_mod_dir(
                 mod_folder, data.get("files", {}), data["game"]
+            )
+            self._remove_stale_managed_files(
+                mod_folder,
+                config.get("files", {}),
+                processed_files,
+                data["game"],
             )
             config.update(
                 {
@@ -1303,9 +1370,10 @@ class ModEditorDialog(QDialog):
             if fi and self.file_tabs.count():
                 tab = self.file_tabs.widget(0)
                 layout = getattr(tab, "_file_layout", None) if tab else None
-                if tab and layout and fi.get("data_file_url"):
+                data_path = fi.get("data_file_path") or fi.get("data_file_url")
+                if tab and layout and data_path:
                     self._create_file_frame(layout, "data")
-                    self._fill_data_in_tab(layout, fi["data_file_url"])
+                    self._fill_data_in_tab(layout, data_path)
             return
         for ti, tab_def in enumerate(game_def.tabs):
             fi = files_data.get(tab_def.files_key) or files_data.get(tab_def.tab_id)
@@ -1314,20 +1382,13 @@ class ModEditorDialog(QDialog):
                 layout = getattr(tab, "_file_layout", None) if tab else None
                 if not tab or not layout:
                     continue
-                if fi.get("data_file_url"):
+                data_path = fi.get("data_file_path") or fi.get("data_file_url")
+                if data_path:
                     self._create_file_frame(layout, "data")
-                    self._fill_data_in_tab(layout, fi["data_file_url"])
-                extra_files = {}
-                for extra_file in parse_extra_files_raw(
-                    fi.get("extra_files", []),
-                    fi,
-                    as_dicts=True,
-                ):
-                    extra_files.setdefault(extra_file["key"], []).append(extra_file["url"])
-                for ek, fnames in extra_files.items():
-                    if fnames:
-                        self._create_file_frame(layout, "extra", ek)
-                        self._fill_extra_in_tab(layout, ek, fnames)
+                    self._fill_data_in_tab(layout, data_path)
+                for extra_file in parse_extra_files_raw(fi.get("extra_files", [])):
+                    self._create_file_frame(layout, "extra")
+                    self._fill_extra_in_tab(layout, extra_file)
 
     def _resolve_path(self, file_path, tab_idx, mod_folder, game=None):
         if not file_path:
@@ -1336,19 +1397,9 @@ class ModEditorDialog(QDialog):
             return file_path
         if not mod_folder:
             return file_path
-        game = game or self.game_combo.currentData()
-        game_def = get_game(game)
-        tab = game_def.get_tab_by_index(tab_idx) if game_def else None
-        folders = [game_def.get_folder_name(tab.tab_id)] if game_def and tab else []
-        if tab and tab.files_key not in folders:
-            folders.append(tab.files_key)
-        for candidate in [
-            *(os.path.join(mod_folder, folder, file_path) for folder in folders),
-            os.path.join(mod_folder, file_path),
-        ]:
-            if os.path.exists(candidate):
-                return candidate
-        return file_path
+        _game = game or self.game_combo.currentData()
+        resolved = resolve_mod_file_path(mod_folder, file_path)
+        return resolved if os.path.exists(resolved) else file_path
 
     def _fill_data_in_tab(self, layout, path):
         for i in range(layout.count() - 1, -1, -1):
@@ -1364,26 +1415,23 @@ class ModEditorDialog(QDialog):
                     sub.setText(path)
             return
 
-    def _fill_extra_in_tab(self, layout, key_name, filenames):
+    def _fill_extra_in_tab(self, layout, filename):
         for i in range(layout.count() - 1, -1, -1):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
             if not w or not hasattr(w, "layout") or not (fl := w.layout()):
                 continue
             title = fl.itemAt(0).widget() if fl.count() > 0 and fl.itemAt(0) else None
-            if not isinstance(title, QLabel) or title.property("clean_key") != key_name:
+            if not isinstance(title, QLabel) or title.property("file_type") != "extra":
                 continue
-            for fn in filenames:
-                file_lbl = QLabel(f"  {os.path.basename(fn)}")
-                sc = self._color("secondary_text", "#888888")
-                file_lbl.setStyleSheet(f"color: {sc}; font-size: 10px;")
-                fl.addWidget(file_lbl)
-                hidden_edit = QLineEdit()
-                hidden_edit.setText(fn)
-                hidden_edit.hide()
-                hidden_edit.setProperty("is_local_extra_path", True)
-                hidden_edit.setProperty("extra_key", key_name)
-                fl.addWidget(hidden_edit)
-            return
+            for j in range(fl.count()):
+                sub = fl.itemAt(j).widget() if fl.itemAt(j) else None
+                if (
+                    isinstance(sub, QLineEdit)
+                    and sub.property("is_local_extra_path")
+                    and not sub.text()
+                ):
+                    sub.setText(filename)
+                    return
 
     def relocalize_ui(self):
         self.setWindowTitle(

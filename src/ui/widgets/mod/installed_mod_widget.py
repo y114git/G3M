@@ -1,8 +1,7 @@
 import logging
 import os
-import tempfile
 
-from PyQt6.QtCore import QMimeData, QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QDrag, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
@@ -13,6 +12,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from presentation.drag_drop import LazyFileExportMimeData
 from services.localization_service import tr
 from ui.common.styling import (
     apply_stylesheet_if_changed,
@@ -56,6 +56,8 @@ class InstalledModWidget(BaseModWidget):
         if parent_app:
             self.parent_app = parent_app
         self.hide()
+        self._drag_start_pos = None
+        self._drag_in_progress = False
         self._is_broken_cache = None
         self.use_button = None
         self.is_active = False
@@ -253,34 +255,20 @@ class InstalledModWidget(BaseModWidget):
             if not files or not isinstance(files, dict):
                 self._is_broken_cache = True
                 return True
-            from utils.file_utils import get_chapter_folder_name
+            from utils.mod_config_parser import resolve_mod_file_path
 
-            for chapter_key, chapter_data in files.items():
+            for chapter_data in files.values():
                 if chapter_data is None:
                     continue
                 if isinstance(chapter_data, dict):
-                    data_file = chapter_data.get("data_file_url")
+                    data_file = chapter_data.get("data_file_path") or chapter_data.get(
+                        "data_file_url"
+                    )
                 else:
-                    data_file = getattr(chapter_data, "data_file_url", None)
+                    data_file = getattr(chapter_data, "data_file_path", None)
                 if not data_file:
                     continue
-                if chapter_key in [
-                    "demo",
-                    "undertale",
-                    "undertaleyellow",
-                    "pizzatower",
-                    "sugaryspire",
-                ]:
-                    chapter_folder = os.path.join(mod_folder, chapter_key)
-                else:
-                    try:
-                        chapter_id = int(chapter_key)
-                        chapter_folder = os.path.join(
-                            mod_folder, get_chapter_folder_name(chapter_id)
-                        )
-                    except (ValueError, TypeError):
-                        chapter_folder = os.path.join(mod_folder, chapter_key)
-                data_file_path = os.path.join(chapter_folder, data_file)
+                data_file_path = resolve_mod_file_path(mod_folder, data_file)
                 if not os.path.exists(data_file_path):
                     self._is_broken_cache = True
                     return True
@@ -382,6 +370,8 @@ class InstalledModWidget(BaseModWidget):
     def mouseMoveEvent(self, event):
         if not (event.buttons() & Qt.MouseButton.LeftButton):
             return
+        if self._drag_in_progress:
+            return
         if not hasattr(self, "_drag_start_pos") or self._drag_start_pos is None:
             return
         if (event.pos() - self._drag_start_pos).manhattanLength() < 30:
@@ -393,21 +383,23 @@ class InstalledModWidget(BaseModWidget):
             controller = getattr(self.parent_app, "mod_import_export_controller", None)
             if not controller:
                 return
-            mod_name = getattr(self.mod_data, "name", "mod") or "mod"
-            safe_name = "".join(
-                c if c.isalnum() or c in " _-" else "_" for c in mod_name
-            ).strip()
-            temp_dir = tempfile.mkdtemp(prefix="deltahub_export_")
-            temp_zip = os.path.join(temp_dir, f"{safe_name}.zip")
-            success = controller.export_mod_to_path(self.mod_data, temp_zip)
-            if not success or not os.path.exists(temp_zip):
-                return
+            self._drag_in_progress = True
+            self._drag_start_pos = None
             drag = QDrag(self)
-            mime = QMimeData()
-            mime.setUrls([QUrl.fromLocalFile(temp_zip)])
+            mod_name = getattr(self.mod_data, "name", "mod") or "mod"
+            mime = LazyFileExportMimeData(
+                lambda path: controller.export_mod_to_path(self.mod_data, path),
+                f"{mod_name}.zip",
+                internal_format="application/x-deltahub-installed-mod-export",
+            )
             drag.setMimeData(mime)
-            drag.exec(Qt.DropAction.CopyAction)
+            try:
+                drag.exec(Qt.DropAction.CopyAction)
+            finally:
+                self._drag_in_progress = False
+                mime.cleanup_later()
         except Exception as e:
+            self._drag_in_progress = False
             logging.warning(
                 f"InstalledModWidget: drag export failed: {e}", exc_info=True
             )

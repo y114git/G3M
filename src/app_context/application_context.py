@@ -16,6 +16,7 @@ from services.game_versions_manager import GameVersionsManager
 from services.launch_service import GameLauncher
 from services.localization_service import localization_service
 from services.mod_service import ModManager
+from services.pizza_oven_conversion_service import PizzaOvenConversionService
 from services.plugin_catalog_service import PluginCatalogService
 from services.plugin_install_service import PluginInstallService
 from services.plugin_runtime_service import PluginRuntimeService
@@ -106,6 +107,7 @@ def build_application_context(parent=None) -> ApplicationContext:
     settings_service.profile_service = profile_service
     session_manager = SessionManager(app_state, parent=parent)
     mod_service = ModManager(app_state, feedback_service, settings_service, parent)
+    pizza_oven_conversion_service = PizzaOvenConversionService()
     game_launcher = GameLauncher(app_state, feedback_service, mod_service, parent)
     update_checker = UpdateChecker(app_state, feedback_service, parent)
     customization_service = CustomizationManager(app_state, parent)
@@ -172,6 +174,7 @@ def build_application_context(parent=None) -> ApplicationContext:
         used_mods_service=used_mods_service,
         downloads_manager=downloads_manager,
         game_versions_manager=game_versions_manager,
+        pizza_oven_conversion_service=pizza_oven_conversion_service,
         plugin_state_service=plugin_state_service,
         plugin_catalog_service=plugin_catalog_service,
         plugin_runtime_service=plugin_runtime_service,

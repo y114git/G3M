@@ -1,7 +1,6 @@
 import logging
 import os
 import shutil
-import zipfile
 from typing import override
 
 from PyQt6.QtCore import QSize, Qt, QUrl
@@ -32,7 +31,6 @@ from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values
 from ui.common.styling import clamp_border_radius, get_ui_scale_factor
 from utils.file_utils import (
-    get_chapter_folder_name,
     get_unique_mod_dir,
     save_json,
 )
@@ -993,12 +991,27 @@ class ManualModInstallDialog(QDialog):
             )
 
     @staticmethod
-    def _make_archive_key(relative_path: str) -> str:
-        clean_path = relative_path.rstrip("/") if relative_path else ""
-        if clean_path:
-            key = clean_path.replace("/", "_").replace("\\", "_").strip("_")
-            return key if key else "root"
-        return "root"
+    def _copy_file_to_relative_path(
+        target_mod_dir: str,
+        source_path: str,
+        relative_path: str,
+    ) -> str:
+        normalized_relative = relative_path.replace("\\", "/").strip().strip("/")
+        if not normalized_relative:
+            normalized_relative = os.path.basename(source_path)
+        target_path = os.path.join(
+            target_mod_dir, normalized_relative.replace("/", os.sep)
+        )
+        target_dir = os.path.dirname(target_path)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+        base_name, extension = os.path.splitext(target_path)
+        suffix = 1
+        while os.path.exists(target_path):
+            target_path = f"{base_name}_{suffix}{extension}"
+            suffix += 1
+        shutil.copy2(source_path, target_path)
+        return os.path.relpath(target_path, target_mod_dir).replace("\\", "/")
 
     def _chapter_display_name(self, chapter_id: str) -> str:
         for i in range(self.data_tabs.count()):
@@ -1053,16 +1066,13 @@ class ManualModInstallDialog(QDialog):
         files_structure = {}
         game = self.game_combo.currentData()
         for chapter_id, data_file_path in self.data_file_selections.items():
-            if chapter_id not in files_structure:
-                files_structure[chapter_id] = {}
-            chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
-            chapter_folder = os.path.join(target_mod_dir, chapter_folder_name)
-            os.makedirs(chapter_folder, exist_ok=True)
-            data_file_name = os.path.basename(data_file_path)
-            target_data_path = os.path.join(chapter_folder, data_file_name)
-            shutil.copy2(data_file_path, target_data_path)
-            files_structure[chapter_id]["data_file_url"] = data_file_name
-        archive_files_map = {}
+            files_structure.setdefault(chapter_id, {})
+            stored_data_path = self._copy_file_to_relative_path(
+                target_mod_dir,
+                data_file_path,
+                os.path.basename(data_file_path),
+            )
+            files_structure[chapter_id]["data_file_path"] = stored_data_path
         selected_data, used_patches = self._get_excluded_files()
         excluded = selected_data | self.unused_files | used_patches
         all_extra_files = [
@@ -1070,8 +1080,7 @@ class ManualModInstallDialog(QDialog):
             for fp in (fp for fp, _ in self.all_files if fp not in excluded)
         ]
         for chapter_id, patches in self.xdelta_patches_mappings.items():
-            if chapter_id not in files_structure:
-                continue
+            files_structure.setdefault(chapter_id, {})
             for xdelta_file_path, target_path in patches.items():
                 if not target_path or not target_path.strip():
                     continue
@@ -1080,20 +1089,19 @@ class ManualModInstallDialog(QDialog):
                     continue
                 dir_part = os.path.dirname(target_path_normalized)
                 file_part = os.path.basename(target_path_normalized)
-                relative_path = (dir_part + "/") if dir_part else ""
-                clean_path = relative_path.rstrip("/") if relative_path else ""
-                archive_key = self._make_archive_key(relative_path)
                 renamed_xdelta_name = f"{file_part}.xdelta"
-                archive_internal_path = (
-                    f"{clean_path}/{renamed_xdelta_name}"
-                    if clean_path
+                stored_patch_path = (
+                    f"{dir_part}/{renamed_xdelta_name}"
+                    if dir_part
                     else renamed_xdelta_name
                 )
-                archive_map_key = (chapter_id, archive_key)
-                if archive_map_key not in archive_files_map:
-                    archive_files_map[archive_map_key] = []
-                archive_files_map[archive_map_key].append(
-                    (xdelta_file_path, relative_path, archive_internal_path)
+                copied_path = self._copy_file_to_relative_path(
+                    target_mod_dir,
+                    xdelta_file_path,
+                    stored_patch_path,
+                )
+                files_structure[chapter_id].setdefault("extra_files", []).append(
+                    copied_path
                 )
         for extra_file_path, relative_path in all_extra_files:
             relative_path = (
@@ -1103,47 +1111,20 @@ class ManualModInstallDialog(QDialog):
                 target_chapter_id = min(self.data_file_selections.keys())
             else:
                 target_chapter_id = game
-            if target_chapter_id not in files_structure:
-                files_structure[target_chapter_id] = {}
-            extra_file_name = os.path.basename(extra_file_path)
-            clean_path = relative_path.rstrip("/") if relative_path else ""
-            archive_key = self._make_archive_key(relative_path)
-            archive_internal_path = (
-                f"{clean_path}/{extra_file_name}" if clean_path else extra_file_name
+            files_structure.setdefault(target_chapter_id, {})
+            stored_extra_path = (
+                f"{relative_path}/{os.path.basename(extra_file_path)}"
+                if relative_path
+                else os.path.basename(extra_file_path)
             )
-            archive_map_key = (target_chapter_id, archive_key)
-            if archive_map_key not in archive_files_map:
-                archive_files_map[archive_map_key] = []
-            archive_files_map[archive_map_key].append(
-                (extra_file_path, relative_path, archive_internal_path)
+            copied_path = self._copy_file_to_relative_path(
+                target_mod_dir,
+                extra_file_path,
+                stored_extra_path,
             )
-        for (chapter_id, archive_key), file_list in archive_files_map.items():
-            chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
-            chapter_folder = os.path.join(target_mod_dir, chapter_folder_name)
-            archive_name = f"extra_file_{archive_key}.zip"
-            archive_path = os.path.join(chapter_folder, archive_name)
-            if "extra_files" not in files_structure[chapter_id]:
-                files_structure[chapter_id]["extra_files"] = {}
-            if archive_key not in files_structure[chapter_id]["extra_files"]:
-                files_structure[chapter_id]["extra_files"][archive_key] = []
-            try:
-                os.makedirs(os.path.dirname(archive_path), exist_ok=True)
-                with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                    for file_path, _rel_path, internal_path in file_list:
-                        zipf.write(file_path, internal_path)
-                        logging.debug(
-                            f"Added {file_path} to archive {archive_path} with internal path: {internal_path}"
-                        )
-                logging.debug(
-                    f"Created extra_file archive: {archive_path} with {len(file_list)} file(s)"
-                )
-            except Exception as e:
-                logging.error(
-                    f"Failed to create extra_file archive {archive_path}: {e}",
-                    exc_info=True,
-                )
-                raise
-            files_structure[chapter_id]["extra_files"][archive_key].append(archive_name)
+            files_structure[target_chapter_id].setdefault("extra_files", []).append(
+                copied_path
+            )
         config_data = {
             "id": mod_id,
             "name": mod_name,
@@ -1151,6 +1132,8 @@ class ManualModInstallDialog(QDialog):
             "files": files_structure,
         }
         if self.gamebanana_metadata:
+            from adapters.gamebanana_adapter import GameBananaAPI
+
             for field in (
                 "author",
                 "description",
@@ -1161,6 +1144,16 @@ class ManualModInstallDialog(QDialog):
             ):
                 if self.gamebanana_metadata.get(field):
                     config_data[field] = self.gamebanana_metadata[field]
+            category_tag = GameBananaAPI.category_to_tag(
+                self.gamebanana_metadata.get("category")
+            )
+            if category_tag:
+                existing_tags = config_data.get("tags", [])
+                if not isinstance(existing_tags, list):
+                    existing_tags = [existing_tags] if existing_tags else []
+                if category_tag not in existing_tags:
+                    existing_tags.append(category_tag)
+                config_data["tags"] = existing_tags
             config_data.setdefault("version", "1.0.0")
         else:
             config_data["author"] = "Unknown"

@@ -7,6 +7,7 @@ from config.config import APP_VERSION
 
 
 def test_get_update_info_returns_platform_specific_payload(app_state):
+    """Checks that getting update info returns platform specific payload."""
     from services.updatecheck_service import UpdateChecker
 
     app_state.global_settings = {
@@ -32,6 +33,7 @@ def test_get_update_info_returns_platform_specific_payload(app_state):
 
 
 def test_get_update_info_skips_current_version(app_state):
+    """Checks that getting update info skips current version."""
     from services.updatecheck_service import UpdateChecker
 
     feedback_service = Mock()
@@ -48,6 +50,7 @@ def test_get_update_info_skips_current_version(app_state):
 
 
 def test_verify_archive_checksum_rejects_mismatch(app_state, temp_dir):
+    """Checks that verifying archive checksum rejects mismatch."""
     from models.exceptions import AppError
     from services.updatecheck_service import UpdateChecker
 
@@ -62,6 +65,7 @@ def test_verify_archive_checksum_rejects_mismatch(app_state, temp_dir):
 
 
 def test_build_unix_updater_script_contains_backup_restore(app_state):
+    """Checks that building unix updater script contains backup restore."""
     from services.updatecheck_service import UpdateChecker
 
     checker = UpdateChecker(app_state=app_state, feedback_service=Mock())
@@ -76,6 +80,7 @@ def test_build_unix_updater_script_contains_backup_restore(app_state):
 
 
 def test_prompt_for_update_queues_when_game_is_running():
+    """Checks that prompting for update queues when game is running."""
     from presentation.update_presenter import prompt_for_update
 
     app = Mock()

@@ -2,7 +2,9 @@ from unittest.mock import Mock, patch
 
 
 class TestAnnounceService:
+    """Tests for announce service."""
     def test_get_poll_options_returns_arbitrary_named_children(self, app_state):
+        """Checks that getting poll options returns arbitrary named children."""
         from services.announce_service import AnnounceService
 
         service = AnnounceService(app_state, Mock())
@@ -22,6 +24,7 @@ class TestAnnounceService:
         assert options == ["A", "Option B", "C"]
 
     def test_submit_poll_vote_creates_identity_and_persists_vote(self, app_state):
+        """Checks that submiting poll vote creates identity and persists vote."""
         from services.announce_service import AnnounceService
 
         settings_service = Mock()

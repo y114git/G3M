@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 
 
 class TestFilterScaling:
+    """Tests for filter scaling."""
     """Test filter widget scaling behavior to prevent regression of scale-down bug.
 
     The fix: theme_controller resets maximumHeight on filter scroll areas to 16777215
@@ -12,7 +13,7 @@ class TestFilterScaling:
     """
 
     def test_library_maximum_height_reset_allows_shrink(self, qapp, app_state, feedback_service):
-        """Resetting maximumHeight to unconstrained allows sizeHint to return smaller values."""
+        """Checks that librarying maximum height reset allows shrink."""
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
         builder = LibraryTabBuilder(app_state, None)
@@ -36,7 +37,7 @@ class TestFilterScaling:
         QApplication.processEvents()
 
     def test_search_maximum_height_reset_allows_shrink(self, qapp, app_state, feedback_service):
-        """Resetting maximumHeight to unconstrained allows sizeHint to return smaller values."""
+        """Checks that searching maximum height reset allows shrink."""
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
 
         builder = ModsBrowserTabBuilder(app_state, None)
@@ -60,7 +61,7 @@ class TestFilterScaling:
         QApplication.processEvents()
 
     def test_library_eventfilter_sets_maxheight(self, qapp, app_state, feedback_service):
-        """Event filter sets maximumHeight to sizeHint after resize."""
+        """Checks that librarying eventfilter sets maxheight."""
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
         builder = LibraryTabBuilder(app_state, None)
@@ -81,7 +82,7 @@ class TestFilterScaling:
         QApplication.processEvents()
 
     def test_search_eventfilter_sets_maxheight(self, qapp, app_state, feedback_service):
-        """Event filter sets maximumHeight to sizeHint after resize."""
+        """Checks that searching eventfilter sets maxheight."""
         from ui.builders.search_tab_builder import ModsBrowserTabBuilder
 
         builder = ModsBrowserTabBuilder(app_state, None)

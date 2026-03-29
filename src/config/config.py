@@ -103,6 +103,7 @@ ARROW_DOWN_SVG_TEMPLATE = shared_styles.ARROW_DOWN_SVG_TEMPLATE
 ARROW_UP_SVG_TEMPLATE = shared_styles.ARROW_UP_SVG_TEMPLATE
 RICH_HTML_CSS_CLASS_MAP = shared_styles.RICH_HTML_CSS_CLASS_MAP
 BASE_TAG_NAMES = ("textedit", "customization", "gameplay", "other")
+CYOP_AFOM_TAG = "CYOP/AFOM"
 LIBRARY_IMPORT_ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma", ".gz")
 MOD_README_EXTENSIONS = (".md", ".txt")
 MOD_README_ENCODINGS = ("utf-8-sig", "utf-16", "cp1251", "latin-1")
@@ -263,6 +264,13 @@ GAME_DATA_FILENAMES = (
     "game.droid",
 )
 MOD_CONFIG_FILENAME = "mod_config.json"
+THEME_CONFIG_VERSION = "1.0.0"
+THEME_CONFIG_FILENAME = "theme_config.json"
+LEGACY_THEME_CONFIG_FILENAME = "theme.json"
+THEME_CONFIG_FILENAMES = (
+    THEME_CONFIG_FILENAME,
+    LEGACY_THEME_CONFIG_FILENAME,
+)
 DATA_WIN_FILENAME = "data.win"
 META_JSON_FILENAME = "meta.json"
 ICON_PNG_FILENAME = "icon.png"

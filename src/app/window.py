@@ -528,6 +528,8 @@ class AppWindow(QWidget):
         if not self.app_state.local_config.get("hide_library_tab", False):
             self.main_tab_widget.addTab(self.library_tab, tr("ui.library_tab"))
             self._num_main_tabs_visible += 1
+        if self._num_main_tabs_visible == 0:
+            self._show_empty_main_tabs_placeholder()
 
         self.previous_tab_index = 0
         from app.tab_handler import handle_tab_changed
@@ -545,10 +547,45 @@ class AppWindow(QWidget):
         setup_settings_tab(self)
         if hasattr(self, "plugins_ui") and self.plugins_ui:
             self.plugins_ui.refresh_main_tabs()
+        self._restore_last_active_main_tab()
         self.search_display.update_filtered_mods()
         self.tab_widget = self.main_tab_widget
         self.tabs = {}
         self.setWindowIcon(QIcon(resource_path("assets/icons/icon.ico")))
+
+    def _show_empty_main_tabs_placeholder(self):
+        self.main_tab_widget.clear()
+        placeholder = QWidget()
+        layout = QVBoxLayout(placeholder)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addStretch()
+        label = QLabel(tr("ui.no_tabs_placeholder"))
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setObjectName("mainTabsEmptyLabel")
+        label.setStyleSheet("font-style: italic;")
+        layout.addWidget(label)
+        layout.addStretch()
+        self.main_tab_widget.addTab(placeholder, "")
+        self.main_tab_widget.tabBar().hide()
+
+    def _restore_main_tabs_bar(self):
+        tab_bar = self.main_tab_widget.tabBar()
+        if tab_bar:
+            tab_bar.show()
+
+    def _restore_last_active_main_tab(self):
+        if not hasattr(self, "main_tab_widget") or not self.main_tab_widget:
+            return
+        if self.main_tab_widget.count() <= 0:
+            return
+        saved_index = self.app_state.local_config.get("last_active_tab", 0)
+        try:
+            saved_index = int(saved_index)
+        except (TypeError, ValueError):
+            saved_index = 0
+        saved_index = max(0, min(saved_index, self.main_tab_widget.count() - 1))
+        self.main_tab_widget.setCurrentIndex(saved_index)
+        self.previous_tab_index = saved_index
 
     def _finish_initialization(self):
         self.app_state.initialization_completed = True

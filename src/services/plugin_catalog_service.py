@@ -39,12 +39,12 @@ class PluginCatalogService:
                 self._invalidate_cache()
                 return data
         self._catalog = self._catalog or {}
-        self._catalog_loaded_at = time.time() if self._catalog else 0.0
+        self._catalog_loaded_at = time.time() if self._catalog.get("plugins") else 0.0
         self._invalidate_cache()
         return self._catalog
 
     def is_loaded(self) -> bool:
-        return self._catalog is not None
+        return bool(self._catalog and self._catalog.get("plugins"))
 
     def refresh_catalog(self) -> dict:
         result = self.load_catalog(force_refresh=True)
@@ -95,7 +95,7 @@ class PluginCatalogService:
             if isinstance(data, dict):
                 return data
         except Exception as e:
-            logger.debug("PluginCatalogService: fetch failed: %s", e, exc_info=True)
+            logger.warning("PluginCatalogService: fetch failed (%s): %s", type(e).__name__, e)
         return None
 
     def _invalidate_cache(self) -> None:

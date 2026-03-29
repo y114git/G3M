@@ -561,6 +561,7 @@ class G3MToolPatchingService(QObject):
                 mod_start,
                 mod_end,
                 mod_name,
+                mod_data,
             ):
                 return False
 
@@ -936,6 +937,7 @@ class G3MToolPatchingService(QObject):
         progress_start: float,
         progress_end: float,
         mod_name: str,
+        mod_data,
     ) -> bool:
         from utils.patching.file_override_utils import apply_file_overrides
 
@@ -953,6 +955,7 @@ class G3MToolPatchingService(QObject):
                 message,
             ),
             mod_name=mod_name,
+            game_id=self._resolve_mod_game(mod_data),
         )
 
     def _backup_or_mark_file(self, chapter_id, target_file: str) -> None:

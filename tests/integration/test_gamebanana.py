@@ -3,9 +3,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 
 class TestGameBananaAPI:
-
+    """Tests for gamebanana."""
     @patch('requests.Session')
     def test_fetch_game_mods(self, mock_session_class):
+        """Checks that fetching game mods."""
         from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
@@ -21,6 +22,7 @@ class TestGameBananaAPI:
         assert isinstance(mods, list)
 
     def test_map_mod_data_marks_content_rated_mod_as_nsfw(self):
+        """Checks that maping mod data marks content rated mod as nsfw."""
         from adapters.gamebanana_adapter import GameBananaAPI
         api = GameBananaAPI()
         mod = api._map_mod_data({'_idRow': 657995, '_sName': 'Roaring Knight: Berserk', '_nDownloadCount': 34, '_aTags': ['Boss: Roaring Knight'], '_bHasContentRatings': True}, 'deltarune')
@@ -29,6 +31,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_get_mod_profile_page(self, mock_session_class):
+        """Checks that getting mod profile page."""
         from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
@@ -43,6 +46,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_get_supported_files(self, mock_session_class):
+        """Checks that getting supported files."""
         from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
@@ -70,6 +74,7 @@ class TestGameBananaAPI:
 
     @patch('requests.Session')
     def test_get_supported_files_with_itemtype(self, mock_session_class):
+        """Checks that getting supported files with itemtype."""
         from adapters.gamebanana_adapter import GameBananaAPI
         mock_session = MagicMock()
         mock_response = Mock()
@@ -87,8 +92,9 @@ class TestGameBananaAPI:
 
 
 class TestGameBananaConverter:
-
+    """Tests for gamebanana."""
     def test_convert_gamebanana_mod(self, temp_mods_dir):
+        """Checks that converting gamebanana mod."""
         import tempfile
         import zipfile
 

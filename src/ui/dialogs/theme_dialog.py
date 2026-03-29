@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+from config.settings_schema import DEFAULT_APP_SETTINGS
 from services.localization_service import tr
 from ui.common.styling import get_border_radius
 
@@ -78,8 +79,10 @@ class ThemeManagementDialog(QDialog):
                 "• " + tr("themes.custom_colors") + ":\n" + "\n".join(changed_colors)
             )
 
-        border_radius = get_border_radius(config)
-        if border_radius:
+        border_radius = get_border_radius(
+            config, default=DEFAULT_APP_SETTINGS["custom_border_radius"]
+        )
+        if border_radius != DEFAULT_APP_SETTINGS["custom_border_radius"]:
             parts.append("• " + tr("ui.border_radius_label") + f": {border_radius}px")
 
         if not parts:

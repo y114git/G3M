@@ -1,7 +1,11 @@
 """Mod filtering and sorting utilities."""
 
 from adapters.gamebanana_adapter import GameBananaAPI
-from config.config import MOD_FILTER_NSFW_TEXT_MARKERS, MOD_FILTER_TRUE_VALUES
+from config.config import (
+    CYOP_AFOM_TAG,
+    MOD_FILTER_NSFW_TEXT_MARKERS,
+    MOD_FILTER_TRUE_VALUES,
+)
 from services.mod_service import parse_mod_date
 
 
@@ -12,6 +16,12 @@ def _get_mod_attr(mod, attr, default=None):
 
 
 def _get_mod_tags(mod, is_gamebanana: bool = False):
+    def _canonical_tag(tag_value):
+        normalized = str(tag_value).strip()
+        if normalized.casefold() == CYOP_AFOM_TAG.casefold():
+            return CYOP_AFOM_TAG
+        return normalized.lower()
+
     raw_tags = _get_mod_attr(mod, "tags") or []
     if isinstance(raw_tags, str):
         tags = [raw_tags]
@@ -26,7 +36,7 @@ def _get_mod_tags(mod, is_gamebanana: bool = False):
         category_tag = GameBananaAPI.category_to_tag(category)
         if category_tag and category_tag not in tags:
             tags.append(category_tag)
-    return [str(tag).strip() for tag in tags if str(tag).strip()]
+    return [_canonical_tag(tag) for tag in tags if str(tag).strip()]
 
 
 def _build_searchable_text(mod, is_gamebanana: bool = False) -> str:

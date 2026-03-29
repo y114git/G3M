@@ -11,16 +11,13 @@ from services.downloads_manager import DownloadsManager, _safe_filename
 
 
 class TestDownloadsManagerEdgeCases:
-    """Test edge cases and important functions in DownloadsManager."""
-
+    """Tests for downloads manager edge cases."""
     def teardown_method(self, method):
-        """Clean up any remaining managers to prevent QThread issues."""
-        # Force garbage collection to clean up any remaining QObjects
         import gc
         gc.collect()
 
     def test_safe_filename_various_inputs(self):
-        """Test _safe_filename function with various inputs."""
+        """Checks that safeing filename various inputs."""
         assert _safe_filename("mod.zip") == "mod.zip"
 
         assert _safe_filename("mod-v1.2.3.zip") == "mod-v1.2.3.zip"
@@ -42,7 +39,7 @@ class TestDownloadsManagerEdgeCases:
         assert _safe_filename("мод.zip") == "мод.zip"
 
     def test_enqueue_with_canonical_key_existing(self, temp_dir):
-        """Test enqueueing with canonical key when record already exists."""
+        """Checks that enqueueing  with canonical key existing."""
         settings_getter = Mock(return_value={'downloads_no_auto_use': False})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -62,11 +59,10 @@ class TestDownloadsManagerEdgeCases:
         assert is_duplicate is True
         assert record_id == 'existing123'
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_enqueue_file_extension_detection(self, temp_dir):
-        """Test file extension detection from various sources."""
+        """Checks that enqueueing file extension detection."""
         settings_getter = Mock(return_value={'downloads_no_auto_use': False})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -80,11 +76,10 @@ class TestDownloadsManagerEdgeCases:
             record = mock_start.call_args[0][0]
             assert 'mod.zip' in record.source_url
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_enqueue_settings_integration(self, temp_dir):
-        """Test enqueue with different settings."""
+        """Checks that enqueueing settings integration."""
         settings_getter = Mock(return_value={
             'downloads_no_auto_use': True,
             'downloads_delete_after_use': True
@@ -98,11 +93,10 @@ class TestDownloadsManagerEdgeCases:
             assert record.auto_use is False
             assert record.delete_after_use is True
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_cancel_download(self, temp_dir):
-        """Test cancelling a download."""
+        """Checks that canceling download."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -122,11 +116,10 @@ class TestDownloadsManagerEdgeCases:
         mock_worker.cancel.assert_called_once()
         assert 'test123' not in manager._workers
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_cancel_completed_download(self, temp_dir):
-        """Test cancelling a completed download (should remove record)."""
+        """Checks that canceling completed download."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -143,11 +136,10 @@ class TestDownloadsManagerEdgeCases:
 
         assert manager._store.find('test123') is None
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_retry_download(self, temp_dir):
-        """Test retrying a failed download."""
+        """Checks that retrying download."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -167,11 +159,10 @@ class TestDownloadsManagerEdgeCases:
             assert updated_record.download_status == DownloadStatus.QUEUED
             mock_start.assert_called_once()
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_use_download_file_not_found(self, temp_dir):
-        """Test using a download when file doesn't exist."""
+        """Checks that using download file not found."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.set_app_context(mods_dir=os.path.join(temp_dir, 'mods'))
@@ -192,11 +183,10 @@ class TestDownloadsManagerEdgeCases:
             record = manager._store.find('test123')
             assert record.use_status == UseStatus.NOT_STARTED
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_clear_completed(self, temp_dir):
-        """Test clearing completed downloads."""
+        """Checks that clearing completed."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -213,14 +203,13 @@ class TestDownloadsManagerEdgeCases:
         manager.clear_downloads()
         assert manager._store.find('comp1') is None
         assert manager._store.find('comp2') is None
-        assert manager._store.find('fail1') is None  # FAILED is also inactive
-        assert manager._store.find('down1') is not None  # DOWNLOADING is active
+        assert manager._store.find('fail1') is None
+        assert manager._store.find('down1') is not None
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_clear_all(self, temp_dir):
-        """Test that clear_downloads preserves records with active (QUEUED) status."""
+        """Checks that clearing all."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -235,11 +224,10 @@ class TestDownloadsManagerEdgeCases:
         manager.clear_downloads()
         assert len(manager._store.records) == 2
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_emit_badge_counts(self, temp_dir):
-        """Test badge emission with different active counts."""
+        """Checks that emiting badge counts."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -261,11 +249,10 @@ class TestDownloadsManagerEdgeCases:
         assert count == 2
         assert not attention
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_startup_recovery(self, temp_dir):
-        """Test startup recovery for interrupted downloads."""
+        """Checks that startuping recovery."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
 
@@ -286,11 +273,10 @@ class TestDownloadsManagerEdgeCases:
         assert recovered_down.download_status == DownloadStatus.FAILED
         assert recovered_using.use_status == UseStatus.FAILED
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_enqueue_with_feedback_validation(self, temp_dir):
-        """Test enqueue_with_feedback with invalid inputs."""
+        """Checks that enqueueing  with feedback validation."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -301,7 +287,7 @@ class TestDownloadsManagerEdgeCases:
             feedback_service,
             display_name='Test Mod'
         )
-        assert result[1] is False  # is_duplicate flag
+        assert result[1] is False
         feedback_service.update_status.assert_called()
 
         result = manager.enqueue_with_feedback(
@@ -309,13 +295,12 @@ class TestDownloadsManagerEdgeCases:
             display_name='Test Mod',
             source_url='not-a-url'
         )
-        assert result[1] is False  # is_duplicate flag
+        assert result[1] is False
 
-        # Clean up manager to prevent QThread issues
         manager.deleteLater()
 
     def test_worker_cleanup_on_finish(self, temp_dir):
-        """Test that workers are cleaned up when they finish."""
+        """Checks that workering cleanup on finish."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -338,5 +323,111 @@ class TestDownloadsManagerEdgeCases:
             mock_worker.finished.connect.assert_called_once_with(mock_worker.deleteLater)
             mock_worker.deleteLater.assert_not_called()
 
-        # Clean up manager to prevent QThread issues
+        manager.deleteLater()
+
+    def test_resolve_presenter_parent_walks_up_parent_chain(self, temp_dir):
+        """Checks that resolving presenter parent walks up parent chain."""
+        settings_getter = Mock(return_value={})
+        manager = DownloadsManager(temp_dir, settings_getter)
+        presenter = Mock()
+
+        class FakeWindow:
+            def __init__(self) -> None:
+                self.pizza_oven_conversion_presenter = presenter
+
+            def parent(self):
+                return None
+
+            def parentWidget(self):  # noqa: N802
+                return None
+
+        class FakeDialog:
+            def __init__(self, parent) -> None:
+                self._parent = parent
+
+            def parent(self):
+                return self._parent
+
+            def parentWidget(self):  # noqa: N802
+                return self._parent
+
+        host = FakeWindow()
+        dialog = FakeDialog(host)
+
+        resolved_parent, resolved_presenter = manager._resolve_presenter_parent(dialog)
+
+        assert resolved_parent is host
+        assert resolved_presenter is presenter
+        manager.deleteLater()
+
+    def test_resolve_presenter_parent_returns_original_parent_when_presenter_missing(
+        self, temp_dir
+    ):
+        """Checks that resolving presenter parent returns original parent when presenter missing."""
+        settings_getter = Mock(return_value={})
+        manager = DownloadsManager(temp_dir, settings_getter)
+
+        class FakeWindow:
+            def __init__(self) -> None:
+                self.other_attribute = Mock()
+
+            def parent(self):
+                return None
+
+            def parentWidget(self):  # noqa: N802
+                return None
+
+        class FakeDialog:
+            def __init__(self, parent) -> None:
+                self._parent = parent
+
+            def parent(self):
+                return self._parent
+
+            def parentWidget(self):  # noqa: N802
+                return self._parent
+
+        host = FakeWindow()
+        dialog = FakeDialog(host)
+
+        resolved_parent, resolved_presenter = manager._resolve_presenter_parent(dialog)
+
+        assert resolved_parent is dialog
+        assert resolved_presenter is None
+        manager.deleteLater()
+
+    def test_resolve_presenter_parent_stops_on_cyclic_parent_chain(self, temp_dir):
+        """Checks that resolving presenter parent stops on cyclic parent chain."""
+        settings_getter = Mock(return_value={})
+        manager = DownloadsManager(temp_dir, settings_getter)
+
+        class FakeA:
+            def __init__(self) -> None:
+                self._parent = None
+
+            def parent(self):
+                return self._parent
+
+            def parentWidget(self):  # noqa: N802
+                return self._parent
+
+        class FakeB:
+            def __init__(self) -> None:
+                self._parent = None
+
+            def parent(self):
+                return self._parent
+
+            def parentWidget(self):  # noqa: N802
+                return self._parent
+
+        a = FakeA()
+        b = FakeB()
+        a._parent = b
+        b._parent = a
+
+        resolved_parent, resolved_presenter = manager._resolve_presenter_parent(a)
+
+        assert resolved_parent is a
+        assert resolved_presenter is None
         manager.deleteLater()

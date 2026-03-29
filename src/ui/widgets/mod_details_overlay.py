@@ -263,7 +263,7 @@ class ScreenshotViewerDialog(QDialog):
 
     def _load(self):
         if not self._urls:
-            self._label.setText("No screenshots")
+            self._label.setText(tr("ui.no_screenshots"))
             return
         signals = WorkerSignals()
         signals.result.connect(self._set_image)
@@ -354,7 +354,7 @@ class ModDetailsOverlay(QWidget):
     EXTERNAL_BUTTON_WIDTH = 400
     NAV_BUTTON_SIZE = (35, 25)
     LOADING_TEXT = "Loading..."
-    NO_SCREENSHOTS_TEXT = "No screenshots"
+    NO_SCREENSHOTS_TEXT_KEY = "ui.no_screenshots"
     SCREENSHOT_LIMIT = 10
 
     def __init__(self, parent=None, mod_data=None, source_card=None) -> None:
@@ -1060,7 +1060,7 @@ class ModDetailsOverlay(QWidget):
 
     def _ss_show_current(self):
         if not self._ss_urls:
-            self._set_screenshot_text(self.NO_SCREENSHOTS_TEXT)
+            self._set_screenshot_text(tr(self.NO_SCREENSHOTS_TEXT_KEY))
             self._update_ss_nav()
             return
 

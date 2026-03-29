@@ -87,6 +87,7 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
 
 
 def test_plugin_state_service_persists_settings_and_filters(temp_dir):
+    """Checks that plugining state service persists settings and filters."""
     settings_service = _DummySettingsService()
     service = PluginStateService(settings_service, temp_dir)
     service.set_enabled("alpha", True)
@@ -99,6 +100,7 @@ def test_plugin_state_service_persists_settings_and_filters(temp_dir):
 
 
 def test_plugin_catalog_service_returns_empty_when_cache_is_empty(temp_dir):
+    """Checks that plugining catalog service returns empty when cache is empty."""
     app_state = Mock()
     app_state.network_session = None
     settings_service = _DummySettingsService()
@@ -110,6 +112,7 @@ def test_plugin_catalog_service_returns_empty_when_cache_is_empty(temp_dir):
 
 
 def test_plugin_catalog_service_uses_in_memory_cache(temp_dir):
+    """Checks that plugining catalog service uses in memory cache."""
     app_state = Mock()
     app_state.network_session = None
     settings_service = _DummySettingsService()
@@ -124,6 +127,7 @@ def test_plugin_catalog_service_uses_in_memory_cache(temp_dir):
 
 
 def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir):
+    """Checks that plugining runtime scan merges localizations without catalog load."""
     localization_service.clear_plugin_strings()
     localization_service.load_language("en")
     settings_service = _DummySettingsService()
@@ -151,6 +155,7 @@ def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir)
 
 
 def test_plugin_install_service_accepts_plugin_folder(temp_dir):
+    """Checks that plugining install service accepts plugin folder."""
     settings_service = _DummySettingsService()
     state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
     plugins_dir = os.path.join(temp_dir, "plugins")
@@ -172,6 +177,7 @@ def test_plugin_install_service_accepts_plugin_folder(temp_dir):
 
 
 def test_plugin_install_service_accepts_plugin_zip(temp_dir):
+    """Checks that plugining install service accepts plugin zip."""
     settings_service = _DummySettingsService()
     state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
     plugins_dir = os.path.join(temp_dir, "plugins")
@@ -193,3 +199,38 @@ def test_plugin_install_service_accepts_plugin_zip(temp_dir):
 
     assert plugin_id == "zip_plugin"
     assert os.path.isfile(os.path.join(plugins_dir, "zip_plugin", "plugin_config.json"))
+
+
+def test_plugin_install_service_accepts_deeply_nested_plugin_zip(temp_dir):
+    """Checks that plugining install service accepts deeply nested plugin zip."""
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_nested")
+    _write_plugin(source_dir, "nested_plugin")
+    archive_path = os.path.join(temp_dir, "nested_plugin.zip")
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for root, _dirs, files in os.walk(source_dir):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                archive.write(
+                    file_path,
+                    os.path.join(
+                        "level1",
+                        "level2",
+                        "level3",
+                        os.path.relpath(file_path, source_dir),
+                    ),
+                )
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=Mock(scan_installed_plugins=Mock()),
+        plugins_dir=plugins_dir,
+    )
+
+    plugin_id = install_service.install_path(archive_path, source="manual")
+
+    assert plugin_id == "nested_plugin"
+    assert os.path.isfile(
+        os.path.join(plugins_dir, "nested_plugin", "plugin_config.json")
+    )

@@ -18,15 +18,15 @@ def mod_folder(tmp_path):
 
 
 class TestListLocalVersions:
+    """Tests for mod versions."""
     def test_empty(self, mod_folder):
+        """Checks that emptying works."""
         from ui.dialogs.mod_versions_dialog import _list_local_versions
 
         assert _list_local_versions(mod_folder) == []
 
     def test_returns_zips(self, mod_folder):
-        import os
-        import zipfile
-
+        """Checks that returnsing zips."""
         from ui.dialogs.mod_versions_dialog import _list_local_versions
 
         versions_dir = os.path.join(mod_folder, "mod_versions")
@@ -41,8 +41,7 @@ class TestListLocalVersions:
         assert result[0]["size"] > 0
 
     def test_ignores_non_zip(self, mod_folder):
-        import os
-
+        """Checks that ignoresing non zip."""
         from ui.dialogs.mod_versions_dialog import _list_local_versions
 
         versions_dir = os.path.join(mod_folder, "mod_versions")
@@ -54,7 +53,9 @@ class TestListLocalVersions:
 
 
 class TestClearModFolder:
+    """Tests for mod versions."""
     def test_preserves_mod_versions(self, mod_folder):
+        """Checks that preservesing mod versions."""
         from ui.dialogs.mod_versions_dialog import _clear_mod_folder
 
         versions_dir = os.path.join(mod_folder, "mod_versions")
@@ -70,7 +71,9 @@ class TestClearModFolder:
 
 
 class TestSnapshotAndApply:
+    """Tests for mod versions."""
     def test_snapshot_creates_zip(self, mod_folder):
+        """Checks that snapshoting creates zip."""
         from utils.mod_version_utils import create_version_zip
 
         zp = create_version_zip(
@@ -84,6 +87,7 @@ class TestSnapshotAndApply:
         assert not any("mod_versions" in n for n in names)
 
     def test_apply_restores(self, mod_folder):
+        """Checks that applying restores."""
         from ui.dialogs.mod_versions_dialog import _apply_version_zip
         from utils.mod_version_utils import create_version_zip
 
@@ -97,6 +101,7 @@ class TestSnapshotAndApply:
             assert f.read() == "hello"
 
     def test_apply_preserves_mod_versions_dir(self, mod_folder):
+        """Checks that applying preserves mod versions dir."""
         from ui.dialogs.mod_versions_dialog import _apply_version_zip
         from utils.mod_version_utils import create_version_zip
 
@@ -113,12 +118,15 @@ class TestSnapshotAndApply:
 
 
 class TestUniqueVersionName:
+    """Tests for mod versions."""
     def test_returns_same_name_when_free(self, mod_folder):
+        """Checks that returnsing same name when free."""
         from utils.mod_version_utils import get_unique_version_name
 
         assert get_unique_version_name(mod_folder, "snap1") == "snap1"
 
     def test_appends_counter_when_taken(self, mod_folder):
+        """Checks that appendsing counter when taken."""
         from utils.mod_version_utils import create_version_zip, get_unique_version_name
 
         create_version_zip(mod_folder, mod_folder, "snap1", ignore_versions_dir=True)
@@ -126,7 +134,9 @@ class TestUniqueVersionName:
 
 
 class TestConvertArchiveToVersionZip:
+    """Tests for mod versions."""
     def test_plain_zip(self, mod_folder):
+        """Checks that plaining zip."""
         from ui.dialogs.mod_versions_dialog import (
             _convert_archive_to_version_zip,
             _list_local_versions,
@@ -148,6 +158,7 @@ class TestConvertArchiveToVersionZip:
                 os.unlink(src_name)
 
     def test_invalid_archive_no_crash(self, mod_folder):
+        """Checks that invaliding archive no crash."""
         from ui.dialogs.mod_versions_dialog import _convert_archive_to_version_zip
 
         with tempfile.NamedTemporaryFile(
@@ -161,9 +172,29 @@ class TestConvertArchiveToVersionZip:
         finally:
             os.unlink(bad_name)
 
+    def test_nested_single_folder_chain_zip(self, mod_folder):
+        """Checks that nesteding single folder chain zip."""
+        from ui.dialogs.mod_versions_dialog import _convert_archive_to_version_zip
+
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".zip", prefix="mv_nested_"
+        ) as src:
+            src_name = src.name
+        try:
+            with zipfile.ZipFile(src_name, "w") as zf:
+                zf.writestr("level1/level2/level3/mod_config.json", '{"name":"nested"}')
+                zf.writestr("level1/level2/level3/data.txt", "content")
+            ok = _convert_archive_to_version_zip(src_name, mod_folder, "nested")
+            assert ok
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(src_name)
+
 
 class TestZipDirToVersion:
+    """Tests for mod versions."""
     def test_creates_zip(self, tmp_path):
+        """Checks that createsing zip."""
         from utils.mod_version_utils import create_version_zip
 
         src = tmp_path / "src"

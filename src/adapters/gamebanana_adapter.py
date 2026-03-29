@@ -562,6 +562,8 @@ class GameBananaAPI:
         if not category:
             return "other"
         cl = category.lower().strip()
+        if cl == "cyop/afom":
+            return "CYOP/AFOM"
         cn = re.sub(r"[\\/]+", " ", cl)
         for tag, cats in GameBananaAPI._TAG_MAP:
             for part in cn.split():

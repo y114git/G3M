@@ -15,19 +15,23 @@ from utils.path_utils import (
 
 
 class TestPathUtils:
+    """Tests for path utils."""
     def test_get_user_data_root(self):
+        """Checks that getting user data root."""
         root = get_user_data_root()
         assert isinstance(root, str)
         assert len(root) > 0
         assert "DELTAHUB" in root
 
     def test_get_user_mods_dir(self):
+        """Checks that getting user mods dir."""
         mods_dir = get_user_mods_dir()
         assert isinstance(mods_dir, str)
         assert "mods" in mods_dir
         assert "DELTAHUB" in mods_dir
 
     def test_resource_path_frozen(self):
+        """Checks that resourceing path frozen."""
         bundle_root = os.path.join("bundle-root", "pyinstaller")
         with (
             patch.object(sys, "frozen", True, create=True),
@@ -38,6 +42,7 @@ class TestPathUtils:
             assert "assets/icons/icon.ico" in path
 
     def test_resource_path_development(self):
+        """Checks that resourceing path development."""
         frozen_attr = getattr(sys, "frozen", None)
         _meipass_attr = getattr(sys, "_MEIPASS", None)
         try:
@@ -54,11 +59,13 @@ class TestPathUtils:
                 sys._MEIPASS = _meipass_attr
 
     def test_replace_svg_color_tokens_matches_root_fill_without_required_space(self):
+        """Checks that replaceing svg color tokens matches root fill without required space."""
         svg = '<svg fill="#000000"viewBox="0 0 16 16"></svg>'
         result = _replace_svg_color_tokens(svg, "#abcdef", [])
         assert 'fill="#abcdef"' in result
 
     def test_resolve_game_executable_deltarune(self, temp_dir):
+        """Checks that resolving game executable deltarune."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
@@ -78,6 +85,7 @@ class TestPathUtils:
         assert resolved is not None
 
     def test_resolve_game_executable_undertale(self, temp_dir):
+        """Checks that resolving game executable undertale."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
@@ -97,6 +105,7 @@ class TestPathUtils:
         assert resolved is not None
 
     def test_resolve_game_executable_pizzatower(self, temp_dir):
+        """Checks that resolving game executable pizzatower."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
@@ -116,6 +125,7 @@ class TestPathUtils:
         assert resolved is not None
 
     def test_resolve_game_executable_sugaryspire(self, temp_dir):
+        """Checks that resolving game executable sugaryspire."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         system = platform.system()
@@ -135,12 +145,14 @@ class TestPathUtils:
         assert resolved is not None
 
     def test_resolve_game_executable_not_found(self, temp_dir):
+        """Checks that resolving game executable not found."""
         game_dir = os.path.join(temp_dir, "empty_game")
         os.makedirs(game_dir, exist_ok=True)
         resolved = resolve_game_executable(game_dir)
         assert resolved is None
 
     def test_find_chapter_resource_dir(self, temp_dir):
+        """Checks that finding chapter resource dir."""
         game_dir = os.path.join(temp_dir, "game")
         system = platform.system()
         if system == "Darwin":
@@ -157,6 +169,7 @@ class TestPathUtils:
         assert "chapter1" in resource_dir.lower()
 
     def test_find_chapter_resource_dir_chapter0(self, temp_dir):
+        """Checks that finding chapter resource dir chapter0."""
         game_dir = os.path.join(temp_dir, "game")
         system = platform.system()
         if system == "Darwin":
@@ -173,12 +186,14 @@ class TestPathUtils:
             assert resource_dir == game_dir
 
     def test_find_chapter_resource_dir_not_found(self, temp_dir):
+        """Checks that finding chapter resource dir not found."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         resource_dir = find_chapter_resource_dir(game_dir, "deltarune_99")
         assert resource_dir is None
 
     def test_find_supported_game_data_file_prefers_exact_name(self, temp_dir):
+        """Checks that finding supported game data file prefers exact name."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         fallback = os.path.join(game_dir, "custom.win")
@@ -193,6 +208,7 @@ class TestPathUtils:
     def test_find_supported_game_data_file_falls_back_to_supported_extension(
         self, temp_dir
     ):
+        """Checks that finding supported game data file falls back to supported extension."""
         game_dir = os.path.join(temp_dir, "game")
         os.makedirs(game_dir, exist_ok=True)
         fallback = os.path.join(game_dir, "modded.win")
@@ -202,6 +218,7 @@ class TestPathUtils:
         assert resolved == fallback
 
     def test_path_handling_special_characters(self, temp_dir):
+        """Checks that pathing handling special characters."""
         special_dir = os.path.join(temp_dir, "test dir with spaces & symbols!")
         os.makedirs(special_dir, exist_ok=True)
         test_file = os.path.join(special_dir, "test.txt")
@@ -211,6 +228,7 @@ class TestPathUtils:
         assert os.path.exists(special_dir)
 
     def test_path_handling_unicode(self, temp_dir):
+        """Checks that pathing handling unicode."""
         unicode_dir = os.path.join(temp_dir, "тест_目录_テスト")
         os.makedirs(unicode_dir, exist_ok=True)
         assert os.path.exists(unicode_dir)
@@ -220,6 +238,7 @@ class TestPathUtils:
         assert os.path.exists(test_file)
 
     def test_pizzatower_path_validation_with_custom_executable(self, temp_dir):
+        """Checks that pizzatowering path validation with custom executable."""
         from services.game_detection_service import is_valid_game_path
 
         game_dir = os.path.join(temp_dir, "game")
@@ -261,6 +280,7 @@ class TestPathUtils:
         assert is_invalid is False
 
     def test_autodetect_pizzatower_variations(self, temp_dir):
+        """Checks that autodetecting pizzatower variations."""
         from utils.path_utils import autodetect_path
 
         system = platform.system()

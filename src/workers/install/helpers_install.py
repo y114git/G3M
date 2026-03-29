@@ -5,7 +5,11 @@ import os
 
 from config.config import MOD_CONFIG_FILENAME
 from utils.file_utils import load_json, sanitize_filename, save_json
-from utils.mod_config_parser import MOD_FIELD_LIMITS, normalize_mod_config_data
+from utils.mod_config_parser import (
+    MOD_FIELD_LIMITS,
+    build_mod_config_data,
+    normalize_mod_config_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,9 @@ def load_mod_config(config_path: str) -> dict | None:
     try:
         config_data = load_json(config_path)
         if isinstance(config_data, dict):
-            normalize_mod_config_data(config_data)
+            normalize_mod_config_data(
+                config_data, mod_root_path=os.path.dirname(config_path)
+            )
         return config_data
     except Exception as e:
         logger.error(f"Error reading mod config: {e}")
@@ -45,7 +51,7 @@ def load_mod_config(config_path: str) -> dict | None:
 def save_mod_config(config_path: str, config_data: dict, indent: int = 4):
     """Save mod config to file."""
     try:
-        save_json(config_path, config_data, indent=indent)
+        save_json(config_path, build_mod_config_data(config_data), indent=indent)
     except Exception as e:
         logger.error(f"Error writing mod config: {e}")
         raise

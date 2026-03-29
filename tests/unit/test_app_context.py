@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 
 def test_build_application_context_creates_services_and_session(qapp, temp_dir):
+    """Checks that building application context creates services and session."""
     from app_context.application_context import build_application_context
 
     user_root = os.path.join(temp_dir, "user")

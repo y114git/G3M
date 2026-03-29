@@ -1,6 +1,7 @@
 """Archive extraction utilities."""
 
 import contextlib
+import errno
 import logging
 import lzma
 import os
@@ -170,6 +171,28 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     shutil.copy2(src_path, os.path.join(out_dir, os.path.basename(src_path)))
 
 
+def unwrap_single_directory_chain(root_dir: str) -> str:
+    """Descend through nested single-directory layers until content branches."""
+
+    current_dir = os.path.abspath(os.fspath(root_dir))
+    visited = {os.path.realpath(current_dir)}
+    while True:
+        try:
+            entries = os.listdir(current_dir)
+        except OSError:
+            return current_dir
+        if len(entries) != 1:
+            return current_dir
+        next_dir = os.path.join(current_dir, entries[0])
+        if not os.path.isdir(next_dir):
+            return current_dir
+        real_next_dir = os.path.realpath(next_dir)
+        if real_next_dir in visited:
+            return current_dir
+        visited.add(real_next_dir)
+        current_dir = next_dir
+
+
 def _move_tree_safely(src_root: str, dst_root: str) -> None:
     """Safely move directory tree with path traversal protection.
 
@@ -177,9 +200,7 @@ def _move_tree_safely(src_root: str, dst_root: str) -> None:
         src_root: Source directory.
         dst_root: Destination directory.
     """
-    import errno
-
-    for root, dirs, files in os.walk(src_root):
+    for root, _dirs, files in os.walk(src_root):
         rel_root = os.path.relpath(root, src_root)
         rel_root = "" if rel_root == "." else rel_root
         if os.path.isabs(rel_root):
@@ -188,8 +209,6 @@ def _move_tree_safely(src_root: str, dst_root: str) -> None:
             continue
         dst_dir = os.path.join(dst_root, rel_root) if rel_root else dst_root
         os.makedirs(dst_dir, exist_ok=True)
-        for d in list(dirs):
-            os.path.join(dst_dir, d)
         for f in files:
             src_path = os.path.join(root, f)
             if os.path.islink(src_path):
@@ -210,17 +229,23 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
     if not is_game_installation:
         return
     try:
-        entries = list(os.listdir(target_dir))
-        if len(entries) == 1 and os.path.isdir(
-            single := os.path.join(target_dir, entries[0])
+        single = unwrap_single_directory_chain(target_dir)
+        if os.path.normcase(os.path.normpath(single)) != os.path.normcase(
+            os.path.normpath(target_dir)
         ):
             for item in os.listdir(single):
                 dst = os.path.join(target_dir, item)
                 if os.path.exists(dst):
                     (safe_rmtree if os.path.isdir(dst) else safe_remove)(dst)
                 safe_move(os.path.join(single, item), dst)
-            with contextlib.suppress(OSError):
-                os.rmdir(single)
+            current = single
+            while os.path.normcase(os.path.normpath(current)) != os.path.normcase(
+                os.path.normpath(target_dir)
+            ):
+                parent = os.path.dirname(current)
+                with contextlib.suppress(OSError):
+                    os.rmdir(current)
+                current = parent
     except Exception as e:
         logging.warning(f"Failed to handle nested folder: {e}")
     pattern = re.compile(r"^chapter\d+_(windows|mac)$", re.I)

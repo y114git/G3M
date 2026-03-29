@@ -37,6 +37,7 @@ def registry_service(app_state, feedback_service):
 
 
 def test_create_custom_game_registers_runtime_definition(registry_service):
+    """Checks that creating custom game registers runtime definition."""
     record = registry_service.create_custom_game(
         display_name="My Game",
         primary_executable="my_game.exe",
@@ -53,6 +54,7 @@ def test_create_custom_game_registers_runtime_definition(registry_service):
 
 
 def test_cannot_hide_last_visible_game(registry_service):
+    """Checks that cannoting hide last visible game."""
     visible_ids = [entry.id for entry in registry_service.list_visible_games()]
     for game_id in visible_ids[1:]:
         registry_service.set_visibility(game_id, False)
@@ -61,6 +63,7 @@ def test_cannot_hide_last_visible_game(registry_service):
 
 
 def test_search_games_include_only_visible_searchable_entries(registry_service):
+    """Checks that searching games include only visible searchable entries."""
     custom = registry_service.create_custom_game(
         display_name="Searchable Game",
         primary_executable="search.exe",
@@ -75,6 +78,7 @@ def test_search_games_include_only_visible_searchable_entries(registry_service):
 
 
 def test_custom_game_uses_explicit_executable_and_data_file(registry_service):
+    """Checks that customing game uses explicit executable and data file."""
     record = registry_service.create_custom_game(
         display_name="Platform Test",
         primary_executable="platform_game.exe",

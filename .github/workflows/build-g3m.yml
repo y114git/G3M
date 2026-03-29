@@ -195,18 +195,30 @@ jobs:
       - name: Create archive (Linux)
         if: runner.os == 'Linux'
         run: |
+          for file in LICENSE THIRD_PARTY_NOTICES.md SECURITY.md; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: required release file missing: $file"
+              exit 1
+            fi
+          done
           mkdir -p archive_content
           mv dist/DELTAHUB archive_content/
+          cp LICENSE THIRD_PARTY_NOTICES.md SECURITY.md archive_content/
           zip -r "${{ steps.set_names.outputs.archive_path }}" archive_content
 
       - name: Create archive (macOS)
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
+        run: |
+          cp LICENSE THIRD_PARTY_NOTICES.md SECURITY.md dist/
+          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
+          (cd dist && zip -ur "../${{ steps.set_names.outputs.archive_path }}" LICENSE THIRD_PARTY_NOTICES.md SECURITY.md)
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path dist\DELTAHUB.exe -DestinationPath "${{ steps.set_names.outputs.archive_path }}" -Force
+        run: |
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, SECURITY.md -Destination dist -Force
+          Compress-Archive -Path dist\* -DestinationPath "${{ steps.set_names.outputs.archive_path }}" -Force
 
       - name: Test startup (Unix)
         if: runner.os != 'Windows'

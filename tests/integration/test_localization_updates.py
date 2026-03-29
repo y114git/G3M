@@ -23,8 +23,9 @@ def _flatten_lang_keys(data, prefix=''):
 
 
 class TestLocalizationSystem:
-
+    """Tests for localization updates."""
     def test_buttons_update_on_language_change(self):
+        """Checks that buttonsing update on language change."""
         from services.localization_service import LocalizationManager
         loc_service = LocalizationManager()
         initial_lang = loc_service.get_current_language()
@@ -35,11 +36,13 @@ class TestLocalizationSystem:
             assert loc_service.get_current_language() == initial_lang
 
     def test_localization_service_has_rescan(self):
+        """Checks that localizationing service has rescan."""
         from services.localization_service import LocalizationManager
         loc_service = LocalizationManager()
         assert hasattr(loc_service, 'rescan_languages')
 
     def test_language_files_match_lang_en_key_set(self):
+        """Checks that languageing files match lang en key set."""
         en_path = LANG_DIR / 'lang_en.json'
         if not en_path.exists():
             pytest.skip('lang_en.json not found')
@@ -55,8 +58,9 @@ class TestLocalizationSystem:
 
 
 class TestUIElementsUseTrFunction:
-
+    """Tests for localization updates."""
     def test_ui_elements_use_tr_function(self):
+        """Checks that uiing elements use tr function."""
         ui_dir = _PROJECT_ROOT / 'src' / 'ui'
         if not ui_dir.exists():
             pytest.skip('src/ui directory not found')
@@ -71,8 +75,9 @@ class TestUIElementsUseTrFunction:
 
 
 class TestWidgetRelocalizeMethods:
-
+    """Tests for localization updates."""
     def test_widgets_have_relocalize_methods(self):
+        """Checks that widgetsing have relocalize methods."""
         ui_widgets_dir = _PROJECT_ROOT / 'src' / 'ui' / 'widgets'
         if not ui_widgets_dir.exists():
             pytest.skip('src/ui/widgets directory not found')
@@ -92,9 +97,9 @@ class TestWidgetRelocalizeMethods:
 
 
 class TestTrKeysExistInLangFiles:
-
+    """Tests for localization updates."""
     def test_all_tr_keys_in_source_exist_in_lang_en(self):
-        """Scan all src/ .py files for tr('key') calls and verify each key exists in lang_en.json."""
+        """Checks that alling tr keys in source exist in lang en."""
         en_path = LANG_DIR / 'lang_en.json'
         if not en_path.exists():
             pytest.skip('lang_en.json not found')
@@ -116,8 +121,9 @@ class TestTrKeysExistInLangFiles:
 
 
 class TestLocalizationRefresh:
-
+    """Tests for localization updates."""
     def test_language_combo_updates_on_refresh(self, app_state):
+        """Checks that languageing combo updates on refresh."""
         from PyQt6.QtWidgets import QComboBox
 
         from controllers.refresh_controller import RefreshController

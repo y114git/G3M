@@ -3,7 +3,7 @@
 import contextlib
 import logging
 
-from PyQt6.QtCore import QMetaObject, QObject, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QEvent, QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog, QMessageBox
 
 from config.config import QSS_LOADING_LABEL, SEARCH_EXHAUSTED_PAGE_SENTINEL
@@ -26,6 +26,12 @@ from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
 from workers.gamebanana.search_worker import SearchGameBananaModsThread
 
 logger = logging.getLogger(__name__)
+
+
+def _bound_checkbox_is_checked(owner, attr_name: str) -> bool:
+    checkbox = getattr(owner, "__dict__", {}).get(attr_name)
+    is_checked = getattr(checkbox, "isChecked", None)
+    return bool(checkbox and callable(is_checked) and is_checked())
 
 
 class SearchDisplayController(QObject):
@@ -60,9 +66,10 @@ class SearchDisplayController(QObject):
         self._pending_filter_update = False
         self._exhausted_search_keys = set()
         self.card_widget_cache: dict[str, ModCardWidget] = {}
-        self._update_display_debounce = DebounceTimer(delay_ms=200)
+        self._update_display_debounce = DebounceTimer(delay_ms=75)
         self._virtual_scroll_debounce = DebounceTimer(delay_ms=80)
         self._initial_mods_display_done = False
+        self._layout_refresh_tries = 0
 
     def _iter_layout_cards(self):
         """Yield all ModCardWidget instances currently in mod_list_layout."""
@@ -216,6 +223,57 @@ class SearchDisplayController(QObject):
             self.ui_widget_updates_enabled.emit("mod_list_widget", True)
             self._maybe_load_more_for_short_viewport()
 
+    def _queue_layout_refresh(self, force: bool = False) -> None:
+        if force:
+            self._last_grid_metrics_key = None
+        QTimer.singleShot(50, self.refresh_visible_layout)
+        QTimer.singleShot(0, self.refresh_visible_layout)
+
+    def _finalize_mod_list_layout_refresh(self) -> None:
+        layout = getattr(self.app, "mod_list_layout", None)
+        if layout:
+            with contextlib.suppress(Exception):
+                layout.invalidate()
+            with contextlib.suppress(Exception):
+                layout.activate()
+        widget_container = getattr(self.app, "mod_list_widget", None)
+        if widget_container:
+            with contextlib.suppress(Exception):
+                widget_container.updateGeometry()
+            with contextlib.suppress(Exception):
+                widget_container.adjustSize()
+            with contextlib.suppress(Exception):
+                widget_container.update()
+        scroll = getattr(self.app, "mods_browser_scroll", None)
+        if scroll:
+            viewport = getattr(scroll, "viewport", lambda: None)()
+            if viewport:
+                with contextlib.suppress(Exception):
+                    viewport.update()
+
+    def eventFilter(self, obj, event):
+        try:
+            scroll = getattr(self.app, "mods_browser_scroll", None)
+            viewport = scroll.viewport() if scroll and hasattr(scroll, "viewport") else None
+            if obj in (scroll, viewport):
+                event_type = event.type()
+                if event_type in (
+                    QEvent.Type.Show,
+                    QEvent.Type.Resize,
+                    QEvent.Type.LayoutRequest,
+                    QEvent.Type.PolishRequest,
+                ):
+                    self._queue_layout_refresh(force=True)
+        except Exception:
+            logger.debug(
+                "SearchDisplayController: eventFilter refresh failed",
+                exc_info=True,
+            )
+        try:
+            return super().eventFilter(obj, event)
+        except TypeError:
+            return False
+
     def _get_installed_mod_ids(self) -> set:
         try:
             if self.mod_service:
@@ -232,16 +290,17 @@ class SearchDisplayController(QObject):
         return set()
 
     def _has_active_tag_filters(self) -> bool:
+        selected_game = self._get_selected_game()
         for attr_name in (
             "tag_textedit",
             "tag_customization",
             "tag_gameplay",
             "tag_other",
+            "tag_cyop_afom",
         ):
-            if (
-                hasattr(self.app, attr_name)
-                and getattr(self.app, attr_name).isChecked()
-            ):
+            if attr_name == "tag_cyop_afom" and selected_game != "pizzatower":
+                continue
+            if _bound_checkbox_is_checked(self.app, attr_name):
                 return True
         return False
 
@@ -513,14 +572,14 @@ class SearchDisplayController(QObject):
             "tag_customization": "customization",
             "tag_gameplay": "gameplay",
             "tag_other": "other",
+            "tag_cyop_afom": "CYOP/AFOM",
         }
-        for attr_name, tag_value in tag_checkboxes.items():
-            if (
-                hasattr(self.app, attr_name)
-                and getattr(self.app, attr_name).isChecked()
-            ):
-                selected_tags.append(tag_value)
         selected_game = self._get_selected_game()
+        for attr_name, tag_value in tag_checkboxes.items():
+            if attr_name == "tag_cyop_afom" and selected_game != "pizzatower":
+                continue
+            if _bound_checkbox_is_checked(self.app, attr_name):
+                selected_tags.append(tag_value)
         show_nsfw = bool(
             hasattr(self.app, "show_nsfw_checkbox")
             and self.app.show_nsfw_checkbox.isChecked()
@@ -723,6 +782,7 @@ class SearchDisplayController(QObject):
                                     and widget_cache_key in current_page_cache_keys
                                 ) or not widget_cache_key:
                                     widget.show()
+                    self._finalize_mod_list_layout_refresh()
                     _remove_loading_indicators()
                     if self.app_state.gamebanana_loading and current_page_mods:
                         _add_loading_indicator(target_position)
@@ -749,12 +809,17 @@ class SearchDisplayController(QObject):
                             if cache_key in self.card_widget_cache:
                                 card = self.card_widget_cache[cache_key]
                                 if hasattr(card, "mod_data"):
+                                    previous_mod = card.mod_data
                                     card.mod_data = mod
-                                    if hasattr(card, "_update_style"):
-                                        card._update_style()
-                                    if hasattr(card, "update_mod_data"):
+                                    if (
+                                        previous_mod is not mod
+                                        and hasattr(card, "update_mod_data")
+                                    ):
                                         card.update_mod_data()
-                                    if hasattr(card, "update_installation_status"):
+                                    if (
+                                        previous_mod is not mod
+                                        and hasattr(card, "update_installation_status")
+                                    ):
                                         card.update_installation_status()
                                 self._place_layout_widget(card, target_position)
                                 if hasattr(card, "update_action_button_state"):
@@ -844,8 +909,6 @@ class SearchDisplayController(QObject):
 
     def _maybe_load_more_for_short_viewport(self):
         if self.app_state.gamebanana_loading:
-            return
-        if self._has_active_tag_filters():
             return
         scroll = getattr(self.app, "mods_browser_scroll", None)
         if not scroll or not hasattr(self.app, "mod_list_widget"):

@@ -218,7 +218,6 @@ class ProfileService(QObject):
             "game_display_name": display_name,
             "game_mod_count": self._count_mods_for_game(data, game),
             "total_mod_count": self._count_all_mods(data),
-            "profile_mod_count": self._count_profile_mods(name),
             "chapter_mode": data.get("chapter_mode_enabled", False),
             "direct_launch": self._resolve_chapter_name(
                 game_def, data.get("direct_launch_chapter", "")
@@ -392,17 +391,6 @@ class ProfileService(QObject):
     def _count_mods_for_game(data: dict[str, Any], game: str) -> int:
         return ProfileService._count_all_mods(data, f"used_mods_{game}")
 
-    def _count_profile_mods(self, name: str) -> int:
-        profile_dir = self._profile_dir(name)
-        if not profile_dir.exists():
-            return 0
-        return sum(
-            1
-            for child in profile_dir.iterdir()
-            if child.is_dir()
-            and (child / MOD_CONFIG_FILENAME).exists()
-        )
-
     def _append_to_order(self, name: str):
         order = [
             safe_profile_name(n)
@@ -456,10 +444,9 @@ class ProfileService(QObject):
 
     @staticmethod
     def _resolve_import_root(directory: Path) -> Path:
-        entries = list(directory.iterdir())
-        if len(entries) == 1 and entries[0].is_dir():
-            return entries[0]
-        return directory
+        from utils.archive_utils import unwrap_single_directory_chain
+
+        return Path(unwrap_single_directory_chain(str(directory)))
 
     @staticmethod
     def _unique_child_path(path: Path) -> str:

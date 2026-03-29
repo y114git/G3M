@@ -13,6 +13,9 @@ from controllers.refresh_controller import RefreshController
 from controllers.search_display_controller import SearchDisplayController
 from controllers.settings_controller import SettingsUiController
 from controllers.theme_controller import ThemeController
+from presentation.pizza_oven_conversion_presenter import (
+    PizzaOvenConversionPresenter,
+)
 from presentation.update_presenter import handle_update_info
 from ui.utils.ui_utils import DebounceTimer
 
@@ -134,6 +137,14 @@ class WindowComposition:
             window.settings_service,
             window.game_launcher,
             window.customization_service,
+            window,
+        )
+        window.pizza_oven_conversion_presenter = PizzaOvenConversionPresenter(
+            window.app_state,
+            window.feedback_service,
+            window.settings_service,
+            window.mod_service,
+            window.pizza_oven_conversion_service,
             window,
         )
         window.refresh_controller = RefreshController(

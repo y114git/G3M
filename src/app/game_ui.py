@@ -16,6 +16,7 @@ from models.game_modes import (
     get_visible_game_entries,
 )
 from services.localization_service import tr
+from ui.builders.shared_filters_builder import set_pizzatower_only_tag_visibility
 from ui.common.styling import (
     clamp_border_radius,
     get_border_radius,
@@ -28,6 +29,28 @@ def update_checkbox_visibility(w):
     game_def = w.app_state.game_mode
     w.chapter_mode_checkbox.setVisible(game_def.is_multi_tab)
     w.full_install_checkbox.setVisible(game_def.supports_full_install)
+    update_special_tag_visibility(w)
+
+
+def update_special_tag_visibility(w):
+    search_game = (
+        w.modgame_combo.currentData()
+        if hasattr(w, "modgame_combo") and w.modgame_combo
+        else ""
+    ) or "deltarune"
+    library_game = (
+        w.game_type_combo.currentData()
+        if hasattr(w, "game_type_combo") and w.game_type_combo
+        else getattr(w.app_state.game_mode, "game_id", "deltarune")
+    ) or "deltarune"
+    set_pizzatower_only_tag_visibility(
+        getattr(w, "tag_cyop_afom", None),
+        search_game == "pizzatower",
+    )
+    set_pizzatower_only_tag_visibility(
+        getattr(w, "library_tag_cyop_afom", None),
+        library_game == "pizzatower",
+    )
 
 
 def on_game_mode_updated_by_state(w, mode_obj):

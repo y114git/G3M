@@ -3,7 +3,7 @@
 import logging
 import time
 
-from PyQt6.QtCore import QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL
@@ -21,7 +21,7 @@ class _GlobalSettingsWorker(QThread):
     finished = pyqtSignal(bool, dict)
 
     def __init__(self, app_state, parent=None) -> None:
-        super().__init__(parent)
+        super().__init__(parent if isinstance(parent, QObject) else None)
         self._app_state = app_state
 
     def run(self):
@@ -82,6 +82,26 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
             callback(True)
         return
     app.app_state.global_settings_load_in_progress = True
+    if not isinstance(app, QObject):
+        try:
+            response = cloud_function_request(
+                "get",
+                f"{CLOUD_FUNCTIONS_BASE_URL}/getGlobalSettings",
+                session=get_session(app.app_state),
+                timeout=5,
+            )
+            success = bool(response and response.status_code == 200)
+            if success:
+                app.app_state.global_settings = response.json() or {}
+                app.app_state.global_settings_loaded_at = time.time()
+        except Exception as e:
+            logging.warning("reload_global_settings: %s", e)
+            success = False
+        finally:
+            if callback:
+                callback(success)
+            app.app_state.global_settings_load_in_progress = False
+        return
     worker = _GlobalSettingsWorker(app.app_state, parent=app)
 
     def _on_finished(success, data):
@@ -104,9 +124,9 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
     is_shown = app.app_state.is_shown_to_user
     is_visible = app.isVisible() if hasattr(app, "isVisible") else False
     if not (init_completed and (is_shown or is_visible or force_check)):
-        if retry_count < 15:
+        if retry_count < UPDATE_PROMPT_MAX_RETRIES:
             QTimer.singleShot(
-                500,
+                UPDATE_PROMPT_RETRY_INTERVAL_MS,
                 lambda: check_and_show_announce(app, retry_count + 1, force_check),
             )
         return

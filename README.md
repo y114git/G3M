@@ -69,3 +69,9 @@
 - **Bugs & Issues:** DH will be updated many more times with new games and features. Please report all bugs and other issues [on this page](https://github.com/y114git/DELTAHUB/issues).
 
 - **Wiki:** For detailed info on "How to properly create mods," "How to change something," etc., please visit the [Wiki](https://github.com/y114git/DELTAHUB/wiki).
+
+## Legal
+
+- [`LICENSE`](LICENSE)
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+- [`SECURITY.md`](SECURITY.md)

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-from config.config import DEFAULT_COLORS, FALLBACK_FRAME_BG
+from config.config import CYOP_AFOM_TAG, DEFAULT_COLORS, FALLBACK_FRAME_BG
 from services.localization_service import tr
 from ui.common.styling import (
     build_tag_checkbox_style,
@@ -78,14 +78,22 @@ def create_sort_controls(
 
 def create_tag_checkboxes(app_state, tag_names):
     """Create tag checkboxes with styling."""
-    tags = {
-        n: QCheckBox(
-            tr(f"tags.{n}")
-            if (n != "gamebanana" and n != "only_gamebanana")
-            else tr("ui.only_gamebanana")
-        )
-        for n in tag_names
-    }
+    tags = {}
+    for item in tag_names:
+        if isinstance(item, tuple):
+            widget_key, tag_value, label_key = item
+            label = tr(label_key)
+        else:
+            widget_key = item
+            tag_value = CYOP_AFOM_TAG if item == "cyop_afom" else item
+            label = (
+                tr(f"tags.{widget_key}")
+                if widget_key not in ("gamebanana", "only_gamebanana")
+                else tr("ui.only_gamebanana")
+            )
+        checkbox = QCheckBox(label)
+        checkbox._tag_value = tag_value
+        tags[widget_key] = checkbox
     style = build_tag_checkbox_style(
         get_theme_color(app_state.local_config, "main_text")
     )
@@ -93,6 +101,19 @@ def create_tag_checkboxes(app_state, tag_names):
         t.setStyleSheet(style)
         t.setToolTip(tr("tooltips.filter_by_tag"))
     return tags
+
+
+def set_pizzatower_only_tag_visibility(checkbox: QCheckBox | None, visible: bool) -> None:
+    """Show CYOP/AFOM tag only for Pizza Tower and clear stale checked state."""
+    if checkbox is None:
+        return
+    blocked = checkbox.blockSignals(True)
+    try:
+        if not visible and checkbox.isChecked():
+            checkbox.setChecked(False)
+        checkbox.setVisible(visible)
+    finally:
+        checkbox.blockSignals(blocked)
 
 
 def create_modgame_combo(app_state, games_list, config_key=None):

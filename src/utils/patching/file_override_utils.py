@@ -7,6 +7,11 @@ import tempfile
 from config.config import ARCHIVE_EXTENSIONS, SKIP_FILES
 from services.localization_service import tr
 from utils.patching import mod_content_utils as mod_content
+from utils.pizzatower_afom_utils import (
+    apply_afom_towers_from_mod_source,
+    is_top_level_towers_archive,
+    is_towers_subpath,
+)
 
 
 def apply_xdelta_override(
@@ -142,6 +147,7 @@ def apply_file_overrides(
     chapter_id: int | None = None,
     progress_callback=None,
     mod_name: str = "",
+    game_id: str | None = None,
 ) -> bool:
     if not os.path.isdir(mod_source_dir):
         return True
@@ -155,12 +161,28 @@ def apply_file_overrides(
     skip_files = SKIP_FILES
     if chapter_id is None:
         chapter_id = mod_content.extract_chapter_id_from_path(target_dir)
+    if (not is_modpack) and (game_id or "").strip().lower() == "pizzatower":
+        from utils.archive_utils import extract_any_archive
+
+        if not apply_afom_towers_from_mod_source(
+            mod_source_dir,
+            backup_or_mark=lambda target_file: patcher._backup_or_mark_file(
+                chapter_id, target_file
+            ),
+            logger=patcher.patching_logger,
+            extract_archive=extract_any_archive,
+        ):
+            return False
     total_files = sum(
         1
         for root, _dirs, files in os.walk(mod_source_dir)
         for file in files
         if file.lower() not in skip_files
         and not os.path.join(root, file).lower().endswith(xdelta_extensions)
+        and not is_towers_subpath(os.path.relpath(os.path.join(root, file), mod_source_dir))
+        and not is_top_level_towers_archive(
+            os.path.relpath(os.path.join(root, file), mod_source_dir)
+        )
     )
     processed_files = 0
     for root, _dirs, files in os.walk(mod_source_dir):
@@ -170,6 +192,11 @@ def apply_file_overrides(
                 continue
             source_path = os.path.join(root, file)
             file_lower = file.lower()
+            source_rel_path = os.path.relpath(source_path, mod_source_dir)
+            if is_towers_subpath(source_rel_path) or is_top_level_towers_archive(
+                source_rel_path
+            ):
+                continue
             processed_files += 1
             if progress_callback:
                 progress_callback(
