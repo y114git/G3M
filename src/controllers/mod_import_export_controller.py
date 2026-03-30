@@ -114,7 +114,7 @@ class ModImportExportController:
         from utils.file_utils import remove_archive_extension, sanitize_filename
 
         try:
-            with tempfile.TemporaryDirectory(prefix="deltahub_import_") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="g3m_import_") as temp_dir:
                 content_path = self._materialize_local_import(file_path, temp_dir)
                 if find_deltamod_info_file(content_path):
                     from adapters.deltamod_adapter import DeltamodConverter
@@ -395,7 +395,7 @@ class ModImportExportController:
     def _prepare_local_files_for_manual_install(
         self, file_path: str
     ) -> tuple[str, str]:
-        temp_dir = tempfile.mkdtemp(prefix="deltahub_manual_install_")
+        temp_dir = tempfile.mkdtemp(prefix="g3m_manual_install_")
         try:
             return (self._materialize_local_import(file_path, temp_dir), temp_dir)
         except Exception as e:

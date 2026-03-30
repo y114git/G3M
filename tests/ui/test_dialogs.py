@@ -71,7 +71,7 @@ class TestAboutDialog:
         dialog = AboutDialog(None, app_state)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
-        assert dialog.title_label.text() == 'DELTAHUB'
+        assert dialog.title_label.text() == 'G3M'
         assert dialog.data_path_edit.text() == temp_dir
         assert dialog.plugin_api_value.text() == PLUGIN_API_VERSION
         assert dialog.report_issue_button.isEnabled()
@@ -771,3 +771,4 @@ class TestManualInstallDialog:
 
         assert dialog.game_combo.currentData() != "pizzatower"
         dialog.close()
+

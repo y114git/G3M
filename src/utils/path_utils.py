@@ -12,9 +12,11 @@ from PyQt6.QtCore import QByteArray, Qt
 from PyQt6.QtGui import QIcon, QPixmap
 
 from config.config import (
+    APP_DATA_DIR_NAME,
     CURRENT_PLATFORM,
     GAME_DATA_FILE_EXTENSIONS,
     GAME_DATA_FILENAMES,
+    LEGACY_APP_DATA_DIR_NAME,
     LEGACY_THEME_CONFIG_FILENAME,
     THEME_CONFIG_FILENAME,
     THEME_CONFIG_FILENAMES,
@@ -45,12 +47,23 @@ _WINDOWS_RESERVED_NAMES = {
     "LPT9",
 }
 
+_user_data_root_override: str | None = None
+
 
 def get_launcher_dir():
     is_frozen = getattr(sys, "frozen", False)
     if is_frozen:
         return os.path.dirname(sys.executable)
     return os.path.abspath(os.path.dirname(__file__))
+
+
+def set_user_data_root_override(path: str | None) -> None:
+    global _user_data_root_override
+    _user_data_root_override = path
+
+
+def get_user_data_root_override() -> str | None:
+    return _user_data_root_override
 
 
 def safe_profile_name(name: str) -> str:
@@ -60,15 +73,27 @@ def safe_profile_name(name: str) -> str:
     return safe
 
 
-def get_user_data_root():
+def get_platform_user_data_root(app_dir_name: str) -> str:
     home = os.path.expanduser("~")
     if CURRENT_PLATFORM == "Windows":
         return ntpath.join(
-            os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or home, "DELTAHUB"
+            os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or home, app_dir_name
         )
     if CURRENT_PLATFORM == "Darwin":
-        return os.path.join(home, "Library", "Application Support", "DELTAHUB")
-    return os.path.join(home, ".local", "share", "DELTAHUB")
+        return os.path.join(home, "Library", "Application Support", app_dir_name)
+    return os.path.join(home, ".local", "share", app_dir_name)
+
+
+def get_default_user_data_root() -> str:
+    return get_platform_user_data_root(APP_DATA_DIR_NAME)
+
+
+def get_legacy_user_data_root() -> str:
+    return get_platform_user_data_root(LEGACY_APP_DATA_DIR_NAME)
+
+
+def get_user_data_root():
+    return _user_data_root_override or get_default_user_data_root()
 
 
 def get_user_profiles_dir():

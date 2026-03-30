@@ -82,7 +82,7 @@ def find_data_win(
 
 
 def extract_chapter_id_from_path(path: str) -> str | None:
-    match = re.search("chapter[_-]?(\\d+)", path, re.IGNORECASE)
+    match = re.search(r"chapter[_-]?(\d+)", path, re.IGNORECASE)
     if match:
         return match.group(1)
     if "demo" in path.lower():

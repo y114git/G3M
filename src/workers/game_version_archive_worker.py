@@ -96,7 +96,7 @@ class CreatePatchedVersionWorker(QThread):
 
         patching_error = ""
         try:
-            self._temp_copy = tempfile.mkdtemp(prefix="deltahub_gv_patch_")
+            self._temp_copy = tempfile.mkdtemp(prefix="g3m_gv_patch_")
             temp_game = os.path.join(self._temp_copy, "game")
 
             all_files = []

@@ -58,16 +58,6 @@ class TestModManager:
         result = validate_mod_config(valid_config, "/fake/path", "test_mod")
         assert result is True
 
-    def test_mod_service_validate_config_invalid_dict(
-        self, app_state, feedback_service
-    ):
-        """Checks that moding service validate config invalid dict."""
-        from utils.mod_scan_utils import validate_mod_config
-
-        invalid_config = ["id", "name"]
-        result = validate_mod_config(invalid_config, "/fake/path", "test_mod")
-        assert result is False
-
     def test_mod_service_validate_config_missing_fields(
         self, app_state, feedback_service
     ):

@@ -179,7 +179,7 @@ def resolve_plugin_path(plugin_dir: str, relative_path: str) -> str:
 
 
 def load_plugin_factory(plugin_id: str, entry_path: str):
-    module_name = f"deltahub_plugin_{plugin_id}"
+    module_name = f"g3m_plugin_{plugin_id}"
     spec = importlib.util.spec_from_file_location(module_name, entry_path)
     if spec is None or spec.loader is None:
         raise PluginValidationError("invalid_entry_spec")

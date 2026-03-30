@@ -601,7 +601,7 @@ class TestCommonWidgets:
         mime = LazyFileExportMimeData(
             lambda path: host.mod_import_export_controller.export_mod_to_path(mod_data, path),
             'Lazy Export Mod.zip',
-            internal_format='application/x-deltahub-installed-mod-export',
+            internal_format='application/x-g3m-installed-mod-export',
         )
         assert host.mod_import_export_controller.export_mod_to_path.call_count == 0
         assert mime.hasUrls() is True
@@ -637,3 +637,4 @@ class TestCommonWidgets:
         assert placeholder.pixelColor(placeholder.width() - 8, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() - 16, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() // 2, center_y).alpha() > 0
+

@@ -296,7 +296,7 @@ class UpdateChecker(QObject):
             if system == "Darwin"
             else self._find_linux_executable(extraction_dir)
         )
-        persistent_temp_dir = tempfile.mkdtemp(prefix="deltahub-update-persistent-")
+        persistent_temp_dir = tempfile.mkdtemp(prefix="g3m-update-persistent-")
         persistent_new_path = os.path.join(
             persistent_temp_dir, os.path.basename(new_content_path)
         )
@@ -311,7 +311,7 @@ class UpdateChecker(QObject):
         self, current_path: str, new_path: str, system: str
     ) -> tuple[str, str]:
         updater_script_path = os.path.join(
-            tempfile.gettempdir(), f"deltahub_updater_{int(time.time())}.sh"
+            tempfile.gettempdir(), f"g3m_updater_{int(time.time())}.sh"
         )
         safe_current = current_path.replace("'", "'\\''")
         safe_new = new_path.replace("'", "'\\''")
@@ -322,7 +322,7 @@ OLD_PATH='{safe_current}'
 NEW_PATH='{safe_new}'
 BACKUP_PATH="${{OLD_PATH}}.old"
 TEMP_DIR='{os.path.dirname(new_path).replace("'", "'\\''")}'
-LOG_FILE="/tmp/deltahub_update.log"
+LOG_FILE="/tmp/g3m_update.log"
 
 while kill -0 "$PID" 2>/dev/null; do sleep 0.5; done
 rm -rf "$BACKUP_PATH" 2>> "$LOG_FILE"
@@ -382,7 +382,7 @@ fi
                 "[UPDATE] Starting update process for version %s",
                 update_info["version"],
             )
-            with tempfile.TemporaryDirectory(prefix="deltahub-update-") as tmp_dir:
+            with tempfile.TemporaryDirectory(prefix="g3m-update-") as tmp_dir:
                 archive_path = self._download_archive(update_info, tmp_dir)
                 self.status_changed.emit(
                     tr("status.unpacking_and_installing"), UI_COLORS["status_warning"]

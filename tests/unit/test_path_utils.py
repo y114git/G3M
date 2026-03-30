@@ -21,14 +21,14 @@ class TestPathUtils:
         root = get_user_data_root()
         assert isinstance(root, str)
         assert len(root) > 0
-        assert "DELTAHUB" in root
+        assert "G3M" in root
 
     def test_get_user_mods_dir(self):
         """Checks that getting user mods dir."""
         mods_dir = get_user_mods_dir()
         assert isinstance(mods_dir, str)
         assert "mods" in mods_dir
-        assert "DELTAHUB" in mods_dir
+        assert "G3M" in mods_dir
 
     def test_resource_path_frozen(self):
         """Checks that resourceing path frozen."""
@@ -294,3 +294,4 @@ class TestPathUtils:
                 f.write("mock")
             result = autodetect_path("Pizza Tower")
             assert result is None or "Pizza" in result
+

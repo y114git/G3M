@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Startup test script for DELTAHUB builds.
+Startup test script for G3M builds.
 Extracts archive and verifies the binary can start successfully.
 Can be used both as a standalone script and as pytest tests.
 """
@@ -143,7 +143,9 @@ def test_run_app_startup_path_imports(monkeypatch):
     monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
     monkeypatch.setattr(startup_module, "register_url_protocol", lambda: None)
     monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
-    monkeypatch.setattr(startup_module, "get_user_data_root", lambda: "")
+    monkeypatch.setattr(
+        startup_module, "resolve_user_data_root_with_migration", lambda: ""
+    )
     monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "")
     monkeypatch.setattr(startup_module, "install_excepthook", lambda: None)
     monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", lambda: None)
@@ -251,7 +253,7 @@ def test_play_startup_sound_skips_when_disabled():
     coordinator.instance = Mock()
     coordinator.instance.app_state.local_config = {"disable_startup_sound": True}
 
-    with patch("bootstrap.bootstrap_coordinator._audio_service.play_deltahub_sound") as play_sound:
+    with patch("bootstrap.bootstrap_coordinator._audio_service.play_g3m_sound") as play_sound:
         coordinator._play_startup_sound()
 
     play_sound.assert_not_called()
@@ -271,7 +273,7 @@ def test_play_startup_sound_uses_enabled_flag():
     coordinator.instance = Mock()
     coordinator.instance.app_state.local_config = {"disable_startup_sound": False}
 
-    with patch("bootstrap.bootstrap_coordinator._audio_service.play_deltahub_sound") as play_sound:
+    with patch("bootstrap.bootstrap_coordinator._audio_service.play_g3m_sound") as play_sound:
         coordinator._play_startup_sound()
 
     play_sound.assert_called_once_with()
@@ -362,7 +364,7 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
         window = AppWindow()
         try:
             assert window is not None
-            assert window.windowTitle() == "DELTAHUB"
+            assert window.windowTitle() == "G3M"
         finally:
             window.close()
 
@@ -426,3 +428,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

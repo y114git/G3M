@@ -13,7 +13,7 @@ def test_get_update_info_returns_platform_specific_payload(app_state):
     app_state.global_settings = {
         "launcher_files": {
             "version": "9.9.9",
-            "urls": {"linux": "https://example.com/deltahub.tar.gz"},
+            "urls": {"linux": "https://example.com/g3m.tar.gz"},
             "message": "Update",
             "sha256": {"linux": "abc123"},
         }
@@ -24,7 +24,7 @@ def test_get_update_info_returns_platform_specific_payload(app_state):
 
     assert update_info == {
         "version": "9.9.9",
-        "url": "https://example.com/deltahub.tar.gz",
+        "url": "https://example.com/g3m.tar.gz",
         "message": "Update",
         "message_ru": None,
         "message_en": None,
@@ -40,7 +40,7 @@ def test_get_update_info_skips_current_version(app_state):
     app_state.global_settings = {
         "launcher_files": {
             "version": APP_VERSION,
-            "urls": {"linux": "https://example.com/deltahub.tar.gz"},
+            "urls": {"linux": "https://example.com/g3m.tar.gz"},
         }
     }
     checker = UpdateChecker(app_state=app_state, feedback_service=feedback_service)
@@ -71,7 +71,7 @@ def test_build_unix_updater_script_contains_backup_restore(app_state):
     checker = UpdateChecker(app_state=app_state, feedback_service=Mock())
 
     _, script = checker._build_unix_updater_script(
-        "/app/DELTAHUB", os.path.join("tmp", "DELTAHUB.new"), "Linux"
+        "/app/G3M", os.path.join("tmp", "G3M.new"), "Linux"
     )
 
     assert 'BACKUP_PATH="${OLD_PATH}.old"' in script
@@ -92,3 +92,4 @@ def test_prompt_for_update_queues_when_game_is_running():
 
     assert app.app_state.pending_dialogs == [("update", {"version": "9.9.9"})]
     app.update_checker.perform_update.assert_not_called()
+

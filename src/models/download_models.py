@@ -34,7 +34,7 @@ class SourceKind(StrEnum):
     """Where the download originated from."""
 
     GAMEBANANA = "gamebanana"
-    DELTAHUB_PROTOCOL = "deltahub_protocol"
+    G3M_PROTOCOL = "g3m_protocol"
     EXTERNAL_URL = "external_url"
     LOCAL_FILE = "local_file"
 

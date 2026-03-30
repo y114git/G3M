@@ -59,7 +59,7 @@ class UseWorker(QThread):
             self.use_finished.emit(self._record_id, False, False, "File not found")
             return
 
-        extract_dir = tempfile.mkdtemp(prefix="dh_use_")
+        extract_dir = tempfile.mkdtemp(prefix="g3m_use_")
         try:
             self._extract(extract_dir)
             if self._cancelled:
@@ -78,7 +78,7 @@ class UseWorker(QThread):
             if has_deltamod_info_file(files_in_root):
                 success = self._install_via_deltamod(content_path, gb_metadata)
             elif find_mod_config(content_path):
-                success = self._install_deltahub_mod(content_path, gb_metadata)
+                success = self._install_g3m_mod(content_path, gb_metadata)
             elif self._is_afom_archive(extract_dir, gb_metadata):
                 success = self._install_afom_archive(extract_dir, gb_metadata)
             elif gb_metadata:
@@ -188,7 +188,7 @@ class UseWorker(QThread):
             logger.error("UseWorker: GB converter failed: %s", e, exc_info=True)
             return False
 
-    def _install_deltahub_mod(self, content_path: str, gb_metadata: dict) -> bool:
+    def _install_g3m_mod(self, content_path: str, gb_metadata: dict) -> bool:
         try:
             from config.config import MOD_CONFIG_FILENAME
             from utils.file_utils import sanitize_filename
@@ -252,7 +252,7 @@ class UseWorker(QThread):
             save_mod_config(target_config_path, config_data, indent=4)
             return True
         except Exception as e:
-            logger.error("UseWorker: deltahub mod install failed: %s", e, exc_info=True)
+            logger.error("UseWorker: g3m mod install failed: %s", e, exc_info=True)
             return False
 
     def _is_afom_archive(self, extract_dir: str, gb_metadata: dict) -> bool:

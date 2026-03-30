@@ -42,7 +42,7 @@ _ALL_FILTER = "All Files (*)"
 
 
 def _get_app_font(app_state) -> str:
-    """Return the current DELTAHUB font family."""
+    """Return the current G3M font family."""
     ff = (app_state.local_config.get("custom_font_family") or "").strip()
     if not ff:
         parent = getattr(app_state, "_app_window", None)

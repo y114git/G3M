@@ -47,7 +47,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                 except Exception as e:
                     logging.warning(f"Failed to remove old file {old_file}: {e}")
         self.app_state.local_config["custom_background_path"] = ""
-        _asset_prefixes = {
+        asset_prefixes = {
             "background.": "custom_background",
             "background_music.": "custom_background_music",
             "startup_sound.": "custom_startup_sound",
@@ -56,7 +56,7 @@ class ThemeInstallWorker(BaseInstallWorker):
         }
         for filename in os.listdir(source_dir):
             src_path = os.path.join(source_dir, filename)
-            for prefix, dest_name in _asset_prefixes.items():
+            for prefix, dest_name in asset_prefixes.items():
                 if filename.startswith(prefix):
                     ext = os.path.splitext(filename)[1]
                     dest_path = os.path.join(self.config_dir, f"{dest_name}{ext}")
@@ -76,7 +76,7 @@ class ThemeInstallWorker(BaseInstallWorker):
         try:
             if os.path.isfile(content_path):
                 with tempfile.TemporaryDirectory(
-                    prefix="dh-theme-extract-"
+                    prefix="g3m-theme-extract-"
                 ) as extract_dir:
                     from utils.archive_utils import (
                         extract_any_archive,
@@ -126,7 +126,7 @@ class ThemeInstallWorker(BaseInstallWorker):
             ) or self.archive_path.startswith("https://")
             if archive_is_url:
                 url = self.archive_path
-                with tempfile.TemporaryDirectory(prefix="dh-theme-import-") as temp_dir:
+                with tempfile.TemporaryDirectory(prefix="g3m-theme-import-") as temp_dir:
                     temp_archive_name = f"temp_theme_{os.getpid()}.zip"
                     temp_archive_path = os.path.join(temp_dir, temp_archive_name)
                     try:

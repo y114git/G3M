@@ -151,7 +151,7 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    name='DELTAHUB',
+    name='G3M',
     icon='assets/icons/icon.ico',
     console=False,
     upx=True,
@@ -161,15 +161,16 @@ exe = EXE(
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
-        name='DELTAHUB.app',
+        name='G3M.app',
         icon='assets/icons/icon.icns',
-        bundle_identifier='com.y114.deltahub',
+        bundle_identifier='com.y114.g3m',
         info_plist={
             'CFBundleURLTypes': [
                 {
-                    'CFBundleURLName': 'DELTAHUB URL',
-                    'CFBundleURLSchemes': ['deltahub']
+                    'CFBundleURLName': 'G3M URL',
+                    'CFBundleURLSchemes': ['g3m', 'deltahub']
                 }
             ]
         }
     )
+

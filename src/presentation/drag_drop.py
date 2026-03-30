@@ -16,13 +16,13 @@ def normalize_local_path(path: str) -> str:
     path = (path or "").strip()
     if len(path) > 3 and path[0] == "/" and path[2] == ":":
         path = path[1:]
-    return os.path.normpath(path)
+    return os.path.normpath(path).replace("\\", "/")
 
 
 class LazyFileExportMimeData(QMimeData):
     """Create an exported file only when the drop target requests URLs."""
 
-    INTERNAL_FORMAT = "application/x-deltahub-lazy-file-export"
+    INTERNAL_FORMAT = "application/x-g3m-lazy-file-export"
 
     def __init__(
         self,
@@ -79,7 +79,7 @@ class LazyFileExportMimeData(QMimeData):
         self._materialized = True
         try:
             safe_name = _sanitize_export_name(self._filename)
-            self._temp_dir = tempfile.mkdtemp(prefix="deltahub_export_")
+            self._temp_dir = tempfile.mkdtemp(prefix="g3m_export_")
             self._temp_path = os.path.join(self._temp_dir, safe_name)
             if self._exporter(self._temp_path) and os.path.exists(self._temp_path):
                 return self._temp_path

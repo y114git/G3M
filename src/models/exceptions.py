@@ -1,13 +1,13 @@
 """Custom exception classes."""
 
 
-class DELTAHUBError(Exception):
-    """Base exception class for all DELTAHUB-specific errors."""
+class G3MError(Exception):
+    """Base exception class for all G3M-specific errors."""
 
     pass
 
 
-class AppError(DELTAHUBError):
+class AppError(G3MError):
     """Application-level error with localization support."""
 
     def __init__(self, key: str, **kwargs) -> None:
@@ -17,7 +17,7 @@ class AppError(DELTAHUBError):
         super().__init__(tr(key, **kwargs))
 
 
-class ModError(DELTAHUBError):
+class ModError(G3MError):
     """Base exception for mod-related errors."""
 
     def __init__(

@@ -47,16 +47,6 @@ def normalize_mod_cache(cache: dict[str, Any]) -> dict[str, ModFolderInfo]:
 
 def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -> bool:
     """Validate that a mod config dict has the required fields and correct types."""
-    if not isinstance(config_data, dict):
-        logging.warning(
-            f"validate_mod_config: Config is not a dictionary in {config_path}, skipping mod",
-            extra={
-                "mod_folder": folder_name,
-                "config_path": config_path,
-                "config_type": type(config_data).__name__,
-            },
-        )
-        return False
     required_string_fields = (
         ("config_version", MOD_CONFIG_VERSION, None),
         ("id", None, MOD_FIELD_LIMITS["id"]),

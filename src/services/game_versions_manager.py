@@ -228,7 +228,7 @@ class GameVersionsManager(QObject):
             "game": record.game,
             "created_at": record.created_at,
             "exported_at": utc_now_iso(),
-            "source_app": "DELTAHUB",
+            "source_app": "G3M",
             "source_game_path": record.source_game_path,
             "file_count": record.file_count,
             "size_bytes": record.size_bytes,

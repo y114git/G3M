@@ -63,13 +63,13 @@ class TestGameBananaAPI:
         assert 'compatibility_checked' in result
         assert 'preferred_format' in result
         assert 'tool_ids' in result
-        assert 'has_deltahub_file' in result
+        assert 'has_g3m_file' in result
         assert 'has_deltamod_file' in result
         assert isinstance(result['supported_files'], list)
         assert isinstance(result['has_supported_files'], bool)
         assert isinstance(result['compatibility_checked'], bool)
         assert isinstance(result['tool_ids'], list)
-        assert isinstance(result['has_deltahub_file'], bool)
+        assert isinstance(result['has_g3m_file'], bool)
         assert isinstance(result['has_deltamod_file'], bool)
 
     @patch('requests.Session')
@@ -109,3 +109,4 @@ class TestGameBananaConverter:
             assert converter is not None
         finally:
             os.unlink(archive_path)
+

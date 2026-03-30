@@ -20,18 +20,29 @@ class LocalizationManager:
 
     def __init__(self) -> None:
         self.internal_lang_dir = resource_path("assets/lang")
-        self.external_lang_dir = get_user_lang_dir()
-        self._ensure_external_lang_dir()
-        self._sync_internal_languages()
+        self.external_lang_dir: str | None = None
         self.strings = {}
         self.fallback_strings = {}
         self.available_languages = {}
         self.current_language = "en"
         self._plugin_strings: dict[str, dict[str, dict]] = {}
+        self._external_lang_dir_initialized = False
         self._load_available_languages()
         self._load_fallback_strings()
 
+    def initialize_external_language_dir(self) -> None:
+        if self._external_lang_dir_initialized:
+            return
+        self.external_lang_dir = get_user_lang_dir()
+        self._ensure_external_lang_dir()
+        self._sync_internal_languages()
+        self._load_available_languages()
+        self._load_fallback_strings()
+        self._external_lang_dir_initialized = True
+
     def _ensure_external_lang_dir(self) -> None:
+        if not self.external_lang_dir:
+            self.external_lang_dir = get_user_lang_dir()
         if os.path.isdir(self.external_lang_dir):
             return
         if os.path.exists(self.external_lang_dir):
@@ -53,14 +64,16 @@ class LocalizationManager:
             os.makedirs(self.external_lang_dir, exist_ok=True)
         except FileExistsError:
             self.external_lang_dir = os.path.join(
-                tempfile.gettempdir(), "deltahub-lang"
+                tempfile.gettempdir(), "g3m-lang"
             )
             os.makedirs(self.external_lang_dir, exist_ok=True)
 
     def _load_fallback_strings(self):
         """Preload English strings as fallback to avoid disk reads."""
-        en_path = os.path.join(self.external_lang_dir, "lang_en.json")
-        if not os.path.exists(en_path):
+        en_path = None
+        if self.external_lang_dir:
+            en_path = os.path.join(self.external_lang_dir, "lang_en.json")
+        if not en_path or not os.path.exists(en_path):
             en_path = os.path.join(self.internal_lang_dir, "lang_en.json")
         if os.path.exists(en_path):
             try:
@@ -151,10 +164,14 @@ class LocalizationManager:
                 json.dump(external_data, f, ensure_ascii=False, indent=2)
 
     def _load_available_languages(self):
-        self.available_languages = self._scan_lang_dir(self.external_lang_dir)
+        languages = self._scan_lang_dir(self.internal_lang_dir)
+        if self.external_lang_dir and os.path.isdir(self.external_lang_dir):
+            languages.update(self._scan_lang_dir(self.external_lang_dir))
+        self.available_languages = languages
 
     def rescan_languages(self):
         self.available_languages.clear()
+        self.initialize_external_language_dir()
         self._sync_internal_languages()
         self._load_available_languages()
 
@@ -385,6 +402,7 @@ class LocalizationManager:
         write_config_callback: Callable,
         write_json_callback: Callable,
     ) -> str:
+        self.initialize_external_language_dir()
         saved_language = local_config.get("language")
         if not saved_language or saved_language not in self.get_available_languages():
             saved_language = self.detect_system_language()

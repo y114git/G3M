@@ -1,6 +1,6 @@
-#define AppName        "DELTAHUB"
-#define AppVersion     "2.4.7stable"
-#define AppExeName     "DELTAHUB.exe"
+#define AppName        "G3M"
+#define AppVersion     "3.0.0stable"
+#define AppExeName     "G3M.exe"
 #define AppIcon        "assets\\icons\\icon.ico"
 #define AppSmallIcon   "assets\\SmallIcon.bmp"
 #define AppWizardImage "assets\\WizardImage.bmp"
@@ -29,7 +29,10 @@ LanguageDetectionMethod=uilanguage
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "spanish"; MessagesFile: "compiler:Languages\\Spanish.isl"
 Name: "russian"; MessagesFile: "compiler:Languages\\Russian.isl"
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\\ChineseSimplified.isl"
+Name: "chinesetraditional"; MessagesFile: "compiler:Languages\\ChineseTraditional.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"
@@ -54,7 +57,7 @@ begin
 
   if (Win.Major < 10) or ((Win.Major = 10) and (Win.Build < 17763)) then
   begin
-    MsgBox('DELTAHUB supports only Windows 10 1809 and higher.'#13#10 +
+    MsgBox('G3M supports only Windows 10 1809 and higher.'#13#10 +
            'Installation will be cancelled.', mbCriticalError, MB_OK);
     Result := False;
     Exit;
@@ -62,3 +65,4 @@ begin
   else
     Result := True;
 end;
+

@@ -13,16 +13,16 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from config.config import APP_VERSION, SOCIAL_LINKS
+from config.config import APP_DISPLAY_NAME, APP_VERSION, SOCIAL_LINKS
 from models.plugin_models import PLUGIN_API_VERSION
 from services.localization_service import localization_service, tr
 from utils.path_utils import get_user_data_root
 
 
 class AboutDialog(QDialog):
-    RELEASES_URL = "https://github.com/y114git/DELTAHUB/releases"
-    WIKI_URL = "https://github.com/y114git/DELTAHUB/wiki"
-    ISSUES_URL = "https://github.com/y114git/DELTAHUB/issues"
+    RELEASES_URL = "https://github.com/y114git/G3M/releases"
+    WIKI_URL = "https://github.com/y114git/G3M/wiki"
+    ISSUES_URL = "https://github.com/y114git/G3M/issues"
 
     def __init__(self, parent, app_state) -> None:
         super().__init__(parent)
@@ -68,7 +68,7 @@ class AboutDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(14)
 
-        self.title_label = QLabel("DELTAHUB")
+        self.title_label = QLabel(APP_DISPLAY_NAME)
         title_font = QFont(self.font())
         title_font.setPointSize(max(14, title_font.pointSize() + 4))
         title_font.setBold(True)
@@ -121,7 +121,7 @@ class AboutDialog(QDialog):
         layout.addLayout(links_layout)
 
         actions_layout = QHBoxLayout()
-        self.open_folder_button = QPushButton(tr("buttons.open_deltahub_folder"))
+        self.open_folder_button = QPushButton(tr("buttons.open_g3m_folder"))
         self.open_folder_button.clicked.connect(self._open_data_folder)
         self.report_issue_button = QPushButton(tr("buttons.report_issue"))
         self.report_issue_button.clicked.connect(self._open_report_form)

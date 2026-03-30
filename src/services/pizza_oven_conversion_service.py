@@ -1,4 +1,4 @@
-"""PizzaOven normal-mod inspection and conversion into DELTAHUB mods."""
+"""PizzaOven normal-mod inspection and conversion into G3M mods."""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ class PizzaOvenSimulationResult:
 
 
 class PizzaOvenConversionService:
-    """Converts PizzaOven normal mods into DELTAHUB mods via temp simulation."""
+    """Converts PizzaOven normal mods into G3M mods via temp simulation."""
 
     def __init__(self, g3mtool: G3MToolManager | None = None) -> None:
         self._g3mtool = g3mtool or G3MToolManager()
@@ -200,7 +200,7 @@ class PizzaOvenConversionService:
         )
         if progress_callback:
             progress_callback(5, tr("status.po_convert_inspecting_source"))
-        temp_root = tempfile.mkdtemp(prefix="dh_po_convert_")
+        temp_root = tempfile.mkdtemp(prefix="g3m_po_convert_")
         try:
             working_game_dir = os.path.join(temp_root, "game")
             if progress_callback:
@@ -222,7 +222,7 @@ class PizzaOvenConversionService:
                 )
             if progress_callback:
                 progress_callback(82, tr("status.po_convert_building_mod"))
-            result = self._build_deltahub_mod(
+            result = self._build_g3m_mod(
                 source_dir,
                 source_file_path,
                 mods_dir,
@@ -615,7 +615,7 @@ class PizzaOvenConversionService:
         for target_file in target_files:
             if not os.path.isfile(target_file):
                 continue
-            temp_dir = tempfile.mkdtemp(prefix="dh_po_patch_")
+            temp_dir = tempfile.mkdtemp(prefix="g3m_po_patch_")
             try:
                 temp_output = os.path.join(temp_dir, os.path.basename(target_file))
                 returncode, _stdout, _stderr = self._g3mtool.xpatch_apply(
@@ -709,7 +709,7 @@ class PizzaOvenConversionService:
                 file_map[rel_path] = abs_path
         return file_map
 
-    def _build_deltahub_mod(
+    def _build_g3m_mod(
         self,
         source_dir: str,
         source_file_path: str | None,
@@ -811,16 +811,15 @@ class PizzaOvenConversionService:
         working_game_dir: str,
         changed_files: list[str],
     ) -> list[str]:
-        extra_files: list[str] = []
-        for rel_path in sorted(changed_files, key=str.lower):
-            normalized = rel_path.replace("\\", "/").strip("/")
-            if not normalized:
+        extra_files = []
+        for rel_path in changed_files:
+            if not rel_path:
                 continue
-            source_path = os.path.join(working_game_dir, normalized.replace("/", os.sep))
-            target_path = os.path.join(target_mod_dir, normalized.replace("/", os.sep))
+            source_path = os.path.join(working_game_dir, rel_path.replace("/", os.sep))
+            target_path = os.path.join(target_mod_dir, rel_path.replace("/", os.sep))
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
             shutil.copy2(source_path, target_path)
-            extra_files.append(normalized)
+            extra_files.append(rel_path)
         return extra_files
 
     def _write_data_patch(
@@ -872,7 +871,7 @@ class PizzaOvenConversionService:
         *,
         patch_type: str,
     ) -> bool:
-        temp_dir = tempfile.mkdtemp(prefix="dh_po_verify_")
+        temp_dir = tempfile.mkdtemp(prefix="g3m_po_verify_")
         try:
             temp_output = os.path.join(temp_dir, os.path.basename(modified_data))
             if patch_type == "g3mpatch":

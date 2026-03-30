@@ -13,6 +13,7 @@ from config.config import (
     THEME_CONFIG_FILENAME,
     THEME_CONFIG_FILENAMES,
     UI_COLORS,
+    URL_PROTOCOL_PREFIXES,
 )
 from models.exceptions import AppError
 from services.localization_service import tr
@@ -52,10 +53,13 @@ class UrlInstallThread(BaseInstallWorker):
 
     def run(self):
         try:
-            if self.url.startswith("deltahub://"):
-                content = (
-                    self.url[len("deltahub://") :].split(",")[0].strip().rstrip("/")
+            if self.url.startswith(URL_PROTOCOL_PREFIXES):
+                prefix = next(
+                    candidate
+                    for candidate in URL_PROTOCOL_PREFIXES
+                    if self.url.startswith(candidate)
                 )
+                content = self.url[len(prefix) :].split(",")[0].strip().rstrip("/")
                 if len(content) == 64 and all(
                     c in "0123456789abcdef" for c in content.lower()
                 ):
@@ -68,7 +72,7 @@ class UrlInstallThread(BaseInstallWorker):
                 download_url = content
             else:
                 download_url = self.url
-            with tempfile.TemporaryDirectory(prefix="dh-url-install-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="g3m-url-install-") as temp_dir:
                 self.status.emit(
                     tr("status.downloading_from_external"), UI_COLORS["status_warning"]
                 )
@@ -87,15 +91,15 @@ class UrlInstallThread(BaseInstallWorker):
             self.finished.emit(False, str(e))
 
     def _process_deltamod_archive(self, url: str):
-        with tempfile.TemporaryDirectory(prefix="dh-redirect-dl-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="g3m-redirect-dl-") as temp_dir:
             archive_path = self._download_archive(url, temp_dir)
             with tempfile.TemporaryDirectory(
-                prefix="dh-redirect-unpack-"
+                prefix="g3m-redirect-unpack-"
             ) as unpack_dir:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
                 if MOD_CONFIG_FILENAME in files_in_root:
-                    mod_dir = self._install_deltahub_mod_from_path(content_path)
+                    mod_dir = self._install_g3m_mod_from_path(content_path)
                     if mod_dir:
                         mod_name = os.path.basename(mod_dir)
                         self.finished.emit(
@@ -122,10 +126,10 @@ class UrlInstallThread(BaseInstallWorker):
                 else:
                     raise AppError("errors.deltamod_archive_invalid_redirect")
 
-    def _install_deltahub_mod_from_path(self, content_path: str) -> str | None:
+    def _install_g3m_mod_from_path(self, content_path: str) -> str | None:
         mod_config_path = find_mod_config(content_path)
         if not mod_config_path:
-            logging.error("mod_config.json not found in DELTAHUB mod archive")
+            logging.error("mod_config.json not found in G3M mod archive")
             return None
         config_data = load_mod_config(mod_config_path)
         if not config_data:
@@ -141,7 +145,7 @@ class UrlInstallThread(BaseInstallWorker):
         try:
             save_mod_config(target_config_path, config_data)
             logging.info(
-                f"Installed DELTAHUB mod from URL: {target_mod_dir}, mod_id={mod_id}"
+                f"Installed G3M mod from URL: {target_mod_dir}, mod_id={mod_id}"
             )
         except Exception as e:
             logging.error(f"Failed to save mod config: {e}", exc_info=True)
@@ -251,7 +255,7 @@ class UrlInstallThread(BaseInstallWorker):
         return self._detect_content_type_from_extracted(archive_path) or ""
 
     def _detect_content_type_from_extracted(self, archive_path: str) -> str | None:
-        with tempfile.TemporaryDirectory(prefix="dh-detect-type-") as unpack_dir:
+        with tempfile.TemporaryDirectory(prefix="g3m-detect-type-") as unpack_dir:
             try:
                 from utils.archive_utils import (
                     extract_any_archive,
@@ -279,7 +283,7 @@ class UrlInstallThread(BaseInstallWorker):
             from utils.archive_utils import extract_archive
 
             persistent_temp_dir = tempfile.mkdtemp(
-                prefix="deltahub_url_manual_install_"
+                prefix="g3m_url_manual_install_"
             )
             try:
                 archive_filename = os.path.basename(archive_path)
@@ -351,7 +355,7 @@ class UrlInstallThread(BaseInstallWorker):
             self.finished.emit(False, tr("themes.installation_error", error=str(e)))
 
     def _extract_and_install_theme(self, archive_path: str, temp_dir: str):
-        with tempfile.TemporaryDirectory(prefix="dh-theme-extract-") as unpack_dir:
+        with tempfile.TemporaryDirectory(prefix="g3m-theme-extract-") as unpack_dir:
             try:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 theme_json_path = find_theme_config_path(content_path)
@@ -366,7 +370,7 @@ class UrlInstallThread(BaseInstallWorker):
 
     def _check_redirect(self, archive_path: str, temp_dir: str) -> bool:
         try:
-            with tempfile.TemporaryDirectory(prefix="dh-redirect-check-") as unpack_dir:
+            with tempfile.TemporaryDirectory(prefix="g3m-redirect-check-") as unpack_dir:
                 content_path = self._unpack_content_path(
                     archive_path, unpack_dir, use_shutil=False
                 )
@@ -412,7 +416,7 @@ class UrlInstallThread(BaseInstallWorker):
 
     def _install_mod_from_archive(self, archive_path: str, temp_dir: str):
         try:
-            with tempfile.TemporaryDirectory(prefix="dh-url-unpack-") as unpack_dir:
+            with tempfile.TemporaryDirectory(prefix="g3m-url-unpack-") as unpack_dir:
                 content_path = self._unpack_content_path(archive_path, unpack_dir)
                 files_in_root = os.listdir(content_path)
                 mod_name = None
@@ -433,7 +437,7 @@ class UrlInstallThread(BaseInstallWorker):
                     self.status.emit(
                         tr("status.installing_mod"), UI_COLORS["status_info"]
                     )
-                    mod_dir = self._install_deltahub_mod_from_path(content_path)
+                    mod_dir = self._install_g3m_mod_from_path(content_path)
                     if not mod_dir:
                         raise AppError("errors.mod_installation_failed")
                     mod_name = os.path.basename(mod_dir)

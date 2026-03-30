@@ -1,4 +1,4 @@
-"""DELTAHUB application entry point.
+"""G3M application entry point.
 This module sets up the Python path and launches the application.
 """
 

@@ -780,6 +780,9 @@ class ModEditorDialog(QDialog):
         if len(self.name_edit.text().strip()) > MOD_FIELD_LIMITS["name"]:
             QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_name_too_long"))
             return False
+        if len(self.author_edit.text().strip()) > MOD_FIELD_LIMITS["author"]:
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_author_too_long"))
+            return False
         if len(self.version_edit.text().strip()) > MOD_FIELD_LIMITS["version"]:
             QMessageBox.warning(
                 self, tr("errors.error"), tr("dialogs.mod_version_too_long")
@@ -787,6 +790,15 @@ class ModEditorDialog(QDialog):
             return False
         if len((self.game_combo.currentData() or "").strip()) > MOD_FIELD_LIMITS["game"]:
             QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_game_too_long"))
+            return False
+        if len(self.homepage_edit.text().strip()) > MOD_FIELD_LIMITS["homepage"]:
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_homepage_too_long"))
+            return False
+        if len(self.icon_edit.text().strip()) > MOD_FIELD_LIMITS["icon"]:
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_icon_too_long"))
+            return False
+        if len(self.game_version_edit.text().strip()) > MOD_FIELD_LIMITS["game_version"]:
+            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_game_version_too_long"))
             return False
         if not any(
             [

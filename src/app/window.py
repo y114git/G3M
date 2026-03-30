@@ -40,6 +40,7 @@ from app_context.application_context import (
 )
 from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 from config.config import (
+    APP_DISPLAY_NAME,
     DEFAULT_COLORS,
     FALLBACK_WINDOW_BG,
     INITIALIZATION_TIMEOUT,
@@ -110,7 +111,7 @@ class AppWindow(QWidget):
             parent_for_dialogs=parent_for_dialogs,
             initial_url=initial_url,
         )
-        self.setWindowTitle("DELTAHUB")
+        self.setWindowTitle(APP_DISPLAY_NAME)
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint

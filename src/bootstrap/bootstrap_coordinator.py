@@ -191,7 +191,7 @@ class BootstrapCoordinator:
         if getattr(self.instance, "app_state", None) and not self.instance.app_state.local_config.get(
             "disable_startup_sound", False
         ):
-            _audio_service.play_deltahub_sound()
+            _audio_service.play_g3m_sound()
 
     @staticmethod
     def post_show_initialization(window) -> None:

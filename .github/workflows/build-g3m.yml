@@ -1,4 +1,4 @@
-name: Build and Release DELTAHUB (Linux + macOS x64 & arm64 + Windows)
+name: Build and Release G3M (Linux + macOS x64 & arm64 + Windows)
 
 on:
   workflow_dispatch:
@@ -17,23 +17,23 @@ on:
         required: false
         type: string
       archive_name_linux:
-        description: "Archive name for Linux (e.g., DELTAHUB-Linux-v2.0.0)"
+        description: "Archive name for Linux (e.g., G3M-Linux-v2.0.0)"
         required: false
         type: string
       archive_name_macos_x64:
-        description: "Archive name for macOS x64 (e.g., DELTAHUB-macOS-x64-v2.0.0)"
+        description: "Archive name for macOS x64 (e.g., G3M-macOS-x64-v2.0.0)"
         required: false
         type: string
       archive_name_macos_arm64:
-        description: "Archive name for macOS arm64 (e.g., DELTAHUB-macOS-arm64-v2.0.0)"
+        description: "Archive name for macOS arm64 (e.g., G3M-macOS-arm64-v2.0.0)"
         required: false
         type: string
       archive_name_windows:
-        description: "Archive name for Windows Portable (e.g., DELTAHUB-Windows-v2.0.0)"
+        description: "Archive name for Windows Portable (e.g., G3M-Windows-v2.0.0)"
         required: false
         type: string
       archive_name_windows_setup:
-        description: "Archive name for Windows Setup (e.g., DELTAHUB-Windows-Setup-v2.0.0)"
+        description: "Archive name for Windows Setup (e.g., G3M-Windows-Setup-v2.0.0)"
         required: false
         type: string
 
@@ -59,28 +59,28 @@ jobs:
         include:
           - label: Linux
             runs_on: ubuntu-22.04
-            artifact_name: DELTAHUB-Linux
+            artifact_name: G3M-Linux
             g3mtool_runtime: linux-x64
             g3mtool_dir: src/assets/bin/g3mtool_linux
-            startup_target: archive_content/DELTAHUB
+            startup_target: archive_content/G3M
           - label: macOS x64
             runs_on: macos-15-intel
-            artifact_name: DELTAHUB-macOS-x86_64
+            artifact_name: G3M-macOS-x86_64
             g3mtool_runtime: osx-x64
             g3mtool_dir: src/assets/bin/g3mtool_macos
-            startup_target: DELTAHUB.app/Contents/MacOS/DELTAHUB
+            startup_target: G3M.app/Contents/MacOS/G3M
           - label: macOS arm64
             runs_on: macos-15
-            artifact_name: DELTAHUB-macOS-arm64
+            artifact_name: G3M-macOS-arm64
             g3mtool_runtime: osx-arm64
             g3mtool_dir: src/assets/bin/g3mtool_macos
-            startup_target: DELTAHUB.app/Contents/MacOS/DELTAHUB
+            startup_target: G3M.app/Contents/MacOS/G3M
           - label: Windows
             runs_on: windows-latest
-            artifact_name: DELTAHUB-Windows
+            artifact_name: G3M-Windows
             g3mtool_runtime: win-x64
             g3mtool_dir: src/assets/bin/g3mtool_windows
-            startup_target: DELTAHUB.exe
+            startup_target: G3M.exe
     steps:
       - uses: actions/checkout@v4
 
@@ -91,21 +91,21 @@ jobs:
           switch ('${{ matrix.label }}') {
             'Linux' {
               $archiveName = "${{ github.event.inputs.archive_name_linux }}"
-              if (-not $archiveName) { $archiveName = "DELTAHUB-Linux-${{ env.RELEASE_VERSION }}" }
+              if (-not $archiveName) { $archiveName = "G3M-Linux-${{ env.RELEASE_VERSION }}" }
             }
             'macOS x64' {
               $archiveName = "${{ github.event.inputs.archive_name_macos_x64 }}"
-              if (-not $archiveName) { $archiveName = "DELTAHUB-macOS-x64-${{ env.RELEASE_VERSION }}" }
+              if (-not $archiveName) { $archiveName = "G3M-macOS-x64-${{ env.RELEASE_VERSION }}" }
             }
             'macOS arm64' {
               $archiveName = "${{ github.event.inputs.archive_name_macos_arm64 }}"
-              if (-not $archiveName) { $archiveName = "DELTAHUB-macOS-arm64-${{ env.RELEASE_VERSION }}" }
+              if (-not $archiveName) { $archiveName = "G3M-macOS-arm64-${{ env.RELEASE_VERSION }}" }
             }
             'Windows' {
               $archiveName = "${{ github.event.inputs.archive_name_windows }}"
-              if (-not $archiveName) { $archiveName = "DELTAHUB-Windows-${{ env.RELEASE_VERSION }}" }
+              if (-not $archiveName) { $archiveName = "G3M-Windows-${{ env.RELEASE_VERSION }}" }
               $setupName = "${{ github.event.inputs.archive_name_windows_setup }}"
-              if (-not $setupName) { $setupName = "DELTAHUB-Windows-Setup-${{ env.RELEASE_VERSION }}" }
+              if (-not $setupName) { $setupName = "G3M-Windows-Setup-${{ env.RELEASE_VERSION }}" }
               "setup_archive_path=$($setupName).zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             }
           }
@@ -205,17 +205,17 @@ jobs:
           [System.IO.File]::WriteAllText('.env', $envContent)
 
       - name: Build via spec
-        run: pyinstaller -y builds/DELTAHUB.spec
+        run: pyinstaller -y builds/G3MExecutable.spec
 
       - name: Optimize Linux binary
         if: runner.os == 'Linux'
         run: |
-          strip dist/DELTAHUB || true
-          upx -9 dist/DELTAHUB || true
+          strip dist/G3M || true
+          upx -9 dist/G3M || true
 
       - name: Codesign macOS app
         if: runner.os == 'macOS'
-        run: codesign --force --deep --sign - "dist/DELTAHUB.app"
+        run: codesign --force --deep --sign - "dist/G3M.app"
 
       - name: Create archive (Linux)
         if: runner.os == 'Linux'
@@ -227,7 +227,7 @@ jobs:
             fi
           done
           mkdir -p archive_content
-          mv dist/DELTAHUB archive_content/
+          mv dist/G3M archive_content/
           cp LICENSE THIRD_PARTY_NOTICES.md SECURITY.md archive_content/
           zip -r "${{ steps.set_names.outputs.archive_path }}" archive_content
 
@@ -235,7 +235,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           cp LICENSE THIRD_PARTY_NOTICES.md SECURITY.md dist/
-          ditto -c -k --sequesterRsrc --keepParent "dist/DELTAHUB.app" "${{ steps.set_names.outputs.archive_path }}"
+          ditto -c -k --sequesterRsrc --keepParent "dist/G3M.app" "${{ steps.set_names.outputs.archive_path }}"
           (cd dist && zip -ur "../${{ steps.set_names.outputs.archive_path }}" LICENSE THIRD_PARTY_NOTICES.md SECURITY.md)
 
       - name: Create archive (Windows)
@@ -269,34 +269,34 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install innosetup -y
 
-      - name: Inject version into setup.iss
+      - name: Inject version into G3MWindowsInstaller.iss
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ver = $env:RELEASE_VERSION.TrimStart('v')
-          $content = Get-Content -Path builds/setup.iss -Raw
+          $content = Get-Content -Path builds/G3MWindowsInstaller.iss -Raw
           $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
           $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("$pwd\builds\setup.iss", $newContent, $utf8NoBomEncoding)
+          [System.IO.File]::WriteAllText("$pwd\builds\G3MWindowsInstaller.iss", $newContent, $utf8NoBomEncoding)
 
       - name: Build installer (Inno Setup)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" builds/setup.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" builds/G3MWindowsInstaller.iss
 
       - name: Create archive for setup exe
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path Output -Filter "DELTAHUB_setup_v*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem -Path Output -Filter "G3M_setup_v*.exe" | Select-Object -First 1
           if (-not $exe) { Write-Error 'Installer not found'; exit 1 }
           Compress-Archive -Path $exe.FullName -DestinationPath "${{ steps.set_names.outputs.setup_archive_path }}" -Force
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: DELTAHUB-Windows-Setup
+          name: G3M-Windows-Setup
           path: ${{ steps.set_names.outputs.setup_archive_path }}
 
   release:
@@ -368,3 +368,4 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release_assets/*.zip
+

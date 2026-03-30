@@ -41,14 +41,14 @@ class TestPathUtilsEdgeCases:
         with patch('utils.path_utils.CURRENT_PLATFORM', 'Windows'), \
                 patch.dict(os.environ, {'LOCALAPPDATA': 'C:\\Users\\Test\\AppData\\Local'}):
             result = get_user_data_root()
-            assert os.path.normpath(result) == os.path.normpath('C:\\Users\\Test\\AppData\\Local\\DELTAHUB')
+            assert os.path.normpath(result) == os.path.normpath('C:\\Users\\Test\\AppData\\Local\\G3M')
 
     def test_get_user_data_root_windows_fallback(self):
         """Checks that getting user data root windows fallback."""
         with patch('utils.path_utils.CURRENT_PLATFORM', 'Windows'), \
                 patch.dict(os.environ, {'APPDATA': 'C:\\Users\\Test\\AppData\\Roaming'}, clear=True):
             result = get_user_data_root()
-            assert os.path.normpath(result) == os.path.normpath('C:\\Users\\Test\\AppData\\Roaming\\DELTAHUB')
+            assert os.path.normpath(result) == os.path.normpath('C:\\Users\\Test\\AppData\\Roaming\\G3M')
 
     def test_get_user_data_root_windows_no_env_vars(self):
         """Checks that getting user data root windows no env vars."""
@@ -56,21 +56,21 @@ class TestPathUtilsEdgeCases:
                 patch.dict(os.environ, {}, clear=True), \
                 patch('os.path.expanduser', return_value='C:\\Users\\Test'):
             result = get_user_data_root()
-            assert os.path.normpath(result) == os.path.normpath('C:\\Users\\Test\\DELTAHUB')
+            assert os.path.normpath(result) == os.path.normpath('C:\\Users\\Test\\G3M')
 
     def test_get_user_data_root_macos(self):
         """Checks that getting user data root macos."""
         with patch('utils.path_utils.CURRENT_PLATFORM', 'Darwin'), \
                 patch('os.path.expanduser', return_value='/Users/Test'):
             result = get_user_data_root()
-            assert result == os.path.join('/Users/Test', 'Library', 'Application Support', 'DELTAHUB')
+            assert result == os.path.join('/Users/Test', 'Library', 'Application Support', 'G3M')
 
     def test_get_user_data_root_linux(self):
         """Checks that getting user data root linux."""
         with patch('utils.path_utils.CURRENT_PLATFORM', 'Linux'), \
                 patch('os.path.expanduser', return_value='/home/test'):
             result = get_user_data_root()
-            assert result == os.path.join('/home/test', '.local', 'share', 'DELTAHUB')
+            assert result == os.path.join('/home/test', '.local', 'share', 'G3M')
 
     def test_get_user_directories_consistency(self):
         """Checks that getting user directories consistency."""
@@ -281,3 +281,4 @@ class TestPathUtilsEdgeCases:
         end = time.time()
 
         assert (end - start) < 1.0
+

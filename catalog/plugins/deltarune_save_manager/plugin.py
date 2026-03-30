@@ -233,7 +233,7 @@ QFrame#slot_row_{chapter}_{slot} {{
         if not (os.path.exists(file_path) and os.path.getsize(file_path) > 0):
             return
         editor_module = _load_local_module(
-            "save_editor.py", "deltahub_plugin_save_editor"
+            "save_editor.py", "g3m_plugin_save_editor"
         )
         dialog = editor_module.SaveEditorDialog(file_path, self.app_state, self.save_manager.parent_widget, self.tr)
         if dialog.exec():
@@ -259,7 +259,7 @@ class DRSaveManagerPlugin:
     def _save_manager_instance(self, parent=None):
         if self._save_manager is not None:
             return self._save_manager
-        module = _load_local_module("save_manager.py", "deltahub_plugin_save_manager")
+        module = _load_local_module("save_manager.py", "g3m_plugin_save_manager")
         module.tr = self._tr()
         self._save_manager = module.SaveManager(
             self._context.app_state,
@@ -273,7 +273,7 @@ class DRSaveManagerPlugin:
     def create_main_widget(self, ui_context, parent):
         builder_module = _load_local_module(
             "save_manager_view_builder.py",
-            "deltahub_plugin_save_manager_view_builder",
+            "g3m_plugin_save_manager_view_builder",
         )
         builder_module.tr = self._tr()
         builder = builder_module.SaveManagerViewBuilder(ui_context.app_state, parent)
@@ -312,3 +312,4 @@ class DRSaveManagerPlugin:
 
 def create_plugin():
     return DRSaveManagerPlugin()
+

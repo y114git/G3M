@@ -37,17 +37,17 @@ class FeedbackManager(QObject):
     ):
         if not self._should_show_dialog():
             return
-        _t = self._tr
+        t = self._tr
         type_map = {
-            "error": (QMessageBox.Icon.Critical, _t("errors.error")),
-            "warning": (QMessageBox.Icon.Warning, _t("dialogs.warning")),
-            "info": (QMessageBox.Icon.Information, _t("dialogs.info")),
-            "success": (QMessageBox.Icon.Information, _t("dialogs.success")),
+            "error": (QMessageBox.Icon.Critical, t("errors.error")),
+            "warning": (QMessageBox.Icon.Warning, t("dialogs.warning")),
+            "info": (QMessageBox.Icon.Information, t("dialogs.info")),
+            "success": (QMessageBox.Icon.Information, t("dialogs.success")),
         }
         icon, title = type_map.get(
-            message_type, (QMessageBox.Icon.Information, _t("dialogs.success"))
+            message_type, (QMessageBox.Icon.Information, t("dialogs.success"))
         )
-        message = _t(message_key, **kwargs)
+        message = t(message_key, **kwargs)
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
@@ -69,9 +69,9 @@ class FeedbackManager(QObject):
     ) -> bool:
         if not self._should_show_dialog():
             return False
-        _t = self._tr
-        title = _t(title_key, **kwargs)
-        message = _t(message_key, **kwargs)
+        t = self._tr
+        title = t(title_key, **kwargs)
+        message = t(message_key, **kwargs)
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)

@@ -297,7 +297,7 @@ def _patch_all_chapters(
     backup_dir = os.path.join(get_user_data_root(), "patching_backups")
     backup_mgr = BackupManager(backup_dir, patching_logger=logger)
     manifest_path = os.path.join(get_user_data_root(), "settings", "session.lock")
-    temp_dir = tempfile.mkdtemp(prefix="deltahub_shortcut_patch_")
+    temp_dir = tempfile.mkdtemp(prefix="g3m_shortcut_patch_")
 
     try:
         for chapter_id, mod_id in sorted(chapter_mods.items()):
@@ -517,7 +517,7 @@ def run_shortcut(shortcut_arg: str):
     Chapters with null/empty values are vanilla (no patching).
     """
     _configure_logging()
-    logger.info("=== DELTAHUB Shortcut Runner ===")
+    logger.info("=== G3M Shortcut Runner ===")
 
     try:
         shortcut_config = _parse_shortcut_arg(shortcut_arg)

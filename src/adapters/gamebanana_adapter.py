@@ -11,8 +11,8 @@ import requests
 
 from config.config import (
     GAMEBANANA_API_BASE,
-    GAMEBANANA_TOOL_ID_DELTAHUB,
     GAMEBANANA_TOOL_ID_DELTAMOD,
+    GAMEBANANA_TOOL_ID_G3M,
     NETWORK_TIMEOUT_MEDIUM,
 )
 from models.game_modes import get_gamebanana_reverse_map
@@ -271,7 +271,7 @@ class GameBananaAPI:
             "has_supported_files": False,
             "preferred_format": None,
             "tool_ids": set(),
-            "has_deltahub_file": False,
+            "has_g3m_file": False,
             "has_deltamod_file": False,
             "compatibility_checked": False,
         }
@@ -301,9 +301,9 @@ class GameBananaAPI:
                     and (tool_id := self._safe_int(integration.get("_idToolRow")))
                 ]
                 compatibility_label = None
-                if GAMEBANANA_TOOL_ID_DELTAHUB in file_tool_ids:
-                    compatibility_label = "deltahub"
-                    compatibility["has_deltahub_file"] = True
+                if GAMEBANANA_TOOL_ID_G3M in file_tool_ids:
+                    compatibility_label = "g3m"
+                    compatibility["has_g3m_file"] = True
                 elif GAMEBANANA_TOOL_ID_DELTAMOD in file_tool_ids:
                     compatibility_label = "deltamod"
                     compatibility["has_deltamod_file"] = True
@@ -321,8 +321,8 @@ class GameBananaAPI:
             if compatibility["supported_files"]:
                 compatibility["has_supported_files"] = True
                 compatibility["preferred_format"] = (
-                    "deltahub"
-                    if compatibility["has_deltahub_file"]
+                    "g3m"
+                    if compatibility["has_g3m_file"]
                     else ("deltamod" if compatibility["has_deltamod_file"] else None)
                 )
             compatibility["tool_ids"] = sorted(compatibility["tool_ids"])

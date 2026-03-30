@@ -390,7 +390,7 @@ class InstalledModWidget(BaseModWidget):
             mime = LazyFileExportMimeData(
                 lambda path: controller.export_mod_to_path(self.mod_data, path),
                 f"{mod_name}.zip",
-                internal_format="application/x-deltahub-installed-mod-export",
+                internal_format="application/x-g3m-installed-mod-export",
             )
             drag.setMimeData(mime)
             try:

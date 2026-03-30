@@ -296,7 +296,7 @@ class TestValidatePrerequisites:
         mock_app_state.local_config[mock_app_state.game_mode.path_config_key] = ""
         error = _validate_shortcut_prerequisites(mock_app_state, False)
         assert error is not None
-        assert "shortcut.error_no_game_path" in error
+        assert "Game path" in error and "not set" in error
 
     def test_nonexistent_game_path(self, mock_app_state):
         """Checks that nonexistenting game path."""
@@ -332,13 +332,13 @@ class TestGenerateShortcutFilename:
     def test_with_mod(self, game_mode, mock_mod_data):
         """Checks that withing  with mod."""
         name = _generate_shortcut_filename(game_mode, {"deltarune_2": mock_mod_data})
-        assert "DELTAHUB" in name
+        assert "G3M" in name
         assert "Test_Mod" in name
 
     def test_vanilla(self, game_mode):
         """Checks that vanillaing works."""
         name = _generate_shortcut_filename(game_mode, {"deltarune_2": None})
-        assert "DELTAHUB" in name
+        assert "G3M" in name
         assert "Vanilla" in name
 
     def test_safe_characters(self, game_mode, mock_mod_data):
@@ -422,3 +422,4 @@ class TestWriteShortcutFile:
         ).decode("ascii")
         assert b64 in content
         assert json.loads(base64.b64decode(b64).decode("utf-8")) == cfg
+

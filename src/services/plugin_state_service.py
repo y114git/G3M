@@ -8,7 +8,7 @@ from models.plugin_models import PLUGIN_TAGS
 
 
 class PluginStateService:
-    """Reads and writes DELTAHUB/plugins/plugins_data.json."""
+    """Reads and writes G3M/plugins/plugins_data.json."""
 
     def __init__(self, settings_service, plugins_dir: str) -> None:
         self.settings_service = settings_service

@@ -21,7 +21,7 @@ class AudioManager:
     def __init__(self) -> None:
         self._sound_instance: SoundInstance | None = None
 
-    def play_deltahub_sound(self) -> None:
+    def play_g3m_sound(self) -> None:
         app_support_path = os.path.join(get_user_data_root(), "settings")
         asset_wav = os.path.join(
             os.path.dirname(__file__), "..", "..", "assets", "audio", "G3M.wav"
@@ -45,15 +45,15 @@ class AudioManager:
             self._sound_instance = playsound(os.path.abspath(sound_path), block=False)
         except Exception as e:
             logging.debug(
-                f"AudioManager.play_deltahub_sound: failed to play {sound_path}: {e}"
+                f"AudioManager.play_g3m_sound: failed to play {sound_path}: {e}"
             )
 
-    def stop_deltahub_sound(self) -> None:
+    def stop_g3m_sound(self) -> None:
         if self._sound_instance and self._sound_instance.is_alive():
             try:
                 self._sound_instance.stop()
             except Exception as e:
-                logging.debug(f"AudioManager.stop_deltahub_sound: failed to stop: {e}")
+                logging.debug(f"AudioManager.stop_g3m_sound: failed to stop: {e}")
         self._sound_instance = None
 
 

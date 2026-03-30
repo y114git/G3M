@@ -416,7 +416,7 @@ class DownloadsManager(QObject):
             )
 
             parent = parent_widget or self.parent()
-            temp_dir = tempfile.mkdtemp(prefix="dh_manual_")
+            temp_dir = tempfile.mkdtemp(prefix="g3m_manual_")
             extract_archive(record.file_path, temp_dir)
             content_path = unwrap_single_directory_chain(temp_dir)
             gb_metadata = self._build_dialog_metadata(record)

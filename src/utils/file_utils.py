@@ -126,7 +126,7 @@ def download_and_extract_archive(
     downloaded_ref, session = downloaded_ref or [0], session or get_session()
     os.makedirs(target_dir, exist_ok=True)
     fname = get_filename_from_url(session, url)
-    with tempfile.TemporaryDirectory(prefix="deltahub-dl-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="g3m-dl-") as tmp:
         tmp_path = os.path.join(tmp, fname)
         download_file(
             session,
@@ -221,7 +221,7 @@ def _ensure_no_prohibited_files(root: str):
 
 
 def sanitize_filename(name: str) -> str:
-    return re.sub('[\\\\/*?:"<>|]', "", name).strip()
+    return re.sub(r'[\\/*?:"<>|]', "", name).strip()
 
 
 def _cleanup_tmp(path: str) -> None:
@@ -570,7 +570,7 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
         if not IS_WINDOWS_PLATFORM:
             try:
                 renamed = os.path.join(
-                    tempfile.gettempdir(), f"deltahub_cleanup_{int(time.time())}"
+                    tempfile.gettempdir(), f"g3m_cleanup_{int(time.time())}"
                 )
                 if not os.path.exists(renamed):
                     os.rename(path, renamed)

@@ -627,7 +627,7 @@ class SaveManager(QObject):
         def _backup_file(path: str) -> None:
             if not os.path.exists(path):
                 return
-            backup_path = path + '.deltahub_backup'
+            backup_path = path + '.g3m_backup'
             tmp_fd, tmp_path = tempfile.mkstemp(
                 prefix=os.path.basename(backup_path) + '.',
                 suffix='.tmp',
@@ -730,3 +730,4 @@ class SaveManager(QObject):
         for backup_file in backup_info.values():
             if os.path.exists(backup_file):
                 os.remove(backup_file)
+

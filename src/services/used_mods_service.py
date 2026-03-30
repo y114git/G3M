@@ -329,8 +329,8 @@ class UsedModsManager(QObject):
                         and chapter_id in self._pending_mod_ids
                     )
                     ):
-                        del used_mods_data[chapter_id_str]
-                        needs_save = True
+                    del used_mods_data[chapter_id_str]
+                    needs_save = True
             if migrations_needed:
                 current_keys = set(used_mods_data.keys())
                 for old_chapter_id, new_chapter_id, mod_data in migrations_needed:

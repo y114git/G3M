@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class GameBananaConverter:
-    """Converts GameBanana mod archives to DELTAHUB format."""
+    """Converts GameBanana mod archives to G3M format."""
 
     def __init__(
         self,

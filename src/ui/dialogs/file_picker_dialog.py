@@ -132,7 +132,7 @@ class GameBananaFilePickerDialog(QDialog):
     @staticmethod
     def _format_auto_install(format_key: str | None) -> str:
         key = (format_key or "").strip().lower()
-        if key in {"deltahub", "deltamod"}:
+        if key in {"g3m", "deltamod"}:
             return tr("dialogs.gamebanana_picker_auto_install_yes")
         return tr("dialogs.gamebanana_picker_auto_install_no")
 

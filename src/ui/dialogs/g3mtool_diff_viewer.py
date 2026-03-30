@@ -201,7 +201,7 @@ def _inline(text: str, inline_code_background_color: str) -> str:
 
 
 def _get_app_font(app_state) -> str:
-    """Return the current DELTAHUB font family."""
+    """Return the current G3M font family."""
     parent = app_state
     while parent and not hasattr(parent, "custom_font_family"):
         parent = getattr(parent, "parent", None)

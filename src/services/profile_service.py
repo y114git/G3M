@@ -346,7 +346,7 @@ class ProfileService(QObject):
         return True
 
     def import_profile(self, archive_path: str) -> str:
-        with tempfile.TemporaryDirectory(prefix="deltahub_profile_import_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="g3m_profile_import_") as temp_dir:
             with zipfile.ZipFile(archive_path, "r") as zf:
                 zf.extractall(temp_dir)
             import_root = self._resolve_import_root(Path(temp_dir))

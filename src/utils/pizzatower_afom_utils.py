@@ -89,7 +89,7 @@ def _extract_archive_contents(
     extract_archive,
 ) -> bool:
     try:
-        with tempfile.TemporaryDirectory(prefix="dh_afom_towers_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="g3m_afom_towers_") as temp_dir:
             extract_archive(archive_path, temp_dir)
             return _copy_tree_contents(temp_dir, target_root, backup_or_mark)
     except Exception:

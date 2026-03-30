@@ -1,4 +1,4 @@
-"""AFOM/CYOP archive detection and DELTAHUB conversion for Pizza Tower."""
+"""AFOM/CYOP archive detection and G3M conversion for Pizza Tower."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class PizzaTowerAFOMInspection:
 
 
 class PizzaTowerAFOMService:
-    """Detect AFOM/CYOP archive layouts and convert them into DELTAHUB mods."""
+    """Detect AFOM/CYOP archive layouts and convert them into G3M mods."""
 
     def inspect_extracted_archive(self, extract_dir: str) -> PizzaTowerAFOMInspection:
         if not extract_dir or not os.path.isdir(extract_dir):
@@ -161,8 +161,8 @@ class PizzaTowerAFOMService:
                 }
             },
         }
-        for field in ("description", "icon", "homepage", "tags"):
-            value = metadata.get(field)
+        for field_name in ("description", "icon", "homepage", "tags"):
+            value = metadata.get(field_name)
             if value not in (None, "", [], {}):
-                config_data[field] = value
+                config_data[field_name] = value
         return config_data

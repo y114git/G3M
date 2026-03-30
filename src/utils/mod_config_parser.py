@@ -19,9 +19,9 @@ MOD_FIELD_LIMITS = {
     "version": 20,
     "game": 30,
     "description": 200,
-    "homepage": 1000,
-    "icon": 1000,
-    "game_version": 1000,
+    "homepage": 200,
+    "icon": 200,
+    "game_version": 20,
     "file_value": 1000,
 }
 MOD_METADATA_KEY_ORDER = (
@@ -211,7 +211,7 @@ def normalize_mod_config_data(
         )
         or "1.0.0",
         "author": _trim_string(
-            _get_metadata_value(config_data, "author"), MOD_FIELD_LIMITS["file_value"]
+            _get_metadata_value(config_data, "author"), 50
         ),
         "description": _trim_string(
             _get_metadata_value(config_data, "description"),

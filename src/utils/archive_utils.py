@@ -286,7 +286,7 @@ class ArchiveExtractor:
     ) -> None:
         os.makedirs(target_dir, exist_ok=True)
         if size_cap_bytes is not None:
-            with tempfile.TemporaryDirectory(prefix="deltahub-extract-") as temp_out:
+            with tempfile.TemporaryDirectory(prefix="g3m-extract-") as temp_out:
                 ArchiveExtractor.extract(archive_path, temp_out)
                 total = 0
                 for root, _, files in os.walk(temp_out):
@@ -322,7 +322,7 @@ class ArchiveExtractor:
     ) -> list[str]:
         extracted_files = []
         try:
-            with tempfile.TemporaryDirectory(prefix="deltahub-extract-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="g3m-extract-") as temp_dir:
                 ArchiveExtractor.extract(archive_path, temp_dir)
                 _cleanup_extracted_archive(temp_dir, False)
                 for root, _dirs, files in os.walk(temp_dir):

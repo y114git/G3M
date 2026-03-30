@@ -16,10 +16,24 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from bootstrap.bootstrap_coordinator import BootstrapCoordinator
-from config.config import SINGLE_INSTANCE_KEY
+from bootstrap.user_data_bootstrap import resolve_user_data_root_with_migration
+from config.config import (
+    APP_DISPLAY_NAME,
+    APP_ORGANIZATION_NAME,
+    LEGACY_TEMP_DIR_GLOBS,
+    LOG_ARCHIVE_DIR_NAME,
+    LOG_ARCHIVE_FILE_PREFIX,
+    SINGLE_INSTANCE_KEY,
+    TEMP_DIR_GLOBS,
+    URL_PROTOCOL_DESKTOP_ENTRY_NAME,
+    URL_PROTOCOL_DESKTOP_FILENAME,
+    URL_PROTOCOL_MIME_TYPES,
+    URL_PROTOCOL_PREFIXES,
+    URL_PROTOCOL_SCHEMES,
+)
 from models.game_modes import get_all_process_names
 from services.localization_service import localization_service, tr
-from utils.path_utils import get_launcher_dir, get_user_data_root, resource_path
+from utils.path_utils import get_launcher_dir, resource_path
 
 if platform.system() == "Windows":
     import winreg
@@ -40,14 +54,16 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
     logs_dir = os.path.join(user_data_root, "logs")
     os.makedirs(logs_dir, exist_ok=True)
     log_path = os.path.join(logs_dir, f"{app_name.lower()}.log")
-    archive_dir = os.path.join(logs_dir, "deltahub")
+    archive_dir = os.path.join(logs_dir, LOG_ARCHIVE_DIR_NAME)
     os.makedirs(archive_dir, exist_ok=True)
     if os.path.exists(log_path) and os.path.getsize(log_path) > 0:
         try:
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            archive_path = os.path.join(archive_dir, f"deltahub_{timestamp}.log")
+            archive_path = os.path.join(
+                archive_dir, f"{LOG_ARCHIVE_FILE_PREFIX}_{timestamp}.log"
+            )
             shutil.copy2(log_path, archive_path)
         except Exception:
             logging.debug("Failed to archive previous log file", exc_info=True)
@@ -97,32 +113,41 @@ def register_url_protocol():
     system = platform.system()
     try:
         if system == "Windows":
-            key_path = "Software\\Classes\\deltahub"
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                winreg.SetValue(key, "", winreg.REG_SZ, "URL:DELTAHUB Protocol")
-                winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
-                command_key_path = f"{key_path}\\shell\\open\\command"
-                with winreg.CreateKey(
-                    winreg.HKEY_CURRENT_USER, command_key_path
-                ) as command_key:
-                    command = f'{executable_path} "%1"'
-                    winreg.SetValue(command_key, "", winreg.REG_SZ, command)
+            for scheme in URL_PROTOCOL_SCHEMES:
+                key_path = f"Software\\Classes\\{scheme}"
+                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                    winreg.SetValue(key, "", winreg.REG_SZ, f"URL:{scheme.upper()} Protocol")
+                    winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+                    command_key_path = f"{key_path}\\shell\\open\\command"
+                    with winreg.CreateKey(
+                        winreg.HKEY_CURRENT_USER, command_key_path
+                    ) as command_key:
+                        command = f'{executable_path} "%1"'
+                        winreg.SetValue(command_key, "", winreg.REG_SZ, command)
         elif system == "Linux":
-            desktop_file_content = f"[Desktop Entry]\nName=DELTAHUB Launcher\nExec={executable_path} %u\nType=Application\nTerminal=false\nMimeType=x-scheme-handler/deltahub;\n"
+            desktop_file_content = (
+                "[Desktop Entry]\n"
+                f"Name={URL_PROTOCOL_DESKTOP_ENTRY_NAME}\n"
+                f"Exec={executable_path} %u\n"
+                "Type=Application\n"
+                "Terminal=false\n"
+                f"MimeType={';'.join(URL_PROTOCOL_MIME_TYPES)};\n"
+            )
             apps_dir = os.path.expanduser("~/.local/share/applications")
             os.makedirs(apps_dir, exist_ok=True)
-            desktop_file_path = os.path.join(apps_dir, "deltahub.desktop")
+            desktop_file_path = os.path.join(apps_dir, URL_PROTOCOL_DESKTOP_FILENAME)
             with open(desktop_file_path, "w", encoding="utf-8") as f:
                 f.write(desktop_file_content)
             if shutil.which("xdg-mime"):
-                QProcess.startDetached(
-                    "xdg-mime",
-                    [
-                        "default",
-                        "deltahub.desktop",
-                        "x-scheme-handler/deltahub",
-                    ],
-                )
+                for mime_type in URL_PROTOCOL_MIME_TYPES:
+                    QProcess.startDetached(
+                        "xdg-mime",
+                        [
+                            "default",
+                            URL_PROTOCOL_DESKTOP_FILENAME,
+                            mime_type,
+                        ],
+                    )
     except Exception as e:
         logging.warning(f"Failed to register URL protocol handler: {e}", exc_info=True)
 
@@ -149,7 +174,7 @@ class SingleInstanceServer(QLocalServer):
                         f"SingleInstanceServer: failed to decode incoming data: {e}"
                     )
                     return
-                if url.startswith("deltahub://"):
+                if url.startswith(URL_PROTOCOL_PREFIXES):
                     self.app_instance.url_received_signal.emit(url)
         finally:
             socket.close()
@@ -174,10 +199,10 @@ def setup_app():
         path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
         if _translator.load(qt_locale_file, path):
             app.installTranslator(_translator)
-    app.setApplicationName("DELTAHUB")
+    app.setApplicationName(APP_DISPLAY_NAME)
     from config.config import APP_VERSION
     app.setApplicationVersion(APP_VERSION)
-    app.setOrganizationName("deltahub")
+    app.setOrganizationName(APP_ORGANIZATION_NAME)
     from PyQt6.QtGui import QIcon
 
     app.setWindowIcon(QIcon(resource_path("assets/icons/icon.ico")))
@@ -192,10 +217,8 @@ def cleanup_old_temp_directories():
 
     temp_base = tempfile.gettempdir()
     patterns = [
-        os.path.join(temp_base, "deltahub_modpack_*"),
-        os.path.join(temp_base, "deltahub_multimod_*"),
-        os.path.join(temp_base, "deltahub-dl-*"),
-        os.path.join(temp_base, "deltahub-extract-*"),
+        *(os.path.join(temp_base, pattern) for pattern in TEMP_DIR_GLOBS),
+        *(os.path.join(temp_base, pattern) for pattern in LEGACY_TEMP_DIR_GLOBS),
     ]
     cleaned_count = 0
     for pattern in patterns:
@@ -222,24 +245,24 @@ def cleanup_old_temp_directories():
 def run_app(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     user_root = ""
+    if platform.system() == "Linux":
+        os.environ.setdefault("NO_AT_BRIDGE", "1")
+    app = setup_app()
     try:
-        user_root = get_user_data_root()
-        configure_logging("DELTAHUB", user_root)
+        user_root = resolve_user_data_root_with_migration()
+        configure_logging(APP_DISPLAY_NAME, user_root)
         install_excepthook()
         cleanup_old_temp_directories()
     except Exception:
         traceback.print_exc(file=sys.stderr)
-    parser = argparse.ArgumentParser(description="DELTAHUB")
+    parser = argparse.ArgumentParser(description=APP_DISPLAY_NAME)
     parser.add_argument(
         "--force-start",
         action="store_true",
         help="Force start even if another instance is detected",
     )
     args, _ = parser.parse_known_args(argv)
-    url_arg = next((arg for arg in argv if arg.startswith("deltahub://")), None)
-    if platform.system() == "Linux":
-        os.environ.setdefault("NO_AT_BRIDGE", "1")
-    app = setup_app()
+    url_arg = next((arg for arg in argv if arg.startswith(URL_PROTOCOL_PREFIXES)), None)
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
     if socket.waitForConnected(500):

@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-DELTAHUB is licensed under GPL-3.0-only. See [`LICENSE`](LICENSE).
+G3M is licensed under GPL-3.0-only. See [`LICENSE`](LICENSE).
 
 This project distributes third-party code and binaries. If you redistribute a
 release archive, include:
@@ -27,9 +27,10 @@ release archive, include:
 
 ## Notes
 
-- DELTAHUB also depends on third-party Python and Qt packages listed in
+- G3M also depends on third-party Python and Qt packages listed in
   `pyproject.toml`.
 - Those runtime dependencies are covered by the GPL-compatible distribution
   terms of this project and the upstream licenses of the relevant packages.
 - Self-contained release archives may include additional upstream notices from
   packaged runtime components.
+

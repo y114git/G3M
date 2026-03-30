@@ -105,11 +105,11 @@ def resolve_mod_icon(config_data: dict, mod_folder_path: str):
 
 
 def sort_gamebanana_files_by_priority(files: list[dict]) -> list[dict]:
-    """Sort GameBanana files by compatibility priority (deltahub > deltamod > others)."""
+    """Sort GameBanana files by compatibility priority (g3m > deltamod > others)."""
 
     def _priority(file_info: dict) -> tuple[int, str]:
         compatibility = str(file_info.get("compatibility") or "").lower()
-        if compatibility == "deltahub":
+        if compatibility == "g3m":
             rank = 0
         elif compatibility == "deltamod":
             rank = 1

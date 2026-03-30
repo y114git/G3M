@@ -70,7 +70,7 @@ class TestAppWindow:
                 assert hasattr(window, "session_manager")
                 assert hasattr(window, "plugins_widget")
                 assert hasattr(window, "plugins_container")
-                assert window.windowTitle() == "DELTAHUB"
+                assert window.windowTitle() == "G3M"
             finally:
                 window.close()
 
@@ -262,3 +262,4 @@ class TestTabBuilders:
         assert "plugins_widget" in builder.get_widgets()
         assert builder.get_widgets()["language_combo"].toolTip() == tr("tooltips.language")
         assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr("tooltips.ui_scale")
+

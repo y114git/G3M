@@ -1,6 +1,6 @@
 """Application-wide constants and configuration values.
 
-Single source of truth for all immutable project configuration shared across DELTAHUB.
+Single source of truth for all immutable project configuration shared across G3M.
 """
 
 import os
@@ -14,7 +14,22 @@ from . import styles as shared_styles
 load_dotenv()
 
 """Application identity and external service configuration."""
-APP_VERSION = "2.4.7stable"
+APP_VERSION = "3.0.0stable"
+APP_DISPLAY_NAME = "G3M"
+APP_ORGANIZATION_NAME = "g3m"
+APP_DATA_DIR_NAME = "G3M"
+LEGACY_APP_DATA_DIR_NAME = "DELTAHUB"
+PRIMARY_URL_SCHEME = "g3m"
+LEGACY_URL_SCHEME = "deltahub"
+URL_PROTOCOL_SCHEMES = (PRIMARY_URL_SCHEME, LEGACY_URL_SCHEME)
+URL_PROTOCOL_PREFIXES = tuple(f"{scheme}://" for scheme in URL_PROTOCOL_SCHEMES)
+URL_PROTOCOL_MIME_TYPES = tuple(
+    f"x-scheme-handler/{scheme}" for scheme in URL_PROTOCOL_SCHEMES
+)
+URL_PROTOCOL_DESKTOP_ENTRY_NAME = f"{APP_DISPLAY_NAME} Launcher"
+URL_PROTOCOL_DESKTOP_FILENAME = "g3m.desktop"
+LOG_ARCHIVE_DIR_NAME = "g3m"
+LOG_ARCHIVE_FILE_PREFIX = "g3m"
 SINGLE_INSTANCE_KEY = "g3m.single-instance-lock"
 CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL", "")
 SOCIAL_LINKS = {
@@ -38,7 +53,7 @@ STEAM_APP_ID_PIZZA_TOWER = "2231450"
 """Plugin and profile runtime configuration."""
 PLUGIN_API_VERSION = "1.0.0"
 PLUGIN_CATALOG_URL = (
-    "https://raw.githubusercontent.com/y114git/DELTAHUB/stable/catalog/plugins/plugins.json"
+    "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/plugins.json"
 )
 PLUGIN_HOOKS = {
     "app_ready",
@@ -237,11 +252,23 @@ DOWNLOAD_CHUNK_SIZE = 262144
 MAX_DOWNLOAD_RETRIES = 5
 SEARCH_TIMEOUT_SECONDS = 10
 SEARCH_EXHAUSTED_PAGE_SENTINEL = 100
+TEMP_DIR_GLOBS = (
+    "g3m_modpack_*",
+    "g3m_multimod_*",
+    "g3m-dl-*",
+    "g3m-extract-*",
+)
+LEGACY_TEMP_DIR_GLOBS = (
+    "deltahub_modpack_*",
+    "deltahub_multimod_*",
+    "deltahub-dl-*",
+    "deltahub-extract-*",
+)
 
 """GameBanana integration constants."""
 GAMEBANANA_API_BASE = "https://gamebanana.com/apiv11"
 GAMEBANANA_TOOL_ID_DELTAMOD = 20575
-GAMEBANANA_TOOL_ID_DELTAHUB = 20615
+GAMEBANANA_TOOL_ID_G3M = 20615
 GAMEBANANA_PER_PAGE = 15
 
 """Mod file, archive, cache, and content metadata constants."""
@@ -274,11 +301,11 @@ THEME_CONFIG_FILENAMES = (
 DATA_WIN_FILENAME = "data.win"
 META_JSON_FILENAME = "meta.json"
 ICON_PNG_FILENAME = "icon.png"
-DELTAMOD_INFO_FILENAME = "_deltamodInfo.json"
-MAX_PATCHING_ARCHIVES = 10
 MOD_TYPE_G3MPATCH = "g3mpatch"
 MOD_TYPE_XDELTA = "xdelta"
 MOD_TYPE_DATAFILE = "datafile"
+DELTAMOD_INFO_FILENAME = "_deltamodInfo.json"
+MAX_PATCHING_ARCHIVES = 10
 MOD_TYPE_OVERRIDES_ONLY = "overrides_only"
 MOD_FILTER_TRUE_VALUES = (True, "true", "True", 1)
 MOD_FILTER_NSFW_TEXT_MARKERS = ("nsfw", "adult", "18+", "18plus", "explicit", "mature")

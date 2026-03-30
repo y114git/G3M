@@ -3,8 +3,8 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "deltahub"
-version = "2.4.7"
+name = "G3M"
+version = "3.0.0"
 description = "G3M - GameMaker Mod Manager"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -141,3 +141,4 @@ ignore-names = [
     "visit_AsyncFunctionDef",
     "wheelEvent",
 ]
+

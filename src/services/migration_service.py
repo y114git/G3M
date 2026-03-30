@@ -79,9 +79,8 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
         return False
     changed = False
     metadata = config_data.get("metadata")
-    if isinstance(metadata, dict):
-        if migrate_mod_config_legacy_fields(metadata):
-            changed = True
+    if isinstance(metadata, dict) and migrate_mod_config_legacy_fields(metadata):
+        changed = True
 
     description_value = config_data.get("description")
     if description_value in (None, "") and LEGACY_DESCRIPTION_KEY in config_data:

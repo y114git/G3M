@@ -49,7 +49,7 @@ def _build_session():
         logging.getLogger(n).setLevel(logging.ERROR)
     s = requests.Session()
     h = dict(BROWSER_HEADERS or {})
-    h.setdefault("User-Agent", f"DELTAHUB/{APP_VERSION}")
+    h.setdefault("User-Agent", f"G3M/{APP_VERSION}")
     s.headers.update(h)
     r = Retry(
         total=3,

@@ -19,7 +19,7 @@ Please report security issues privately.
 2. If advisory reporting is unavailable, contact the maintainer privately
    before publishing exploit details.
 3. Include:
-   - affected DELTAHUB version
+   - affected G3M version
    - operating system and architecture
    - reproducible steps
    - impact assessment
@@ -33,6 +33,7 @@ Please report security issues privately.
 
 ## Scope Notes
 
-- DELTAHUB includes bundled tools and local file operations.
+- G3M includes bundled tools and local file operations.
 - Treat untrusted archives, mods, scripts, and external downloads as
   untrusted input.
+

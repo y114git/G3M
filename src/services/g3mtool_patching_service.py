@@ -247,7 +247,7 @@ class G3MToolPatchingService(QObject):
             return False
 
         try:
-            self._temp_dir = tempfile.mkdtemp(prefix="deltahub_patch_")
+            self._temp_dir = tempfile.mkdtemp(prefix="g3m_patch_")
 
             if is_modpack:
                 backup_dir = os.path.join(self._temp_dir, "backups")

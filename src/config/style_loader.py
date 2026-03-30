@@ -44,7 +44,7 @@ def _write_arrow_svgs(icons_dir: str, text_color: str) -> tuple[str, str]:
 
 def _ensure_arrow_svgs(text_color: str) -> tuple[str, str]:
     global _last_arrow_color
-    temp_icons_dir = os.path.join(tempfile.gettempdir(), "deltahub_arrows")
+    temp_icons_dir = os.path.join(tempfile.gettempdir(), "g3m_arrows")
     down_path = os.path.join(temp_icons_dir, "arrow_down.svg")
     up_path = os.path.join(temp_icons_dir, "arrow_up.svg")
     if (

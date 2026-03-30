@@ -225,8 +225,8 @@ def test_presenter_reuses_existing_valid_pizzatower_path_without_prompt(tmp_path
     settings_service.prompt_for_game_path.assert_not_called()
 
 
-def test_convert_builds_canonical_deltahub_mod_from_pizzaoven_result(tmp_path):
-    """Checks that converting builds canonical deltahub mod from pizzaoven result."""
+def test_convert_builds_canonical_g3m_mod_from_pizzaoven_result(tmp_path):
+    """Checks that converting builds canonical g3m mod from pizzaoven result."""
     game_dir = tmp_path / "game"
     mod_dir = tmp_path / "mod"
     mods_dir = tmp_path / "mods"
@@ -322,3 +322,4 @@ def test_converted_mod_applies_expected_files_to_clean_game(
     assert (apply_game_dir / "lang" / "graphics" / "english.png").read_bytes() == b"PNG_GRAPHICS"
     assert (apply_game_dir / "lang" / "fonts" / "tutorial_english.png").read_bytes() == b"PNG_FONT"
     assert (apply_game_dir / "sound" / "Desktop" / "music" / "custom.bank").read_bytes() == b"CUSTOM_BANK"
+

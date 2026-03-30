@@ -134,7 +134,7 @@ class TestPathUtils:
         root = get_user_data_root()
         assert root is not None
         assert isinstance(root, str)
-        assert 'DELTAHUB' in root
+        assert 'G3M' in root
 
     def test_get_user_mods_dir(self):
         """Checks that getting user mods dir."""
@@ -230,3 +230,4 @@ class TestCache:
             assert get_from_cache('nonexistent') is None
         except ImportError:
             pytest.skip('Cache not available')
+

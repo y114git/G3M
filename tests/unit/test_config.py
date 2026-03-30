@@ -32,7 +32,7 @@ class TestConstants:
     def test_gamebanana_constants(self):
         """Checks that gamebananaing constants."""
         from config.config import (
-            GAMEBANANA_TOOL_ID_DELTAHUB,
+            GAMEBANANA_TOOL_ID_G3M,
             GAMEBANANA_TOOL_ID_DELTAMOD,
         )
         from models.game_modes import BUILTIN_GAME_REGISTRY
@@ -48,7 +48,7 @@ class TestConstants:
             assert BUILTIN_GAME_REGISTRY[game_id].gamebanana_id, (
                 f"{game_id} has no gamebanana_id"
             )
-        assert GAMEBANANA_TOOL_ID_DELTAHUB is not None
+        assert GAMEBANANA_TOOL_ID_G3M is not None
         assert GAMEBANANA_TOOL_ID_DELTAMOD is not None
 
     @staticmethod
@@ -92,3 +92,4 @@ class TestConstants:
 
         expected = 10 * 60 * 1000
         assert expected == ONLINE_UPDATE_INTERVAL
+

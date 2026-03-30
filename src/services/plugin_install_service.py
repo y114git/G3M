@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class PluginInstallService:
-    """Validates and installs plugin zip archives into DELTAHUB/plugins."""
+    """Validates and installs plugin zip archives into G3M/plugins."""
 
     def __init__(self, plugin_state_service, plugin_runtime_service, plugins_dir: str) -> None:
         self.plugin_state_service = plugin_state_service
@@ -33,7 +33,7 @@ class PluginInstallService:
         source: str,
         catalog_plugin_version: str = "",
     ) -> str:
-        with tempfile.TemporaryDirectory(prefix="deltahub_plugin_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="g3m_plugin_") as temp_dir:
             safe_extract_zip(archive_path, temp_dir)
             return self._install_from_source_dir(
                 temp_dir, source=source, catalog_plugin_version=catalog_plugin_version

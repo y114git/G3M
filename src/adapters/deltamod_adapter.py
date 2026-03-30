@@ -25,7 +25,7 @@ DELTAMOD_GAME_MAP: dict[str, str] = {
 
 
 class DeltamodConverter:
-    """Converts deltamod format mods to DELTAHUB format."""
+    """Converts deltamod format mods to G3M format."""
 
     def __init__(
         self, source_path: str, mods_dir: str, gamebanana_metadata: dict | None = None

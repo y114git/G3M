@@ -148,7 +148,7 @@ class InstallModsThread(QThread):
         import requests
 
         try:
-            self.temp_root = tempfile.mkdtemp(prefix="deltahub-install-")
+            self.temp_root = tempfile.mkdtemp(prefix="g3m-install-")
             tasks = []
             total_bytes = 0
             mod_folders = {}

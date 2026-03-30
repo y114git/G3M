@@ -64,7 +64,7 @@ class _DropAreaWidget(QWidget):
         mime = event.mimeData()
         return (
             getattr(event, "source", lambda: None)() is None
-            and not mime.hasFormat("application/x-deltahub-installed-mod-export")
+            and not mime.hasFormat("application/x-g3m-installed-mod-export")
             and mime.hasUrls()
             and any(url.isLocalFile() for url in mime.urls())
         )

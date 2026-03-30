@@ -91,7 +91,7 @@ def _generate_shortcut_filename(game_mode, chapter_mod_objects: dict) -> str:
         if selected_mod
         else "Vanilla"
     )
-    base = f"DELTAHUB_{game_name}_{mod_part}"
+    base = f"G3M_{game_name}_{mod_part}"
     return "".join(c for c in base if c.isalnum() or c in ("_", "-"))
 
 
@@ -151,12 +151,12 @@ class ShortcutDialog(QDialog):
             self._build_summary(game_mode, chapter_mod_objects, shortcut_config)
         )
         summary.setWordWrap(True)
-        _cfg = (
+        cfg = (
             getattr(getattr(parent, "app_state", None), "local_config", None)
             if parent
             else None
         )
-        br = get_border_radius(_cfg)
+        br = get_border_radius(cfg)
         summary.setStyleSheet(
             f"padding: 8px; background: rgba(0,0,0,0.1); border-radius: {br}px;"
         )
@@ -217,7 +217,10 @@ def _validate_shortcut_prerequisites(app_state, has_any_mod: bool) -> str | None
     """Return an error message string if shortcut cannot be created, or None if OK."""
     game_path = app_state.game_mode.get_game_path(app_state.local_config)
     if not game_path or not os.path.isdir(game_path):
-        return tr("shortcut.error_no_game_path", game=app_state.game_mode.display_name)
+        return (
+            f"Game path for {app_state.game_mode.display_name} is not set. "
+            "Please configure the game path in settings first."
+        )
     if has_any_mod:
         from adapters.g3mtool_adapter import G3MToolManager
 
