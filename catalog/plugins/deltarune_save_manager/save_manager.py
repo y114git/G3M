@@ -56,6 +56,13 @@ class SaveManager(QObject):
         self._selected_slot = None
         self._backup_info = {}
 
+    @staticmethod
+    def _has_save_data(path: str) -> bool:
+        try:
+            return os.path.getsize(path) > 0
+        except OSError:
+            return False
+
     @property
     def save_path(self):
         if self._save_path is None:
@@ -670,7 +677,7 @@ class SaveManager(QObject):
                 col_file = os.path.join(collection_path, f'filech{chapter}_{slot}')
                 try:
                     _backup_file(main_file)
-                    if os.path.exists(col_file):
+                    if self._has_save_data(col_file):
                         shutil.copy2(col_file, main_file)
                     elif os.path.exists(main_file):
                         os.remove(main_file)
@@ -692,7 +699,7 @@ class SaveManager(QObject):
                     col_fin = os.path.join(collection_path, f'filech{chapter}_{fin_idx}')
                     try:
                         _backup_file(main_fin)
-                        if os.path.exists(col_fin):
+                        if self._has_save_data(col_fin):
                             shutil.copy2(col_fin, main_fin)
                         elif os.path.exists(main_fin):
                             os.remove(main_fin)

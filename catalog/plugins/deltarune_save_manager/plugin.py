@@ -297,7 +297,7 @@ class DRSaveManagerPlugin:
             return False
         if collection_idx != -1:
             backup_info = manager.apply_collection_saves_for_launch(collection_idx)
-            if backup_info is None:
+            if not backup_info:
                 return False
             self._backup_info = backup_info
         return True

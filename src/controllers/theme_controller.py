@@ -426,6 +426,7 @@ class ThemeController:
 
     def init_theme_list(self):
         import os
+        import zipfile
 
         from utils.path_utils import get_user_themes_dir, resource_path
 
@@ -433,12 +434,27 @@ class ThemeController:
         os.makedirs(user_dir, exist_ok=True)
         self.app.themes_list_widget.clear()
 
+        def _is_hidden_legacy_theme(dir_path: str, filename: str) -> bool:
+            if os.path.normcase(os.path.abspath(dir_path)) != os.path.normcase(
+                os.path.abspath(user_dir)
+            ):
+                return False
+            if os.path.splitext(filename)[0].lower() != "legacy_theme":
+                return False
+            archive_path = os.path.join(dir_path, filename)
+            try:
+                with zipfile.ZipFile(archive_path, "r") as zipf:
+                    names = {name.replace("\\", "/").strip("/") for name in zipf.namelist()}
+                return any(name.endswith("/theme.json") or name == "theme.json" for name in names)
+            except Exception:
+                return True
+
         themes = {
             f[:-4]
             for d in (resource_path("assets/themes"), user_dir)
             if os.path.exists(d)
             for f in os.listdir(d)
-            if f.lower().endswith(".zip")
+            if f.lower().endswith(".zip") and not _is_hidden_legacy_theme(d, f)
         }
         self.app.themes_list_widget.addItems(sorted(themes))
 

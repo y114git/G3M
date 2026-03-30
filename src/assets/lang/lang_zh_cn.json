@@ -343,7 +343,6 @@
     "mod_priority": "当多个模组修改同一文件时，调整谁优先生效。",
     "create_modpack": "把当前选中的模组打包成一个模组包压缩文件。",
     "installed_mods": "这里会显示你资料库中当前可用的模组。",
-    "announcement_text": "阅读当前公告、更新说明或投票消息。",
     "announcement_details": "打开与此公告相关的更多详情页面。",
     "announcement_option": "选择这个选项作为公告投票的答案。",
     "confirm": "确认此操作。",

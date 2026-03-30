@@ -22,7 +22,6 @@ class TestAnnounceDialog:
         )
 
         assert dialog.panel.ok_button.isEnabled() is False
-        assert dialog.panel.text_browser.toolTip() == tr("tooltips.announcement_text")
         assert dialog.panel.ok_button.toolTip() == tr("tooltips.confirm")
         dialog.panel.select_option(0)
         assert dialog.panel.ok_button.isEnabled() is True

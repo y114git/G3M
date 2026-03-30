@@ -1,3 +1,173 @@
+### Version 3.0.0 — 30.03.26
+
+- **DELTAHUB is now G3M (GameMaker Mod Manager)**
+
+  - DELTAHUB is now **G3M**.
+  - The application name, branding, icons, links, and one-click install format were updated for the new name.
+  - `g3m://` one-click install links are now supported as the main format.
+  - Older `deltahub://` links are still recognized, and the app can move your old DELTAHUB data into the new G3M folder on first launch.
+
+- **Profiles system**
+
+  - G3M now supports full **profiles** for your library.
+  - Each profile keeps its own active mods and launch settings, so you can separate different playstyles, setups, or test environments.
+  - Profiles can be created, duplicated, renamed, deleted, reordered, exported, and imported.
+  - Switching between profiles is now part of the normal library workflow instead of something you have to manage manually.
+
+- **Game Manager and Custom Games**
+
+  - G3M now includes a proper **Game Manager**.
+  - Built-in games can be shown or hidden, and the visible game order can be changed.
+  - You can add your own **custom games/fangames** directly inside the app.
+  - Custom games can define their executable, target DATA file, optional Steam identifier, and optional GameBanana identifier.
+  - This means custom games can become real first-class entries in the launcher instead of awkward manual workarounds.
+  - Custom games can also be edited or removed later.
+  - When removing a custom game, G3M can also clean up related profile references and saved game versions tied to it.
+
+- **PizzaOven and CYOP/AFOM mods support**
+
+  - PizzaOven support was expanded into a much more exact workflow instead of treating every PizzaOven package like the same type of mod.
+  - G3M now inspects a PizzaOven archive first and checks what kind of PizzaOven mod it actually is.
+  - For PO mods, G3M makes a temporary copy of your Pizza Tower files, applies the PizzaOven mod there, compares the changed result against the original game, and then rebuilds that result as a normal G3M mod.
+  - Because of this, the final converted mod is based on the real in-game file changes produced by the PizzaOven mod, not just on blindly copying files into a new archive.
+  - If the PizzaOven mod changes `data.win`, G3M can keep that result as a proper patch or as a full file when needed.
+  - If the PizzaOven mod changes other files, those changes are also collected and saved into the final G3M mod as normal extra files.
+  - After conversion, the result is much easier to manage inside G3M as a regular Pizza Tower mod.
+  - Mods whose authors explicitly disabled PizzaOven one-click integration are not force-converted by this workflow.
+  - **GMLoader mods are detected separately and are not supported** 
+  - G3M now also supports **CYOP/AFOM-style Pizza Tower mods**, but this support works differently from PizzaOven conversion.
+  - CYOP/AFOM archives are recognized from their own folder layout and level `.ini` data.
+  - When such an archive is imported, G3M converts it into a Pizza Tower mod that keeps the required `towers` content in the right structure.
+  - During use and launch, that `towers` content is then copied to `AppData/Roaming/PizzaTower_GM2/towers/`.
+  - A dedicated **CYOP/AFOM** tag/filter was also added, so these mods are easier to identify in the browser and library.
+  - You can also create **CYOP/AFOM** yourself! You can add extra file (Folder or Archive) with `towers` in name and if it's Pizza Tower mod, everything from this folder will be copied to `AppData/Roaming/PizzaTower_GM2/towers/`.
+
+- **Built-in Mod Editor**
+
+  - The separate **Mod Editor plugin** was removed. Its functionality is now built directly into the main app.
+  - You can now create and edit local mods without installing any extra plugin first.
+  - Extra files, folders, and archives are handled more cleanly, which makes it easier to build larger mods without awkward setup.
+  - Exporting a local mod is now part of the same workflow, so creating, editing, and sharing a mod feels like one system instead of separate tools.
+
+- **Mod Versions**
+
+  - Mods can now keep their own **saved versions**.
+  - You can save the current state of a mod as a version snapshot before making changes.
+  - You can switch a mod back to any saved version at any time.
+  - Old versions can be deleted when you no longer need them.
+  - A version can be imported from a file instead of rebuilding it by hand.
+  - If you import a mod that already exists in your library, G3M now keeps it as a **new version of that mod** instead of simply colliding with the existing copy.
+  - For mods linked to GameBanana, versions can also be downloaded directly from GameBanana into the version manager.
+
+- **Built-in Modding Tools**
+
+  - The separate **Xdelta Patcher plugin** was removed. Its functionality is now built directly into the main app.
+  - A new **Modding Tools** window brings patch-related tools together in one place.
+  - You can create patches, apply patches, merge multiple patches, inspect patch information, and compare two files with a visual diff report.
+  - Diff reports can be exported, which is useful when you need to study exactly what changed.
+  - DATA patch conversion is now built in as a proper workflow, so existing patch-based mods can be converted into other usable mod versions more easily.
+  - This makes patch work much less dependent on separate external tools and much easier to keep inside one app workflow.
+
+- **Downloads Queue**
+
+  - G3M now has a full **Downloads** window instead of treating every download like a one-off action.
+  - Downloads from GameBanana, external links, one-click protocol links, and local imports can now go through one queue.
+  - Each item shows clear status, including downloading, installing, ready to install, conflict, manual install required, installed, failed, and cancelled.
+  - You can retry, cancel, reinstall, overwrite, continue setup, or delete individual download entries.
+  - Downloaded files can be kept for later reuse instead of immediately disappearing.
+  - New download settings let you stop automatic installation after download.
+  - New download settings let you delete downloaded files after use.
+  - New download settings let you keep local imports in Downloads history.
+  - External one-click installs are now confirmed before download starts.
+
+- **Game Versions and Restore Points**
+
+  - You can now save full **game versions** as restore points for supported games.
+  - A saved game version can be applied back to the game folder later, exported as an archive, or deleted when no longer needed.
+  - Imported game version archives are also supported.
+  - When creating a game version, you can save the current game state as-is or save a version tied to a selected profile setup.
+  - There is also an option for a more complete restore that removes files not present in the saved version, which is useful when you want a cleaner rollback.
+
+- **Catalog, New Plugin Management and Plugin API**
+
+  - Plugins are no longer just a local list. G3M now has an **online catalog** inside the app.
+  - Plugins can be filtered more clearly, including an installed-only view and tag-based filtering.
+  - Plugin cards now show clearer status, including enabled, incompatible, and local-only states.
+  - Each plugin now has a more complete details view with version, author, status, homepage, update action, settings access, and delete action.
+  - Local plugins are now clearly marked when they exist only on your machine and are not part of the online catalog.
+  - Now it's more easier to make plugins to G3M, check Wiki for more info.
+
+- **DR Save Manager Catalog Release**
+
+  - **DR Save Manager** existed before, but it is now available through the plugin catalog as a proper downloadable plugin.
+  - This makes it easier for players to find, install, update, and manage it like other optional features.
+  - The plugin now comes as a more complete catalog release with its own translated interface.
+  - Save collection handling remains a core part of the plugin, including choosing which collection to use for a session, renaming collections, deleting them, and importing or exporting saves.
+  - The save editor is now split into **Simple mode** and **Advanced mode**.
+  - **Simple mode** is designed more like a classic player-friendly editor in the style of Spamton/Tenna save editors, with cleaner grouped categories and easier-to-understand values.
+  - **Advanced mode** remains available for users who want direct access to a much wider range of save values and flags.
+
+- **Mods Browser and Library Improvements**
+
+  - Mod cards and mod details were heavily upgraded.
+  - The details view is now richer and easier to browse, with better presentation for screenshots, descriptions, readmes, and metadata.
+  - You can now open screenshot images in the browser, copy images, or copy image URLs more easily.
+  - Readmes have their own dedicated view, so longer mod instructions are easier to read.
+  - Search and library pages now support more polished placeholders, cleaner empty states, and a more consistent layout.
+  - Search filters and library presentation were reorganized to make large mod lists easier to manage.
+  - If needed, the **Mods Browser** tab or the **Library** tab can now be hidden from settings.
+
+- **Blocklist Manager**
+
+  - G3M now includes a dedicated **Blocklist Manager** for the Mods Browser.
+  - You can hide specific mods from search results instead of having to ignore them manually every time.
+  - Blocking can be done by **ID**, **name**, or **category**, depending on how specific you want the filter to be.
+  - The blocklist can be set for one game only or used globally across the browser.
+  - This is especially useful if you want to hide joke mods, NSFW content, low-quality uploads, duplicate pages, or categories you simply never use.
+
+- **Manual Install, Import, and Conversion Improvements**
+
+  - Manual installation was expanded again and is now easier to continue from the Downloads system when a mod cannot be installed automatically.
+  - DATA files and extra files are assigned through a clearer setup flow.
+  - Additional Xdelta patches for other game files can now be configured more explicitly, including the target path inside the game folder.
+  - Deltamod import and conversion support was also strengthened, especially when archives are packed in unusual ways or when a mod with the same ID already exists.
+
+- **GameBanana Improvements**
+
+  - GameBanana integration was expanded across the app.
+  - Mod details, file picking, downloads, and version handling now work together much more cleanly.
+  - File selection gives clearer information when a GameBanana post has multiple possible downloads.
+  - GameBanana-linked mods can work with the new version system, which is useful when a mod has multiple downloadable builds.
+  - Better error handling was added for rate limits and failed requests, so the app behaves more predictably when GameBanana is slow or temporarily restricted.
+
+- **Themes, Settings, and Interface Options**
+
+  - Settings were reorganized into clearer sections such as General, Game, Appearance, Library, Mods Browser, and Plugins.
+  - Theme management was improved with a clearer summary of what your current theme actually changes.
+  - Built-in themes are now included directly with the app.
+  - Theme import, export, apply, save, and delete actions were polished into a cleaner workflow.
+  - More appearance controls were added or expanded, including UI scale, border radius, custom hover/select colors, and theme-related media options.
+  - The old animated splash screen is no longer used. Because of that, the old **Disable splash** setting was removed. In its place, there is now a **Disable startup sound** option for users who want a quieter startup without changing the rest of the interface.
+  - There is now a dedicated option to keep the app window visible while the game is running.
+  - Anonymous analytics is now opt-in and clearly presented as optional help for improving the project.
+
+- **New Menu bar at the top and Help tab**
+
+  - G3M now uses a new **top menu bar**, which makes important app-level actions easier to find.
+  - A dedicated **Help** menu was added instead of scattering these actions around the interface.
+  - From the Help menu, users can quickly open the built-in **Changelog** window and the **About** window.
+  - The built-in changelog viewer makes it easier to check what changed without leaving the app.
+  - The About window gives quick access to releases, wiki, issues, and the G3M data folder.
+
+- **Compatibility, Launch, and Quality-of-Life Improvements**
+
+  - Launch flow is now clearer when using Steam together with mods, especially in cases where Steam may start the game from a different folder than the one configured in the app.
+  - This is particularly helpful for Steam Deck and other setups where the real launch path may differ from the obvious one.
+  - Shortcut creation was improved and now presents a clearer summary of what the shortcut will launch.
+  - Archive support was expanded further, including broader support for `.tar`, `.tar.bz2`, `.tar.xz`, `.tgz`, `.tbz2`, and `.txz` packages.
+  - `.rar` handling is more reliable thanks to bundled extraction support.
+  - Better warnings were added for patch/file mismatches, missing original files, and partial patching situations, so players get more understandable prompts instead of silent failures.
+
 ### Version 2.4.7 — 16.01.26
 
 - **Major Mod Merge Improvements**

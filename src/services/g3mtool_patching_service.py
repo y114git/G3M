@@ -80,7 +80,17 @@ def _get_patching_logger() -> logging.Logger:
     logs_dir = os.path.join(get_user_data_root(), "logs")
     os.makedirs(logs_dir, exist_ok=True)
     log_path = os.path.join(logs_dir, "patching.log")
-    handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    try:
+        handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    except (PermissionError, OSError) as error:
+        logging.warning(
+            "Failed to initialize patching file logger at %s: %s",
+            log_path,
+            error,
+        )
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = True
+        return logger
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     )

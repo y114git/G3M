@@ -343,7 +343,6 @@
     "mod_priority": "Change which mods win when multiple mods edit the same files.",
     "create_modpack": "Bundle the currently selected mods into a single modpack archive.",
     "installed_mods": "This area lists the mods currently available in your library.",
-    "announcement_text": "Read the current announcement, update note, or poll message.",
     "announcement_details": "Open the linked page with more details about this announcement.",
     "announcement_option": "Choose this answer for the announcement poll.",
     "confirm": "Confirm this action.",

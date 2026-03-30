@@ -43,7 +43,6 @@ class AnnouncePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.text_browser = QTextBrowser()
         self.text_browser.setOpenExternalLinks(True)
-        self.text_browser.setToolTip(tr("tooltips.announcement_text"))
         document = self.text_browser.document()
         if document is not None:
             document.setDefaultStyleSheet("p { margin: 0.5em 0; }")
@@ -203,12 +202,8 @@ class AnnouncePanel(QWidget):
 
     def relocalize_ui(self) -> None:
         self.details_button.setText(tr("dialogs.announce_details_button"))
-        self.text_browser.setToolTip(tr("tooltips.announcement_text"))
         self.details_button.setToolTip(tr("tooltips.announcement_details"))
         self.ok_button.setText(tr("ui.ok"))
-        self.ok_button.setToolTip(tr("tooltips.confirm"))
-        for button in self._option_buttons:
-            button.setToolTip(tr("tooltips.announcement_option"))
         self.sync_ok_button_state()
 
 

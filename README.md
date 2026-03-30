@@ -1,77 +1,202 @@
-# G3M - The ultimate Mod manager
+<a id="readme-top"></a>
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/y114git/G3M?style=for-the-badge) ![GitHub all releases](https://img.shields.io/github/downloads/y114git/G3M/total?style=for-the-badge) ![Discord](https://img.shields.io/discord/1389372598260858950?label=Discord&logo=discord&style=for-the-badge) [![Telegram Channel](https://img.shields.io/badge/Telegram-t.me/y_maintg-2EA3D2?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/y_maintg)
+<p align="center">
+  <img src="src/assets/images/logo.png" alt="G3M logo" width="500">
+</p>
 
----
+<h1 align="center">G3M</h1>
+<p align="center">
+  Desktop mod manager for GameMaker games, with built-in discovery, library management, patching tools, profiles, and plugins.
+</p>
 
-**G3M** is a cross-platform, universal, and extremely convenient Mod Manager, Saves Manager, and multi-functional manager for games such as **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, **UNDERTALE Yellow**, and **Pizza Tower**. In the future, it will support other games made with GameMaker.
+<p align="center">
+  <a href="https://github.com/y114git/G3M/releases/latest"><img src="https://img.shields.io/github/v/release/y114git/G3M?style=for-the-badge" alt="Latest release"></a>
+  <a href="https://github.com/y114git/G3M/releases"><img src="https://img.shields.io/github/downloads/y114git/G3M/total?style=for-the-badge" alt="Total downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/y114git/G3M?style=for-the-badge" alt="License"></a>
+  <img src="https://img.shields.io/badge/Python-3.14%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.14+">
+  <img src="https://img.shields.io/badge/Desktop-Windows%20%7C%20macOS%20%7C%20Linux-4B5563?style=for-the-badge" alt="Desktop platforms">
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/y114git/G3M/releases/latest">Download</a>
+  ·
+  <a href="https://g3m.gitbook.io/g3m-wiki">Wiki</a>
+  ·
+  <a href="https://github.com/y114git/G3M/issues">Issues</a>
+  ·
+  <a href="CHANGELOG.md">Changelog</a>
+  ·
+  <a href="https://discord.gg/2MFdvFfD9a">Discord</a>
+  ·
+  <a href="https://t.me/y_maintg">Telegram</a>
+</p>
 
-## 🌟 G3M FEATURES
+<details>
+<summary><strong>Table of Contents</strong></summary>
 
-### Mod Management
+- [What Is G3M](#what-is-g3m)
+- [Highlights](#highlights)
+- [Features](#features)
+- [Supported Games](#supported-games)
+- [Plugins](#plugins)
+- [Build From Source](#build-from-source)
+- [Development and Tests](#development-and-tests)
+- [Customization and Localization](#customization-and-localization)
+- [Legal](#legal)
 
-- **Mod Search:** Browse a huge number of diverse mods. You can view their details and install with a single click! Filter mods by downloads, creation/update date, specific games, tags, and even by name or description. You can also install mods directly from GameBanana! Customize how many mods you want to see per page for optimal search experience.
+</details>
 
-- **Mod Library:** All your installed mods are here! Simply click on a mod to use it. Select multiple mods at once and play with them simultaneously! After exiting, all original files are restored, so G3M will never damage your game files.
+## What Is G3M
 
-- **Multi-Mod System:** Play with multiple mods at once! When selecting 2+ mods, configure their priority to control which mod's changes take precedence when mods conflict. Higher priority mods are merged last, so their changes will be the final ones applied. Create modpacks to instantly launch your favorite mod combinations without waiting for merging each time!
+G3M *(Formerly DELTAHUB)* is a desktop manager for GameMaker mod workflows. It combines GameBanana browsing, local library management, profile switching, mod and game versioning, patch utilities, custom game support, and optional plugins in one PyQt6 application.
 
-- **Chapter-by-Chapter Mode:** For the full version of DELTARUNE, you can select mods for each chapter separately, allowing you to play with different mod combinations per chapter.
+The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTALE Yellow, Pizza Tower, and Sugary Spire, while also allowing custom games to be added through the in-app Game Manager.
 
-- **Direct Launch:** Double-click on the desired chapter slot and enable direct launch. This will allow you to launch the desired chapter directly when starting the game, bypassing the chapter selection menu.
+## Highlights
 
-- **Mod Import/Export:** Import mods from files or URLs, and export them in G3M format. Share your mods easily with others! G3M automatically detects and converts mods from Deltamod and PizzaOven formats.
+- Built for both players and modders. G3M covers browsing, installing, launching, editing, converting, and packaging without splitting those workflows across multiple tools.
+- Profiles are first-class. Each profile keeps its own library state and launch-related settings, so you can maintain separate playthrough, testing, or modpack setups.
+- The built-in toolset is broader than a typical mod manager. Mod editing, manual install setup, patch creation and application, merge tools, diff viewing, and conversion workflows are part of the main app.
+- Plugin support is real, not placeholder UI. G3M can load local or catalog plugins, validate API compatibility, expose plugin settings and views, and run lifecycle hooks.
+- Recovery workflows are built in. Downloads history, mod versions, and game restore points make it easier to experiment without losing track of what changed.
 
-- **Deltamod compatibility:** G3M features built-in compatibility with the Deltamod format. More about this you can read from [Wiki](https://github.com/y114git/G3M/wiki/Deltamod-Compatibility).
+## Features
 
-- **PizzaOven compatibility:** G3M also supports automatic conversion of PizzaOven mods for Pizza Tower. PizzaOven mods are automatically detected and converted when imported.
+### Discovery and installation
 
-### Game and Save Management
+- Browse supported GameBanana games directly in the app, with metadata, screenshots, descriptions, and per-post file selection when a page has multiple compatible downloads.
+- Install from GameBanana, external URLs, local archives, or one-click protocol links. `g3m://` is the primary scheme, legacy `deltahub://` links are still accepted, and external protocol downloads go through an explicit confirmation step.
+- Use manual install when an archive is not ready for automatic conversion. The manual flow can map DATA files, extra files, and additional xdelta patches to explicit target paths.
+- Hide unwanted browser results with the blocklist manager. Entries can be scoped globally or per game, and can block by mod ID, name, or category.
 
-- **Support for Multiple Games:** G3M allows you to install mods for **DELTARUNE**, **DELTARUNEdemo**, **UNDERTALE**, **UNDERTALE Yellow**, and **Pizza Tower**! For free games like DELTARUNEdemo and UNDERTALE Yellow, G3M has the ability to directly download the game itself with up-to-date files, eliminating the need to visit separate websites.
+### Library, profiles, and versions
 
-- **Save Manager (Plugin):** Solve the problem of not having enough save slots! The Save Manager plugin lets you create an endless number of additional save collections. Copy and export them wherever you want, even to an external source. Double-clicking on a save slot allows you to edit it. The Save Manager is now a plugin, so you can install it if you need it!
+- Manage installed mods in a local library with drag-and-drop import and export, local README viewing, and richer mod details for screenshots and metadata.
+- Create multiple library profiles with their own active mod selections and profile-scoped settings. Profiles can be created, renamed, duplicated, deleted, reordered, exported, and imported.
+- Save per-mod version snapshots in each mod folder. Versions can be created locally, imported from archives, switched back in place, deleted, and downloaded from GameBanana for supported linked mods.
+- Save full game versions as restore points. Game versions can be created from the live game or a profile-backed state, then applied, exported, imported, or removed later.
 
-### Creation & Customization
+### Mod creation, editing, and conversion
 
-- **Localization:** G3M supports multiple languages (English, Russian, Chinese Simplified, Chinese Traditional, Spanish, and more). If you want to translate G3M into your language (or just edit langs for fun), all the necessary files and instructions are in `src/assets/lang` and the [project Wiki](https://github.com/y114git/G3M/wiki/Localization-and-Lang-system-Guide).
+- Create and edit local mods with the built-in Mod Editor. It supports game-aware file structures, extra files, metadata editing, icons, screenshots, and local export.
+- Convert Deltamod packages into G3M mods during import. The converter keeps game mappings and patch layouts instead of treating Deltamod archives as opaque files.
+- Convert PizzaOven packages for Pizza Tower into standard G3M mods when the source layout is eligible. GMLoader-style packages are explicitly rejected instead of being installed incorrectly.
+- Import CYOP/AFOM-style Pizza Tower archives through a dedicated conversion path. Converted mods keep the required `towers` data and are tagged as `CYOP/AFOM`.
 
-- **Create Mods:** You can create and modify your own mods. G3M has its own very simple structure for mods. The Mod Editor is now a plugin - install it if you need to create or edit mods!
-  - **Public Mods:** After verification, a public mod will appear on the mods page for anyone to download.
-  - **Local Mods:** A local mod will not appear on the mods page, but can be created without an internet connection and easily shared with friends or published on a separate website.
+### Patching and modding tools
 
-- **File Management, Auto-updates, and Other Mod Actions:** Configure necessary files for each chapter or game. Divide them into components with versions, so users only need to download updated components. Add and manage screenshots for your mod, which users will see directly in G3M! You can also hide a mod, delete it, and more.
+- Use the built-in Modding Tools window to create patches, apply patches, merge patch sets, inspect patch info, compare files, and export diff reports.
+- Convert DATA-based mod content between supported patch formats inside the same toolset, instead of relying on separate patcher plugins.
+- Launch multi-mod setups and create packaged modpacks. The patching layer also preserves extra-file overrides and game-specific file handling during use.
 
-- **Plugin System:** Extend G3M's functionality with plugins! Browse, install, enable/disable, and import plugins. The Save Manager, Mod Editor, and XDELTA Patcher are now separate plugins that you can install if needed. Create your own plugins to add custom functionality! Plugins can be downloaded from [G3M Plugins List](https://github.com/y114git/ylauncherdata/blob/main/PLUGINS.md) More details in the [Plugins Guide](https://github.com/y114git/G3M/wiki/Plugins-Guide).
+### Launch and compatibility
 
-- **Built-in Chat:** Chat with other G3M users! The chat is completely anonymous and supports 5 different language channels. Switch between channels for your preferred language.
+- Launch supported games with or without mods, including Steam launch handoff when a game has a configured Steam App ID.
+- Create standalone shortcuts that embed the current launch configuration. Shortcuts can run headlessly through `--shortcut` without opening the full UI first.
+- Use direct-launch chapter selection where the selected game supports it. DELTARUNE keeps its chapter-aware workflow separate from single-tab games.
+- Enable PortProton on Linux instead of the default launch path when that setup is available and Steam launch is not taking over the session.
 
-- **Built-in Patching (Plugin):** The XDELTA Patcher is now a plugin! Create patches without needing separate programs. The process is no different from other patching GUIs. Install the plugin if you need patching functionality.
+### Downloads and recovery
 
-- **1-Click Installation & External Sources:** Install mods from external sources by creating an archive and providing a direct download link like this: `g3m://{URL}`. When a user enters this link in their browser, G3M will install the mod automatically. This works for both public and local mods, as well as plugins. Details are on the Wiki.
+- Track downloads in a dedicated queue instead of one-off install prompts. Records move through queued, downloading, downloaded, ready, using, overwrite-pending, manual-required, failed, or cancelled states.
+- Retry, cancel, install, overwrite, continue manual setup, or delete entries from the downloads window as needed.
+- Control download behavior from settings. G3M supports disabling automatic use after download, deleting downloaded files after use, and keeping local imports in download history.
 
-- **Create SHORTCUTS:** Create a shortcut for your game with desired settings and mods. Launching it will immediately start the game with your chosen configuration, even without running G3M first.
+### Plugins and extra tools
 
-- **Customize G3M as you wish:** Change game and mods folders, create your own themes, add background music, or even change the intro sound! And if you want - share with your themes with friends! Quickly access your G3M folder (where mods, settings, plugins, and language files are stored) with a single button in settings.
+- Load plugins from an online catalog or from local archives and folders. Installed plugins are scanned, validated against the plugin API version, and marked as enabled, incompatible, broken, or local-only.
+- Toggle plugins on and off, open plugin settings, and surface plugin-provided main views and hooks through the runtime service.
+- The bundled catalog currently exposes the `DR Save Manager` plugin, which adds DELTARUNE save collection management, import and export tools, pre-launch collection switching, and a save editor with Simple and Advanced modes.
+- G3M still includes an anonymous in-app chat dialog with language channels. It is part of the current UI and uses the app's network-backed chat service when that backend is configured and reachable.
 
-- **Steam Integration:** Enable an option to launch the game through Steam, ensuring all your achievements and other Steam features work. You can also select a separate game executable file if needed.
+### Interface, help, and privacy
 
-- **PortProton Support (Linux):** On Linux, you can use PortProton instead of Wine to run Windows executables. PortProton provides better compatibility for games.
+- Open built-in About and Changelog dialogs without leaving the app. The About dialog links to releases, wiki, issues, the local G3M data folder, Discord, and Telegram.
+- Switch between bundled themes or import and export theme archives. Theme packages can include color settings, media assets, and custom fonts.
+- Change UI scale, border radius, theme colors, background media, startup sound behavior, and related appearance options from settings.
+- Hide the Library tab if you want a slimmer layout for browsing and tool-focused use.
+- Use bundled language packs or add external language files. G3M currently ships with English, Russian, Spanish, Chinese Simplified, and Chinese Traditional.
+- Anonymous analytics are opt-in. The analytics service checks the local opt-in flag before recording or flushing batches.
 
----
+## Supported Games
 
-### 💻 Download & Support
+| Game | Browser / GameBanana | Library / Launch | Notes |
+| --- | --- | --- | --- |
+| DELTARUNE | Yes | Yes | Full chapter-aware workflow, Steam App ID, direct-launch restrictions handled in-app. |
+| DELTARUNE Demo | No (Download from DELTARUNE) | Yes | Supports local use and has a built-in full-install. |
+| UNDERTALE | Yes | Yes | Includes Steam App ID support. |
+| UNDERTALE Yellow | Yes | Yes | Includes a built-in full-install. |
+| Pizza Tower | Yes | Yes | Includes PizzaOven conversion and CYOP/AFOM handling. |
+| Sugary Spire | Yes | Yes | Included in the built-in registry and marked for full-install support. |
 
-- **How to download?:** Just download installer or binaries from [releases](https://github.com/y114git/G3M/releases) and launch them.
+Custom games can be added in the Game Manager. A custom game can define its executable, DATA filename, optional Steam App ID, and optional GameBanana ID, and visible custom games can participate in search when a valid GameBanana ID is provided.
 
-- **Bugs & Issues:** G3M will be updated many more times with new games and features. Please report all bugs and other issues [on this page](https://github.com/y114git/G3M/issues).
+## Plugins
 
-- **Wiki:** For detailed info on "How to properly create mods," "How to change something," etc., please visit the [Wiki](https://github.com/y114git/G3M/wiki).
+G3M has a plugin catalog service, install service, runtime loader, persistent plugin state, API compatibility checks, localization merge support, and hook execution for settings views, main views, lifecycle events, and game/session-related callbacks.
+
+Plugin manifests can also declare required or conflicting plugins, and the runtime enforces those relations when enabling plugins.
+
+The catalog committed in this repository currently contains one published plugin:
+
+- `DR Save Manager` for DELTARUNE save collections and save editing.
+
+Local plugins are also supported. Manual installs are marked separately from catalog-backed installs so the UI can distinguish local-only plugins from catalog entries.
+
+## Build From Source
+
+G3M requires Python 3.14 or newer (project uses latest versions, edit pyproject.toml if you need compatibility changes).
+
+```bash
+git clone https://github.com/y114git/G3M.git
+cd G3M
+python -m pip install -e ".[dev,test,build]"
+python src/main.py
+```
+
+Extras defined in `pyproject.toml`:
+
+- `.[build]` installs PyInstaller.
+- `.[test]` installs `pytest`, `pytest-qt`, coverage helpers, and related test tools.
+- `.[dev]` installs Ruff.
+
+The repository includes a PyInstaller spec at `builds/G3MExecutable.spec`:
+
+```bash
+pyinstaller builds/G3MExecutable.spec
+```
+
+That spec packages `src/main.py`, bundles the `src/` tree into the frozen app, and includes macOS bundle URL scheme metadata for both `g3m` and `deltahub`. A Windows installer script also exists at `builds/G3MWindowsInstaller.iss`.
+
+## Development and Tests
+
+Run the full automated suite with:
+
+```bash
+pytest
+```
+
+Useful local commands:
+
+```bash
+ruff check src tests
+pytest tests/unit
+pytest tests/integration
+pytest tests/ui
+```
+
+The repository includes unit, integration, and Qt UI coverage for core areas such as protocol handling, downloads, profiles, plugin services, GameBanana integration, patching, game versions, dialogs, and widgets.
+
+## Customization and Localization
+
+Bundled themes live in `src/assets/themes/`, and bundled language packs live in `src/assets/lang/`. Theme import and export are archive-based, and localization supports external `lang_*.json` files plus per-language custom fonts loaded from the same directory as the language file.
+
+If you want implementation details or contributor-facing guides for themes, localization, plugins, or mod formats, the README intentionally keeps those out of the main flow. The GitHub wiki is the better place for step-by-step documentation.
 
 ## Legal
 
-- [`LICENSE`](LICENSE)
-- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
-- [`SECURITY.md`](SECURITY.md)
+- [License](LICENSE)
+- [Security Policy](SECURITY.md)
+- [Third-Party Notices](THIRD_PARTY_NOTICES.md)
+
+<p align="right"><a href="#readme-top">Back to top</a></p>

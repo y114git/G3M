@@ -118,8 +118,10 @@ class SettingsViewBuilder:
                 seen.add(id(btn))
                 btn.setIcon(colored_icon(icon_name, tc))
                 btn.setIconSize(QSize(20, 20))
-        if self.parent and hasattr(self.parent, "_update_games_manager_button_style"):
-            self.parent._update_games_manager_button_style()
+        if self.parent and getattr(self.parent, "games_manager_button", None):
+            from app.game_ui import update_games_manager_button_style
+
+            update_games_manager_button_style(self.parent)
         for btn, *_ in self.widgets.get("_section_reset_buttons", []):
             icon_name = getattr(btn, "_themed_icon_name", None) if btn else None
             if btn and icon_name and id(btn) not in seen:
@@ -742,6 +744,8 @@ class SettingsViewBuilder:
         games_manager_button = QPushButton()
         games_manager_button.setObjectName("games_manager_button")
         games_manager_button._themed_icon_name = "settings"
+        games_manager_button._themed_icon_app_state = self.app_state
+        games_manager_button._themed_icon_size = QSize(20, 20)
         games_manager_button.setIconSize(QSize(20, 20))
         games_manager_button.setToolTip(tr("games.manager_title"))
         games_manager_button.setContentsMargins(0, 0, 0, 0)

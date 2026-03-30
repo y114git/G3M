@@ -11,6 +11,7 @@ import tempfile
 
 from config.config import THEME_CONFIG_FILENAME, UI_COLORS
 from services.localization_service import tr
+from services.migration_service import normalize_theme_settings
 from utils.path_utils import find_theme_config_path
 from workers.base_install_worker import BaseInstallWorker
 
@@ -98,7 +99,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                         )
                         return False
                     with open(theme_json_path, encoding="utf-8") as f:
-                        theme_settings = json.load(f)
+                        theme_settings = normalize_theme_settings(json.load(f))
                     self._apply_theme_settings(theme_settings, content_root)
             else:
                 theme_json_path = find_theme_config_path(content_path)
@@ -108,7 +109,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                     )
                     return False
                 with open(theme_json_path, encoding="utf-8") as f:
-                    theme_settings = json.load(f)
+                    theme_settings = normalize_theme_settings(json.load(f))
                 self._apply_theme_settings(theme_settings, content_path)
             self.settings_service.write_local_config()
             return True

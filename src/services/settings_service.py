@@ -26,7 +26,10 @@ from config.settings_schema import (
 )
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
-from services.migration_service import migrate_settings_payload
+from services.migration_service import (
+    migrate_settings_payload,
+    normalize_theme_settings,
+)
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
 from utils.path_utils import find_theme_config_path
@@ -123,14 +126,16 @@ class SettingsManager(QObject):
             )
 
     def _handle_permission_error(self, directory: str):
-        if self.parent_widget and hasattr(
-            self.parent_widget, "_handle_permission_error"
-        ):
-            self.parent_widget._handle_permission_error(directory)
-        else:
-            self.feedback_service.show_message(
-                "error", "errors.no_write_permission_for", path=directory
-            )
+        parent_handler = getattr(self.parent_widget, "_handle_permission_error", None)
+        if callable(parent_handler):
+            try:
+                parent_handler(directory)
+                return
+            except Exception as e:
+                logging.debug(f"Parent permission error handler failed: {e}")
+        self.feedback_service.show_message(
+            "error", "errors.no_write_permission_for", path=directory
+        )
 
     def _get_audio_paths(self, base_name: str) -> list[str]:
         return [
@@ -157,8 +162,8 @@ class SettingsManager(QObject):
             self.write_json(self.app_state.config_path, self.app_state.local_config)
 
     def ensure_config_defaults(self):
-        migrate_settings_payload(self.app_state.local_config, APP_VERSION)
-        self.write_local_config()
+        if migrate_settings_payload(self.app_state.local_config, APP_VERSION):
+            self.write_local_config()
 
     def on_language_changed(self, language_code: str):
         current_language = self.app_state.local_config.get("language", "en")
@@ -681,7 +686,13 @@ class SettingsManager(QObject):
     def _install_theme_from_file(self, theme_file_path: str):
         try:
             with zipfile.ZipFile(theme_file_path, "r") as zipf:
-                if not any(name in zipf.namelist() for name in THEME_CONFIG_FILENAMES):
+                archive_names = set(zipf.namelist())
+                if not any(
+                    name in archive_names or any(
+                        archived_name.endswith(f"/{name}") for archived_name in archive_names
+                    )
+                    for name in THEME_CONFIG_FILENAMES
+                ):
                     raise ValueError
         except Exception:
             self.feedback_service.show_message(
@@ -726,7 +737,7 @@ class SettingsManager(QObject):
                         f"{THEME_CONFIG_FILENAME} not found in extracted archive"
                     )
                 with open(theme_json_path, encoding="utf-8") as f:
-                    theme_settings = json.load(f)
+                    theme_settings = normalize_theme_settings(json.load(f))
                 for key, value in theme_settings.items():
                     if key != "config_version":
                         self.app_state.local_config[key] = value

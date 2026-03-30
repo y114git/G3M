@@ -346,7 +346,6 @@
     "mod_priority": "當多個模組修改同一檔案時，調整誰優先生效。",
     "create_modpack": "把目前選取的模組打包成單一模組包壓縮檔。",
     "installed_mods": "這裡會顯示你資料庫中目前可用的模組。",
-    "announcement_text": "閱讀目前公告、更新說明或投票訊息。",
     "announcement_details": "開啟與此公告相關的更多詳細資訊頁面。",
     "announcement_option": "選擇這個選項作為公告投票的答案。",
     "confirm": "確認此操作。",

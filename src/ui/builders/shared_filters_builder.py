@@ -28,10 +28,18 @@ def _install_themed_button_icon(
 ) -> None:
     if not button:
         return
+    button._themed_icon_name = icon_name
+    button._themed_icon_app_state = app_state
+    button._themed_icon_size = icon_size
     install_widget_update_handler(
         button,
-        lambda target=button, target_state=app_state, target_icon=icon_name, target_size=icon_size: (
-            _apply_themed_button_icon(target, target_icon, target_state, target_size)
+        lambda target=button: (
+            _apply_themed_button_icon(
+                target,
+                getattr(target, "_themed_icon_name", icon_name),
+                getattr(target, "_themed_icon_app_state", app_state),
+                getattr(target, "_themed_icon_size", icon_size),
+            )
         ),
         attr_name=f"_{icon_name}_button_icon_filter",
     )
@@ -47,6 +55,21 @@ def _apply_themed_button_icon(
     )
     button.setIcon(colored_icon(icon_name, tc))
     button.setIconSize(icon_size)
+
+
+def set_themed_button_icon(
+    button: QPushButton, icon_name: str, app_state=None, icon_size: QSize | None = None
+) -> None:
+    """Update a themed button icon and keep its theme-refresh state in sync."""
+    if not button:
+        return
+    button._themed_icon_name = icon_name
+    if app_state is not None:
+        button._themed_icon_app_state = app_state
+    size = icon_size or getattr(button, "_themed_icon_size", None) or QSize(16, 16)
+    button._themed_icon_size = size
+    target_state = getattr(button, "_themed_icon_app_state", app_state)
+    _apply_themed_button_icon(button, icon_name, target_state, size)
 
 
 def create_sort_controls(

@@ -56,6 +56,13 @@ def migrate_theme_settings(settings: dict[str, Any]) -> bool:
     return changed
 
 
+def normalize_theme_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of theme settings normalized from legacy keys to current keys."""
+    normalized = dict(settings or {})
+    migrate_theme_settings(normalized)
+    return normalized
+
+
 def migrate_settings_payload(local_config: dict[str, Any], app_version: str) -> bool:
     changed = False
     if local_config.get("cache_format_version") != app_version:

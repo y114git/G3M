@@ -56,6 +56,7 @@ from presentation.update_presenter import (
 from presentation.window_composition import WindowComposition
 from presentation.window_state import initialize_window_runtime
 from services.localization_service import localization_service, tr
+from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import (
     apply_rounded_mask,
     clamp_border_radius,
@@ -1151,13 +1152,13 @@ class AppWindow(QWidget):
             panel_height = self.top_panel_widget.height()
             y = max(0, (panel_height - logo_height) // 2)
             self.launcher_icon_label.move((panel_width - logo_width) // 2, y)
-        if not self._restoring_window_geometry:
+        if not getattr(self, "_restoring_window_geometry", False):
             self.settings_service.schedule_geometry_save(self)
             self._schedule_window_layout_refresh()
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        if not self._restoring_window_geometry:
+        if not getattr(self, "_restoring_window_geometry", False):
             self.settings_service.schedule_geometry_save(self)
 
     def _load_local_data(self):
@@ -1183,11 +1184,12 @@ class AppWindow(QWidget):
         self.context.update_qt_locale(language_code)
 
     def _set_lib_search_icon(self, is_searching: bool):
-        tc = get_theme_color(self.app_state.local_config, "main_text")
-        self.library_search_button.setIcon(
-            colored_icon("reset", tc) if is_searching else colored_icon("search", tc)
+        set_themed_button_icon(
+            self.library_search_button,
+            "reset" if is_searching else "search",
+            self.app_state,
+            QSize(16, 16),
         )
-        self.library_search_button.setIconSize(QSize(16, 16))
 
     def _refresh_themed_icons(self):
         """Re-read theme color and regenerate all SVG-based button icons."""
@@ -1197,12 +1199,7 @@ class AppWindow(QWidget):
             self.top_refresh_button.setIconSize(QSize(20, 20))
         if hasattr(self, "library_search_button"):
             is_searching = bool(getattr(self, "library_search_text", ""))
-            self.library_search_button.setIcon(
-                colored_icon("reset", tc)
-                if is_searching
-                else colored_icon("search", tc)
-            )
-            self.library_search_button.setIconSize(QSize(16, 16))
+            self._set_lib_search_icon(is_searching)
         if hasattr(self, "library_sort_order_btn") and self.library_sort_order_btn:
             is_asc = getattr(self, "library_sort_ascending", False)
             self.library_sort_order_btn.setIcon(

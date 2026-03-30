@@ -343,7 +343,6 @@
     "mod_priority": "Cambia qué mods tienen prioridad cuando varios modifican los mismos archivos.",
     "create_modpack": "Empaqueta los mods seleccionados en un único archivo de modpack.",
     "installed_mods": "Esta zona muestra los mods disponibles actualmente en tu biblioteca.",
-    "announcement_text": "Lee el anuncio, nota de actualización o mensaje de encuesta actual.",
     "announcement_details": "Abre la página enlazada con más detalles sobre este anuncio.",
     "announcement_option": "Elige esta respuesta para la encuesta del anuncio.",
     "confirm": "Confirmar esta acción.",

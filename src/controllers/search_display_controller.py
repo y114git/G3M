@@ -14,6 +14,7 @@ from models.game_modes import (
 from services.blocklist_service import BlocklistManager
 from services.localization_service import tr
 from services.mod_filter_service import filter_and_sort_mods
+from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import get_theme_color
 from ui.dialogs.blocklist_dialog import BlocklistDialog
 from ui.utils.ui_utils import DebounceTimer
@@ -305,9 +306,17 @@ class SearchDisplayController(QObject):
         return False
 
     def _set_search_btn_icon(self, is_searching: bool):
-        tc = get_theme_color(self.app_state.local_config, "main_text")
-        icon = colored_icon("reset", tc) if is_searching else colored_icon("search", tc)
-        self.ui_button_icon_update.emit("search_button", icon)
+        icon_name = "reset" if is_searching else "search"
+        if hasattr(self.app, "search_button"):
+            set_themed_button_icon(
+                self.app.search_button,
+                icon_name,
+                self.app_state,
+            )
+        else:
+            tc = get_theme_color(self.app_state.local_config, "main_text")
+            icon = colored_icon(icon_name, tc)
+            self.ui_button_icon_update.emit("search_button", icon)
         tooltip = (
             tr("ui.clear_search_tooltip", text=self.app_state.search_text)
             if is_searching

@@ -17,6 +17,7 @@ from config.config import (
 )
 from models.exceptions import AppError
 from services.localization_service import tr
+from services.migration_service import normalize_theme_settings
 from utils.file_utils import check_filename_is_deltamod_info, has_deltamod_info_file
 from utils.network_utils import download_file, get_session
 from utils.path_utils import find_theme_config_path
@@ -329,7 +330,7 @@ class UrlInstallThread(BaseInstallWorker):
             if not theme_json_path:
                 raise ValueError(f"Missing {THEME_CONFIG_FILENAME}")
             with open(theme_json_path, encoding="utf-8") as f:
-                theme_settings = json.load(f)
+                theme_settings = normalize_theme_settings(json.load(f))
             for key, value in theme_settings.items():
                 if key != "config_version":
                     app_state.local_config[key] = value
