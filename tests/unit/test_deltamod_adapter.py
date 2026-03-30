@@ -143,3 +143,32 @@ def test_process_files_copies_root_docs(tmp_path):
 
     assert (target_dir / "README.md").read_text(encoding="utf-8") == "# Guide"
     assert (target_dir / "notes.txt").read_text(encoding="utf-8") == "hello"
+
+
+def test_process_files_uses_legacy_chapter_layout_for_deltamod_assets(tmp_path):
+    """Checks that converted deltamod assets keep chapter folders with plain files."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "patch.xdelta").write_text("patch", encoding="utf-8")
+    sprites_dir = source_dir / "sprites"
+    sprites_dir.mkdir()
+    (sprites_dir / "hero.png").write_text("hero", encoding="utf-8")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    converter = DeltamodConverter(str(source_dir), str(tmp_path / "mods"))
+    converter._target_game = "deltarune"
+    converter.modding_xml = ElementTree.fromstring(
+        """
+        <patches>
+            <patch to="./chapter1_windows/data.win" patch="./patch.xdelta" type="xdelta" />
+            <patch to="./chapter1_windows/sprites/hero.png" patch="./sprites/hero.png" type="override" />
+        </patches>
+        """
+    )
+
+    converter._process_files(str(target_dir))
+
+    chapter_dir = target_dir / "chapter_1"
+    assert (chapter_dir / "patch.xdelta").read_text(encoding="utf-8") == "patch"
+    assert (chapter_dir / "sprites" / "hero.png").read_text(encoding="utf-8") == "hero"

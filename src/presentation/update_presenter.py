@@ -3,7 +3,7 @@
 import logging
 import time
 
-from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL
@@ -150,6 +150,9 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
         app.app_state.is_shown_to_user = True
     from ui.dialogs.announce_dialog import AnnounceDialog
 
+    if getattr(app.app_state, "active_announce_dialog", None) is not None:
+        return
+
     localized_announce = dict(announce)
     localized_announce["messages"] = announce_messages
     localized_announce["message"] = announce_message
@@ -173,7 +176,12 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
         on_submit_poll=_submit_poll,
     )
     dialog.accepted_with_ok.connect(lambda: save_announce(app, announce_version))
-    dialog.exec()
+    app.app_state.active_announce_dialog = dialog
+    dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+    dialog.finished.connect(
+        lambda _result: setattr(app.app_state, "active_announce_dialog", None)
+    )
+    dialog.show()
     app.app_state.pending_announce_check = False
 
 

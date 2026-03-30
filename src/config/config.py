@@ -167,6 +167,8 @@ WIDGET_LOCALIZATIONS = [
     ("language_combo", "setToolTip", "tooltips.language"),
     ("beta_updates_checkbox", "setText", "ui.beta_updates"),
     ("show_reset_buttons_checkbox", "setText", "ui.show_reset_buttons"),
+    ("analytics_opt_in_checkbox", "setText", "ui.analytics_opt_in"),
+    ("analytics_opt_in_checkbox", "setToolTip", "tooltips.analytics_opt_in"),
     ("skip_patching_warnings_checkbox", "setText", "ui.skip_patching_warnings"),
     ("fullscreen_checkbox", "setText", "ui.fullscreen"),
     ("fullscreen_checkbox", "setToolTip", "tooltips.fullscreen_tooltip"),

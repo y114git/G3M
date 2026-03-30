@@ -41,6 +41,23 @@ class UpdateChecker(QObject):
         self.app_state = app_state
         self.feedback_service = feedback_service
 
+    def _analytics(self):
+        parent = self.parent()
+        return getattr(parent, "analytics_service", None) if parent else None
+
+    def _record_update_check(self, outcome: str) -> None:
+        analytics = self._analytics()
+        if not analytics:
+            return
+        try:
+            analytics.record_update_check(outcome)
+        except Exception:
+            logging.debug(
+                "UpdateChecker: analytics record failed (%s)",
+                outcome,
+                exc_info=True,
+            )
+
     def check_for_updates(self):
         beta_enabled = self.app_state.local_config.get("beta_updates_enabled", False)
         system = platform.system()
@@ -51,6 +68,7 @@ class UpdateChecker(QObject):
         try:
             update_info = self.get_update_info(system=system, beta_enabled=beta_enabled)
             if update_info is None:
+                self._record_update_check("no_update")
                 return
             if system == "Darwin" and "AppTranslocation" in sys.executable:
                 logging.warning(
@@ -59,11 +77,13 @@ class UpdateChecker(QObject):
                 self.feedback_service.update_status(
                     tr("errors.app_translocation_detected"), UI_COLORS["status_error"]
                 )
+                self._record_update_check("blocked_translocation")
                 return
             logging.info(
                 "UpdateChecker: Update available - version %s",
                 update_info["version"],
             )
+            self._record_update_check("available")
             self.update_available.emit(update_info)
         except Exception as e:
             import requests
@@ -75,6 +95,9 @@ class UpdateChecker(QObject):
             )
             self.feedback_service.update_status(
                 tr(key, error=str(e)), UI_COLORS["status_error"]
+            )
+            self._record_update_check(
+                "network_error" if isinstance(e, requests.RequestException) else "error"
             )
 
     def get_update_info(

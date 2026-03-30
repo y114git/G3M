@@ -403,8 +403,17 @@ class SettingsViewBuilder:
             config_key="show_reset_buttons",
             reset_value=False,
         )
+        analytics_opt_in_checkbox = self._styled_checkbox(
+            tr("ui.analytics_opt_in"),
+            tr("tooltips.analytics_opt_in"),
+            "analytics_opt_in_enabled",
+            reset_value=False,
+        )
         cl_adv.addWidget(
             show_reset_buttons_checkbox, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        cl_adv.addWidget(
+            analytics_opt_in_checkbox, alignment=Qt.AlignmentFlag.AlignCenter
         )
         layout.addWidget(sec_adv)
 
@@ -415,6 +424,7 @@ class SettingsViewBuilder:
         self.widgets["beta_updates_checkbox"] = beta_updates_checkbox
         self.widgets["fullscreen_checkbox"] = fullscreen_checkbox
         self.widgets["show_reset_buttons_checkbox"] = show_reset_buttons_checkbox
+        self.widgets["analytics_opt_in_checkbox"] = analytics_opt_in_checkbox
         self.widgets["ui_scale_label"] = ui_scale_label
         self.widgets["ui_scale_spinbox"] = ui_scale_spinbox
         return self._wrap_in_scroll(page, parent)

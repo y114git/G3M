@@ -341,8 +341,8 @@ class DeltamodConverter:
             if content_key not in files_structure:
                 files_structure[content_key] = {}
             if patch_type == "xdelta":
-                files_structure[content_key]["data_file_path"] = patch_file.lstrip("./").replace(
-                    "\\", "/"
+                files_structure[content_key]["data_file_path"] = os.path.basename(
+                    patch_file.lstrip("./").replace("\\", "/")
                 )
             elif patch_type == "override":
                 stored_path = self._build_stored_path(relative_path, filename)
@@ -400,7 +400,12 @@ class DeltamodConverter:
                     f"DeltamodConverter: could not determine chapter for path: {to_path}"
                 )
                 continue
-            stored_path = self._build_stored_path(relative_path, filename)
+            content_key = self._normalize_content_key(chapter_key)
+            from utils.file_utils import get_chapter_folder_name
+
+            chapter_dir_name = get_chapter_folder_name(content_key, game=self._target_game)
+            target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
+            os.makedirs(target_chapter_dir, exist_ok=True)
             if patch_type == "override":
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
@@ -408,11 +413,20 @@ class DeltamodConverter:
                         f"DeltamodConverter: override patch file not found: {patch_file_rel}"
                     )
                     continue
+                stored_path = self._build_stored_path(relative_path, filename)
                 target_override_path = os.path.join(
-                    target_mod_dir, stored_path.replace("/", os.sep)
+                    target_chapter_dir, stored_path.replace("/", os.sep)
                 )
-                os.makedirs(os.path.dirname(target_override_path), exist_ok=True)
+                parent_dir = os.path.dirname(target_override_path)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
                 shutil.copy2(patch_file_abs, target_override_path)
+                logging.info(
+                    "Copied override file: %s for chapter %s into %s",
+                    stored_path,
+                    chapter_key,
+                    chapter_dir_name,
+                )
             elif patch_type == "xdelta":
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
@@ -421,12 +435,14 @@ class DeltamodConverter:
                     )
                     continue
                 target_patch_path = os.path.join(
-                    target_mod_dir, stored_path.replace("/", os.sep)
+                    target_chapter_dir, os.path.basename(patch_file_abs)
                 )
-                os.makedirs(os.path.dirname(target_patch_path), exist_ok=True)
                 shutil.copy2(patch_file_abs, target_patch_path)
                 logging.info(
-                    f"Copied xdelta patch: {os.path.basename(patch_file_abs)} for chapter {chapter_key}, target: {stored_path}"
+                    "Copied xdelta patch: %s for chapter %s into %s",
+                    os.path.basename(patch_file_abs),
+                    chapter_key,
+                    chapter_dir_name,
                 )
             else:
                 logging.warning(f"DeltamodConverter: unknown patch type: {patch_type}")

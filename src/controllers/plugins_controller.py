@@ -506,6 +506,8 @@ QPushButton#cardButtonUninstall:disabled {{
     def download_plugin(self, entry) -> None:
         if not entry.download_link:
             return
+        if analytics := getattr(self.app, "analytics_service", None):
+            analytics.count("plugin_download_requested")
         self.downloads_manager.enqueue_with_feedback(
             self.feedback_service,
             display_name=entry.name,
@@ -535,6 +537,8 @@ QPushButton#cardButtonUninstall:disabled {{
                 logger.error("PluginsController: import failed for %s: %s", path, e, exc_info=True)
                 self.feedback_service.show_message("error", "errors.error", str(e))
         if imported:
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.count("plugin_imported")
             self.refresh_main_tabs()
             self.render()
 
@@ -543,6 +547,8 @@ QPushButton#cardButtonUninstall:disabled {{
         if not plugin:
             return
         if plugin.enabled:
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.count("plugin_disabled")
             self.plugin_runtime_service.disable_plugin(plugin_id)
         else:
             success, error = self.plugin_runtime_service.enable_plugin(plugin_id)
@@ -552,6 +558,8 @@ QPushButton#cardButtonUninstall:disabled {{
                     "errors.error",
                     error or tr("plugins.enable_failed"),
                 )
+            elif analytics := getattr(self.app, "analytics_service", None):
+                analytics.count("plugin_enabled")
         self.refresh_main_tabs()
         self.render()
 
@@ -559,6 +567,8 @@ QPushButton#cardButtonUninstall:disabled {{
         plugin = self.plugin_runtime_service.get_plugin(plugin_id)
         if not plugin:
             return
+        if analytics := getattr(self.app, "analytics_service", None):
+            analytics.count("plugin_details_opened")
         dialog = PluginDetailsDialog(
             plugin,
             self.plugin_runtime_service,
@@ -587,6 +597,8 @@ QPushButton#cardButtonUninstall:disabled {{
     def delete_plugin(self, plugin_id: str) -> None:
         try:
             self.plugin_install_service.delete_plugin(plugin_id)
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.count("plugin_deleted")
         except Exception as e:
             logger.error("PluginsController: delete failed for %s: %s", plugin_id, e, exc_info=True)
             self.feedback_service.show_message("error", "errors.error", str(e))

@@ -133,6 +133,7 @@ class DownloadsManager(QObject):
                 worker.requestInterruption()
             with contextlib.suppress(Exception):
                 worker.finished.connect(worker.deleteLater)
+        _cleanup_worker(worker)
         self._store.delete_file_for_record(record)
         self._store.remove(record_id)
         self.record_removed.emit(record_id)
@@ -332,8 +333,11 @@ class DownloadsManager(QObject):
         worker = self._workers.pop(record_id, None)
         if worker and hasattr(worker, "cancel"):
             worker.cancel()
-            worker.requestInterruption()
-            worker.finished.connect(worker.deleteLater)
+            with contextlib.suppress(Exception):
+                worker.requestInterruption()
+            with contextlib.suppress(Exception):
+                worker.finished.connect(worker.deleteLater)
+        _cleanup_worker(worker)
         record.download_status = DownloadStatus.CANCELLED
         record.use_status = UseStatus.CANCELLED
         record.file_exists = False
@@ -368,6 +372,11 @@ class DownloadsManager(QObject):
         worker = self._workers.pop(record_id, None)
         if worker and hasattr(worker, "cancel"):
             worker.cancel()
+            with contextlib.suppress(Exception):
+                worker.requestInterruption()
+            with contextlib.suppress(Exception):
+                worker.finished.connect(worker.deleteLater)
+        _cleanup_worker(worker)
         self._store.delete_file_for_record(record)
         self._store.remove(record_id)
         self.record_removed.emit(record_id)

@@ -144,6 +144,7 @@ class AppWindow(QWidget):
             ):
                 self.custom_font_family = families[0]
         self.ui_ready.emit()
+        self.analytics_service.mark_ui_ready()
         self._connect_own_signals()
         self.initialization_timer = QTimer()
         self.initialization_timer.setSingleShot(True)
@@ -1105,6 +1106,8 @@ class AppWindow(QWidget):
         if app:
             with contextlib.suppress(Exception):
                 app.removeEventFilter(self)
+        with contextlib.suppress(Exception):
+            self.analytics_service.shutdown()
         if hasattr(self, 'plugins_ui') and self.plugins_ui:
             self.plugins_ui.shutdown()
         from app.cleanup import perform_close_cleanup

@@ -17,6 +17,8 @@ def open_chat(w):
         return
     from ui.dialogs.chat_dialog import ChatWindow
 
+    if analytics := getattr(w, "analytics_service", None):
+        analytics.record_dialog_opened("chat")
     chat_window = ChatWindow(w.app_state, w)
     chat_window.exec()
 
@@ -70,6 +72,9 @@ def open_downloads_dialog(w):
         w._downloads_dialog.raise_()
         w._downloads_dialog.activateWindow()
         return
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.record_dialog_opened("downloads")
     w._downloads_dialog = DownloadsDialog(w.downloads_manager, w.app_state, w)
     w._downloads_dialog.show()
 
@@ -78,6 +83,9 @@ def open_game_versions_dialog(w):
     from ui.dialogs.game_versions_dialog import GameVersionsDialog
 
     if w._game_versions_dialog is None:
+        analytics = getattr(w, "analytics_service", None)
+        if analytics:
+            analytics.record_dialog_opened("game_versions")
         initial_game = w.app_state.local_config.get("selected_game_type", "deltarune")
         w._game_versions_dialog = GameVersionsDialog(
             w.game_versions_manager, w.app_state, initial_game, w
@@ -98,6 +106,9 @@ def open_modding_tools_dialog(w):
         w._modding_tools_dialog.raise_()
         w._modding_tools_dialog.activateWindow()
         return
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.record_dialog_opened("modding_tools")
     g3m = getattr(w, "_g3m_manager", None)
     if not g3m:
         g3m = G3MToolManager()
@@ -125,6 +136,9 @@ def populate_profile_combo(w):
 def open_profile_manager(w):
     from ui.dialogs.profile_manager_dialog import ProfileManagerDialog
 
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.record_dialog_opened("profile_manager")
     dialog = ProfileManagerDialog(w.profile_service, w.app_state, w)
     dialog.exec()
     populate_profile_combo(w)
@@ -133,6 +147,9 @@ def open_profile_manager(w):
 def open_game_manager(w):
     from ui.dialogs.game_manager_dialog import GameManagerDialog
 
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.record_dialog_opened("game_manager")
     dialog = GameManagerDialog(
         w.game_registry_service,
         w.profile_service,
@@ -154,6 +171,9 @@ def on_profile_combo_changed(w, index: int):
 
 def on_profile_switched(w, name: str):
     """Reload full library UI state from the newly active profile."""
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.count("profile_switched")
     saved_game_type = w.app_state.local_config.get("selected_game_type", "deltarune")
     saved_chapter_mode = w.app_state.local_config.get("chapter_mode_enabled", False)
     saved_full_install = w.app_state.local_config.get("full_install_enabled", False)

@@ -124,6 +124,10 @@ class SettingsUiController:
             self.app.show_reset_buttons_checkbox.setChecked(
                 config.get("show_reset_buttons", False)
             )
+        if hasattr(self.app, "analytics_opt_in_checkbox"):
+            self.app.analytics_opt_in_checkbox.setChecked(
+                config.get("analytics_opt_in_enabled", False)
+            )
         for attr, key in (
             ("hide_mods_browser_tab_checkbox", "hide_mods_browser_tab"),
             ("hide_library_tab_checkbox", "hide_library_tab"),

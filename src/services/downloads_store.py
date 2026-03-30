@@ -75,12 +75,35 @@ class DownloadsStore(BaseJsonStore):
             self.save()
 
     def delete_file_for_record(self, record: DownloadRecord):
-        if record.file_path and os.path.exists(record.file_path):
+        paths_to_delete: list[str] = []
+        if record.file_path:
+            paths_to_delete.append(record.file_path)
+
+        record_prefix = f"{record.id}__"
+        if os.path.isdir(self.downloads_dir):
             try:
-                os.remove(record.file_path)
+                for entry in os.scandir(self.downloads_dir):
+                    if not entry.is_file():
+                        continue
+                    if entry.name.startswith(record_prefix):
+                        paths_to_delete.append(entry.path)
             except OSError as e:
                 logger.warning(
-                    "DownloadsStore: could not delete file %s: %s", record.file_path, e
+                    "DownloadsStore: could not scan downloads dir %s: %s",
+                    self.downloads_dir,
+                    e,
+                )
+
+        deleted_paths: set[str] = set()
+        for path in paths_to_delete:
+            if not path or path in deleted_paths or not os.path.exists(path):
+                continue
+            try:
+                os.remove(path)
+                deleted_paths.add(path)
+            except OSError as e:
+                logger.warning(
+                    "DownloadsStore: could not delete file %s: %s", path, e
                 )
         record.file_exists = False
         record.file_path = None

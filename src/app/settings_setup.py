@@ -236,6 +236,7 @@ def setup_settings_tab(w):
             "language_combo",
             "beta_updates_checkbox",
             "show_reset_buttons_checkbox",
+            "analytics_opt_in_checkbox",
             "fullscreen_checkbox",
             "disable_animations_checkbox",
             "disable_background_checkbox",
@@ -327,6 +328,18 @@ def setup_settings_tab(w):
         lambda state: _guarded_trigger(
             w.show_reset_buttons_checkbox,
             lambda: w.settings_ui.on_toggle_show_reset_buttons(bool(state)),
+        )
+    )
+    w.analytics_opt_in_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.analytics_opt_in_checkbox,
+            lambda: (
+                w.settings_service.on_toggle_analytics_opt_in(bool(state)),
+                w.analytics_service.set_opt_in_enabled(bool(state)),
+                w.analytics_service.record_setting_changed(
+                    "analytics_opt_in_enabled", bool(state)
+                ),
+            ),
         )
     )
     w.fullscreen_checkbox.stateChanged.connect(
@@ -513,6 +526,11 @@ def setup_settings_tab(w):
     w.show_reset_buttons_checkbox.setChecked(
         w.app_state.local_config.get("show_reset_buttons", False)
     )
+    w.analytics_opt_in_checkbox.blockSignals(True)
+    w.analytics_opt_in_checkbox.setChecked(
+        w.app_state.local_config.get("analytics_opt_in_enabled", False)
+    )
+    w.analytics_opt_in_checkbox.blockSignals(False)
     w.hide_mods_browser_tab_checkbox.setChecked(
         w.app_state.local_config.get("hide_mods_browser_tab", False)
     )

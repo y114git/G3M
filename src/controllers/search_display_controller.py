@@ -606,17 +606,22 @@ class SearchDisplayController(QObject):
             if not hasattr(self.app_state, "all_mods") or not self.app_state.all_mods:
                 self.app_state.filtered_mods = []
                 self.app_state.current_page = 1
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.record_search_results("mods_browser", 0)
                 self.update_display()
                 return
             filters, sort_config = self._build_filters_and_sort()
             installed_ids = self._get_installed_mod_ids()
-            self.app_state.filtered_mods = filter_and_sort_mods(
+            filtered_mods = filter_and_sort_mods(
                 self.app_state.all_mods,
                 filters,
                 sort_config,
                 blocklist_service=self.blocklist_service,
                 installed_mod_ids=installed_ids,
             )
+            self.app_state.filtered_mods = filtered_mods
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.record_search_results("mods_browser", len(filtered_mods))
             if not preserve_page:
                 self.app_state.current_page = 1
             self.update_display()
@@ -1069,6 +1074,8 @@ class SearchDisplayController(QObject):
             return
         self.clear_all_selections(except_widget=target_widget)
         target_widget.set_selected(True)
+        if analytics := getattr(self.app, "analytics_service", None):
+            analytics.record_mod_opened("mods_browser")
 
     def show_details(self, mod_data):
         source_card = None
@@ -1076,6 +1083,8 @@ class SearchDisplayController(QObject):
             if widget.mod_data == mod_data:
                 source_card = widget
                 break
+        if analytics := getattr(self.app, "analytics_service", None):
+            analytics.record_mod_details_opened("mods_browser")
         show_mod_details_overlay(self.app, mod_data, source_card=source_card)
 
     def clear_all_selections(self, except_widget=None):

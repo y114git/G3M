@@ -216,6 +216,20 @@ class TestDownloadsStore:
         assert r.file_exists is False
         assert r.file_path is None
 
+    def test_delete_file_for_record_removes_record_prefixed_file_when_path_missing(self):
+        """Checks that deleting a record also removes orphaned prefixed downloads."""
+        fp = os.path.join(self.store.downloads_dir, 'rec123__orphan.zip')
+        with open(fp, 'w', encoding='utf-8') as f:
+            f.write('data')
+        r = DownloadRecord(id='rec123', file_path=None, file_exists=True)
+        self.store.add(r)
+
+        self.store.delete_file_for_record(r)
+
+        assert not os.path.exists(fp)
+        assert r.file_exists is False
+        assert r.file_path is None
+
     def test_corrupt_history_backup(self):
         """Checks that corrupting history backup."""
         history_path = os.path.join(self.base_dir, 'downloads', 'downloads_history.json')

@@ -65,10 +65,10 @@ def _placeholder_resource_width(target_width: int) -> int:
     return max(120, width - 20)
 
 
-def _browser_available_width(browser: QTextBrowser) -> int:
+def _widget_available_width(widget: QTextBrowser | QTextEdit) -> int:
     viewport = None
     try:
-        viewport = browser.viewport()
+        viewport = widget.viewport()
     except (AttributeError, RuntimeError, TypeError):
         viewport = None
     width_candidates = []
@@ -78,12 +78,12 @@ def _browser_available_width(browser: QTextBrowser) -> int:
         with contextlib.suppress(AttributeError, RuntimeError, TypeError, ValueError):
             width_candidates.append(int(viewport.width()))
     with contextlib.suppress(AttributeError, RuntimeError, TypeError, ValueError):
-        width_candidates.append(int(browser.contentsRect().width()))
+        width_candidates.append(int(widget.contentsRect().width()))
     with contextlib.suppress(AttributeError, RuntimeError, TypeError, ValueError):
-        width_candidates.append(int(browser.width()))
+        width_candidates.append(int(widget.width()))
     available_width = next((width for width in width_candidates if width > 0), 600)
     try:
-        document_margin = int(browser.document().documentMargin())
+        document_margin = int(widget.document().documentMargin())
     except (AttributeError, TypeError, ValueError):
         document_margin = 0
     return max(available_width - (document_margin * 2), 200)
@@ -148,7 +148,7 @@ def _create_loading_placeholder(width: int, height: int, text: str) -> QImage:
     return image
 
 
-def _refresh_browser_document(browser: QTextBrowser, doc: QTextDocument):
+def _refresh_browser_document(browser: QTextBrowser | QTextEdit, doc: QTextDocument):
     try:
         from PyQt6 import sip as _sip
 
@@ -303,7 +303,7 @@ def _cache_image(url: str, img: QImage):
 
 
 def load_remote_images(
-    browser: QTextBrowser, html: str, widget_width: int | None = None
+    browser: QTextBrowser | QTextEdit, html: str, widget_width: int | None = None
 ):
     """Find all <img src="http..."> in *html*, download them in background threads,
     and register each as a QTextDocument ImageResource so Qt renders them.
@@ -392,7 +392,9 @@ def load_remote_images(
         pool.start(runnable)
 
 
-def set_rich_html(browser: QTextBrowser, html: str, default_color: str = "#e8e9eb"):
+def set_rich_html(
+    browser: QTextBrowser | QTextEdit, html: str, default_color: str = "#e8e9eb"
+):
     """One-call convenience: preprocess HTML, set it on the browser, load remote images.
 
     Args:
@@ -402,11 +404,11 @@ def set_rich_html(browser: QTextBrowser, html: str, default_color: str = "#e8e9e
     """
     with contextlib.suppress(AttributeError, RuntimeError, TypeError):
         browser.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-    widget_width = _browser_available_width(browser)
+    widget_width = _widget_available_width(browser)
     processed = preprocess_html(html, widget_width=widget_width)
     wrapped = f'<div style="color:{default_color};">{processed}</div>'
     browser.setHtml(wrapped)
-    refined_width = _browser_available_width(browser)
+    refined_width = _widget_available_width(browser)
     if abs(refined_width - widget_width) >= 4:
         widget_width = refined_width
         processed = preprocess_html(html, widget_width=widget_width)

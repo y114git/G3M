@@ -540,6 +540,8 @@ class LibraryDisplayController:
         if target_widget:
             self.clear_all_selections()
             target_widget.set_selected(True)
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.record_mod_opened("library")
             self._show_mod_in_summary(mod_data)
 
     def _show_mod_in_summary(self, mod_data):
@@ -578,7 +580,11 @@ class LibraryDisplayController:
         for i in range(self.app.installed_mods_layout.count() - 1):
             item = self.app.installed_mods_layout.itemAt(i)
             widget = item.widget() if item else None
-            if isinstance(widget, InstalledModWidget) and getattr(widget, "is_selected", False):
+            if (
+                isinstance(widget, InstalledModWidget)
+                and widget.isVisible()
+                and getattr(widget, "is_selected", False)
+            ):
                 return widget
         return None
 
@@ -628,6 +634,8 @@ class LibraryDisplayController:
         try:
             controller = getattr(self.app, "mod_import_export_controller", None)
             if controller:
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.record_mod_details_opened("library")
                 controller.show_mod_details_dialog(mod_data)
         except Exception as e:
             logging.error(f"Failed to open mod details: {e}", exc_info=True)
@@ -650,6 +658,8 @@ class LibraryDisplayController:
                 "Zip (*.zip)",
             )
             if path:
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.count("mod_export_requested")
                 controller.export_mod_to_path(mod_data, path)
         except Exception as e:
             logging.error(f"Failed to export mod: {e}", exc_info=True)
@@ -659,6 +669,8 @@ class LibraryDisplayController:
             key = get_mod_id(mod_data)
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if mod_folder and os.path.isdir(mod_folder):
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.count("mod_folder_opened")
                 QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.normpath(mod_folder)))
         except Exception as e:
             logging.error(f"Failed to open mod folder: {e}", exc_info=True)
@@ -671,6 +683,8 @@ class LibraryDisplayController:
                 return
             from ui.dialogs.mod_versions_dialog import ModVersionsDialog
 
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.record_dialog_opened("mod_versions")
             dialog = ModVersionsDialog(
                 mod_folder, mod_data, self.app_state, parent=self.app
             )
@@ -690,6 +704,8 @@ class LibraryDisplayController:
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.mod_service.uninstall_mod(mod_data)
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.count("mod_deleted_from_library")
                 self._clear_summary()
                 self._safe_update_after_mod_deletion()
         except Exception as e:
@@ -703,6 +719,8 @@ class LibraryDisplayController:
             if url:
                 import webbrowser
 
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.count("mod_homepage_opened")
                 webbrowser.open(url)
         except Exception as e:
             logging.error(f"Failed to open homepage: {e}", exc_info=True)
@@ -728,6 +746,8 @@ class LibraryDisplayController:
                 return
             from ui.dialogs.mod_readme_dialog import ModReadmeDialog
 
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.record_dialog_opened("mod_readme")
             dialog = ModReadmeDialog(
                 self.app_state,
                 getattr(mod_data, "name", "") or "Mod",
@@ -777,6 +797,8 @@ class LibraryDisplayController:
             expected_keys = {
                 get_mod_id(mod) for mod in expected_mods if get_mod_id(mod)
             }
+            summary = getattr(self.app, "mod_summary_panel", None)
+            current_summary_id = get_mod_id(getattr(summary, "_current_mod", None))
 
             keys_to_add = expected_keys - current_keys
             keys_to_remove = current_keys - expected_keys
@@ -792,8 +814,14 @@ class LibraryDisplayController:
                             widgets_to_remove.append(widget)
 
             for widget in widgets_to_remove:
+                layout.removeWidget(widget)
+                if hasattr(widget, "set_selected"):
+                    widget.set_selected(False)
                 widget.hide()
                 widget.deleteLater()
+
+            if current_summary_id and current_summary_id not in expected_keys:
+                self._clear_summary()
 
             for mod_data in expected_mods:
                 mod_id = get_mod_id(mod_data)

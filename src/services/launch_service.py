@@ -52,6 +52,12 @@ class GameLauncher(QObject):
         self.restore_window_callback = None
         self._launch_started_at = None
         self._launch_mod_ids: list[str] = []
+        self._launch_mode = "unknown"
+        self._launch_had_mods = False
+
+    def _analytics(self):
+        parent = self.parent()
+        return getattr(parent, "analytics_service", None) if parent else None
 
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
@@ -107,11 +113,13 @@ class GameLauncher(QObject):
     ):
         self._launch_started_at = time.monotonic()
         self._launch_mod_ids = self._collect_launch_mod_ids(selections)
+        self._launch_had_mods = self._has_selected_mods(selections)
+        self._launch_mode = "unknown"
         self.restore_window_callback = restore_window_callback
         self.status_changed.emit(
             tr("status.launching_game"), self._launch_status_color()
         )
-        has_selected_mods = self._has_selected_mods(selections)
+        has_selected_mods = self._launch_had_mods
         current_path = self._get_current_game_path()
         if not current_path or not os.path.exists(current_path):
             if not self._find_and_validate_game_path(selections, is_initial=False):
@@ -160,7 +168,14 @@ class GameLauncher(QObject):
         else:
             self._continue_after_patching(selections, True, needs_multi_mod)
 
-    def _handle_launch_failure(self):
+    def _handle_launch_failure(self, reason: str = "unknown"):
+        analytics = self._analytics()
+        if analytics:
+            analytics.record_launch_failed(
+                reason=reason,
+                mode=self._launch_mode,
+                with_mods=self._launch_had_mods,
+            )
         if self.restore_window_callback:
             self.restore_window_callback()
         parent = self.parent()
@@ -346,16 +361,23 @@ class GameLauncher(QObject):
         logging.info("[LAUNCH] Cleanup completed, game launch finished")
 
     def _record_launch_playtime(self) -> None:
-        if self._launch_started_at is None or not self._launch_mod_ids:
+        if self._launch_started_at is None:
             return
         elapsed = time.monotonic() - self._launch_started_at
         self._launch_started_at = None
         if elapsed <= 0:
             return
         parent = self.parent()
+        analytics = self._analytics()
         mod_service = getattr(parent, "mod_service", None) if parent else None
-        if mod_service and hasattr(mod_service, "add_playtime_hours"):
+        if self._launch_mod_ids and mod_service and hasattr(mod_service, "add_playtime_hours"):
             mod_service.add_playtime_hours(self._launch_mod_ids, elapsed / 3600.0)
+        if analytics:
+            analytics.record_launch_finished(
+                elapsed,
+                mode=self._launch_mode,
+                with_mods=self._launch_had_mods,
+            )
 
     @staticmethod
     def _collect_launch_mod_ids(selections: dict[str, Any]) -> list[str]:
@@ -670,8 +692,14 @@ class GameLauncher(QObject):
                         return
         launch_config = self._determine_launch_config(selections)
         if not launch_config:
-            self._handle_launch_failure()
+            self._handle_launch_failure("config")
             return
+        self._launch_mode = str(launch_config.get("type", "unknown"))
+        if analytics := self._analytics():
+            analytics.record_launch_started(
+                mode=self._launch_mode,
+                with_mods=has_selected_mods,
+            )
         if needs_multi_mod and self.restore_window_callback:
             self.game_launch_started.emit()
         self._execute_game(launch_config)

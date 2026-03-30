@@ -302,6 +302,18 @@ class ModOperationsController:
         try:
             if self.app_state.is_installing and (not force):
                 return
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.count(
+                    "mod_install_requested",
+                    source="gamebanana"
+                    if (
+                        hasattr(mod, "is_gamebanana_mod")
+                        and callable(mod.is_gamebanana_mod)
+                        and mod.is_gamebanana_mod()
+                    )
+                    else "local",
+                    mode="update" if is_update else "install",
+                )
             if (
                 hasattr(mod, "is_gamebanana_mod")
                 and callable(mod.is_gamebanana_mod)
@@ -420,6 +432,8 @@ class ModOperationsController:
                 or self.app_state.operation_cancelled
             )
             if is_cancelled:
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.count("mod_install_cancelled")
                 logging.info("ModOperationsController: Installation was cancelled")
                 self._safe_execute(
                     lambda: setattr(self.app_state, "operation_cancelled", False),
@@ -429,6 +443,8 @@ class ModOperationsController:
                     tr("status.operation_cancelled"), UI_COLORS["status_warning"]
                 )
             else:
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.count("mod_install_failed")
                 self.feedback_service.update_status(
                     tr("status.mod_install_error"), UI_COLORS["status_error"]
                 )
@@ -523,6 +539,11 @@ class ModOperationsController:
 
         if current_task and installed_mod_info:
             self.refresh_specific_mod_widget_after_update(installed_mod_info)
+        if analytics := getattr(self.app, "analytics_service", None):
+            analytics.count(
+                "mod_install_completed",
+                mode="update" if was_installed_before else "install",
+            )
         self._update_debounce_short.call(check_cache_and_update)
         self._update_debounce_short.call(update_filtered_mods)
         self._update_debounce_short.call(update_cards_with_retry)
@@ -622,6 +643,8 @@ class ModOperationsController:
     def uninstall_mod(self, mod):
         try:
             self.mod_service.delete_mod_files(mod)
+            if analytics := getattr(self.app, "analytics_service", None):
+                analytics.count("mod_uninstalled")
             self.app.search_display.update_search_cards()
             if hasattr(self.app, "library_display"):
                 self.app.library_display.update_display()
