@@ -23,13 +23,11 @@ class ConfirmExternalDownloadDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-        msg = QLabel(tr("downloads.confirm_external_message"))
+        combined_text = f"{tr('downloads.confirm_external_message')}\n{tr('downloads.confirm_link', link=self._url)}"
+        msg = QLabel(combined_text)
         msg.setWordWrap(True)
+        msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(msg)
-        link_label = QLabel(tr("downloads.confirm_link", link=self._url))
-        link_label.setWordWrap(True)
-        link_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(link_label)
         btns = QHBoxLayout()
         btns.addStretch()
         no_btn = QPushButton(tr("downloads.confirm_no"))

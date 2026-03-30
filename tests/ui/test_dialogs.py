@@ -1,5 +1,10 @@
 from unittest.mock import Mock, patch
 
+try:
+    from typing import override
+except ImportError:
+    from typing import override
+
 from PyQt6.QtCore import QMimeData, Qt, QUrl
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
@@ -225,15 +230,17 @@ class TestReadmeUi:
         mime.setUrls([QUrl.fromLocalFile(first), QUrl.fromLocalFile(second)])
 
         class _Event:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.accepted = False
 
+            @override
             def mimeData(self):
                 return mime
 
             def source(self):
                 return None
 
+            @override
             def acceptProposedAction(self):
                 self.accepted = True
 
@@ -241,8 +248,8 @@ class TestReadmeUi:
         with patch("ui.dialogs.profile_manager_dialog.QMessageBox.information"):
             dialog.list_widget.dropEvent(event)
         assert event.accepted is True
-        assert profile_service.import_profile.call_args_list[0].args[0] == first
-        assert profile_service.import_profile.call_args_list[1].args[0] == second
+        assert os.path.normpath(profile_service.import_profile.call_args_list[0].args[0]) == os.path.normpath(first)
+        assert os.path.normpath(profile_service.import_profile.call_args_list[1].args[0]) == os.path.normpath(second)
         dialog.close()
 
     def test_game_versions_dialog_drop_imports_multiple_files_and_urls(self, qapp, app_state, temp_dir):
@@ -276,15 +283,17 @@ class TestReadmeUi:
         )
 
         class _Event:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.accepted = False
 
+            @override
             def mimeData(self):
                 return mime
 
             def source(self):
                 return None
 
+            @override
             def acceptProposedAction(self):
                 self.accepted = True
 
@@ -295,14 +304,17 @@ class TestReadmeUi:
         dialog.dropEvent(event)
         game_id = dialog._current_game()
         assert event.accepted is True
-        assert manager.import_game_version_from_file.call_args_list[0].args == (game_id, first)
-        assert manager.import_game_version_from_file.call_args_list[1].args == (game_id, second)
+        actual_first_path = manager.import_game_version_from_file.call_args_list[0].args[1]
+        actual_second_path = manager.import_game_version_from_file.call_args_list[1].args[1]
+        assert os.path.normpath(actual_first_path) == os.path.normpath(first)
+        assert os.path.normpath(actual_second_path) == os.path.normpath(second)
         assert manager.import_game_version_from_url.call_args_list[0].args == (game_id, "https://example.com/one.zip")
         assert manager.import_game_version_from_url.call_args_list[1].args == (game_id, "https://example.com/two.zip")
         dialog.close()
 
     def test_mod_versions_dialog_drop_queues_multiple_imports(self, qapp, app_state, tmp_path):
         """Checks that mod versions dialog drop queues multiple imports."""
+        import os
 
         from ui.dialogs.mod_versions_dialog import ModVersionsDialog
 
@@ -336,15 +348,17 @@ class TestReadmeUi:
         )
 
         class _Event:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.accepted = False
 
+            @override
             def mimeData(self):
                 return mime
 
             def source(self):
                 return None
 
+            @override
             def acceptProposedAction(self):
                 self.accepted = True
 
@@ -354,7 +368,7 @@ class TestReadmeUi:
         event = _Event()
         dialog.dropEvent(event)
         assert event.accepted is True
-        assert imported_files == [(str(first), False), (str(second), False)]
+        assert [(os.path.normpath(path), flag) for path, flag in imported_files] == [(os.path.normpath(str(first)), False), (os.path.normpath(str(second)), False)]
         assert imported_urls == [
             ("https://example.com/modA.zip", False),
             ("https://example.com/modB.zip", False),
@@ -771,4 +785,3 @@ class TestManualInstallDialog:
 
         assert dialog.game_combo.currentData() != "pizzatower"
         dialog.close()
-

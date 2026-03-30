@@ -32,8 +32,8 @@ class TestConstants:
     def test_gamebanana_constants(self):
         """Checks that gamebananaing constants."""
         from config.config import (
-            GAMEBANANA_TOOL_ID_G3M,
             GAMEBANANA_TOOL_ID_DELTAMOD,
+            GAMEBANANA_TOOL_ID_G3M,
         )
         from models.game_modes import BUILTIN_GAME_REGISTRY
 
@@ -72,10 +72,13 @@ class TestConstants:
         """Checks that enving config loading with dotenv file."""
         configured_value = "https://example.com/functions"
         monkeypatch.delenv("CLOUD_FUNCTIONS_BASE_URL", raising=False)
-        dotenv_path = tmp_path / ".env"
+        dotenv_path = tmp_path / "src" / ".env"
+        dotenv_path.parent.mkdir()
         dotenv_path.write_text(
             f"CLOUD_FUNCTIONS_BASE_URL={configured_value}\n", encoding="utf-8"
         )
+        monkeypatch.setattr("sys.frozen", True, raising=False)
+        monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
         monkeypatch.setattr(
             "dotenv.load_dotenv",
             lambda *args, **kwargs: real_load_dotenv(dotenv_path=dotenv_path, override=True),

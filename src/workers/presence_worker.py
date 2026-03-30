@@ -48,7 +48,7 @@ class PresenceWorker(QObject):
                 timeout=NETWORK_TIMEOUT_SHORT,
             )
             self._last_heartbeat_at = now
-            if resp.status_code == 200:
+            if resp is not None and resp.status_code == 200:
                 try:
                     count = max(int((resp.json() or {}).get("online", 0)), 0)
                 except (json.JSONDecodeError, ValueError, TypeError):

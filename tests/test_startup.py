@@ -37,12 +37,15 @@ def test_startup_from_environment():
         main_py = project_root / "src" / "main.py"
         if not main_py.exists():
             pytest.skip("Neither CI env vars nor local main.py available")
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
         result = subprocess.run(
             [sys.executable, str(main_py), "--help"],
             capture_output=True,
             text=True,
             timeout=TEST_TIMEOUT,
             cwd=str(project_root),
+            env=env,
         )
         output = (result.stdout or "") + (result.stderr or "")
         assert result.returncode == 0, output
@@ -93,12 +96,15 @@ def test_local_startup():
         pytest.skip(f"main.py not found at {main_py_path}")
 
     try:
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
         result = subprocess.run(
             [sys.executable, str(main_py_path), "--help"],
             capture_output=True,
             text=True,
             timeout=TEST_TIMEOUT,
             cwd=str(project_root),
+            env=env,
         )
 
         output = (result.stdout or "") + (result.stderr or "")
@@ -378,10 +384,14 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
 
             target = extract_path / startup_target
             if not target.exists():
+                sys.stderr.write(f"Startup target not found: {target}\n")
                 return False
 
             target.chmod(target.stat().st_mode | 0o111)
             cwd = str(extract_path)
+
+            env = os.environ.copy()
+            env["QT_QPA_PLATFORM"] = "offscreen"
 
             if startup_target.endswith(".py"):
                 result = subprocess.run(
@@ -390,6 +400,7 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                     text=True,
                     timeout=TEST_TIMEOUT,
                     cwd=cwd,
+                    env=env,
                 )
             else:
                 result = subprocess.run(
@@ -398,9 +409,20 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                     text=True,
                     timeout=TEST_TIMEOUT,
                     cwd=cwd,
+                    env=env,
                 )
             output = (result.stdout or "") + (result.stderr or "")
-            return result.returncode == 0 and not _contains_startup_errors(output)
+            if result.returncode != 0:
+                sys.stderr.write(
+                    f"Startup command failed for {startup_target} with code {result.returncode}\n"
+                )
+                sys.stderr.write(output)
+                return False
+            if _contains_startup_errors(output):
+                sys.stderr.write(f"Startup error markers found for {startup_target}\n")
+                sys.stderr.write(output)
+                return False
+            return True
 
     except subprocess.TimeoutExpired:
         sys.stderr.write(
@@ -423,9 +445,9 @@ def main():
 
     success = _test_startup_with_archive(archive_path, startup_target)
     if not success:
+        sys.stderr.write(f"Startup test failed for {startup_target}\n")
         raise SystemExit(1)
 
 
 if __name__ == "__main__":
     main()
-

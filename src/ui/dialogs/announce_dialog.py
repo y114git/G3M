@@ -217,10 +217,15 @@ class AnnounceDialog(QDialog):
 
     def __init__(self, announce: dict, parent=None, *, on_submit_poll=None) -> None:
         super().__init__(parent)
+        self._parent_window = parent
         self.app_state = getattr(parent, "app_state", None)
+        self._announce = announce or {}
+        try:
+            self._announce_version = int(self._announce.get("version") or 0)
+        except (TypeError, ValueError):
+            self._announce_version = 0
         self.setWindowTitle(tr("dialogs.announce_title"))
-        self.setMinimumWidth(750)
-        self.setMinimumHeight(600)
+        self.setMinimumSize(860, 680)
         apply_dialog_theme(self, self.app_state)
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
@@ -237,6 +242,21 @@ class AnnounceDialog(QDialog):
     def _on_panel_accepted(self) -> None:
         self.accepted_with_ok.emit()
         self.accept()
+
+    def reject(self) -> None:
+        self._save_current_version()
+        super().reject()
+
+    def _save_current_version(self) -> None:
+        if self._announce_version > 0 and self.app_state is not None:
+            self.app_state.local_config["announce_version"] = self._announce_version
+            settings_service = getattr(
+                getattr(self._parent_window, "settings_service", None),
+                "write_local_config",
+                None,
+            )
+            if callable(settings_service):
+                settings_service()
 
     def relocalize_ui(self) -> None:
         self.setWindowTitle(tr("dialogs.announce_title"))

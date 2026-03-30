@@ -6,12 +6,19 @@ Single source of truth for all immutable project configuration shared across G3M
 import os
 import platform
 import re
+import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from . import styles as shared_styles
 
-load_dotenv()
+_dotenv_path = Path(__file__).resolve().parents[1] / ".env"
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _dotenv_path = Path(sys._MEIPASS) / "src" / ".env"
+
+if _dotenv_path.is_file():
+    load_dotenv(dotenv_path=_dotenv_path)
 
 """Application identity and external service configuration."""
 APP_VERSION = "3.0.0stable"

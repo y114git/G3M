@@ -21,7 +21,6 @@ from utils.path_utils import get_user_data_root
 
 class AboutDialog(QDialog):
     RELEASES_URL = "https://github.com/y114git/G3M/releases"
-    WIKI_URL = "https://github.com/y114git/G3M/wiki"
     ISSUES_URL = "https://github.com/y114git/G3M/issues"
 
     def __init__(self, parent, app_state) -> None:
@@ -48,7 +47,43 @@ class AboutDialog(QDialog):
 
     @staticmethod
     def _current_os_name() -> str:
-        return f"{platform.system()} {platform.release()} ({platform.machine()})"
+        system = platform.system()
+        release = platform.release()
+        machine = platform.machine()
+
+        if system == "Windows":
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+                    product_name = winreg.QueryValueEx(key, "ProductName")[0]
+                    build_number = winreg.QueryValueEx(key, "CurrentBuildNumber")[0]
+                    display_version = winreg.QueryValueEx(key, "DisplayVersion")[0]
+
+                    if int(build_number) >= 22000 and "Windows 10" in product_name:
+                        product_name = product_name.replace("Windows 10", "Windows 11")
+
+                    return f"{product_name} {display_version} Build {build_number} ({machine})"
+            except Exception:
+                version = platform.version()
+                return f"Windows {version} ({machine})"
+        elif system == "Darwin":
+            try:
+                version = platform.mac_ver()[0]
+                return f"macOS {version} ({machine})"
+            except Exception:
+                return f"macOS {release} ({machine})"
+        elif system == "Linux":
+            try:
+                with open("/etc/os-release") as f:
+                    for line in f:
+                        if line.startswith("PRETTY_NAME="):
+                            distro = line.split("=")[1].strip().strip('"')
+                            return f"{distro} ({machine})"
+                return f"Linux {release} ({machine})"
+            except Exception:
+                return f"Linux {release} ({machine})"
+        else:
+            return f"{system} {release} ({machine})"
 
     @staticmethod
     def _current_python_version() -> str:
@@ -112,7 +147,7 @@ class AboutDialog(QDialog):
         self.releases_button = QPushButton(tr("ui.about_releases"))
         self.releases_button.clicked.connect(lambda: self._open_url(self.RELEASES_URL))
         self.wiki_button = QPushButton(tr("ui.about_wiki"))
-        self.wiki_button.clicked.connect(lambda: self._open_url(self.WIKI_URL))
+        self.wiki_button.clicked.connect(lambda: self._open_url(self._wiki_url()))
         self.issues_button = QPushButton(tr("ui.about_issues"))
         self.issues_button.clicked.connect(lambda: self._open_url(self.ISSUES_URL))
         links_layout.addWidget(self.releases_button)
@@ -150,6 +185,9 @@ class AboutDialog(QDialog):
     def _open_data_folder(self):
         if self.data_root and os.path.exists(self.data_root):
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.data_root))
+
+    def _wiki_url(self) -> str:
+        return str((self.app_state.global_settings or {}).get("wiki_url", "https://github.com/y114git/G3M/")).strip()
 
     def _report_form_url(self) -> str:
         return str((self.app_state.global_settings or {}).get("reportform_url", "")).strip()

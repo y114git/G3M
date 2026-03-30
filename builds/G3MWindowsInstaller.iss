@@ -31,8 +31,6 @@ LanguageDetectionMethod=uilanguage
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\\Spanish.isl"
 Name: "russian"; MessagesFile: "compiler:Languages\\Russian.isl"
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\\ChineseSimplified.isl"
-Name: "chinesetraditional"; MessagesFile: "compiler:Languages\\ChineseTraditional.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"
