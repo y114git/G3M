@@ -208,6 +208,9 @@ class SettingsManager(QObject):
     def on_toggle_disable_startup_sound(self, enabled: bool):
         self._toggle_setting("disable_startup_sound", enabled, None)
 
+    def on_toggle_pause_background_music_unfocused(self, enabled: bool):
+        self._toggle_setting("pause_background_music_unfocused", enabled, None)
+
     def on_toggle_skip_patching_warnings(self, enabled: bool):
         self._toggle_setting("skip_patching_warnings", enabled)
 

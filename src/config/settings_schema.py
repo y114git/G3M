@@ -32,6 +32,7 @@ DEFAULT_APP_SETTINGS = {
     "custom_executable_path": "",
     "background_disabled": False,
     "disable_startup_sound": False,
+    "pause_background_music_unfocused": False,
     "custom_background_color": "",
     "custom_elements_color": "",
     "custom_border_color": "",

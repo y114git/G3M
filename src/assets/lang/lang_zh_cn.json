@@ -259,6 +259,7 @@
   "checkboxes": {
     "disable_background": "禁用背景",
     "disable_startup_sound": "禁用启动音效",
+    "pause_background_music_unfocused": "失去焦点时停止背景音乐",
     "xdelta_modpack": "使用XDELTA代替data.win/.ios",
     "merge_properties": "属性合并",
     "merge_code": "代码合并",
@@ -314,7 +315,7 @@
   },
   "tooltips": {
     "custom_executable_library": "为此游戏选择自定义可执行文件。此设置对每个游戏都是唯一的。",
-    "full_install_instructions": "为DELTARUNE Demo从头安装游戏文件：\\n  • 所有需要的文件都会自动下载\\n  • 完成后将选择一个新的游戏文件夹。\\n  • 注意！如果您想通过Steam运行Demo版\\n  • 您必须选择STEAM创建的文件夹！\\n\\n完成后复选框将被禁用。",
+    "full_install_instructions": "为DELTARUNE Demo从头安装游戏文件：\n  • 所有需要的文件都会自动下载\n  • 完成后将选择一个新的游戏文件夹。\n  • 注意！如果您想通过Steam运行Demo版\n  • 您必须选择STEAM创建的文件夹！\n\n完成后复选框将被禁用。",
     "full_yellow_install_instructions": "为UNDERTALE Yellow从头安装游戏文件：\\n  • 所有需要的文件都会自动下载\\n  • 完成后将选择一个新的游戏文件夹。\\n  • 存档包含一个带有游戏文件的文件夹。\\n  • 文件将自动提取到目标目录。\\n\\n完成后复选框将被禁用。",
     "full_spire_install_instructions": "为Sugary Spire从头安装游戏文件：\\n  • 所有需要的文件都会自动下载\\n  • 完成后将选择一个新的游戏文件夹。\\n  • 存档包含一个带有游戏文件的文件夹。\\n  • 文件将自动提取到目标目录。\\n\\n完成后复选框将被禁用。",
     "macos_install_unavailable": "在macOS上无法安装游戏文件。\\n建议通过Steam安装Demo版。",
@@ -331,6 +332,7 @@
     "language": "选择 G3M 界面使用的语言。",
     "ui_scale": "放大或缩小整个界面。更大的值会让文字和控件更容易看清。",
     "analytics_opt_in": "通过分享额外的匿名聚合使用统计来帮助改进 G3M，例如功能使用、对话框打开、下载、搜索以及游戏启动结果分组。不会发送个人数据、原始文件路径、精确搜索词或直接标识符。",
+    "pause_background_music_unfocused": "当 G3M 失去焦点或最小化时停止背景音乐。由于播放限制，重新回到应用时音乐会从头开始播放。",
     "sort_mode": "选择当前列表的排序方式。",
     "select_game": "选择你现在要查看模组或设置的游戏。",
     "filter_by_tag": "按模组分类筛选当前列表。",
@@ -425,6 +427,7 @@
     "extra_files_tab": "额外文件",
     "data_tab_info": "为每个分区选择主要 DATA 文件。\n每个标签页只能分配一个 DATA 文件。",
     "extra_files_path_instructions": "输入每个文件应放置的文件夹路径，相对于游戏文件夹。\n示例：'sprites/bgs' 会将文件放置在游戏文件夹的 sprites/bgs/ 目录中。\n使用正斜杠 (/) 分隔文件夹。",
+    "extra_files_path_instructions_deltarune": "输入每个文件应放置的文件夹路径，相对于游戏文件夹。\n示例：'sprites/bgs' 会将文件放置在游戏文件夹的 sprites/bgs/ 目录中。\n对于 DELTARUNE，你也可以让路径以章节文件夹开头，例如 'chapter_1/' 或 'chapter1_windows/'，这样文件会被绑定到对应章节。\n使用正斜杠 (/) 分隔文件夹。",
     "select_data_file_info": "为 {chapter} 选择数据文件",
     "no_file_selected": "未选择文件",
     "select_target_folder": "选择目标文件夹",

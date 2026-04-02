@@ -422,6 +422,49 @@ class TestCustomizationManager:
         assert manager is not None
         assert manager.app_state == app_state
 
+    def test_customization_service_pause_is_non_blocking(self, app_state):
+        """Checks that pausing background music does not block waiting for the thread."""
+        from unittest.mock import Mock
+
+        from services.customization_service import CustomizationManager
+
+        manager = CustomizationManager(app_state)
+        manager._current_music_path = "music.mp3"
+        player = Mock()
+        player.is_alive.return_value = True
+        player.join = Mock()
+        player.terminate = Mock()
+        manager._bg_music_instance = player
+
+        manager.stop_background_music(wait_for_thread=False)
+
+        player.terminate.assert_called_once()
+        player.join.assert_not_called()
+        assert manager._focus_pause_active is False
+        assert manager._current_music_path is None
+
+    def test_customization_service_focus_pause_preserves_state_and_resumes(self, app_state):
+        """Checks that focus pause keeps pause state until resume restarts music."""
+        from unittest.mock import Mock, patch
+
+        from services.customization_service import CustomizationManager
+
+        manager = CustomizationManager(app_state)
+        manager.get_background_music_path = Mock(return_value="music.mp3")
+
+        with patch.object(manager, "stop_background_music") as stop_music:
+            manager.set_background_music_focus_paused(True)
+
+        stop_music.assert_called_once_with(
+            wait_for_thread=False, preserve_focus_pause=True
+        )
+        assert manager._focus_pause_active is True
+
+        with patch.object(manager, "maybe_start_background_music") as maybe_start:
+            manager.set_background_music_focus_paused(False)
+
+        maybe_start.assert_called_once_with(force=True)
+
     def test_customization_service_get_font_path(self, app_state, temp_dir):
         """Checks that customizationing service get font path."""
         from services.customization_service import CustomizationManager

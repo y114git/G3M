@@ -296,6 +296,11 @@ class BootstrapCoordinator:
         window._set_checkbox_checked_silently(
             window.beta_updates_checkbox, config.get("beta_updates_enabled", False)
         )
+        if hasattr(window, "pause_background_music_unfocused_checkbox"):
+            window._set_checkbox_checked_silently(
+                window.pause_background_music_unfocused_checkbox,
+                config.get("pause_background_music_unfocused", False),
+            )
         window._set_checkbox_checked_silently(
             window.fullscreen_checkbox, config.get("fullscreen_enabled", False)
         )

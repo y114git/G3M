@@ -581,6 +581,12 @@ class ThemeController:
                 self.app.disable_animations_checkbox.setChecked(
                     self.app_state.local_config.get("disable_animations", False)
                 )
+            if hasattr(self.app, "pause_background_music_unfocused_checkbox"):
+                self.app.pause_background_music_unfocused_checkbox.setChecked(
+                    self.app_state.local_config.get(
+                        "pause_background_music_unfocused", False
+                    )
+                )
             if hasattr(self.app, "border_radius_spinbox"):
                 self.app.border_radius_spinbox.blockSignals(True)
                 self.app.border_radius_spinbox.setValue(
@@ -600,6 +606,8 @@ class ThemeController:
                     self.app.launcher_icon_label
                 )
             self._handle_music_after_theme_change()
+            if hasattr(self.app, "_sync_background_audio_focus"):
+                self.app._sync_background_audio_focus()
         finally:
             self._theme_update_in_progress = False
             if self._pending_theme_update:
@@ -608,12 +616,12 @@ class ThemeController:
 
     def _is_current_bg_music_running(self, current_music_path: str) -> bool:
         """Check if the same background music is currently running."""
-        return (
-            hasattr(self.customization_service, "_current_music_path")
-            and self.customization_service._current_music_path == current_music_path
-            and hasattr(self.customization_service, "_bg_music_thread")
-            and self.customization_service._bg_music_thread is not None
-            and self.customization_service._bg_music_thread.isRunning()
+        player = getattr(self.customization_service, "_bg_music_instance", None)
+        return bool(
+            player
+            and player.is_alive()
+            and getattr(self.customization_service, "_current_music_path", None)
+            == current_music_path
         )
 
     def _handle_music_after_theme_change(self):

@@ -206,4 +206,3 @@ def all_test_mods_dirs(mods_dir):
     if not mods_path.exists():
         return {}
     return {'full_structure': str(mods_path / 'test_mod_full_structure'), 'chapter1_only': str(mods_path / 'test_mod_chapter1_only'), 'multiple_chapters': str(mods_path / 'test_mod_multiple_chapters'), 'demo': str(mods_path / 'test_mod_demo'), 'undertale': str(mods_path / 'test_mod_undertale')}
-

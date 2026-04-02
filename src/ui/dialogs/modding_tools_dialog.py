@@ -5,6 +5,8 @@ import logging
 import os
 import shutil
 import tempfile
+import zipfile
+from contextlib import suppress
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -30,15 +32,50 @@ from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
+from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
 
 logger = logging.getLogger(__name__)
 
 _DATA_FILTER = "Data files (*.win *.ios *.unx *.droid);;All Files (*)"
-_PATCH_FILTER = "Patch files (*.g3mpatch *.xdelta);;All Files (*)"
+_G3M_PATCH_FILTER = "Patch files (*.g3mpatch *.zip);;All Files (*)"
+_CSX_FILTER = "Script files (*.csx);;All Files (*)"
+_PATCH_FILTER = "Patch files (*.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
 _DATA_PATCH_FILTER = (
-    "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.xdelta);;All Files (*)"
+    "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
 )
 _ALL_FILTER = "All Files (*)"
+
+
+def _is_g3mpatch_source(path: str) -> bool:
+    lower_path = str(path or "").lower()
+    if lower_path.endswith(".g3mpatch"):
+        return True
+    if not lower_path.endswith(".zip"):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            archive.getinfo("g3mpatch.json")
+        return True
+    except Exception:
+        return False
+
+
+def _is_xdelta_source(path: str) -> bool:
+    return str(path or "").lower().endswith((".xdelta", ".vcdiff"))
+
+
+def _is_csx_source(path: str) -> bool:
+    return str(path or "").lower().endswith(".csx")
+
+
+def _apply_source_to_data(g3m, original: str, patch: str, output: str):
+    if _is_g3mpatch_source(patch):
+        return g3m.apply_patch(original, patch, output)
+    if _is_xdelta_source(patch):
+        return g3m.xpatch_apply(original, patch, output)
+    if _is_csx_source(patch):
+        return g3m.execute(patch, data_file=original, output_path=output)
+    return -1, "", f"Unsupported source patch format: {patch}"
 
 
 def _get_app_font(app_state) -> str:
@@ -72,12 +109,15 @@ class _WorkerThread(QThread):
 class _PathRow(QWidget):
     """Reusable row: label + line-edit + browse button."""
 
+    text_changed = pyqtSignal(str)
+
     def __init__(
         self, label_key: str, file_filter: str, parent=None, save_mode: bool = False
     ) -> None:
         super().__init__(parent)
         self._filter = file_filter
         self._save_mode = save_mode
+        self._save_path_getter = None
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(6)
@@ -88,6 +128,7 @@ class _PathRow(QWidget):
         self._edit = QLineEdit()
         self._edit.setPlaceholderText(tr("ui.file_path_placeholder"))
         self._edit.setToolTip(tr("tooltips.file_path_field"))
+        self._edit.textChanged.connect(self.text_changed.emit)
         lay.addWidget(self._edit, 1)
         self._btn = QPushButton(tr("ui.browse_button"))
         self._btn.setObjectName("modding_tools_browse_btn")
@@ -97,8 +138,12 @@ class _PathRow(QWidget):
 
     def _browse(self):
         if self._save_mode:
+            start_path = self.path()
+            if callable(self._save_path_getter):
+                with suppress(Exception):
+                    start_path = self._save_path_getter() or start_path
             path, _ = QFileDialog.getSaveFileName(
-                self, tr("ui.save_file"), "", self._filter
+                self, tr("ui.save_file"), start_path, self._filter
             )
         else:
             path, _ = QFileDialog.getOpenFileName(
@@ -112,6 +157,9 @@ class _PathRow(QWidget):
 
     def set_path(self, p: str):
         self._edit.setText(p)
+
+    def set_save_path_getter(self, getter) -> None:
+        self._save_path_getter = getter
 
     def relocalize(self):
         self._label.setText(tr(self._label_key))
@@ -132,16 +180,11 @@ class _ConvertWorkerThread(QThread):
 
     def run(self):
         try:
-            with tempfile.TemporaryDirectory(prefix="g3m_convert_") as tmp:
+            with managed_temporary_directory(prefix="g3m_convert_") as tmp:
                 temp_modified = os.path.join(tmp, "modified.tmp")
-                if self._target_is_xdelta:
-                    rc, out, err = self._g3m.apply_patch(
-                        self._orig, self._patch, temp_modified
-                    )
-                else:
-                    rc, out, err = self._g3m.xpatch_apply(
-                        self._orig, self._patch, temp_modified
-                    )
+                rc, out, err = _apply_source_to_data(
+                    self._g3m, self._orig, self._patch, temp_modified
+                )
                 if rc != 0:
                     self.finished.emit(rc, out, err)
                     return
@@ -163,6 +206,8 @@ class _PatchTab(QWidget):
         super().__init__(parent)
         self._g3m, self._app_state = g3m, app_state
         self._worker = None
+        self._output_user_modified = False
+        self._setting_output_text = False
         self._build_ui()
 
     def _build_ui(self):
@@ -175,7 +220,7 @@ class _PatchTab(QWidget):
         self._mode_label = QLabel(tr("modding_tools.patch_mode"))
         mode_row.addWidget(self._mode_label)
         self._mode_combo = QComboBox()
-        self._mode_combo.addItems(["g3mpatch", "xdelta"])
+        self._mode_combo.addItems(["g3mpatch", "xdelta", "csx"])
         self._mode_combo.setToolTip(tr("tooltips.modding_tools_mode"))
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_row.addWidget(self._mode_combo)
@@ -203,7 +248,11 @@ class _PatchTab(QWidget):
         self._output_row = _PathRow(
             "modding_tools.output_file", _ALL_FILTER, save_mode=True
         )
+        self._output_row.set_save_path_getter(self._suggest_output_path)
+        self._output_row.text_changed.connect(self._on_output_text_changed)
         lay.addWidget(self._output_row)
+        self._original_row.text_changed.connect(self._maybe_suggest_output_path)
+        self._second_row.text_changed.connect(self._maybe_suggest_output_path)
 
         lay.addStretch()
 
@@ -224,6 +273,13 @@ class _PatchTab(QWidget):
         lay.addWidget(self._status_label)
 
     def _on_action_changed(self, _idx):
+        if (
+            self._mode_combo.currentText() == "csx"
+            and self._action_combo.currentIndex() != 1
+        ):
+            self._action_combo.blockSignals(True)
+            self._action_combo.setCurrentIndex(1)
+            self._action_combo.blockSignals(False)
         action = self._action_combo.currentIndex()
         if action == 2:
             key = "modding_tools.source_patch"
@@ -234,25 +290,86 @@ class _PatchTab(QWidget):
         self._second_row._label.setText(tr(key))
         self._second_row._label_key = key
         self._update_filters()
+        self._maybe_suggest_output_path()
 
     def _on_mode_changed(self, _idx):
+        if (
+            self._mode_combo.currentText() == "csx"
+            and self._action_combo.currentIndex() != 1
+        ):
+            self._action_combo.blockSignals(True)
+            self._action_combo.setCurrentIndex(1)
+            self._action_combo.blockSignals(False)
         self._update_filters()
+        self._maybe_suggest_output_path()
 
     def _update_filters(self):
-        is_xdelta = self._mode_combo.currentIndex() == 1
+        mode = self._mode_combo.currentText()
         action = self._action_combo.currentIndex()
+        self._output_row._filter = _DATA_FILTER
         if action == 2:
             self._original_row._filter = _DATA_FILTER
-            self._second_row._filter = _PATCH_FILTER if not is_xdelta else _ALL_FILTER
-        elif is_xdelta:
+            self._second_row._filter = _PATCH_FILTER
+            self._output_row._filter = _PATCH_FILTER
+        elif mode == "xdelta":
             self._original_row._filter = _ALL_FILTER
             self._second_row._filter = _ALL_FILTER
+            self._output_row._filter = _PATCH_FILTER if action == 0 else _DATA_FILTER
         elif action == 0:
             self._original_row._filter = _DATA_FILTER
             self._second_row._filter = _DATA_FILTER
+            self._output_row._filter = _G3M_PATCH_FILTER
         else:
             self._original_row._filter = _DATA_FILTER
-            self._second_row._filter = _PATCH_FILTER
+            if mode == "csx":
+                self._second_row._filter = _CSX_FILTER
+            else:
+                self._second_row._filter = _G3M_PATCH_FILTER
+
+    def _on_output_text_changed(self, _text: str) -> None:
+        if not self._setting_output_text:
+            self._output_user_modified = True
+
+    def _set_output_path(self, path: str) -> None:
+        self._setting_output_text = True
+        try:
+            self._output_row.set_path(path)
+        finally:
+            self._setting_output_text = False
+
+    @staticmethod
+    def _replace_extension(path: str, suffix: str) -> str:
+        base, _ext = os.path.splitext(path)
+        return base + suffix
+
+    def _suggest_output_path(self) -> str:
+        mode = self._mode_combo.currentText()
+        action = self._action_combo.currentIndex()
+        orig = self._original_row.path()
+        second = self._second_row.path()
+        if action == 0:
+            seed = second or orig
+            if not seed:
+                return ""
+            suffix = ".csx" if mode == "csx" else ".xdelta" if mode == "xdelta" else ".g3mpatch"
+            return self._replace_extension(seed, suffix)
+        if action == 1:
+            if not orig:
+                return ""
+            base, ext = os.path.splitext(orig)
+            return f"{base}_patched{ext or '.win'}"
+        if not second:
+            return ""
+        suffix = ".csx" if mode == "csx" else ".xdelta" if mode == "xdelta" else ".g3mpatch"
+        return self._replace_extension(second, suffix)
+
+    def _maybe_suggest_output_path(self, *_args) -> None:
+        if self._output_user_modified and self._output_row.path():
+            return
+        suggested = self._suggest_output_path()
+        if suggested:
+            self._set_output_path(suggested)
+            self._output_user_modified = False
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
@@ -281,11 +398,17 @@ class _PatchTab(QWidget):
             )
         else:
             is_create = action == 0
-            if mode == "xdelta":
+            if mode == "csx":
+                self._worker = _WorkerThread(
+                    self._g3m.execute,
+                    (second, None, orig, out),
+                )
+            elif mode == "xdelta":
                 func = self._g3m.xpatch_create if is_create else self._g3m.xpatch_apply
+                self._worker = _WorkerThread(func, (orig, second, out))
             else:
                 func = self._g3m.patch_create if is_create else self._g3m.apply_patch
-            self._worker = _WorkerThread(func, (orig, second, out))
+                self._worker = _WorkerThread(func, (orig, second, out))
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
@@ -354,16 +477,17 @@ class _DataConvertWorkerThread(QThread):
                 data_path = ch_info.get("data_file_path") or ch_info.get("data_file_url", "")
                 if not data_path:
                     continue
-                is_xdelta = data_path.lower().endswith((".xdelta", ".vcdiff"))
-                is_g3m = data_path.lower().endswith(".g3mpatch")
+                patch_path = resolve_mod_file_path(self._mod_folder, data_path)
+                if not patch_path:
+                    continue
+                is_xdelta = _is_xdelta_source(data_path)
+                is_g3m = _is_g3mpatch_source(patch_path)
+                is_csx = _is_csx_source(data_path)
                 if self._target_xdelta and is_xdelta:
                     continue
                 if not self._target_xdelta and is_g3m:
                     continue
-                if not is_xdelta and not is_g3m:
-                    continue
-                patch_path = resolve_mod_file_path(self._mod_folder, data_path)
-                if not patch_path:
+                if not is_xdelta and not is_g3m and not is_csx:
                     continue
                 if not os.path.isfile(patch_path):
                     continue
@@ -402,7 +526,7 @@ class _DataConvertWorkerThread(QThread):
                 tr("modding_tools.convert_saving_version", version=version_name)
             )
 
-            with tempfile.TemporaryDirectory(prefix="g3m_modconv_") as tmp:
+            with managed_temporary_directory(prefix="g3m_modconv_") as tmp:
                 converted_mod_folder = os.path.join(tmp, "mod")
                 shutil.copytree(
                     self._mod_folder,
@@ -420,18 +544,11 @@ class _DataConvertWorkerThread(QThread):
                             file=os.path.basename(patch_path),
                         )
                     )
-                    with tempfile.TemporaryDirectory(
-                        prefix="g3m_modconv_file_"
-                    ) as work_dir:
+                    with managed_temporary_directory(prefix="g3m_modconv_file_") as work_dir:
                         temp_modified = os.path.join(work_dir, "modified.tmp")
-                        if self._target_xdelta:
-                            rc, _, err = self._g3m.apply_patch(
-                                original, patch_path, temp_modified
-                            )
-                        else:
-                            rc, _, err = self._g3m.xpatch_apply(
-                                original, patch_path, temp_modified
-                            )
+                        rc, _, err = _apply_source_to_data(
+                            self._g3m, original, patch_path, temp_modified
+                        )
                         if rc != 0:
                             self.finished.emit(False, err[:300])
                             return
@@ -597,6 +714,9 @@ class _DataConvertTab(QWidget):
             try:
                 with open(config_path, encoding="utf-8") as f:
                     config_data = json.load(f)
+                from utils.mod_config_parser import normalize_mod_config_data
+
+                normalize_mod_config_data(config_data, mod_root_path=folder_path)
             except Exception:
                 logger.debug("Skipping unreadable mod config: %s", config_path)
                 continue
@@ -611,10 +731,14 @@ class _DataConvertTab(QWidget):
                 if not url:
                     continue
                 low = url.lower()
-                if target_xdelta and low.endswith(".g3mpatch"):
+                patch_path = os.path.join(folder_path, url)
+                if target_xdelta and _is_g3mpatch_source(patch_path):
                     has_convertible = True
                     break
-                if not target_xdelta and low.endswith((".xdelta", ".vcdiff")):
+                if not target_xdelta and (_is_xdelta_source(low) or _is_csx_source(low)):
+                    has_convertible = True
+                    break
+                if target_xdelta and _is_csx_source(low):
                     has_convertible = True
                     break
             if not has_convertible:
@@ -651,6 +775,9 @@ class _DataConvertTab(QWidget):
         try:
             with open(config_path, encoding="utf-8") as f:
                 config_data = json.load(f)
+            from utils.mod_config_parser import normalize_mod_config_data
+
+            normalize_mod_config_data(config_data, mod_root_path=mod_folder)
         except Exception as e:
             self._status_label.setText(
                 tr("modding_tools.convert_data_failed", error=str(e))
@@ -707,6 +834,8 @@ class _MergeTab(QWidget):
         super().__init__(parent)
         self._g3m, self._app_state = g3m, app_state
         self._worker = None
+        self._output_user_modified = False
+        self._setting_output_text = False
         self._build_ui()
 
     def _build_ui(self):
@@ -751,9 +880,12 @@ class _MergeTab(QWidget):
         lay.addLayout(list_btns)
 
         self._output_row = _PathRow(
-            "modding_tools.output_file", _ALL_FILTER, save_mode=True
+            "modding_tools.output_file", _DATA_FILTER, save_mode=True
         )
+        self._output_row.set_save_path_getter(self._suggest_output_path)
+        self._output_row.text_changed.connect(self._on_output_text_changed)
         lay.addWidget(self._output_row)
+        self._original_row.text_changed.connect(self._maybe_suggest_output_path)
 
         run_row = QHBoxLayout()
         run_row.addStretch()
@@ -779,10 +911,12 @@ class _MergeTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, p)
             item.setToolTip(p)
             self._file_list.insertItem(0, item)
+        self._maybe_suggest_output_path()
 
     def _on_remove(self):
         for item in self._file_list.selectedItems():
             self._file_list.takeItem(self._file_list.row(item))
+        self._maybe_suggest_output_path()
 
     def _move(self, direction):
         row = self._file_list.currentRow()
@@ -793,6 +927,32 @@ class _MergeTab(QWidget):
             item = self._file_list.takeItem(row)
             self._file_list.insertItem(new_row, item)
             self._file_list.setCurrentRow(new_row)
+
+    def _on_output_text_changed(self, _text: str) -> None:
+        if not self._setting_output_text:
+            self._output_user_modified = True
+
+    def _set_output_path(self, path: str) -> None:
+        self._setting_output_text = True
+        try:
+            self._output_row.set_path(path)
+        finally:
+            self._setting_output_text = False
+
+    def _suggest_output_path(self) -> str:
+        orig = self._original_row.path()
+        if not orig:
+            return ""
+        base, ext = os.path.splitext(orig)
+        return f"{base}_merged{ext or '.win'}"
+
+    def _maybe_suggest_output_path(self, *_args) -> None:
+        if self._output_user_modified and self._output_row.path():
+            return
+        suggested = self._suggest_output_path()
+        if suggested:
+            self._set_output_path(suggested)
+            self._output_user_modified = False
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
@@ -1019,7 +1179,7 @@ class _DiffTab(QWidget):
 
     def _cleanup_out_dir(self):
         if self._out_dir:
-            shutil.rmtree(self._out_dir, ignore_errors=True)
+            cleanup_temporary_directory(self._out_dir)
             self._out_dir = None
 
     @staticmethod

@@ -19,6 +19,7 @@ class PresenceWorker(QObject):
         super().__init__()
         self.session_id, self.app_state, self._busy = session_id, app_state, False
         self._last_heartbeat_at = 0.0
+        self._last_online_count = -1
 
     def _safe_emit(self, signal, *args):
         try:
@@ -29,7 +30,7 @@ class PresenceWorker(QObject):
 
     @pyqtSlot()
     def run(self):
-        count = -1
+        count = self._last_online_count
         try:
             if (
                 self._busy
@@ -52,7 +53,7 @@ class PresenceWorker(QObject):
                 try:
                     count = max(int((resp.json() or {}).get("online", 0)), 0)
                 except (json.JSONDecodeError, ValueError, TypeError):
-                    count = 0
+                    count = self._last_online_count if self._last_online_count >= 0 else 0
         except (
             requests.Timeout,
             requests.ConnectionError,
@@ -61,5 +62,7 @@ class PresenceWorker(QObject):
             logging.debug(f"Presence worker network error: {e}")
         finally:
             self._busy = False
+            if count >= 0:
+                self._last_online_count = count
             self._safe_emit(self.update_online_count, count)
             self._safe_emit(self.finished)

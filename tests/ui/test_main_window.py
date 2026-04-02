@@ -184,6 +184,34 @@ class TestAppWindow:
             btn.deleteLater()
         window.deleteLater()
 
+    def test_background_audio_pause_detection_accepts_child_windows(
+        self, qapp, temp_dir
+    ):
+        from PyQt6.QtWidgets import QDialog
+
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
+            window = AppWindow()
+            dialog = QDialog(window)
+            try:
+                window.app_state.local_config["pause_background_music_unfocused"] = True
+                qapp.processEvents()
+                window.show()
+                dialog.show()
+                dialog.raise_()
+                dialog.activateWindow()
+                qapp.processEvents()
+                assert window._should_pause_background_audio() is False
+                dialog.close()
+                window.showMinimized()
+                qapp.processEvents()
+                assert window._should_pause_background_audio() is True
+            finally:
+                dialog.close()
+                window.close()
+
 
 class TestTabBuilders:
     """Tests for main window."""
@@ -260,6 +288,6 @@ class TestTabBuilders:
         assert "games_manager_button" in builder.get_widgets()
         assert "plugins_layout" in builder.get_widgets()
         assert "plugins_widget" in builder.get_widgets()
+        assert "pause_background_music_unfocused_checkbox" in builder.get_widgets()
         assert builder.get_widgets()["language_combo"].toolTip() == tr("tooltips.language")
         assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr("tooltips.ui_scale")
-

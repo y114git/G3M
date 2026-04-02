@@ -166,6 +166,26 @@ class TestModWidgets:
         controller.clear_all_selections.assert_not_called()
         card.set_selected.assert_not_called()
 
+    def test_search_display_controller_records_analytics_for_new_selection(self):
+        """Checks that searching display controller records analytics for a newly selected card."""
+        from unittest.mock import Mock
+
+        from controllers.search_display_controller import SearchDisplayController
+
+        mod = SimpleNamespace(name="Test Mod")
+        analytics = Mock()
+        card = SimpleNamespace(mod_data=mod, is_selected=False, set_selected=Mock())
+        controller = SearchDisplayController.__new__(SearchDisplayController)
+        controller.app = SimpleNamespace(analytics_service=analytics)
+        controller._iter_layout_cards = lambda: iter([card])
+        controller.clear_all_selections = Mock()
+
+        SearchDisplayController.on_mod_clicked(controller, mod)
+
+        controller.clear_all_selections.assert_called_once_with(except_widget=card)
+        card.set_selected.assert_called_once_with(True)
+        analytics.record_mod_opened.assert_called_once_with("mods_browser", mod)
+
     def test_mod_card_widget_has_likes_label(self, qapp):
         """Checks that moding card widget has likes label."""
         from unittest.mock import patch
@@ -637,4 +657,3 @@ class TestCommonWidgets:
         assert placeholder.pixelColor(placeholder.width() - 8, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() - 16, center_y).alpha() == 0
         assert placeholder.pixelColor(placeholder.width() // 2, center_y).alpha() > 0
-

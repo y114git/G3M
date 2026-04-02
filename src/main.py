@@ -2,6 +2,7 @@
 This module sets up the Python path and launches the application.
 """
 
+import multiprocessing
 import os
 import sys
 
@@ -24,8 +25,14 @@ def _run_shortcut(argv: list[str]) -> int:
     return 0
 
 
+def _prepare_process_runtime() -> None:
+    """Enable safe child-process startup for frozen Windows builds."""
+    multiprocessing.freeze_support()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
+    _prepare_process_runtime()
     if "--shortcut" in argv:
         return _run_shortcut(argv)
     from app.startup import run_app

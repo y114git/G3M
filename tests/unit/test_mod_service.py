@@ -174,6 +174,144 @@ def test_get_mod_folder_path_and_source_dir_do_not_depend_on_sanitized_name(
     )
 
 
+def test_load_local_mods_refreshes_existing_local_mod_files_after_edit(
+    app_state, feedback_service
+):
+    """Checks that reloading local mods refreshes chapter/file mappings in memory."""
+    import os
+
+    mod_folder = os.path.join(app_state.mods_dir, "sigma")
+    os.makedirs(mod_folder, exist_ok=True)
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {
+            "id": "local_sigma",
+            "name": "sigma",
+            "author": "Author",
+            "version": "1.0.0",
+            "game": "deltarune",
+            "files": {"deltarune_0": {"data_file_path": "BOSSRUSH.win"}},
+        },
+        indent=4,
+    )
+    with open(os.path.join(mod_folder, "BOSSRUSH.win"), "wb") as f:
+        f.write(b"menu")
+
+    manager = ModManager(app_state, feedback_service)
+    existing_mod = LocalModInfo(
+        id="local_sigma",
+        name="sigma",
+        version="1.0.0",
+        author="Author",
+        description="Desc",
+        game="deltarune",
+        files={
+            "deltarune_0": ModFileData(
+                data_file_path=os.path.join(mod_folder, "BOSSRUSH.win")
+            )
+        },
+    )
+    app_state.all_mods = [existing_mod]
+
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {
+            "id": "local_sigma",
+            "name": "sigma",
+            "author": "Author",
+            "version": "1.0.0",
+            "game": "deltarune",
+            "files": {"deltarune_4": {"data_file_path": "BOSSRUSH.win"}},
+        },
+        indent=4,
+    )
+
+    manager.invalidate_mods_cache()
+    manager.load_local_mods()
+
+    assert app_state.all_mods[0] is existing_mod
+    assert existing_mod.get_chapter_data("deltarune_0") is None
+    refreshed = existing_mod.get_chapter_data("deltarune_4")
+    assert refreshed is not None
+    assert refreshed.data_file_path == os.path.join(mod_folder, "BOSSRUSH.win")
+
+
+def test_load_local_mods_refreshes_existing_installed_mod_files_after_edit_without_restart(
+    app_state, feedback_service
+):
+    """Checks that reloading installed mods refreshes chapter mappings for existing in-memory objects."""
+    import logging
+    import os
+
+    from utils.patching.mod_resolve_utils import get_mod_configured_data_file
+
+    mod_folder = os.path.join(app_state.mods_dir, "chapter_swap")
+    os.makedirs(mod_folder, exist_ok=True)
+    data_file = os.path.join(mod_folder, "DATA.win")
+    with open(data_file, "wb") as handle:
+        handle.write(b"patched")
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {
+            "id": "chapter_swap_mod",
+            "name": "Chapter Swap",
+            "author": "Author",
+            "version": "1.0.0",
+            "game": "deltarune",
+            "files": {"deltarune_4": {"data_file_path": "DATA.win"}},
+        },
+        indent=4,
+    )
+
+    manager = ModManager(app_state, feedback_service)
+    existing_mod = LocalModInfo(
+        id="chapter_swap_mod",
+        name="Chapter Swap",
+        version="1.0.0",
+        author="Author",
+        description="Desc",
+        game="deltarune",
+        files={
+            "deltarune_4": ModFileData(
+                data_file_path=data_file,
+            )
+        },
+    )
+    app_state.all_mods = [existing_mod]
+
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {
+            "id": "chapter_swap_mod",
+            "name": "Chapter Swap",
+            "author": "Author",
+            "version": "1.0.0",
+            "game": "deltarune",
+            "files": {"deltarune_0": {"data_file_path": "DATA.win"}},
+        },
+        indent=4,
+    )
+
+    manager.invalidate_mods_cache()
+    manager.load_local_mods()
+
+    assert app_state.all_mods[0] is existing_mod
+    assert existing_mod.get_chapter_data("deltarune_4") is None
+    refreshed = existing_mod.get_chapter_data("deltarune_0")
+    assert refreshed is not None
+    assert refreshed.data_file_path == "DATA.win"
+    assert (
+        get_mod_configured_data_file(
+            existing_mod,
+            "deltarune_0",
+            manager,
+            app_state,
+            logging.getLogger("test"),
+        )
+        == data_file
+    )
+
+
 def test_fetch_mods_thread_keeps_remote_card_object_separate_from_local_state():
     """Checks that fetching mods keeps remote card object separate from local state."""
     from unittest.mock import Mock, patch

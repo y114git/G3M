@@ -64,7 +64,12 @@ class ModEditorDialog(QDialog):
             if isinstance(mod_data, dict) and isinstance(mod_data.get("mod_data"), dict)
             else mod_data
         )
-        self.mod_data = payload or {}
+        self.mod_data = dict(payload) if isinstance(payload, dict) else {}
+        if self.mod_data:
+            normalize_mod_config_data(
+                self.mod_data,
+                mod_root_path=self.mod_data.get("folder_path"),
+            )
         self.mod_id = self.mod_data.get("id") if isinstance(self.mod_data, dict) else None
         self._last_browse_dir = os.path.expanduser("~")
         self._cfg = getattr(self._app_state, "local_config", None)
@@ -106,6 +111,18 @@ class ModEditorDialog(QDialog):
             else:
                 current = None
         return None
+
+    def _apply_initial_game_selection(self) -> None:
+        if not self.is_creating or self.mod_data:
+            return
+        game_mode = getattr(self._app_state, "game_mode", None)
+        preferred_game = getattr(game_mode, "game_id", None)
+        if not preferred_game:
+            return
+        for i in range(self.game_combo.count()):
+            if self.game_combo.itemData(i) == preferred_game:
+                self.game_combo.setCurrentIndex(i)
+                break
 
     def _color(self, key, fallback):
         return get_theme_color(self._get_config(), key, fallback)
@@ -184,6 +201,7 @@ class ModEditorDialog(QDialog):
         for entry in get_visible_game_entries():
             self.game_combo.addItem(entry.display_name, entry.id)
             self._visible_game_ids.add(entry.id)
+        self._apply_initial_game_selection()
         self.game_combo.currentIndexChanged.connect(self._update_file_tabs)
         game_row.addWidget(self.game_combo)
         game_row.addStretch()
@@ -1202,7 +1220,9 @@ class ModEditorDialog(QDialog):
             )
             if icon_val:
                 config["icon"] = icon_val
-            self.parent_app.settings_service.write_json(config_path, config)
+            self.parent_app.settings_service.write_json(
+                config_path, build_mod_config_data(config)
+            )
             self._refresh_after_save()
             QMessageBox.information(
                 self,

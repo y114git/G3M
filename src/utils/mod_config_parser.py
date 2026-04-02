@@ -16,6 +16,7 @@ MOD_ALLOWED_TAGS = ("textedit", "customization", "gameplay", "other", CYOP_AFOM_
 MOD_FIELD_LIMITS = {
     "id": 50,
     "name": 50,
+    "author": 50,
     "version": 20,
     "game": 30,
     "description": 200,
@@ -211,7 +212,7 @@ def normalize_mod_config_data(
         )
         or "1.0.0",
         "author": _trim_string(
-            _get_metadata_value(config_data, "author"), 50
+            _get_metadata_value(config_data, "author"), MOD_FIELD_LIMITS["author"]
         ),
         "description": _trim_string(
             _get_metadata_value(config_data, "description"),

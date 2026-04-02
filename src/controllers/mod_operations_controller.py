@@ -141,6 +141,10 @@ class ModOperationsController:
             "gb_file_id": file_id,
             "file_name": file_name,
             "compatibility": compatibility,
+            "name": getattr(mod, "name", None),
+            "author": getattr(mod, "author", None),
+            "version": getattr(mod, "version", None),
+            "description": getattr(mod, "description", None),
             "homepage": getattr(mod, "homepage", None),
             "icon": getattr(mod, "icon", None),
             "tags": getattr(mod, "tags", None) or [],
@@ -303,15 +307,8 @@ class ModOperationsController:
             if self.app_state.is_installing and (not force):
                 return
             if analytics := getattr(self.app, "analytics_service", None):
-                analytics.count(
-                    "mod_install_requested",
-                    source="gamebanana"
-                    if (
-                        hasattr(mod, "is_gamebanana_mod")
-                        and callable(mod.is_gamebanana_mod)
-                        and mod.is_gamebanana_mod()
-                    )
-                    else "local",
+                analytics.record_mod_install_requested(
+                    mod,
                     mode="update" if is_update else "install",
                 )
             if (
@@ -426,6 +423,12 @@ class ModOperationsController:
             "Failed to update button state",
         )
         if not success:
+            analytics_mod = installed_mod_info
+            if analytics_mod is None and current_task:
+                install_tasks = getattr(current_task, "install_tasks", []) or []
+                if install_tasks:
+                    analytics_mod = install_tasks[0][0]
+            analytics_mode = "update" if was_installed_before else "install"
             is_cancelled = (
                 message == tr("status.operation_cancelled")
                 or "cancelled" in message.lower()
@@ -433,7 +436,10 @@ class ModOperationsController:
             )
             if is_cancelled:
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.count("mod_install_cancelled")
+                    analytics.record_mod_install_cancelled(
+                        analytics_mod,
+                        mode=analytics_mode,
+                    )
                 logging.info("ModOperationsController: Installation was cancelled")
                 self._safe_execute(
                     lambda: setattr(self.app_state, "operation_cancelled", False),
@@ -444,7 +450,10 @@ class ModOperationsController:
                 )
             else:
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.count("mod_install_failed")
+                    analytics.record_mod_install_failed(
+                        analytics_mod,
+                        mode=analytics_mode,
+                    )
                 self.feedback_service.update_status(
                     tr("status.mod_install_error"), UI_COLORS["status_error"]
                 )
@@ -539,9 +548,13 @@ class ModOperationsController:
 
         if current_task and installed_mod_info:
             self.refresh_specific_mod_widget_after_update(installed_mod_info)
-        if analytics := getattr(self.app, "analytics_service", None):
-            analytics.count(
-                "mod_install_completed",
+        elif current_task and not installed_mod_info:
+            logging.debug("ModOperationsController: current_task.mod_info was missing")
+        if installed_mod_info and (
+            analytics := getattr(self.app, "analytics_service", None)
+        ):
+            analytics.record_mod_install_completed(
+                installed_mod_info,
                 mode="update" if was_installed_before else "install",
             )
         self._update_debounce_short.call(check_cache_and_update)
@@ -644,7 +657,7 @@ class ModOperationsController:
         try:
             self.mod_service.delete_mod_files(mod)
             if analytics := getattr(self.app, "analytics_service", None):
-                analytics.count("mod_uninstalled")
+                analytics.record_mod_removed(mod, action="uninstall")
             self.app.search_display.update_search_cards()
             if hasattr(self.app, "library_display"):
                 self.app.library_display.update_display()

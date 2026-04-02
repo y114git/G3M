@@ -56,6 +56,21 @@ class TestLocalizationSystem:
                 mismatches.append((lang_path.name, missing[:10], extra[:10]))
         assert not mismatches, f'Localization key mismatches found: {mismatches}'
 
+    def test_tr_unescapes_html_entities_in_format_args(self):
+        """Checks that formatted placeholders render as plain text."""
+        from services.localization_service import LocalizationManager
+
+        loc_service = LocalizationManager()
+        assert loc_service.load_language('en')
+        assert (
+            loc_service.get_text(
+                'errors.mod_import_failed',
+                mod_name='John&#x27;s Mod',
+                error='can&#x27;t open file',
+            )
+            == "Failed to import mod: can't open file"
+        )
+
 
 class TestUIElementsUseTrFunction:
     """Tests for localization updates."""

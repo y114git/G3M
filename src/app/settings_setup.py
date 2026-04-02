@@ -241,6 +241,7 @@ def setup_settings_tab(w):
             "disable_animations_checkbox",
             "disable_background_checkbox",
             "disable_startup_sound_checkbox",
+            "pause_background_music_unfocused_checkbox",
             "change_background_button",
             "change_logo_button",
             "change_font_button",
@@ -366,6 +367,14 @@ def setup_settings_tab(w):
             lambda: w.settings_ui.on_toggle_disable_startup_sound(bool(state)),
         )
     )
+    w.pause_background_music_unfocused_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.pause_background_music_unfocused_checkbox,
+            lambda: w.settings_ui.on_toggle_pause_background_music_unfocused(
+                bool(state)
+            ),
+        )
+    )
     w.change_background_button.clicked.connect(
         lambda: _guarded_trigger(
             w.change_background_button, w.theme.on_background_button_click
@@ -400,6 +409,9 @@ def setup_settings_tab(w):
     )
     w.disable_startup_sound_checkbox.setChecked(
         w.app_state.local_config.get("disable_startup_sound", False)
+    )
+    w.pause_background_music_unfocused_checkbox.setChecked(
+        w.app_state.local_config.get("pause_background_music_unfocused", False)
     )
     w.theme_button.clicked.connect(
         lambda: _guarded_trigger(w.theme_button, w.theme.on_theme_button_click)

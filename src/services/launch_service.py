@@ -52,6 +52,7 @@ class GameLauncher(QObject):
         self.restore_window_callback = None
         self._launch_started_at = None
         self._launch_mod_ids: list[str] = []
+        self._launch_mod_refs: list[dict[str, str]] = []
         self._launch_mode = "unknown"
         self._launch_had_mods = False
 
@@ -113,6 +114,7 @@ class GameLauncher(QObject):
     ):
         self._launch_started_at = time.monotonic()
         self._launch_mod_ids = self._collect_launch_mod_ids(selections)
+        self._launch_mod_refs = self._collect_launch_mod_refs(selections)
         self._launch_had_mods = self._has_selected_mods(selections)
         self._launch_mode = "unknown"
         self.restore_window_callback = restore_window_callback
@@ -175,6 +177,9 @@ class GameLauncher(QObject):
                 reason=reason,
                 mode=self._launch_mode,
                 with_mods=self._launch_had_mods,
+                game=self.app_state.game_mode.game_id,
+                mod_count=len(self._launch_mod_refs),
+                via_steam=bool(self.app_state.local_config.get("launch_via_steam", False)),
             )
         if self.restore_window_callback:
             self.restore_window_callback()
@@ -377,6 +382,10 @@ class GameLauncher(QObject):
                 elapsed,
                 mode=self._launch_mode,
                 with_mods=self._launch_had_mods,
+                game=self.app_state.game_mode.game_id,
+                mod_count=len(self._launch_mod_refs),
+                mod_refs=self._launch_mod_refs,
+                via_steam=bool(self.app_state.local_config.get("launch_via_steam", False)),
             )
 
     @staticmethod
@@ -393,6 +402,27 @@ class GameLauncher(QObject):
                     continue
                 seen.add(mod_id)
                 result.append(mod_id)
+        return result
+
+    @staticmethod
+    def _collect_launch_mod_refs(selections: dict[str, Any]) -> list[dict[str, str]]:
+        from utils.mod_utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
+
+        seen = set()
+        result: list[dict[str, str]] = []
+        for mods in selections.values():
+            mod_list = mods if isinstance(mods, list) else [mods]
+            for mod in mod_list:
+                mod_id = get_mod_id(mod)
+                gb_type, gb_id = parse_gamebanana_mod_id(str(mod_id or ""))
+                if not gb_type or not gb_id or mod_id in seen:
+                    continue
+                seen.add(mod_id)
+                payload = {"ref": f"gb_{gb_type}_{gb_id}"}
+                mod_name = str(get_mod_name(mod, "") or "").strip()
+                if mod_name:
+                    payload["name"] = mod_name
+                result.append(payload)
         return result
 
     def _determine_launch_config(
@@ -699,6 +729,10 @@ class GameLauncher(QObject):
             analytics.record_launch_started(
                 mode=self._launch_mode,
                 with_mods=has_selected_mods,
+                game=self.app_state.game_mode.game_id,
+                mod_count=len(self._launch_mod_refs),
+                mod_refs=self._launch_mod_refs,
+                via_steam=bool(self.app_state.local_config.get("launch_via_steam", False)),
             )
         if needs_multi_mod and self.restore_window_callback:
             self.game_launch_started.emit()

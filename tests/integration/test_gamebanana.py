@@ -109,4 +109,3 @@ class TestGameBananaConverter:
             assert converter is not None
         finally:
             os.unlink(archive_path)
-

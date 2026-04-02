@@ -32,7 +32,7 @@ if os.path.exists(env_path):
     print(f"Adding .env to datas: {env_path} -> .")
     datas_extra.append((env_path, '.'))
 else:
-    print("WARNING: .env file not found!")
+    print(f"WARNING: .env file not found at: {env_path}")
 
 a = Analysis(
     ['../src/main.py'],
@@ -118,7 +118,6 @@ a = Analysis(
         'telnetlib',
         'ftplib',
         'xmlrpc',
-        'multiprocessing',
         'PIL',
         'PIL.Image',
         'PIL.ImageFile',

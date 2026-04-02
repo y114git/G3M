@@ -297,6 +297,8 @@ class DownloadsManager(QObject):
             return
         record.ever_installed = True
         if record.delete_after_use:
+            record.use_status = UseStatus.READY
+            self.record_updated.emit(record)
             self._store.delete_file_for_record(record)
             self._store.remove(record.id)
             self.record_removed.emit(record.id)
@@ -485,8 +487,11 @@ class DownloadsManager(QObject):
         return {
             "mod_id": m["gb_mod_id"],
             "item_type": m.get("item_type", "mod"),
-            "name": record.display_name,
+            "name": m.get("name") or record.display_name,
             "author": m.get("author"),
+            "version": m.get("version"),
+            "description": m.get("description"),
+            "file_name": m.get("file_name"),
             "homepage": m.get("homepage") or m.get("profile_url"),
             "icon": m.get("icon"),
             "tags": m.get("tags") or [],

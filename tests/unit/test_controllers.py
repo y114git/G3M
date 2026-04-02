@@ -29,6 +29,58 @@ class TestModOperationsController:
         assert controller.mod_service == mod_service
 
 
+class TestGameLaunchController:
+    def test_refresh_mods_in_use_replaces_mod_objects_inside_lists(
+        self, app_state, feedback_service
+    ):
+        from controllers.game_launch_controller import GameLaunchController
+        from models.mod_models import LocalModInfo, ModFileData
+
+        stale_mod = LocalModInfo(
+            id="chapter_swap_mod",
+            name="Old",
+            version="1.0.0",
+            author="Author",
+            description="Desc",
+            game="deltarune",
+            files={"deltarune_4": ModFileData(data_file_path="chapter4/DATA.win")},
+        )
+        refreshed_mod = LocalModInfo(
+            id="chapter_swap_mod",
+            name="New",
+            version="1.0.0",
+            author="Author",
+            description="Desc",
+            game="deltarune",
+            files={"deltarune_0": ModFileData(data_file_path="menu/DATA.win")},
+        )
+        app_state.all_mods = [refreshed_mod]
+        used_mods_service = Mock()
+        used_mods_service.used_mods = {"deltarune_0": [stale_mod]}
+        mod_service = Mock()
+
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=Mock(),
+            customization_service=Mock(),
+            app_window=Mock(),
+        )
+
+        controller.refresh_mods_in_use()
+
+        assert used_mods_service.used_mods["deltarune_0"] == [refreshed_mod]
+        assert used_mods_service.used_mods["deltarune_0"][0].get_chapter_data(
+            "deltarune_4"
+        ) is None
+        assert used_mods_service.used_mods["deltarune_0"][0].get_chapter_data(
+            "deltarune_0"
+        ) is not None
+
+
 class TestTabHandler:
     def test_handle_tab_changed_clears_search_selection_on_switch(self):
         from app.tab_handler import handle_tab_changed
@@ -591,6 +643,36 @@ class TestSearchDisplayController:
         app_window.modgame_combo.currentData.return_value = "deltarune"
         filters, _ = controller._build_filters_and_sort()
         assert filters["tags"] == []
+
+    def test_search_display_cleanup_cancels_and_stops_threads(
+        self, app_state, feedback_service, monkeypatch
+    ):
+        from controllers.search_display_controller import SearchDisplayController
+
+        app_window = Mock()
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        thread = Mock()
+        controller._load_more_threads = [thread]
+        controller._clear_search_timers = Mock()
+        controller._cleanup_load_thread = Mock()
+        safe_stop = Mock()
+        monkeypatch.setattr(
+            "controllers.search_display_controller.safe_stop_thread",
+            safe_stop,
+        )
+
+        controller.cleanup()
+
+        controller._clear_search_timers.assert_called_once_with()
+        thread.cancel.assert_called_once_with()
+        safe_stop.assert_called_once_with(thread, timeout=500, blocking=False)
+        controller._cleanup_load_thread.assert_called_once_with(thread)
 
 
 class TestLibraryCyopAfomFilter:

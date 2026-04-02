@@ -5,6 +5,7 @@ import os
 import shutil
 import threading
 import time
+from types import SimpleNamespace
 from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -269,15 +270,31 @@ class ModManager(QObject):
                     if hasattr(existing_mod, "update_metadata"):
                         existing_mod.update_metadata({"icon": local_icon})
 
+            def _refresh_local_mod_files(existing_mod, config_data, mod_id):
+                mod_folder_path = self.get_mod_folder_path(mod_id)
+                refreshed_files: dict[str, ModFileData] = {}
+                try:
+                    self._parse_local_chapter_files(
+                        SimpleNamespace(files=refreshed_files),
+                        config_data,
+                        mod_id,
+                        mod_folder_path,
+                    )
+                except Exception as e:
+                    logging.warning(
+                        f"load_local_mods: Failed to refresh local files for mod {mod_id}: {e}",
+                        exc_info=True,
+                    )
+                    return
+                existing_mod.files = refreshed_files
+
             def _try_update_mod_files(
                 existing_mod, config_data, mod_id, replace_in_list=False
             ):
-                if (
-                    not hasattr(existing_mod, "files") or not existing_mod.files
-                ) and config_data.get("files"):
+                files_data = config_data.get("files")
+                if files_data:
                     try:
-                        files_data = config_data.get("files", {})
-                        if isinstance(files_data, dict) and files_data:
+                        if isinstance(files_data, dict):
                             new_mod = self.create_mod_object_from_info(
                                 config_data, self.app_state.all_mods
                             )
@@ -288,6 +305,8 @@ class ModManager(QObject):
                                         break
                             elif hasattr(new_mod, "files") and new_mod.files:
                                 existing_mod.files = new_mod.files
+                            elif hasattr(existing_mod, "files"):
+                                existing_mod.files = {}
                         else:
                             logging.debug(
                                 f"load_local_mods: Skipping mod {mod_id} with empty/invalid files data"
@@ -367,6 +386,7 @@ class ModManager(QObject):
                                 field,
                                 config_data.get(field, getattr(existing_mod, field)),
                             )
+                        _refresh_local_mod_files(existing_mod, config_data, mod_id)
                         _sync_mod_icon(existing_mod, config_data, mod_id)
                         if hasattr(existing_mod, "update_metadata"):
                             existing_mod.update_metadata(config_data)

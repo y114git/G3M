@@ -259,6 +259,7 @@
   "checkboxes": {
     "disable_background": "禁用背景",
     "disable_startup_sound": "禁用啟動音效",
+    "pause_background_music_unfocused": "失去焦點時停止背景音樂",
     "xdelta_modpack": "使用XDELTA代替data.win/.ios",
     "merge_properties": "屬性合併",
     "merge_code": "程式碼合併",
@@ -334,6 +335,7 @@
     "language": "選擇 G3M 介面使用的語言。",
     "ui_scale": "放大或縮小整個介面。更大的數值會讓文字與控制項更容易閱讀。",
     "analytics_opt_in": "透過分享額外的匿名聚合使用統計來幫助改進 G3M，例如功能使用、對話框開啟、下載、搜尋以及遊戲啟動結果分組。不會傳送個人資料、原始檔案路徑、精確搜尋詞或直接識別資訊。",
+    "pause_background_music_unfocused": "當 G3M 失去焦點或最小化時停止背景音樂。由於播放限制，回到應用程式後音樂會從頭重新開始。",
     "sort_mode": "選擇目前列表的排序方式。",
     "select_game": "選擇你目前要查看模組或設定的遊戲。",
     "filter_by_tag": "依模組分類過濾目前列表。",
@@ -425,6 +427,7 @@
     "extra_files_tab": "額外檔案",
     "data_tab_info": "為每個區段選擇主要 DATA 檔案。\n每個分頁只能指派一個 DATA 檔案。",
     "extra_files_path_instructions": "輸入每個檔案應放置的資料夾路徑，相對於遊戲資料夾。\n範例：'sprites/bgs' 會將檔案放置在遊戲資料夾的 sprites/bgs/ 目錄中。\n使用正斜線 (/) 分隔資料夾。",
+    "extra_files_path_instructions_deltarune": "輸入每個檔案應放置的資料夾路徑，相對於遊戲資料夾。\n範例：'sprites/bgs' 會將檔案放置在遊戲資料夾的 sprites/bgs/ 目錄中。\n對於 DELTARUNE，你也可以讓路徑以前置章節資料夾開始，例如 'chapter_1/' 或 'chapter1_windows/'，這樣檔案就會綁定到對應章節。\n使用正斜線 (/) 分隔資料夾。",
     "select_data_file_info": "為 {chapter} 選擇資料檔案",
     "no_file_selected": "未選擇檔案",
     "select_target_folder": "選擇目標資料夾",

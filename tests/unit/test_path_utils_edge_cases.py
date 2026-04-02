@@ -281,4 +281,3 @@ class TestPathUtilsEdgeCases:
         end = time.time()
 
         assert (end - start) < 1.0
-

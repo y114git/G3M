@@ -4,7 +4,9 @@ import logging
 import os
 import shutil
 import tempfile
+import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -12,6 +14,7 @@ import pytest
 from adapters.g3mtool_adapter import G3MToolManager
 from services.backup_service import BackupManager
 from services.g3mtool_patching_service import (
+    MOD_TYPE_CSX,
     MOD_TYPE_DATAFILE,
     MOD_TYPE_G3MPATCH,
     MOD_TYPE_OVERRIDES_ONLY,
@@ -150,6 +153,22 @@ class TestG3MToolAdapter:
                 lambda g3mtool: g3mtool.diff("left.win", "right.win", "diff-out"),
                 ["g3mtool", "diff", "left.win", "right.win", "diff-out"],
             ),
+            (
+                lambda g3mtool: g3mtool.execute(
+                    "script.csx",
+                    data_file="original.win",
+                    output_path="out.win",
+                ),
+                [
+                    "g3mtool",
+                    "execute",
+                    "script.csx",
+                    "--data",
+                    "original.win",
+                    "--output",
+                    "out.win",
+                ],
+            ),
         ],
     )
     def test_public_commands_forward_expected_contract(
@@ -172,6 +191,11 @@ class TestG3MToolAdapter:
             lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
             lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
             lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
+            lambda g3mtool: g3mtool.execute(
+                "script.csx",
+                data_file="original.win",
+                output_path="out.win",
+            ),
             lambda g3mtool: g3mtool.info("target.win"),
             lambda g3mtool: g3mtool.diff("left.win", "right.win"),
         ],
@@ -226,6 +250,60 @@ class TestModClassification:
         assert mod_type == MOD_TYPE_DATAFILE
         assert patch_file.endswith("data.win")
 
+    def test_collect_mod_infos_uses_configured_root_data_file_for_menu_chapter(
+        self, tmp_path
+    ):
+        """Checks that root-level configured menu data files are not skipped."""
+        mod_dir = tmp_path / "sigma"
+        mod_dir.mkdir()
+        data_file = mod_dir / "BOSSRUSH.win"
+        data_file.write_text("patched", encoding="utf-8")
+        (mod_dir / "mod_config.json").write_text(
+            json.dumps(
+                {
+                    "id": "sigma",
+                    "name": "sigma",
+                    "author": "Local author",
+                    "version": "1.0.0",
+                    "game": "deltarune",
+                    "files": {
+                        "deltarune_0": {
+                            "data_file_path": "BOSSRUSH.win",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        app_state = Mock()
+        app_state.local_config = {}
+        app_state.mods_dir = str(tmp_path)
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = str(mod_dir)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        mod_data = SimpleNamespace(
+            id="sigma",
+            name="sigma",
+            game="deltarune",
+            get_chapter_data=lambda chapter_id: SimpleNamespace(
+                data_file_path="BOSSRUSH.win" if chapter_id == "deltarune_0" else None
+            ),
+        )
+
+        mod_infos = patcher._collect_mod_infos([mod_data], "deltarune_0")
+
+        assert mod_infos == [(str(data_file), MOD_TYPE_DATAFILE, None)]
+
+    def test_classify_csx(self, tmp_path):
+        """Checks that classifying csx scripts."""
+        mod_dir = tmp_path / "mod"
+        mod_dir.mkdir()
+        (mod_dir / "patch.csx").write_text("// fake", encoding="utf-8")
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_CSX
+        assert patch_file.endswith(".csx")
+
     def test_classify_overrides_only(self, tmp_path):
         """Checks that classifying overrides only."""
         mod_dir = tmp_path / "mod"
@@ -254,6 +332,18 @@ class TestModClassification:
         patcher = G3MToolPatchingService(Mock(), Mock())
         _patch_file, mod_type = patcher._classify_mod(str(mod_dir))
         assert mod_type == MOD_TYPE_OVERRIDES_ONLY
+
+    def test_classify_g3mpatch_zip(self, tmp_path):
+        """Checks that classifying g3mpatch zip."""
+        mod_dir = tmp_path / "mod"
+        mod_dir.mkdir()
+        patch_zip = mod_dir / "patch.zip"
+        with zipfile.ZipFile(patch_zip, "w") as zf:
+            zf.writestr("g3mpatch.json", json.dumps({"original": {"md5": "abc"}}))
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patch_file, mod_type = patcher._classify_mod(str(mod_dir))
+        assert mod_type == MOD_TYPE_G3MPATCH
+        assert patch_file.endswith(".zip")
 
     def test_classify_empty_dir(self, tmp_path):
         """Checks that classifying empty dir."""
@@ -452,6 +542,72 @@ class TestXdeltaPatchApplication:
         result = patcher._apply_single_mod(
             str(data_win_path),
             (str(patch_file), MOD_TYPE_XDELTA, str(tmp_path)),
+            str(output_path),
+            str(tmp_path / "g3mtool.log"),
+            0,
+            100,
+            "Chapter 4",
+        )
+
+        assert result is True
+        assert output_path.read_bytes() == b"ORIGINAL"
+        patcher.warning_handler.assert_called_once()
+
+
+class TestCsxPatchApplication:
+    """Tests for csx patch execution."""
+
+    def test_csx_patch_uses_execute_with_data_file(self, tmp_path):
+        """Checks that csx execution writes a patched output file."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        data_win_path = tmp_path / "data.win"
+        patch_file = tmp_path / "chapter4.csx"
+        output_path = tmp_path / "patched_data.win"
+        data_win_path.write_bytes(b"ORIGINAL")
+        patch_file.write_text("// script", encoding="utf-8")
+
+        def _execute(target, args=None, data_file=None, output_path=None, input_path=None):
+            assert target == str(patch_file)
+            assert data_file == str(data_win_path)
+            assert output_path == str(output_path_arg)
+            Path(output_path).write_bytes(b"PATCHED")
+            return (0, "", "")
+
+        output_path_arg = output_path
+        patcher.g3mtool.execute = Mock(side_effect=_execute)
+
+        result = patcher._apply_single_mod(
+            str(data_win_path),
+            (str(patch_file), MOD_TYPE_CSX, str(tmp_path)),
+            str(output_path),
+            str(tmp_path / "g3mtool.log"),
+            0,
+            100,
+            "Chapter 4",
+        )
+
+        assert result is True
+        assert output_path.read_bytes() == b"PATCHED"
+        patcher.g3mtool.execute.assert_called_once()
+
+    def test_csx_missing_output_uses_warning_fallback(self, tmp_path):
+        """Checks that csx missing output uses warning fallback."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        data_win_path = tmp_path / "data.win"
+        patch_file = tmp_path / "chapter4.csx"
+        output_path = tmp_path / "patched_data.win"
+        data_win_path.write_bytes(b"ORIGINAL")
+        patch_file.write_text("// script", encoding="utf-8")
+        patcher.g3mtool.execute = Mock(return_value=(0, "", ""))
+        patcher.warning_handler = Mock(return_value=True)
+
+        result = patcher._apply_single_mod(
+            str(data_win_path),
+            (str(patch_file), MOD_TYPE_CSX, str(tmp_path)),
             str(output_path),
             str(tmp_path / "g3mtool.log"),
             0,

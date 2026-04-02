@@ -422,4 +422,3 @@ class TestWriteShortcutFile:
         ).decode("ascii")
         assert b64 in content
         assert json.loads(base64.b64decode(b64).decode("utf-8")) == cfg
-

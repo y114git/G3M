@@ -3,8 +3,16 @@
 import os
 import platform
 import re
+import zipfile
 
-from config.config import GAME_DATA_FILE_EXTENSIONS
+from config.config import (
+    GAME_DATA_FILE_EXTENSIONS,
+    MOD_TYPE_CSX,
+    MOD_TYPE_DATAFILE,
+    MOD_TYPE_G3MPATCH,
+    MOD_TYPE_OVERRIDES_ONLY,
+    MOD_TYPE_XDELTA,
+)
 from models.game_modes import get_game
 from utils.path_utils import (
     find_supported_game_data_file,
@@ -31,15 +39,30 @@ def find_files_by_extension(
 
 
 def find_g3m_patches(mod_source_dir: str) -> list[str]:
-    """Find .g3mpatch files in a mod directory."""
+    """Find G3M patch packages in a mod directory."""
     results = []
     if not os.path.isdir(mod_source_dir):
         return results
     for root, _dirs, files in os.walk(mod_source_dir):
         for f in files:
-            if f.lower().endswith(".g3mpatch"):
-                results.append(os.path.join(root, f))
+            candidate = os.path.join(root, f)
+            if is_g3mpatch_package(candidate):
+                results.append(candidate)
     return results
+
+
+def is_g3mpatch_package(path: str) -> bool:
+    lower_path = str(path or "").lower()
+    if lower_path.endswith(".g3mpatch"):
+        return True
+    if not lower_path.endswith(".zip"):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            archive.getinfo("g3mpatch.json")
+        return True
+    except Exception:
+        return False
 
 
 def find_ready_data_win_files(mod_source_dir: str, logger=None) -> list[str]:
@@ -65,6 +88,27 @@ def find_ready_data_win_files(mod_source_dir: str, logger=None) -> list[str]:
             f"find_ready_data_win_files: found {len(ready_files)} ready data file(s) in {mod_source_dir}"
         )
     return ready_files
+
+
+def classify_patch_file(path: str | None) -> tuple[str | None, str]:
+    if not path or not os.path.isfile(path):
+        return (None, MOD_TYPE_OVERRIDES_ONLY)
+    lower_path = str(path).lower()
+    if is_g3mpatch_package(path):
+        return (path, MOD_TYPE_G3MPATCH)
+    if lower_path.endswith((".xdelta", ".vcdiff")):
+        return (path, MOD_TYPE_XDELTA)
+    if lower_path.endswith(".csx"):
+        return (path, MOD_TYPE_CSX)
+    if lower_path.endswith(GAME_DATA_FILE_EXTENSIONS):
+        return (path, MOD_TYPE_DATAFILE)
+    return (None, MOD_TYPE_OVERRIDES_ONLY)
+
+
+def find_csx_scripts(mod_source_dir: str) -> list[str]:
+    if not os.path.isdir(mod_source_dir):
+        return []
+    return find_files_by_extension(mod_source_dir, [".csx"])
 
 
 def find_data_win(

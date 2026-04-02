@@ -299,7 +299,7 @@ class TestSafeFilename:
 class TestDownloadsManager:
     """Tests for downloads."""
     @pytest.fixture(autouse=True)
-    def _setup_manager(self, tmp_path, qtbot):
+    def _setup_manager(self, tmp_path):
         self.base_dir = str(tmp_path)
         self.settings = {'downloads_no_auto_use': True, 'downloads_delete_after_use': False}
         self.manager = DownloadsManager(self.base_dir, lambda: self.settings)
@@ -418,7 +418,7 @@ class TestDownloadsManager:
         self.manager.clear_downloads()
         assert self.manager.store.find('fin1') is None
 
-    def test_badge_emitted(self, qtbot):
+    def test_badge_emitted(self):
         """Checks that badgeing emitted."""
         badge_calls = []
         self.manager.badge_changed.connect(lambda c, a: badge_calls.append((c, a)))

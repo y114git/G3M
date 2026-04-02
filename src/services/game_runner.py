@@ -79,6 +79,10 @@ def _find_mod_source_dir(mod_id: str, local_config: dict) -> str | None:
             try:
                 with open(config_path, encoding="utf-8") as f:
                     cfg = json.load(f)
+                if isinstance(cfg, dict):
+                    from utils.mod_config_parser import normalize_mod_config_data
+
+                    normalize_mod_config_data(cfg, mod_root_path=folder_path)
                 if isinstance(cfg, dict) and cfg.get("id") == mod_id:
                     return folder_path
             except Exception as e:
@@ -121,6 +125,9 @@ def _classify_mod(mod_source_dir: str):
         fl = f.lower()
         if fl.endswith((".xdelta", ".vcdiff")):
             return (os.path.join(mod_source_dir, f), "xdelta")
+    csx_scripts = mod_content.find_csx_scripts(mod_source_dir)
+    if csx_scripts:
+        return (csx_scripts[0], "csx")
     ready_files = mod_content.find_ready_data_win_files(mod_source_dir)
     if ready_files:
         return (ready_files[0], "datafile")
@@ -261,6 +268,20 @@ def _patch_chapter(
             success = True
         except Exception as e:
             logger.error(f"Failed to copy data file: {e}")
+            return False
+    elif mod_type == "csx":
+        logger.info(f"Executing csx script: {patch_file}")
+        rc, _stdout, stderr = g3mtool.execute(
+            patch_file,
+            data_file=data_win_path,
+            output_path=temp_output,
+        )
+        if rc != 0:
+            logger.error(f"g3mtool execute failed: {stderr[:500]}")
+            return False
+        success = os.path.exists(temp_output)
+        if not success:
+            logger.error(f"CSX script produced no output file: {temp_output}")
             return False
 
     if success:

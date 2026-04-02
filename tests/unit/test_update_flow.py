@@ -92,4 +92,3 @@ def test_prompt_for_update_queues_when_game_is_running():
 
     assert app.app_state.pending_dialogs == [("update", {"version": "9.9.9"})]
     app.update_checker.perform_update.assert_not_called()
-

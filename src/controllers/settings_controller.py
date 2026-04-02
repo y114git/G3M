@@ -120,6 +120,10 @@ class SettingsUiController:
             self.app.disable_startup_sound_checkbox.setChecked(
                 config.get("disable_startup_sound", False)
             )
+        if hasattr(self.app, "pause_background_music_unfocused_checkbox"):
+            self.app.pause_background_music_unfocused_checkbox.setChecked(
+                config.get("pause_background_music_unfocused", False)
+            )
         if hasattr(self.app, "show_reset_buttons_checkbox"):
             self.app.show_reset_buttons_checkbox.setChecked(
                 config.get("show_reset_buttons", False)
@@ -287,6 +291,11 @@ class SettingsUiController:
 
     def on_toggle_disable_startup_sound(self, state):
         self.settings_service.on_toggle_disable_startup_sound(bool(state))
+
+    def on_toggle_pause_background_music_unfocused(self, state):
+        self.settings_service.on_toggle_pause_background_music_unfocused(bool(state))
+        if hasattr(self.app, "_sync_background_audio_focus"):
+            self.app._sync_background_audio_focus()
 
     def on_toggle_skip_patching_warnings(self, state):
         self.settings_service.on_toggle_skip_patching_warnings(bool(state))

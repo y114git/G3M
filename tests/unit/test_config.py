@@ -93,6 +93,5 @@ class TestConstants:
         """Checks that presenceing timing constants."""
         from config.config import ONLINE_UPDATE_INTERVAL
 
-        expected = 10 * 60 * 1000
+        expected = 30 * 60 * 1000
         assert expected == ONLINE_UPDATE_INTERVAL
-

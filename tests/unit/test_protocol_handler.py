@@ -202,4 +202,3 @@ class TestProtocolHandler:
 
         call_args = w.downloads_manager.enqueue_with_feedback.call_args
         assert call_args[1]['display_name'] == 'example.com'
-

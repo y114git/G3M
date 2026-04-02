@@ -152,7 +152,11 @@ class AppWindow(QWidget):
         self.initialization_timer.timeout.connect(self._force_finish_initialization)
         self.initialization_timer.start(INITIALIZATION_TIMEOUT)
         self.settings_service.load_window_geometry(self)
-        QApplication.instance().installEventFilter(self)
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
+            with contextlib.suppress(Exception):
+                app.applicationStateChanged.connect(self._on_application_state_changed)
 
     def _connect_own_signals(self):
         """Connect AppWindow's own pyqtSignals to their handlers."""
@@ -614,6 +618,7 @@ class AppWindow(QWidget):
     def _try_start_background_music(self):
         if getattr(self, "is_shown_to_user", False) and self.isVisible():
             self.customization_service.maybe_start_background_music(force=True)
+            self._sync_background_audio_focus()
 
     def _on_search_sort_changed(self):
         if not hasattr(self, "search_display"):
@@ -807,6 +812,15 @@ class AppWindow(QWidget):
                 return True
             self._hide_custom_tooltip()
             return super().eventFilter(obj, ev)
+        elif ev_type in (
+            QEvent.Type.WindowActivate,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.ApplicationActivate,
+            QEvent.Type.ApplicationDeactivate,
+            QEvent.Type.FocusIn,
+            QEvent.Type.FocusOut,
+        ):
+            self._sync_background_audio_focus()
         elif ev_type in (
             QEvent.Type.Leave,
             QEvent.Type.MouseButtonPress,
@@ -1107,6 +1121,8 @@ class AppWindow(QWidget):
         if app:
             with contextlib.suppress(Exception):
                 app.removeEventFilter(self)
+            with contextlib.suppress(Exception):
+                app.applicationStateChanged.disconnect(self._on_application_state_changed)
         with contextlib.suppress(Exception):
             self.analytics_service.shutdown()
         if hasattr(self, 'plugins_ui') and self.plugins_ui:
@@ -1120,8 +1136,35 @@ class AppWindow(QWidget):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
             self._sync_title_bar_window_state()
+            self._sync_background_audio_focus()
             if not self.isMinimized():
                 self._schedule_window_layout_refresh(220)
+
+    def _on_application_state_changed(self, _state):
+        self._sync_background_audio_focus()
+
+    def _should_pause_background_audio(self) -> bool:
+        if not self.app_state.local_config.get("pause_background_music_unfocused", False):
+            return False
+        app = QApplication.instance()
+        if self.isMinimized():
+            return True
+        if not app:
+            return False
+        for widget in (app.activeWindow(), app.focusWidget(), app.activeModalWidget()):
+            while widget is not None:
+                if widget is self:
+                    return False
+                widget = widget.parent() if hasattr(widget, "parent") else None
+        return app.applicationState() != Qt.ApplicationState.ApplicationActive
+
+    def _sync_background_audio_focus(self):
+        customization = getattr(self, "customization_service", None)
+        if customization is None:
+            return
+        customization.set_background_music_focus_paused(
+            self._should_pause_background_audio()
+        )
 
     def mousePressEvent(self, event):
         if (
@@ -1237,6 +1280,7 @@ class AppWindow(QWidget):
             self.game_launch.update_button_state()
         if is_initial and (not result):
             self.customization_service.start_background_music()
+            self._sync_background_audio_focus()
         return result
 
     def _update_all_action_buttons(self):

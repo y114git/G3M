@@ -1,7 +1,5 @@
 """Window-local runtime state initialization."""
 
-import platform
-
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QPixmap
 
@@ -20,8 +18,6 @@ def initialize_window_runtime(window) -> None:
     window.background_movie = None
     window.background_pixmap: QPixmap | None = None
     window.custom_font_family = None
-    window._bg_music_running = False
-    window._bg_music_thread = None
     window._suppress_tab_handlers = False
     window._last_online_count = 0
     window._install_op_id = 0
@@ -39,4 +35,3 @@ def initialize_window_runtime(window) -> None:
     window._downloads_dialog = None
     window._game_versions_dialog = None
     window._modding_tools_dialog = None
-    window._supports_volume = platform.system() == "Windows"

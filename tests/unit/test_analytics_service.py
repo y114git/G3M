@@ -35,13 +35,154 @@ def test_analytics_service_respects_opt_in_and_flushes_batch(qapp, tmp_path):
     assert not service._opt_in
 
 
-def test_analytics_service_records_search_bucket(qapp, tmp_path):
+def test_analytics_service_records_mods_browser_search_bucket(qapp, tmp_path):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
     service = AnalyticsService(app_state, str(tmp_path))
 
-    service.record_search_results("mods_browser", 12)
+    service.record_mods_browser_search("roaring edition")
 
     assert any(
-        key.startswith("search_results") and "count=10_49" in key
+        key.startswith("search_mods_browser") and "query_len=13_plus" in key
         for key in service._always_on
     )
+
+
+def test_analytics_service_records_single_character_mods_browser_search_bucket(
+    qapp, tmp_path
+):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state, str(tmp_path))
+
+    service.record_mods_browser_search("a")
+
+    assert any(
+        key.startswith("search_mods_browser") and "query_len=1" in key
+        for key in service._always_on
+    )
+
+
+def test_analytics_service_persists_local_counters_between_instances(qapp, tmp_path):
+    app_state = SimpleNamespace(
+        local_config={
+            "language": "en",
+            "ui_scale": 1.0,
+            "analytics_opt_in_enabled": True,
+        }
+    )
+    service = AnalyticsService(app_state, str(tmp_path))
+
+    service.record_launch_started(
+        mode="subprocess",
+        with_mods=True,
+        game="deltarune",
+        mod_count=2,
+        mod_refs=[{"ref": "gb_mod_123", "name": "Roaring Patch"}],
+    )
+    service._save_state()
+
+    restored = AnalyticsService(app_state, str(tmp_path))
+
+    assert any(key.startswith("game_launch_started") for key in restored._always_on)
+    assert any(key.startswith("launch_mod_selected") for key in restored._opt_in)
+
+
+def test_analytics_service_persists_stable_pending_payload_ids(qapp, tmp_path):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state, str(tmp_path))
+
+    service.count("always_event")
+    service._enqueue_session_payload()
+    first_payload_id = service._pending[0]["id"]
+    service._save_state()
+
+    restored = AnalyticsService(app_state, str(tmp_path))
+
+    assert restored._pending[0]["id"] == first_payload_id
+
+
+def test_analytics_service_records_download_use_completion_details(qapp, tmp_path):
+    app_state = SimpleNamespace(
+        local_config={
+            "language": "en",
+            "ui_scale": 1.0,
+            "analytics_opt_in_enabled": True,
+        }
+    )
+    service = AnalyticsService(app_state, str(tmp_path))
+    record = SimpleNamespace(
+        id="rec1",
+        source_kind="gamebanana",
+        target_kind="mod",
+        auto_use=True,
+        delete_after_use=False,
+        download_status="downloaded",
+        use_status="ready_to_use",
+        ever_installed=True,
+        bytes_total=12_000_000,
+        bytes_received=12_000_000,
+        metadata={
+            "game": "deltarune",
+            "gb_mod_id": 123,
+            "item_type": "mod",
+            "name": "Roaring Patch",
+            "gb_file_id": 456,
+            "file_name": "roaring_patch.zip",
+            "compatibility": "g3m",
+            "category": "Gameplay",
+        },
+    )
+
+    service._on_download_record_updated(record)
+
+    assert any(key.startswith("use_completed") for key in service._always_on)
+    assert any(
+        key.startswith("use_completed_detail") and "ref=gb_mod_123" in key
+        for key in service._opt_in
+    )
+
+
+def test_analytics_service_shutdown_waits_for_upload_completion(qapp, tmp_path, monkeypatch):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state, str(tmp_path))
+    service.count("always_event")
+    wait_calls = []
+    real_wait_for_upload_shutdown = service._wait_for_upload_shutdown
+
+    def tracked_wait(timeout_ms=1500):
+        wait_calls.append(timeout_ms)
+        return real_wait_for_upload_shutdown(timeout_ms)
+
+    monkeypatch.setattr(service, "_wait_for_upload_shutdown", tracked_wait)
+
+    with patch("services.analytics_service.cloud_function_request", return_value=_Response()):
+        service.shutdown()
+
+    assert wait_calls == [1500]
+    assert service._upload_thread is None
+
+
+def test_analytics_service_shutdown_uses_less_aggressive_fallback_timeout(
+    qapp, tmp_path, monkeypatch
+):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state, str(tmp_path))
+
+    class _StuckThread:
+        def wait(self, _timeout):
+            return False
+
+        def isRunning(self):  # noqa: N802
+            return True
+
+    service._upload_thread = _StuckThread()
+    fallback_calls = []
+    monkeypatch.setattr(
+        "services.analytics_service.safe_stop_thread",
+        lambda thread, timeout, blocking: fallback_calls.append(
+            (thread, timeout, blocking)
+        ),
+    )
+
+    service._wait_for_upload_shutdown(timeout_ms=0)
+
+    assert fallback_calls == [(service._upload_thread, 750, True)]

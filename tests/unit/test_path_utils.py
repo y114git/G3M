@@ -294,4 +294,3 @@ class TestPathUtils:
                 f.write("mock")
             result = autodetect_path("Pizza Tower")
             assert result is None or "Pizza" in result
-

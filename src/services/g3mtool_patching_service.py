@@ -19,6 +19,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from adapters.g3mtool_adapter import G3MToolManager
 from config.config import (
     MAX_PATCHING_ARCHIVES,
+    MOD_TYPE_CSX,
     MOD_TYPE_DATAFILE,
     MOD_TYPE_G3MPATCH,
     MOD_TYPE_OVERRIDES_ONLY,
@@ -28,7 +29,11 @@ from services.backup_service import BackupManager
 from services.localization_service import tr
 from utils.file_utils import ensure_writable, get_chapter_folder_name, safe_rmtree
 from utils.patching import mod_content_utils as mod_content
-from utils.patching.mod_resolve_utils import get_mod_source_dir, get_target_dir
+from utils.patching.mod_resolve_utils import (
+    get_mod_configured_data_file,
+    get_mod_source_dir,
+    get_target_dir,
+)
 from utils.path_utils import get_user_data_root
 
 
@@ -596,6 +601,55 @@ class G3MToolPatchingService(QObject):
     ) -> bool:
         patch_file, mod_type, _mod_source_dir = mod_info
 
+        if mod_type == MOD_TYPE_CSX:
+            self.patching_logger.info(f"Executing csx script: {patch_file}")
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.35,
+                tr("status.patching_chapter", chapter=display_name, current=1, total=1),
+            )
+            returncode, _stdout, stderr = self.g3mtool.execute(
+                patch_file,
+                data_file=data_win_path,
+                output_path=output_path,
+            )
+            if returncode != 0:
+                error_text = stderr[:200] or "Unknown error"
+                return self._continue_without_data_patch(
+                    tr(
+                        "dialogs.patching_warning.data_patch_failed",
+                        patch_name=os.path.basename(patch_file),
+                        patch_path=patch_file,
+                        data_win_path=data_win_path,
+                        error=error_text,
+                    ),
+                    data_win_path,
+                    output_path,
+                    f"csx execute failed: {stderr[:500]}",
+                )
+            if not os.path.exists(output_path):
+                error_text = self._missing_output_error(output_path)
+                return self._continue_without_data_patch(
+                    tr(
+                        "dialogs.patching_warning.data_patch_failed",
+                        patch_name=os.path.basename(patch_file),
+                        patch_path=patch_file,
+                        data_win_path=data_win_path,
+                        error=error_text,
+                    ),
+                    data_win_path,
+                    output_path,
+                    error_text,
+                )
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.70,
+                tr("status.finalizing_chapter", display=display_name),
+            )
+            return True
+
         if mod_type == MOD_TYPE_XDELTA:
             self.patching_logger.info(f"Applying xdelta patch: {patch_file}")
             self._emit_chapter_progress(
@@ -754,6 +808,37 @@ class G3MToolPatchingService(QObject):
         chapter_end: int,
         display_name: str,
     ) -> bool:
+        if any(mod_type == MOD_TYPE_CSX for _patch_file, mod_type, _source_dir in mod_infos):
+            current_input = data_win_path
+            temp_inputs_to_cleanup: list[str] = []
+            total_mods = len(mod_infos)
+            for index, mod_info in enumerate(mod_infos, start=1):
+                temp_output = (
+                    output_path
+                    if index == total_mods
+                    else os.path.join(
+                        self._temp_dir or tempfile.gettempdir(),
+                        f"seq_{chapter_id}_{index}_{os.path.basename(data_win_path)}",
+                    )
+                )
+                if not self._apply_single_mod(
+                    current_input,
+                    mod_info,
+                    temp_output,
+                    log_path,
+                    chapter_start,
+                    chapter_end,
+                    display_name,
+                ):
+                    return False
+                if current_input != data_win_path:
+                    temp_inputs_to_cleanup.append(current_input)
+                current_input = temp_output
+            for temp_input in temp_inputs_to_cleanup:
+                if os.path.exists(temp_input):
+                    with contextlib.suppress(Exception):
+                        os.remove(temp_input)
+            return True
 
         patch_files = [pf for pf, _, _ in mod_infos]
         report_path = (
@@ -869,9 +954,25 @@ class G3MToolPatchingService(QObject):
         result = []
         for mod_data in mods_list:
             mod_source_dir = self._get_mod_source_dir(mod_data, chapter_id)
-            if not mod_source_dir:
+            patch_file = get_mod_configured_data_file(
+                mod_data,
+                chapter_id,
+                self.mod_service,
+                self.app_state,
+                self.patching_logger,
+            )
+            if patch_file and os.path.exists(patch_file):
+                patch_file, mod_type = mod_content.classify_patch_file(patch_file)
+            elif mod_source_dir:
+                patch_file, mod_type = self._classify_mod(mod_source_dir)
+            else:
+                if patch_file:
+                    self.patching_logger.warning(
+                        "Configured data file for chapter %s is missing: %s",
+                        chapter_id,
+                        patch_file,
+                    )
                 continue
-            patch_file, mod_type = self._classify_mod(mod_source_dir)
             result.append((patch_file, mod_type, mod_source_dir))
         return result
 
@@ -888,6 +989,10 @@ class G3MToolPatchingService(QObject):
             fl = f.lower()
             if fl.endswith((".xdelta", ".vcdiff")):
                 return (os.path.join(mod_source_dir, f), MOD_TYPE_XDELTA)
+
+        csx_scripts = mod_content.find_csx_scripts(mod_source_dir)
+        if csx_scripts:
+            return (csx_scripts[0], MOD_TYPE_CSX)
 
         ready_files = mod_content.find_ready_data_win_files(mod_source_dir)
         if ready_files:

@@ -259,6 +259,7 @@
   "checkboxes": {
     "disable_background": "Disable background",
     "disable_startup_sound": "Disable startup sound",
+    "pause_background_music_unfocused": "Stop music when unfocused",
     "xdelta_modpack": "XDELTA instead of data.win/.ios",
     "merge_properties": "Properties merge",
     "merge_code": "Code merge",
@@ -331,6 +332,7 @@
     "language": "Choose the language used by the G3M interface.",
     "ui_scale": "Scale the whole interface up or down. Larger values make text and controls easier to read.",
     "analytics_opt_in": "Help improve G3M by sharing extra anonymous aggregated usage statistics such as feature usage, dialog opens, downloads, searches, and game launch outcome buckets. No personal data, raw file paths, exact queries, or direct identifiers are sent.",
+    "pause_background_music_unfocused": "Stop background music whenever G3M is unfocused or minimized. Because of playback limitations, it starts again from the beginning when you return.",
     "sort_mode": "Choose how the current list should be sorted.",
     "select_game": "Choose which game's mods or settings you want to work with.",
     "filter_by_tag": "Filter the current list by mod category.",
@@ -425,6 +427,7 @@
     "extra_files_tab": "Extra Files",
     "data_tab_info": "Select the main data file for each section.\nOnly one data file can be assigned to each tab.",
     "extra_files_path_instructions": "Enter the folder path where each file should be placed, relative to the game folder.\nExample: 'sprites/bgs' will place the file in the game folder's sprites/bgs/ directory.\nUse forward slashes (/) to separate folders.",
+    "extra_files_path_instructions_deltarune": "Enter the folder path where each file should be placed, relative to the game folder.\nExample: 'sprites/bgs' will place the file in the game folder's sprites/bgs/ directory.\nFor DELTARUNE, you can also start the path with a chapter folder like 'chapter_1/' or 'chapter1_windows/' to bind the file to that chapter.\nUse forward slashes (/) to separate folders.",
     "select_data_file_info": "Select a data file for {chapter}",
     "no_file_selected": "No file selected",
     "select_target_folder": "Select Target Folder",

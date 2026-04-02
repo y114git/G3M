@@ -10,7 +10,6 @@ import time
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 from services.game_detection_service import is_game_running
-from utils.network_utils import increment_launch_counter
 
 
 class GameMonitorWorker(QObject):
@@ -36,7 +35,6 @@ class GameMonitorWorker(QObject):
     def run(self):
         try:
             logging.info("[GAME_MONITOR] Starting game monitoring")
-            increment_launch_counter()
             if self.process:
                 try:
                     logging.info(

@@ -3,7 +3,6 @@
 import contextlib
 import logging
 import os
-import platform
 import re
 import threading
 import time
@@ -203,23 +202,4 @@ def safe_request(method, url, session=None, timeout=None, **kwargs):
 
 
 def cloud_function_request(method, url, session=None, timeout=None, **kwargs):
-    try:
-        return getattr(session or get_session(), method.lower())(
-            url, timeout=timeout or NETWORK_TIMEOUT_MEDIUM, **kwargs
-        )
-    except Exception:
-        return None
-
-
-def increment_launch_counter():
-    from config.config import CLOUD_FUNCTIONS_BASE_URL
-
-    os_k = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(
-        platform.system(), "other"
-    )
-    safe_request(
-        "post",
-        f"{CLOUD_FUNCTIONS_BASE_URL}/incrementLaunches",
-        json={"os": os_k},
-        timeout=NETWORK_TIMEOUT_SHORT,
-    )
+    return safe_request(method, url, session=session, timeout=timeout, **kwargs)

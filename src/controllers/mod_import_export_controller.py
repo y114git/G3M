@@ -26,11 +26,32 @@ class ModImportExportController:
         self.app_window = app_window
         self._import_queue: list = []
         self._importing = False
+        self._active_remote_import_source: str | None = None
 
     def _refresh_mod_list(self) -> None:
         self.mod_service.invalidate_mods_cache()
         self.mod_service.load_local_mods()
         self.mod_service.mod_list_updated.emit()
+
+    def _record_import_analytics(
+        self,
+        *,
+        source: str,
+        outcome: str,
+        file_path: str = "",
+        merged: bool = False,
+        manual: bool = False,
+    ) -> None:
+        analytics = getattr(self.app_window, "analytics_service", None)
+        if not analytics:
+            return
+        analytics.record_local_import(
+            source=source,
+            outcome=outcome,
+            file_ext=os.path.splitext(file_path)[1].lstrip(".").lower(),
+            merged=merged,
+            manual=manual,
+        )
 
     def show_add_mod_dialog(self):
         """Show dialog with Import Mod / Create Mod options."""
@@ -111,10 +132,14 @@ class ModImportExportController:
                 self._install_mod_from_url(dialog.selected_url)
 
     def _install_mod_from_file(self, file_path: str):
-        from utils.file_utils import remove_archive_extension, sanitize_filename
+        from utils.file_utils import (
+            managed_temporary_directory,
+            remove_archive_extension,
+            sanitize_filename,
+        )
 
         try:
-            with tempfile.TemporaryDirectory(prefix="g3m_import_") as temp_dir:
+            with managed_temporary_directory(prefix="g3m_import_") as temp_dir:
                 content_path = self._materialize_local_import(file_path, temp_dir)
                 if find_deltamod_info_file(content_path):
                     from adapters.deltamod_adapter import DeltamodConverter
@@ -122,6 +147,11 @@ class ModImportExportController:
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
+                        self._record_import_analytics(
+                            source="file",
+                            outcome="success",
+                            file_path=file_path,
+                        )
                         self._refresh_mod_list()
                         QMessageBox.information(
                             self.app_window,
@@ -193,6 +223,11 @@ class ModImportExportController:
                         ) or config_updated
                         if config_updated:
                             save_json(config_path, config, indent=2)
+                        self._record_import_analytics(
+                            source="file",
+                            outcome="success",
+                            file_path=file_path,
+                        )
                         self._refresh_mod_list()
                         QMessageBox.information(
                             self.app_window,
@@ -209,11 +244,22 @@ class ModImportExportController:
                         safe_rmtree(target_mod_dir)
                         raise
                 else:
+                    self._record_import_analytics(
+                        source="file",
+                        outcome="manual_needed",
+                        file_path=file_path,
+                        manual=True,
+                    )
                     self._show_import_error_with_manual_install(
                         file_path, tr("errors.invalid_mod_format")
                     )
         except Exception as e:
             logging.error(f"[IMPORT] Mod import failed: {e}", exc_info=True)
+            self._record_import_analytics(
+                source="file",
+                outcome="failed",
+                file_path=file_path,
+            )
             self._show_import_error_with_manual_install(
                 file_path, tr("errors.mod_import_failed", error=str(e))
             )
@@ -252,6 +298,12 @@ class ModImportExportController:
                 existing_mod_folder,
                 version_name,
                 ignore_versions_dir=True,
+            )
+            self._record_import_analytics(
+                source="file",
+                outcome="merged",
+                file_path=file_path,
+                merged=True,
             )
             self._refresh_mod_list()
             QMessageBox.information(
@@ -314,12 +366,14 @@ class ModImportExportController:
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
             self.app_state.current_task = worker
+            self._active_remote_import_source = "url"
             worker.start()
         except Exception as e:
             logging.error(
                 f"ModImportExportController: Error installing mod from URL: {e}",
                 exc_info=True,
             )
+            self._record_import_analytics(source="url", outcome="failed")
             self.app_window.feedback_service.show_message(
                 "error", "errors.error", tr("mods.installation_error", error=str(e))
             )
@@ -329,6 +383,13 @@ class ModImportExportController:
     ):
         try:
             self.app_state.reset_install_state()
+            self._record_import_analytics(
+                source=self._active_remote_import_source or "url",
+                outcome="manual_needed",
+                file_path=archive_path,
+                manual=True,
+            )
+            self._active_remote_import_source = None
 
             def _on_accept():
                 from ui.utils.ui_utils import refresh_ui_after_mod_install
@@ -419,6 +480,12 @@ class ModImportExportController:
 
     def _on_mod_install_finished(self, success: bool, message: str):
         self.app_state.reset_install_state()
+        if self._active_remote_import_source:
+            self._record_import_analytics(
+                source=self._active_remote_import_source,
+                outcome="success" if success else "failed",
+            )
+            self._active_remote_import_source = None
         if success:
             self._refresh_mod_list()
             self.app_window.feedback_service.update_status(message, "green")

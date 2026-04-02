@@ -1,3 +1,25 @@
+### Version 3.0.1 — 02.04.26
+
+- **Manual Install and DELTARUNE file placement improvements**
+
+  - Manual installation handles **extra files for DELTARUNE** more cleanly now.
+  - You can now bind extra files to a specific chapter more explicitly instead of everything awkwardly falling into the wrong place.
+  - Chapter-prefixed paths such as `chapter_1/` and `chapter1_windows/` are now recognized properly during setup.
+  - Additional patch target paths are also chosen more accurately for the chapter they are meant to affect.
+
+- **Modding Tools improvements**
+
+  - **Modding Tools** now work with more source formats.
+  - `zip`-packed **G3M patches** are now recognized properly where patch files are expected.
+  - **CSX scripts** can now be used in patch/conversion workflows as supported sources.
+  - Suggested output names in patching and merge tools are now much clearer, so it is easier to see what file will be created before you run the action.
+
+- **Small quality-of-life and stability fixes**
+
+  - Fixed huge bugs with mod creating and editing (Really sorry about that)
+  - There is now an option to **stop background music when G3M is unfocused or minimized**. It doesn't pause it tho due to lot of Python limitations(
+  - A few edge cases around search/background tasks and launch state refresh were also cleaned up, which should make the app feel a bit more stable overall.
+
 ### Version 3.0.0 — 30.03.26
 
 - **DELTAHUB is now G3M (GameMaker Mod Manager)**

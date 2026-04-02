@@ -223,5 +223,121 @@ class TestManualInstall:
         config = json.loads((mod_folders[0] / "mod_config.json").read_text("utf-8"))
         assert "deltarune_4" in config["files"]
         assert "4" not in config["files"]
-        assert config["files"]["deltarune_4"]["data_file_path"] == "BOSSRUSH.win"
-        assert (mod_folders[0] / "BOSSRUSH.win").exists()
+        assert config["files"]["deltarune_4"]["data_file_path"] == "chapter_4/BOSSRUSH.win"
+        assert (mod_folders[0] / "chapter_4" / "BOSSRUSH.win").exists()
+
+    def test_create_mod_from_files_accepts_csx_as_data_file(self, tmp_path):
+        """Checks that manual install stores csx scripts as chapter data files."""
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        source_dir = tmp_path / "prepared"
+        source_dir.mkdir()
+        data_file = source_dir / "BOSSRUSH.csx"
+        data_file.write_text("// fake script", encoding="utf-8")
+        with patch.object(
+            ManualModInstallDialog, "__init__", lambda self, *a, **kw: None
+        ):
+            dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)
+            dialog.app_state = SimpleNamespace(mods_dir=str(tmp_path / "mods"))
+            dialog.mod_service = object()
+            dialog.gamebanana_metadata = {}
+            dialog.source_file_path = None
+            dialog.game_combo = SimpleNamespace(currentData=lambda: "deltarune")
+            dialog.data_file_selections = {"deltarune_4": str(data_file)}
+            dialog.extra_files_mappings = {}
+            dialog.unused_files = set()
+            dialog.xdelta_patches_mappings = {}
+            dialog.all_files = [(str(data_file), "BOSSRUSH.csx")]
+            os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
+
+            dialog._create_mod_from_files()
+
+        mod_folder = next(Path(dialog.app_state.mods_dir).iterdir())
+        config = json.loads((mod_folder / "mod_config.json").read_text("utf-8"))
+        assert config["files"]["deltarune_4"]["data_file_path"] == "chapter_4/BOSSRUSH.csx"
+        assert (mod_folder / "chapter_4" / "BOSSRUSH.csx").exists()
+
+    def test_create_mod_from_files_persists_gamebanana_metadata(self, tmp_path):
+        """Checks that manual install stores available GameBanana metadata locally."""
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        source_dir = tmp_path / "prepared"
+        source_dir.mkdir()
+        data_file = source_dir / "laphell.xdelta"
+        data_file.write_text("patch", encoding="utf-8")
+        with patch.object(
+            ManualModInstallDialog, "__init__", lambda self, *a, **kw: None
+        ):
+            dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)
+            dialog.app_state = SimpleNamespace(mods_dir=str(tmp_path / "mods"))
+            dialog.mod_service = object()
+            dialog.gamebanana_metadata = {
+                "mod_id": 665180,
+                "item_type": "mod",
+                "name": "Lap Hell",
+                "description": "Preheat your oven.",
+                "author": "Chef",
+                "version": "2.0",
+                "icon": "https://images.gamebanana.com/example.jpg",
+                "homepage": "https://gamebanana.com/mods/665180",
+                "tags": ["gameplay"],
+            }
+            dialog.source_file_path = "laphell.zip"
+            dialog.game_combo = SimpleNamespace(currentData=lambda: "pizzatower")
+            dialog.data_file_selections = {"pizzatower": str(data_file)}
+            dialog.extra_files_mappings = {}
+            dialog.extra_files_chapters = {}
+            dialog.unused_files = set()
+            dialog.xdelta_patches_mappings = {}
+            dialog.all_files = [(str(data_file), "laphell.xdelta")]
+            dialog._copy_root_docs_to_mod = lambda target_mod_dir: None
+            os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
+
+            dialog._create_mod_from_files()
+
+        mod_folder = next(Path(dialog.app_state.mods_dir).iterdir())
+        config = json.loads((mod_folder / "mod_config.json").read_text("utf-8"))
+
+        assert config["metadata"]["id"] == "gb_mod_665180"
+        assert config["metadata"]["name"] == "Lap Hell"
+        assert config["metadata"]["description"] == "Preheat your oven."
+        assert config["metadata"]["icon"] == "https://images.gamebanana.com/example.jpg"
+        assert config["metadata"]["homepage"] == "https://gamebanana.com/mods/665180"
+
+    def test_create_mod_from_files_uses_extra_path_prefix_to_bind_chapter(self, tmp_path):
+        """Checks that chapter-prefixed extra paths bind files to that DELTARUNE chapter."""
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        source_dir = tmp_path / "prepared"
+        source_dir.mkdir()
+        extra_file = source_dir / "lang.json"
+        extra_file.write_text("{}", encoding="utf-8")
+        with patch.object(
+            ManualModInstallDialog, "__init__", lambda self, *a, **kw: None
+        ):
+            dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)
+            dialog.app_state = SimpleNamespace(mods_dir=str(tmp_path / "mods"))
+            dialog.mod_service = object()
+            dialog.gamebanana_metadata = {}
+            dialog.source_file_path = None
+            dialog.game_combo = SimpleNamespace(currentData=lambda: "deltarune")
+            dialog.data_tabs = SimpleNamespace(count=lambda: 0)
+            dialog.data_file_selections = {}
+            dialog.extra_files_mappings = {
+                str(extra_file): "chapter_1/lang_es/",
+            }
+            dialog.extra_files_chapters = {}
+            dialog.unused_files = set()
+            dialog.xdelta_patches_mappings = {}
+            dialog.all_files = [(str(extra_file), "lang.json")]
+            dialog._copy_root_docs_to_mod = lambda target_mod_dir: None
+            os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
+
+            dialog._create_mod_from_files()
+
+        mod_folder = next(Path(dialog.app_state.mods_dir).iterdir())
+        config = json.loads((mod_folder / "mod_config.json").read_text("utf-8"))
+
+        assert config["files"]["deltarune_1"]["extra_files"] == [
+            "chapter_1/lang_es/lang.json"
+        ]

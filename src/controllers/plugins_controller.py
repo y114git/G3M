@@ -507,7 +507,7 @@ QPushButton#cardButtonUninstall:disabled {{
         if not entry.download_link:
             return
         if analytics := getattr(self.app, "analytics_service", None):
-            analytics.count("plugin_download_requested")
+            analytics.record_plugin_download_requested(entry)
         self.downloads_manager.enqueue_with_feedback(
             self.feedback_service,
             display_name=entry.name,
@@ -538,7 +538,7 @@ QPushButton#cardButtonUninstall:disabled {{
                 self.feedback_service.show_message("error", "errors.error", str(e))
         if imported:
             if analytics := getattr(self.app, "analytics_service", None):
-                analytics.count("plugin_imported")
+                analytics.record_plugin_imported(source="manual")
             self.refresh_main_tabs()
             self.render()
 
@@ -548,7 +548,13 @@ QPushButton#cardButtonUninstall:disabled {{
             return
         if plugin.enabled:
             if analytics := getattr(self.app, "analytics_service", None):
-                analytics.count("plugin_disabled")
+                analytics.record_plugin_state_changed(
+                    plugin_id=plugin.plugin_id,
+                    plugin_name=plugin.manifest.name if plugin.manifest else plugin.plugin_id,
+                    version=plugin.manifest.version if plugin.manifest else "",
+                    enabled=False,
+                    source="installed",
+                )
             self.plugin_runtime_service.disable_plugin(plugin_id)
         else:
             success, error = self.plugin_runtime_service.enable_plugin(plugin_id)
@@ -559,7 +565,13 @@ QPushButton#cardButtonUninstall:disabled {{
                     error or tr("plugins.enable_failed"),
                 )
             elif analytics := getattr(self.app, "analytics_service", None):
-                analytics.count("plugin_enabled")
+                analytics.record_plugin_state_changed(
+                    plugin_id=plugin.plugin_id,
+                    plugin_name=plugin.manifest.name if plugin.manifest else plugin.plugin_id,
+                    version=plugin.manifest.version if plugin.manifest else "",
+                    enabled=True,
+                    source="installed",
+                )
         self.refresh_main_tabs()
         self.render()
 
@@ -595,10 +607,16 @@ QPushButton#cardButtonUninstall:disabled {{
         self.download_plugin(entry)
 
     def delete_plugin(self, plugin_id: str) -> None:
+        plugin = self.plugin_runtime_service.get_plugin(plugin_id)
         try:
             self.plugin_install_service.delete_plugin(plugin_id)
             if analytics := getattr(self.app, "analytics_service", None):
-                analytics.count("plugin_deleted")
+                analytics.record_plugin_deleted(
+                    plugin_id=plugin_id,
+                    plugin_name=plugin.manifest.name if plugin and plugin.manifest else plugin_id,
+                    version=plugin.manifest.version if plugin and plugin.manifest else "",
+                    source="installed",
+                )
         except Exception as e:
             logger.error("PluginsController: delete failed for %s: %s", plugin_id, e, exc_info=True)
             self.feedback_service.show_message("error", "errors.error", str(e))

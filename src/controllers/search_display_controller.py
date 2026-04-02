@@ -17,7 +17,7 @@ from services.mod_filter_service import filter_and_sort_mods
 from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import get_theme_color
 from ui.dialogs.blocklist_dialog import BlocklistDialog
-from ui.utils.ui_utils import DebounceTimer
+from ui.utils.ui_utils import DebounceTimer, safe_stop_thread
 from ui.widgets.mod.mod_card_widget import ModCardWidget
 from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
 from ui.widgets.mod_details_overlay import show_mod_details_overlay
@@ -356,6 +356,27 @@ class SearchDisplayController(QObject):
         except (RuntimeError, ValueError):
             pass
 
+    def cleanup(self) -> None:
+        """Stop active timers and GameBanana worker threads before shutdown."""
+        self._clear_search_timers()
+        for thread in self._load_more_threads[:]:
+            try:
+                if hasattr(thread, "cancel"):
+                    thread.cancel()
+            except Exception:
+                logger.debug(
+                    "SearchDisplayController.cleanup: failed to cancel worker thread",
+                    exc_info=True,
+                )
+            try:
+                safe_stop_thread(thread, timeout=500, blocking=False)
+            except Exception:
+                logger.debug(
+                    "SearchDisplayController.cleanup: failed to stop worker thread",
+                    exc_info=True,
+                )
+            self._cleanup_load_thread(thread)
+
     def _load_more_gamebanana_mods_if_needed(
         self, items_needed: int | None = None, preferred_game: str | None = None
     ):
@@ -570,6 +591,8 @@ class SearchDisplayController(QObject):
                 self.app, tr("ui.search_tab"), tr("ui.search_in_name_description")
             )
             if ok and len(text.strip()) >= 2:
+                if analytics := getattr(self.app, "analytics_service", None):
+                    analytics.record_mods_browser_search(text.strip())
                 self.app_state.search_text = text.strip()
                 self._set_search_btn_icon(True)
                 self.load_mods_for_selected_game()
@@ -615,8 +638,6 @@ class SearchDisplayController(QObject):
             if not hasattr(self.app_state, "all_mods") or not self.app_state.all_mods:
                 self.app_state.filtered_mods = []
                 self.app_state.current_page = 1
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_search_results("mods_browser", 0)
                 self.update_display()
                 return
             filters, sort_config = self._build_filters_and_sort()
@@ -629,8 +650,6 @@ class SearchDisplayController(QObject):
                 installed_mod_ids=installed_ids,
             )
             self.app_state.filtered_mods = filtered_mods
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_search_results("mods_browser", len(filtered_mods))
             if not preserve_page:
                 self.app_state.current_page = 1
             self.update_display()
@@ -1084,7 +1103,7 @@ class SearchDisplayController(QObject):
         self.clear_all_selections(except_widget=target_widget)
         target_widget.set_selected(True)
         if analytics := getattr(self.app, "analytics_service", None):
-            analytics.record_mod_opened("mods_browser")
+            analytics.record_mod_opened("mods_browser", mod)
 
     def show_details(self, mod_data):
         source_card = None
@@ -1093,7 +1112,7 @@ class SearchDisplayController(QObject):
                 source_card = widget
                 break
         if analytics := getattr(self.app, "analytics_service", None):
-            analytics.record_mod_details_opened("mods_browser")
+            analytics.record_mod_details_opened("mods_browser", mod_data)
         show_mod_details_overlay(self.app, mod_data, source_card=source_card)
 
     def clear_all_selections(self, except_widget=None):

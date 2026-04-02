@@ -170,6 +170,27 @@ class G3MToolManager:
             cmd.append(output_dir)
         return self._run_command(cmd)
 
+    def execute(
+        self,
+        target: str,
+        args: list[str] | None = None,
+        data_file: str | None = None,
+        output_path: str | None = None,
+        input_path: str | None = None,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
+        """Call g3mtool execute <target> [args] [--data <file>] [--output <file>] [--input <dir>]."""
+        cmd = ["execute", target]
+        if args:
+            cmd.extend(str(arg) for arg in args)
+        if data_file:
+            cmd.extend(["--data", data_file])
+        if output_path:
+            cmd.extend(["--output", output_path])
+        if input_path:
+            cmd.extend(["--input", input_path])
+        return self._run_command(cmd, progress_callback=progress_callback)
+
     def cancel_active_processes(self):
         for process in list(self._active_processes):
             try:

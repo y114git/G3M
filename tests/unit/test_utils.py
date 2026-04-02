@@ -115,6 +115,17 @@ class TestFileUtils:
         assert result2 is True
         assert not os.path.exists(test_dir2)
 
+    def test_safe_rmtree_fails_when_directory_still_exists(self, temp_dir, monkeypatch):
+        """Checks that safeing rmtree fails when removal silently leaves directory behind."""
+        from utils.file_utils import safe_rmtree
+
+        test_dir = os.path.join(temp_dir, "test_rmtree_stuck")
+        os.makedirs(test_dir, exist_ok=True)
+        monkeypatch.setattr("utils.file_utils.shutil.rmtree", lambda *_args, **_kwargs: None)
+
+        assert safe_rmtree(test_dir, max_retries=1, delay=0) is False
+        assert os.path.exists(test_dir)
+
     def test_has_deltamod_info_file(self):
         """Checks that hasing deltamod info file."""
         file_list = ['file1.txt', '_deltamodInfo.json', 'file2.txt']
@@ -230,4 +241,3 @@ class TestCache:
             assert get_from_cache('nonexistent') is None
         except ImportError:
             pytest.skip('Cache not available')
-

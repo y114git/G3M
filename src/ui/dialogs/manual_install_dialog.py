@@ -31,11 +31,12 @@ from services.localization_service import tr
 from ui.common.dialog_theme import get_dialog_theme_values
 from ui.common.styling import clamp_border_radius, get_ui_scale_factor
 from utils.file_utils import (
+    get_chapter_folder_name,
     get_unique_mod_dir,
     save_json,
 )
 from utils.mod_config_parser import build_mod_config_data
-from utils.path_utils import colored_icon
+from utils.path_utils import colored_icon, find_chapter_resource_dir
 
 
 class ManualModInstallDialog(QDialog):
@@ -79,6 +80,7 @@ class ManualModInstallDialog(QDialog):
         self.initial_game_type = initial_game_type
         self.data_file_selections = {}
         self.extra_files_mappings = {}
+        self.extra_files_chapters = {}
         self.all_files = []
         self.extra_file_widgets = {}
         self.unused_files = set()
@@ -294,14 +296,13 @@ class ManualModInstallDialog(QDialog):
         extra_widget = QWidget()
         extra_layout = QVBoxLayout(extra_widget)
         extra_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        instructions_text = tr("dialogs.extra_files_path_instructions")
-        instructions_label = QLabel(instructions_text)
-        instructions_label.setWordWrap(True)
-        instructions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        instructions_label.setProperty("hintText", True)
-        instructions_label.setToolTip(tr("tooltips.manual_install_extra_tab"))
-        instructions_label.setStyleSheet("font-size: 11px; padding: 10px;")
-        extra_layout.addWidget(instructions_label)
+        self.extra_instructions_label = QLabel(self._extra_files_instructions_text())
+        self.extra_instructions_label.setWordWrap(True)
+        self.extra_instructions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.extra_instructions_label.setProperty("hintText", True)
+        self.extra_instructions_label.setToolTip(tr("tooltips.manual_install_extra_tab"))
+        self.extra_instructions_label.setStyleSheet("font-size: 11px; padding: 10px;")
+        extra_layout.addWidget(self.extra_instructions_label)
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -319,6 +320,7 @@ class ManualModInstallDialog(QDialog):
 
     def _update_file_tabs(self):
         self.data_tabs.clear()
+        self.data_file_edits = {}
         game = self.game_combo.currentData()
         game_def = get_game(game)
         if game_def and game_def.is_multi_tab:
@@ -332,6 +334,25 @@ class ManualModInstallDialog(QDialog):
                 game, display_name=game_display
             )
             self.data_tabs.addTab(single_widget, tr("dialogs.data_file"))
+        self._update_extra_files_instructions()
+        self._populate_extra_files_list()
+
+    def _chapter_entries(self) -> list[tuple[str, str]]:
+        game = self.game_combo.currentData()
+        game_def = get_game(game)
+        if game_def and game_def.is_multi_tab:
+            return [(tab.tab_id, tr(tab.name_key)) for tab in game_def.tabs]
+        return [(game, self.game_combo.currentText())]
+
+    def _extra_files_instructions_text(self) -> str:
+        if self.game_combo.currentData() == "deltarune":
+            return tr("dialogs.extra_files_path_instructions_deltarune")
+        return tr("dialogs.extra_files_path_instructions")
+
+    def _update_extra_files_instructions(self) -> None:
+        label = getattr(self, "extra_instructions_label", None)
+        if label is not None:
+            label.setText(self._extra_files_instructions_text())
 
     def _create_chapter_data_widget(
         self, chapter_id: str, display_name: str = ""
@@ -576,7 +597,7 @@ class ManualModInstallDialog(QDialog):
         return section_widget
 
     def _create_xdelta_patch_widget(
-        self, file_path: str, rel_path: str, chapter_id: int
+        self, file_path: str, rel_path: str, chapter_id: str
     ) -> QWidget:
         widget = QWidget()
         widget.setProperty("fileCard", True)
@@ -623,9 +644,9 @@ class ManualModInstallDialog(QDialog):
         return widget
 
     def _on_xdelta_target_path_changed(
-        self, file_path: str, text: str, chapter_id: int
+        self, file_path: str, text: str, chapter_id: str
     ):
-        normalized = self._normalize_path(text)
+        normalized = self._normalize_relative_target_path(text, chapter_id)
         if (
             normalized != text
             and chapter_id in self.xdelta_patch_widgets
@@ -652,19 +673,19 @@ class ManualModInstallDialog(QDialog):
         )
         return (result + "/") if result and trailing_slash else result
 
-    def _browse_xdelta_target_file(self, file_path: str, chapter_id: int):
-        game_root = self._get_or_prompt_game_folder()
-        if not game_root:
+    def _browse_xdelta_target_file(self, file_path: str, chapter_id: str):
+        target_root = self._get_target_root_for_chapter(chapter_id)
+        if not target_root:
             return
         target_file, _ = QFileDialog.getOpenFileName(
-            self, tr("dialogs.select_target_folder"), game_root
+            self, tr("dialogs.select_target_folder"), target_root
         )
         if target_file:
-            game_root_normalized = os.path.normpath(os.path.abspath(game_root))
+            target_root_normalized = os.path.normpath(os.path.abspath(target_root))
             file_normalized = os.path.normpath(os.path.abspath(target_file))
-            if file_normalized.startswith(game_root_normalized):
-                rel_file = os.path.relpath(target_file, game_root)
-                rel_file = rel_file.replace("\\", "/")
+            if file_normalized.startswith(target_root_normalized):
+                rel_file = os.path.relpath(target_file, target_root)
+                rel_file = self._normalize_relative_target_path(rel_file, chapter_id)
                 if (
                     chapter_id in self.xdelta_patch_widgets
                     and file_path in self.xdelta_patch_widgets[chapter_id]
@@ -683,7 +704,7 @@ class ManualModInstallDialog(QDialog):
                     self, tr("errors.error"), tr("dialogs.path_outside_game_folder")
                 )
 
-    def _add_xdelta_patch(self, chapter_id: int):
+    def _add_xdelta_patch(self, chapter_id: str):
         available_xdelta = self._get_available_xdelta_files(chapter_id)
         if not available_xdelta:
             QMessageBox.information(
@@ -705,7 +726,7 @@ class ManualModInstallDialog(QDialog):
             self._populate_extra_files_list()
             self._refresh_summary_text()
 
-    def _clear_xdelta_patch(self, file_path: str, chapter_id: int):
+    def _clear_xdelta_patch(self, file_path: str, chapter_id: str):
         if (
             chapter_id in self.xdelta_patches_mappings
             and file_path in self.xdelta_patches_mappings[chapter_id]
@@ -715,7 +736,7 @@ class ManualModInstallDialog(QDialog):
         self._populate_extra_files_list()
         self._refresh_summary_text()
 
-    def _update_xdelta_patches_section(self, chapter_id: int):
+    def _update_xdelta_patches_section(self, chapter_id: str):
         current_tab_index = self.data_tabs.currentIndex()
         if self.data_tabs.count() > current_tab_index:
             current_widget = self.data_tabs.widget(current_tab_index)
@@ -740,11 +761,12 @@ class ManualModInstallDialog(QDialog):
                             layout.insertWidget(layout.count() - 1, xdelta_section)
 
     def _populate_extra_files_list(self):
-        if hasattr(self, "extra_files_list_layout"):
-            while self.extra_files_list_layout.count():
-                item = self.extra_files_list_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
+        if not hasattr(self, "extra_files_list_layout"):
+            return
+        while self.extra_files_list_layout.count():
+            item = self.extra_files_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
         selected_data, used_patches = self._get_excluded_files()
         extra_files = [
             (fp, rp)
@@ -763,6 +785,99 @@ class ManualModInstallDialog(QDialog):
             self.extra_file_widgets[file_path] = file_widget
         self.extra_files_list_layout.addStretch()
 
+    def _guess_chapter_for_file(self, rel_path: str) -> str | None:
+        chapter_id, _normalized = self._extract_chapter_prefixed_path(rel_path)
+        return chapter_id
+
+    def _chapter_alias_map(self) -> dict[str, str]:
+        folder_to_chapter = {}
+        for chapter_id, _name in self._chapter_entries():
+            for alias in self._chapter_path_aliases(chapter_id):
+                folder_to_chapter[alias] = chapter_id
+        return folder_to_chapter
+
+    def _extract_chapter_prefixed_path(
+        self, path: str, *, trailing_slash: bool | None = None
+    ) -> tuple[str | None, str]:
+        if trailing_slash is None:
+            trailing_slash = str(path or "").endswith(("/", "\\"))
+        normalized = self._normalize_path(path, trailing_slash=trailing_slash)
+        if not normalized:
+            return None, ""
+        preserve_trailing = normalized.endswith("/")
+        working = normalized[:-1] if preserve_trailing else normalized
+        if not working:
+            return None, ""
+        first_part, _, rest = working.partition("/")
+        chapter_id = self._chapter_alias_map().get(first_part.lower())
+        if not chapter_id:
+            return None, normalized
+        if not rest:
+            return chapter_id, ""
+        return chapter_id, f"{rest}/" if preserve_trailing else rest
+
+    def _default_extra_target_path(self, file_path: str, rel_path: str) -> str:
+        normalized = str(rel_path or "").replace("\\", "/").strip("/")
+        chapter_id, stripped = self._extract_chapter_prefixed_path(normalized)
+        if chapter_id:
+            self.extra_files_chapters.setdefault(file_path, chapter_id)
+            normalized = stripped.strip("/")
+        if not normalized:
+            return ""
+        dir_part = os.path.dirname(normalized).replace("\\", "/").strip("/")
+        return self._normalize_path(dir_part, trailing_slash=True)
+
+    def _chapter_path_aliases(self, chapter_id: str) -> set[str]:
+        aliases: set[str] = set()
+        game = self.game_combo.currentData()
+        storage_name = get_chapter_folder_name(chapter_id, game=game)
+        if storage_name:
+            aliases.add(storage_name.replace("\\", "/").strip("/").lower())
+        if "_" in chapter_id:
+            suffix = chapter_id.rsplit("_", 1)[1]
+            if suffix.isdigit():
+                aliases.add(f"chapter{suffix}")
+                aliases.add(f"chapter_{suffix}")
+                aliases.add(f"chapter{suffix}_")
+                aliases.add(f"chapter{suffix}_windows")
+        target_root = self._peek_target_root_for_chapter(chapter_id)
+        if target_root:
+            target_name = os.path.basename(os.path.normpath(target_root))
+            if target_name:
+                aliases.add(target_name.replace("\\", "/").strip("/").lower())
+        return {alias for alias in aliases if alias}
+
+    def _strip_chapter_prefix(self, normalized_path: str, chapter_id: str) -> str:
+        if not normalized_path:
+            return ""
+        stripped = normalized_path
+        lowered = stripped.lower()
+        for alias in self._chapter_path_aliases(chapter_id):
+            if lowered == alias:
+                return ""
+            prefix = f"{alias}/"
+            if lowered.startswith(prefix):
+                stripped = stripped[len(prefix) :]
+                lowered = stripped.lower()
+        return stripped
+
+    def _normalize_relative_target_path(
+        self,
+        path: str,
+        chapter_id: str,
+        *,
+        trailing_slash: bool = False,
+    ) -> str:
+        normalized = self._normalize_path(path, trailing_slash=trailing_slash)
+        if not normalized:
+            return ""
+        preserve_trailing = normalized.endswith("/")
+        working = normalized[:-1] if preserve_trailing else normalized
+        working = self._strip_chapter_prefix(working, chapter_id)
+        if not working:
+            return ""
+        return f"{working}/" if preserve_trailing else working
+
     def _create_extra_file_widget(self, file_path: str, rel_path: str) -> QWidget:
         widget = QWidget()
         widget.setProperty("fileCard", True)
@@ -770,10 +885,7 @@ class ManualModInstallDialog(QDialog):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
         layout.addWidget(self._create_file_name_widget(file_path, rel_path))
-        dir_part = (
-            os.path.dirname(rel_path).replace("\\", "/").strip("/") if rel_path else ""
-        )
-        auto_path = (dir_part + "/") if dir_part else ""
+        auto_path = self._default_extra_target_path(file_path, rel_path)
         path_input = QLineEdit()
         path_input.setObjectName("path_input")
         path_input.setMinimumWidth(200)
@@ -819,6 +931,9 @@ class ManualModInstallDialog(QDialog):
             if path_input:
                 path_input.setText(normalized)
         if file_path not in self.unused_files:
+            chapter_id, _stripped = self._extract_chapter_prefixed_path(normalized)
+            if chapter_id:
+                self.extra_files_chapters[file_path] = chapter_id
             self.extra_files_mappings[file_path] = normalized
         elif file_path in self.extra_files_mappings:
             del self.extra_files_mappings[file_path]
@@ -843,11 +958,47 @@ class ManualModInstallDialog(QDialog):
                     path_input = widget.findChild(QLineEdit, "path_input")
                     if path_input:
                         path_input.setText(rel_folder)
+                        chapter_id, _stripped = self._extract_chapter_prefixed_path(
+                            rel_folder, trailing_slash=True
+                        )
+                        if chapter_id:
+                            self.extra_files_chapters[file_path] = chapter_id
                         self.extra_files_mappings[file_path] = rel_folder
             else:
                 QMessageBox.warning(
                     self, tr("errors.error"), tr("dialogs.path_outside_game_folder")
                 )
+
+    def _get_target_root_for_chapter(self, chapter_id: str) -> str | None:
+        game_root = self._get_or_prompt_game_folder()
+        if not game_root:
+            return None
+        return self._resolve_target_root_for_chapter(game_root, chapter_id)
+
+    def _peek_target_root_for_chapter(self, chapter_id: str) -> str | None:
+        game_def = get_game(self.game_combo.currentData() or "")
+        if not game_def or not self.app_state or not getattr(self.app_state, "local_config", None):
+            return None
+        try:
+            game_root = game_def.get_game_path(self.app_state.local_config)
+        except Exception:
+            return None
+        if not game_root:
+            return None
+        return self._resolve_target_root_for_chapter(game_root, chapter_id)
+
+    def _resolve_target_root_for_chapter(
+        self, game_root: str, chapter_id: str
+    ) -> str | None:
+        game_def = get_game(self.game_combo.currentData() or "")
+        if not game_def or not game_def.is_multi_tab:
+            return game_root
+        chapter_root = find_chapter_resource_dir(
+            game_root,
+            chapter_id,
+            getattr(game_def, "macos_app_names", ("DELTARUNE.app", "DELTARUNEdemo.app")),
+        )
+        return chapter_root or game_root
 
     def _get_or_prompt_game_folder(self) -> str | None:
         game_def = get_game(self.game_combo.currentData() or "")
@@ -1013,6 +1164,24 @@ class ManualModInstallDialog(QDialog):
         shutil.copy2(source_path, target_path)
         return os.path.relpath(target_path, target_mod_dir).replace("\\", "/")
 
+    def _storage_prefix_for_chapter(self, chapter_id: str) -> str:
+        game = self.game_combo.currentData()
+        game_def = get_game(game)
+        if game_def and game_def.is_multi_tab:
+            return get_chapter_folder_name(chapter_id, game=game)
+        return ""
+
+    def _join_storage_path(self, chapter_id: str, *parts: str) -> str:
+        normalized_parts = []
+        prefix = self._storage_prefix_for_chapter(chapter_id)
+        if prefix:
+            normalized_parts.append(prefix)
+        for part in parts:
+            text = str(part or "").replace("\\", "/").strip("/")
+            if text:
+                normalized_parts.append(text)
+        return "/".join(normalized_parts)
+
     def _chapter_display_name(self, chapter_id: str) -> str:
         for i in range(self.data_tabs.count()):
             widget = self.data_tabs.widget(i)
@@ -1070,7 +1239,9 @@ class ManualModInstallDialog(QDialog):
             stored_data_path = self._copy_file_to_relative_path(
                 target_mod_dir,
                 data_file_path,
-                os.path.basename(data_file_path),
+                self._join_storage_path(
+                    chapter_id, os.path.basename(data_file_path)
+                ),
             )
             files_structure[chapter_id]["data_file_path"] = stored_data_path
         selected_data, used_patches = self._get_excluded_files()
@@ -1090,10 +1261,8 @@ class ManualModInstallDialog(QDialog):
                 dir_part = os.path.dirname(target_path_normalized)
                 file_part = os.path.basename(target_path_normalized)
                 renamed_xdelta_name = f"{file_part}.xdelta"
-                stored_patch_path = (
-                    f"{dir_part}/{renamed_xdelta_name}"
-                    if dir_part
-                    else renamed_xdelta_name
+                stored_patch_path = self._join_storage_path(
+                    chapter_id, dir_part, renamed_xdelta_name
                 )
                 copied_path = self._copy_file_to_relative_path(
                     target_mod_dir,
@@ -1107,15 +1276,28 @@ class ManualModInstallDialog(QDialog):
             relative_path = (
                 relative_path.strip().strip("/").strip("\\") if relative_path else ""
             )
-            if game == "deltarune" and self.data_file_selections:
-                target_chapter_id = min(self.data_file_selections.keys())
+            path_chapter_id, stripped_relative_path = self._extract_chapter_prefixed_path(
+                relative_path
+            )
+            if path_chapter_id:
+                target_chapter_id = path_chapter_id
+                relative_path = stripped_relative_path.strip().strip("/").strip("\\")
             else:
-                target_chapter_id = game
+                relative_path = relative_path.strip().strip("/").strip("\\")
+                target_chapter_id = self.extra_files_chapters.get(extra_file_path)
+            target_chapter_id = (
+                target_chapter_id
+                or (
+                    min(self.data_file_selections.keys())
+                    if game == "deltarune" and self.data_file_selections
+                    else game
+                )
+            )
             files_structure.setdefault(target_chapter_id, {})
-            stored_extra_path = (
-                f"{relative_path}/{os.path.basename(extra_file_path)}"
-                if relative_path
-                else os.path.basename(extra_file_path)
+            stored_extra_path = self._join_storage_path(
+                target_chapter_id,
+                relative_path,
+                os.path.basename(extra_file_path),
             )
             copied_path = self._copy_file_to_relative_path(
                 target_mod_dir,
@@ -1154,6 +1336,7 @@ class ManualModInstallDialog(QDialog):
                 if category_tag not in existing_tags:
                     existing_tags.append(category_tag)
                 config_data["tags"] = existing_tags
+            config_data.setdefault("author", "Unknown")
             config_data.setdefault("version", "1.0.0")
         else:
             config_data["author"] = "Unknown"

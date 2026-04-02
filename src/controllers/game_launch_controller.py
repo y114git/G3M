@@ -365,21 +365,22 @@ class GameLaunchController(QObject):
     def refresh_mods_in_use(self):
         if not self.app_state.all_mods:
             return
-        for chapter_id, mod_data in list(self.used_mods_service.used_mods.items()):
-            if not mod_data:
+        all_mods_by_id = {get_mod_id(mod): mod for mod in self.app_state.all_mods if get_mod_id(mod)}
+        for chapter_id, mods_list in list(self.used_mods_service.used_mods.items()):
+            if not mods_list:
                 continue
-            key = get_mod_id(mod_data)
-            if not key:
-                continue
-            updated_mod = next(
-                (mod for mod in self.app_state.all_mods if get_mod_id(mod) == key),
-                None,
-            )
-            if not updated_mod:
-                mod_config = self.mod_service.get_mod_config(key)
-                if mod_config:
-                    updated_mod = self.mod_service.create_mod_object_from_info(
-                        mod_config, self.app_state.all_mods
-                    )
-            if updated_mod:
-                self.used_mods_service.used_mods[chapter_id] = updated_mod
+            refreshed_mods = []
+            for mod_data in mods_list:
+                key = get_mod_id(mod_data)
+                if not key:
+                    refreshed_mods.append(mod_data)
+                    continue
+                updated_mod = all_mods_by_id.get(key)
+                if not updated_mod:
+                    mod_config = self.mod_service.get_mod_config(key)
+                    if mod_config:
+                        updated_mod = self.mod_service.create_mod_object_from_info(
+                            mod_config, self.app_state.all_mods
+                        )
+                refreshed_mods.append(updated_mod or mod_data)
+            self.used_mods_service.used_mods[chapter_id] = refreshed_mods

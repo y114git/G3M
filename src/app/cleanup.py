@@ -18,6 +18,9 @@ def perform_close_cleanup(w):
             w.plugin_runtime_service.execute_hook("app_shutdown")
         if hasattr(w, "session_manager"):
             w.session_manager.stop()
+        if hasattr(w, "search_display") and w.search_display:
+            with contextlib.suppress(Exception):
+                w.search_display.cleanup()
         threads_to_stop = []
         for attr in ("_network_init_thread", "_mod_scan_thread"):
             thread = getattr(w, attr, None)

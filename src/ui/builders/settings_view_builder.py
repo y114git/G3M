@@ -480,6 +480,11 @@ class SettingsViewBuilder:
             tr("checkboxes.disable_startup_sound"),
             config_key="disable_startup_sound",
         )
+        pause_background_music_unfocused_checkbox = self._styled_checkbox(
+            tr("checkboxes.pause_background_music_unfocused"),
+            tr("tooltips.pause_background_music_unfocused"),
+            config_key="pause_background_music_unfocused",
+        )
         background_buttons_layout = QHBoxLayout()
         background_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         background_buttons_layout.setSpacing(10)
@@ -582,6 +587,10 @@ class SettingsViewBuilder:
         checkboxes_layout.addWidget(disable_background_checkbox)
         checkboxes_layout.addWidget(disable_startup_sound_checkbox)
         cl_adv.addLayout(checkboxes_layout)
+        cl_adv.addWidget(
+            pause_background_music_unfocused_checkbox,
+            alignment=Qt.AlignmentFlag.AlignCenter,
+        )
         layout.addWidget(sec_adv)
 
         layout.addStretch()
@@ -590,6 +599,9 @@ class SettingsViewBuilder:
         self.widgets["disable_background_checkbox"] = disable_background_checkbox
         self.widgets["disable_startup_sound_checkbox"] = (
             disable_startup_sound_checkbox
+        )
+        self.widgets["pause_background_music_unfocused_checkbox"] = (
+            pause_background_music_unfocused_checkbox
         )
         self.widgets["change_background_button"] = change_background_button
         self.widgets["change_logo_button"] = change_logo_button

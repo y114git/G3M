@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import gzip
+import hashlib
 import json
 import logging
 import os
@@ -15,9 +16,12 @@ from collections import Counter
 from typing import Any
 
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 
 from config.config import APP_VERSION, CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_SHORT
+from ui.utils.ui_utils import safe_stop_thread
 from utils.file_utils import load_json, save_json
+from utils.mod_utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
 from utils.network_utils import cloud_function_request
 
 logger = logging.getLogger(__name__)
@@ -34,7 +38,11 @@ class _AnalyticsUploadWorker(QObject):
         try:
             encoded = base64.b64encode(
                 gzip.compress(
-                    json.dumps({"v": 1, "b": self._batch}, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                    json.dumps(
+                        {"v": 1, "b": self._batch},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8"),
                     compresslevel=9,
                 )
             ).decode("ascii")
@@ -44,7 +52,10 @@ class _AnalyticsUploadWorker(QObject):
                 json={"encoding": "gzip+base64", "payload": encoded},
                 timeout=NETWORK_TIMEOUT_SHORT,
             )
-            self.finished.emit(bool(response) and getattr(response, "status_code", 500) < 300, len(self._batch))
+            self.finished.emit(
+                bool(response) and getattr(response, "status_code", 500) < 300,
+                len(self._batch),
+            )
         except Exception as e:
             logger.debug("Analytics flush failed: %s", e, exc_info=True)
             self.finished.emit(False, len(self._batch))
@@ -54,6 +65,14 @@ class AnalyticsService(QObject):
     """Aggregates cheap anonymous analytics and flushes compressed batches."""
 
     _MAX_DIM_LEN = 40
+    _MAX_PENDING_PAYLOADS = 80
+    _MAX_UNIQUE_ALWAYS = 256
+    _MAX_UNIQUE_OPT_IN = 512
+    _ACTIVITY_FLUSH_DELAY_MS = 180000
+    _BURST_FLUSH_DELAY_MS = 8000
+    _STATE_SAVE_DELAY_MS = 1500
+    _ALWAYS_FLUSH_THRESHOLD = 90
+    _OPT_IN_FLUSH_THRESHOLD = 140
 
     def __init__(self, app_state, base_dir: str, parent=None) -> None:
         super().__init__(parent)
@@ -62,8 +81,10 @@ class AnalyticsService(QObject):
         self._state_path = os.path.join(self._dir, "telemetry_state.json")
         self._always_on = Counter()
         self._opt_in = Counter()
+        self._always_total = 0
+        self._opt_total = 0
         self._pending: list[dict[str, Any]] = []
-        self._download_states: dict[str, tuple[str, str]] = {}
+        self._download_states: dict[str, tuple[str, str, bool]] = {}
         self._active_searches = {"mods_browser": False, "library": False}
         self._session_started_at = time.monotonic()
         self._startup_started_at = time.monotonic()
@@ -78,13 +99,18 @@ class AnalyticsService(QObject):
         self._flush_timer = QTimer(self)
         self._flush_timer.setSingleShot(True)
         self._flush_timer.timeout.connect(self._flush_async)
+        self._state_timer = QTimer(self)
+        self._state_timer.setSingleShot(True)
+        self._state_timer.timeout.connect(self._save_state)
         self.count("app_launch", os=self._os_key())
         self.count(
             "app_launch_detail",
             scope="opt_in",
             os=self._os_key(),
             locale=self._clean_value(self.app_state.local_config.get("language", "en")),
-            py=self._clean_value(f"{sys.version_info.major}.{sys.version_info.minor}"),
+            py=self._clean_value(
+                f"{sys.version_info.major}.{sys.version_info.minor}"
+            ),
         )
 
     @property
@@ -98,21 +124,23 @@ class AnalyticsService(QObject):
             self.count("opt_in_enabled")
         if not enabled:
             self._opt_in.clear()
+            self._opt_total = 0
             if self._upload_in_flight:
-                self._upload_in_flight = [
-                    {**payload, "oi": {}}
-                    for payload in self._upload_in_flight
-                    if isinstance(payload, dict) and (payload.get("ao") or payload.get("oi"))
-                ]
+                stripped = []
+                for payload in self._upload_in_flight:
+                    if not isinstance(payload, dict):
+                        continue
+                    if payload.get("ao"):
+                        stripped.append({**payload, "oi": {}})
+                self._upload_in_flight = stripped
             retained = []
             for payload in self._pending:
                 if not isinstance(payload, dict):
                     continue
-                stripped = {**payload, "oi": {}}
-                if payload.get("ao") or payload.get("oi"):
-                    retained.append(stripped)
-            self._pending = retained
-            self._save_state()
+                if payload.get("ao"):
+                    retained.append({**payload, "oi": {}})
+            self._pending = retained[-self._MAX_PENDING_PAYLOADS :]
+            self._schedule_state_save()
 
     def attach_window(self, window) -> None:
         if self._window is window:
@@ -120,7 +148,10 @@ class AnalyticsService(QObject):
         self._window = window
         if hasattr(window, "main_tab_widget"):
             window.main_tab_widget.currentChanged.connect(self._on_tab_changed)
-            QTimer.singleShot(0, lambda: self._on_tab_changed(window.main_tab_widget.currentIndex()))
+            QTimer.singleShot(
+                0,
+                lambda: self._on_tab_changed(window.main_tab_widget.currentIndex()),
+            )
         self.app_state.search_text_changed.connect(
             lambda text: self._on_search_text_changed("mods_browser", text)
         )
@@ -129,7 +160,9 @@ class AnalyticsService(QObject):
         )
         if hasattr(window, "downloads_manager"):
             window.downloads_manager.record_added.connect(self._on_download_record_added)
-            window.downloads_manager.record_updated.connect(self._on_download_record_updated)
+            window.downloads_manager.record_updated.connect(
+                self._on_download_record_updated
+            )
         app = getattr(window, "instance", None)
         with contextlib.suppress(Exception):
             from PyQt6.QtWidgets import QApplication
@@ -144,7 +177,10 @@ class AnalyticsService(QObject):
         if self._ui_ready_recorded:
             return
         self._ui_ready_recorded = True
-        self.count("app_ready", startup=self._bucket_seconds(time.monotonic() - self._startup_started_at))
+        self.count(
+            "app_ready",
+            startup=self._bucket_seconds(time.monotonic() - self._startup_started_at),
+        )
 
     def record_dialog_opened(self, name: str) -> None:
         self.count("dialog_opened", name=name)
@@ -152,58 +188,224 @@ class AnalyticsService(QObject):
     def record_setting_changed(self, name: str, enabled: bool) -> None:
         self.count("setting_changed", name=name, state="on" if enabled else "off")
 
-    def record_search_results(self, area: str, count: int) -> None:
-        bucket = (
-            "0"
-            if count <= 0
-            else "1" if count == 1 else "2_9" if count < 10 else "10_49" if count < 50 else "50_plus"
-        )
-        self.count("search_results", area=area, count=bucket)
+    def record_mods_browser_search(self, query: str) -> None:
+        bucket = self._mods_browser_query_length_bucket(query)
+        self.count("search_mods_browser", area="mods_browser", query_len=bucket)
 
-    def record_mod_opened(self, area: str) -> None:
-        self.count("mod_opened", area=area)
+    def record_mod_opened(self, area: str, mod=None) -> None:
+        dims = {"area": area, **self._mod_common_dims(mod)}
+        self.count("mod_opened", **dims)
+        self._record_mod_detail("mod_opened_detail", "area", area, mod)
 
-    def record_mod_details_opened(self, area: str) -> None:
-        self.count("mod_details_opened", area=area)
+    def record_mod_details_opened(self, area: str, mod=None) -> None:
+        dims = {"area": area, **self._mod_common_dims(mod)}
+        self.count("mod_details_opened", **dims)
+        self._record_mod_detail("mod_details_opened_detail", "area", area, mod)
 
-    def record_launch_started(self, *, mode: str, with_mods: bool) -> None:
-        self.count("game_launch_started", mode=mode, mods="yes" if with_mods else "no")
-
-    def record_launch_finished(self, seconds: float, *, mode: str, with_mods: bool) -> None:
-        self.record_timing(
-            "game_launch_finished",
-            seconds,
+    def record_launch_started(
+        self,
+        *,
+        mode: str,
+        with_mods: bool,
+        game: str = "unknown",
+        mod_count: int = 0,
+        mod_refs: list[dict[str, str]] | None = None,
+        via_steam: bool = False,
+    ) -> None:
+        dims = self._launch_dims(
             mode=mode,
-            mods="yes" if with_mods else "no",
+            with_mods=with_mods,
+            game=game,
+            mod_count=mod_count,
+            via_steam=via_steam,
         )
+        self.count("game_launch_started", **dims)
+        self.count("game_launch_started_detail", scope="opt_in", **dims)
+        for payload in self._normalized_mod_refs(mod_refs):
+            self.count("launch_mod_selected", scope="opt_in", game=dims["game"], **payload)
 
-    def record_launch_failed(self, *, reason: str, mode: str, with_mods: bool) -> None:
-        self.count(
-            "game_launch_failed",
-            reason=reason,
+    def record_launch_finished(
+        self,
+        seconds: float,
+        *,
+        mode: str,
+        with_mods: bool,
+        game: str = "unknown",
+        mod_count: int = 0,
+        mod_refs: list[dict[str, str]] | None = None,
+        via_steam: bool = False,
+    ) -> None:
+        dims = self._launch_dims(
             mode=mode,
-            mods="yes" if with_mods else "no",
+            with_mods=with_mods,
+            game=game,
+            mod_count=mod_count,
+            via_steam=via_steam,
         )
+        self.record_timing("game_launch_finished", seconds, **dims)
+        self.record_timing("game_launch_finished_detail", seconds, scope="opt_in", **dims)
+        for payload in self._normalized_mod_refs(mod_refs):
+            self.record_timing(
+                "launch_mod_playtime",
+                seconds,
+                scope="opt_in",
+                game=dims["game"],
+                **payload,
+            )
+
+    def record_launch_failed(
+        self,
+        *,
+        reason: str,
+        mode: str,
+        with_mods: bool,
+        game: str = "unknown",
+        mod_count: int = 0,
+        via_steam: bool = False,
+    ) -> None:
+        dims = self._launch_dims(
+            mode=mode,
+            with_mods=with_mods,
+            game=game,
+            mod_count=mod_count,
+            via_steam=via_steam,
+        )
+        self.count("game_launch_failed", reason=reason, **dims)
+        self.count("game_launch_failed_detail", scope="opt_in", reason=reason, **dims)
 
     def record_update_check(self, outcome: str) -> None:
         self.count("update_check", outcome=outcome)
+
+    def record_mod_install_requested(self, mod, *, mode: str) -> None:
+        dims = {"mode": self._clean_value(mode), **self._mod_common_dims(mod)}
+        self.count("mod_install_requested", **dims)
+        self._record_mod_detail("mod_install_requested_detail", "mode", mode, mod)
+
+    def record_mod_install_completed(self, mod, *, mode: str) -> None:
+        dims = {"mode": self._clean_value(mode), **self._mod_common_dims(mod)}
+        self.count("mod_install_completed", **dims)
+        self._record_mod_detail("mod_install_completed_detail", "mode", mode, mod)
+
+    def record_mod_install_cancelled(self, mod, *, mode: str) -> None:
+        dims = {"mode": self._clean_value(mode), **self._mod_common_dims(mod)}
+        self.count("mod_install_cancelled", **dims)
+        self._record_mod_detail("mod_install_cancelled_detail", "mode", mode, mod)
+
+    def record_mod_install_failed(self, mod, *, mode: str) -> None:
+        dims = {"mode": self._clean_value(mode), **self._mod_common_dims(mod)}
+        self.count("mod_install_failed", **dims)
+        self._record_mod_detail("mod_install_failed_detail", "mode", mode, mod)
+
+    def record_mod_removed(self, mod, *, action: str) -> None:
+        dims = {"action": self._clean_value(action), **self._mod_common_dims(mod)}
+        self.count("mod_removed", **dims)
+        self._record_mod_detail("mod_removed_detail", "action", action, mod)
+
+    def record_plugin_download_requested(self, entry) -> None:
+        self.count("plugin_download_requested", source="catalog")
+        self._record_plugin_detail(
+            "plugin_download_requested_detail",
+            entry,
+            source="catalog",
+        )
+
+    def record_plugin_imported(self, *, source: str = "manual") -> None:
+        self.count("plugin_imported", source=self._clean_value(source) or "manual")
+
+    def record_plugin_state_changed(
+        self,
+        *,
+        plugin_id: str,
+        plugin_name: str | None = None,
+        version: str | None = None,
+        enabled: bool,
+        source: str = "installed",
+    ) -> None:
+        event = "plugin_enabled" if enabled else "plugin_disabled"
+        clean_source = self._clean_value(source) or "installed"
+        self.count(event, source=clean_source)
+        self._record_plugin_detail(
+            f"{event}_detail",
+            {
+                "id": plugin_id,
+                "name": plugin_name,
+                "version": version,
+                "source": clean_source,
+            },
+            source=clean_source,
+        )
+
+    def record_plugin_deleted(
+        self,
+        *,
+        plugin_id: str,
+        plugin_name: str | None = None,
+        version: str | None = None,
+        source: str = "installed",
+    ) -> None:
+        clean_source = self._clean_value(source) or "installed"
+        self.count("plugin_deleted", source=clean_source)
+        self._record_plugin_detail(
+            "plugin_deleted_detail",
+            {
+                "id": plugin_id,
+                "name": plugin_name,
+                "version": version,
+                "source": clean_source,
+            },
+            source=clean_source,
+        )
+
+    def record_local_import(
+        self,
+        *,
+        source: str,
+        outcome: str,
+        file_ext: str = "",
+        merged: bool = False,
+        manual: bool = False,
+    ) -> None:
+        dims = {
+            "source": self._clean_value(source) or "file",
+            "outcome": self._clean_value(outcome) or "unknown",
+            "merged": "yes" if merged else "no",
+            "manual": "yes" if manual else "no",
+        }
+        if file_ext:
+            dims["ext"] = self._clean_value(file_ext)
+        self.count("local_import", **dims)
 
     def count(self, event: str, scope: str = "always", value: int = 1, **dims) -> None:
         if value <= 0:
             return
         if scope == "opt_in" and not self.opt_in_enabled:
             return
-        counter = self._opt_in if scope == "opt_in" else self._always_on
+        counter, total_attr, max_unique = (
+            (self._opt_in, "_opt_total", self._MAX_UNIQUE_OPT_IN)
+            if scope == "opt_in"
+            else (self._always_on, "_always_total", self._MAX_UNIQUE_ALWAYS)
+        )
         key = self._event_key(event, dims)
+        if key not in counter and len(counter) >= max_unique:
+            key = self._event_key(f"{event}_overflow", {})
         counter[key] += int(value)
-        if (scope == "always" and sum(self._always_on.values()) % 24 == 0) or (
-            scope == "opt_in" and sum(self._opt_in.values()) % 20 == 0
-        ):
-            self._schedule_flush(1500)
+        setattr(self, total_attr, getattr(self, total_attr) + int(value))
+        threshold = (
+            self._OPT_IN_FLUSH_THRESHOLD
+            if scope == "opt_in"
+            else self._ALWAYS_FLUSH_THRESHOLD
+        )
+        self._schedule_state_save()
+        if getattr(self, total_attr) >= threshold:
+            self._schedule_flush(self._BURST_FLUSH_DELAY_MS)
+        else:
+            self._schedule_flush(self._ACTIVITY_FLUSH_DELAY_MS)
 
-    def record_timing(self, event: str, seconds: float, scope: str = "always", **dims) -> None:
+    def record_timing(
+        self, event: str, seconds: float, scope: str = "always", **dims
+    ) -> None:
         dims = dict(dims)
-        dims["bucket"] = self._bucket_seconds(seconds)
+        dims["duration_bucket"] = self._bucket_seconds(seconds)
         self.count(event, scope=scope, **dims)
 
     def shutdown(self) -> None:
@@ -217,19 +419,29 @@ class AnalyticsService(QObject):
             scope="opt_in",
             duration=self._bucket_seconds(duration),
             locale=self._clean_value(self.app_state.local_config.get("language", "en")),
-            scale=self._clean_value(int(float(self.app_state.local_config.get("ui_scale", 1.0)) * 100)),
-            theme=self._clean_value("custom" if any(self.app_state.local_config.get(k) for k in (
-                "custom_background_color",
-                "custom_elements_color",
-                "custom_border_color",
-                "custom_hover_color",
-                "custom_select_color",
-                "custom_main_text_color",
-                "custom_secondary_text_color",
-            )) else "default"),
+            scale=self._clean_value(
+                int(float(self.app_state.local_config.get("ui_scale", 1.0)) * 100)
+            ),
+            theme=self._clean_value(
+                "custom"
+                if any(
+                    self.app_state.local_config.get(k)
+                    for k in (
+                        "custom_background_color",
+                        "custom_elements_color",
+                        "custom_border_color",
+                        "custom_hover_color",
+                        "custom_select_color",
+                        "custom_main_text_color",
+                        "custom_secondary_text_color",
+                    )
+                )
+                else "default"
+            ),
         )
         self._enqueue_session_payload()
         self._flush_async(force=True)
+        self._wait_for_upload_shutdown()
 
     def flush(self, force: bool = False) -> bool:
         self._flush_async(force=force)
@@ -280,31 +492,102 @@ class AnalyticsService(QObject):
             return
         self._flush_timer.start(max(250, int(delay_ms)))
 
+    def _schedule_state_save(self) -> None:
+        self._state_timer.start(self._STATE_SAVE_DELAY_MS)
+
+    def _wait_for_upload_shutdown(self, timeout_ms: int = 1500) -> None:
+        """Drain the final upload thread so QObject shutdown does not race Qt teardown."""
+        thread = self._upload_thread
+        if thread is None:
+            return
+        deadline = time.monotonic() + max(0, timeout_ms) / 1000
+        app = QApplication.instance()
+        while self._upload_thread is thread and time.monotonic() < deadline:
+            if app is not None:
+                with contextlib.suppress(Exception):
+                    app.processEvents()
+            if thread.wait(25):
+                break
+        if self._upload_thread is thread and thread.isRunning():
+            safe_stop_thread(thread, timeout=750, blocking=True)
+            if app is not None:
+                with contextlib.suppress(Exception):
+                    app.processEvents()
+
     def _enqueue_session_payload(self, transient: bool = False) -> None:
         if not self._always_on and not self._opt_in:
             return
+        payload = self._build_payload(
+            dict(self._always_on),
+            dict(self._opt_in),
+        )
+        self._always_on.clear()
+        self._opt_in.clear()
+        self._always_total = 0
+        self._opt_total = 0
+        self._pending.append(payload)
+        self._pending = self._pending[-self._MAX_PENDING_PAYLOADS :]
+        if not transient:
+            self._save_state()
+
+    def _build_payload(
+        self,
+        always_on: dict[str, int],
+        opt_in: dict[str, int],
+    ) -> dict[str, Any]:
         payload = {
             "a": APP_VERSION,
             "d": time.strftime("%Y-%m-%d", time.gmtime()),
-            "ao": dict(self._always_on),
-            "oi": dict(self._opt_in),
+            "ao": always_on,
+            "oi": opt_in,
         }
-        self._always_on.clear()
-        self._opt_in.clear()
-        self._pending.append(payload)
-        if not transient:
-            self._save_state()
+        payload["id"] = self._payload_id(payload)
+        return payload
 
     def _load_state(self) -> None:
         os.makedirs(self._dir, exist_ok=True)
         data = load_json(self._state_path) or {}
         pending = data.get("pending")
         if isinstance(pending, list):
-            self._pending = [item for item in pending if isinstance(item, dict)][-20:]
+            self._pending = [item for item in pending if isinstance(item, dict)][
+                -self._MAX_PENDING_PAYLOADS :
+            ]
+        self._always_on = self._restore_counter(data.get("always_on"))
+        self._opt_in = self._restore_counter(data.get("opt_in"))
+        self._always_total = sum(self._always_on.values())
+        self._opt_total = sum(self._opt_in.values())
 
     def _save_state(self) -> None:
         os.makedirs(self._dir, exist_ok=True)
-        save_json(self._state_path, {"pending": self._pending[-20:]}, indent=2)
+        pending = []
+        for item in self._pending[-self._MAX_PENDING_PAYLOADS :]:
+            if not isinstance(item, dict):
+                continue
+            normalized = dict(item)
+            if not normalized.get("id"):
+                normalized["id"] = self._payload_id(normalized)
+            pending.append(normalized)
+        save_json(
+            self._state_path,
+            {
+                "pending": pending,
+                "always_on": dict(self._always_on),
+                "opt_in": dict(self._opt_in),
+            },
+            indent=2,
+        )
+
+    @staticmethod
+    def _restore_counter(data: Any) -> Counter:
+        if not isinstance(data, dict):
+            return Counter()
+        return Counter(
+            {
+                str(key): int(value)
+                for key, value in data.items()
+                if isinstance(key, str) and isinstance(value, int) and value > 0
+            }
+        )
 
     def _event_key(self, event: str, dims: dict[str, Any]) -> str:
         parts = [self._clean_value(event)]
@@ -313,6 +596,22 @@ class AnalyticsService(QObject):
             if clean:
                 parts.append(f"{self._clean_value(key)}={clean}")
         return "|".join(parts)
+
+    @staticmethod
+    def _payload_id(payload: dict[str, Any]) -> str:
+        normalized = {
+            "a": str(payload.get("a") or ""),
+            "d": str(payload.get("d") or ""),
+            "ao": payload.get("ao") if isinstance(payload.get("ao"), dict) else {},
+            "oi": payload.get("oi") if isinstance(payload.get("oi"), dict) else {},
+        }
+        raw = json.dumps(
+            normalized,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()[:32]
 
     def _clean_value(self, value: Any) -> str:
         text = str(value or "").strip().lower().replace(" ", "_").replace(".", "_")
@@ -337,10 +636,58 @@ class AnalyticsService(QObject):
             return "10_29m"
         return "30m_plus"
 
+    def _bucket_bytes(self, bytes_count: int) -> str:
+        size = max(0, int(bytes_count or 0))
+        if size <= 0:
+            return "unknown"
+        if size < 1_000_000:
+            return "lt1mb"
+        if size < 10_000_000:
+            return "1_9mb"
+        if size < 50_000_000:
+            return "10_49mb"
+        if size < 200_000_000:
+            return "50_199mb"
+        return "200mb_plus"
+
+    def _bucket_count(self, count: int) -> str:
+        value = max(0, int(count or 0))
+        if value <= 0:
+            return "0"
+        if value == 1:
+            return "1"
+        if value < 4:
+            return "2_3"
+        if value < 8:
+            return "4_7"
+        if value < 16:
+            return "8_15"
+        return "16_plus"
+
     def _os_key(self) -> str:
-        return {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(
-            platform.system(), "other"
-        )
+        return {
+            "Windows": "windows",
+            "Linux": "linux",
+            "Darwin": "macos",
+        }.get(platform.system(), "other")
+
+    def _launch_dims(
+        self,
+        *,
+        mode: str,
+        with_mods: bool,
+        game: str,
+        mod_count: int,
+        via_steam: bool,
+    ) -> dict[str, str]:
+        return {
+            "game": self._clean_value(game) or "unknown",
+            "mode": self._clean_value(mode) or "unknown",
+            "mods": "yes" if with_mods else "no",
+            "mod_count": self._bucket_count(mod_count),
+            "os": self._os_key(),
+            "launch": "steam" if via_steam else "direct",
+        }
 
     def _tab_name(self, index: int) -> str:
         if not self._window or not hasattr(self._window, "main_tab_widget"):
@@ -360,12 +707,13 @@ class AnalyticsService(QObject):
     def _on_search_text_changed(self, area: str, text: str) -> None:
         active = bool(str(text or "").strip())
         if active and not self._active_searches.get(area, False):
-            self.count("search_started", area=area, length=self._query_length_bucket(text))
+            length_bucket = self._query_length_bucket(text)
+            self.count("search_started", area=area, length=length_bucket)
             self.count(
                 "search_started_detail",
                 scope="opt_in",
                 area=area,
-                length=self._query_length_bucket(text),
+                length=length_bucket,
             )
         self._active_searches[area] = active
 
@@ -379,38 +727,266 @@ class AnalyticsService(QObject):
             return "9_16"
         return "17_plus"
 
-    def _on_download_record_added(self, record) -> None:
-        self.count(
-            "download_enqueued",
-            source=self._clean_value(getattr(record, "source_kind", "unknown")),
-            target=self._clean_value(getattr(record, "target_kind", "unknown")),
+    def _mods_browser_query_length_bucket(self, text: str) -> str:
+        length = len(str(text or "").strip())
+        if length <= 0:
+            return "0"
+        if length == 1:
+            return "1"
+        if length < 5:
+            return "2_4"
+        if length < 13:
+            return "5_12"
+        return "13_plus"
+
+    def _mod_common_dims(self, mod) -> dict[str, str]:
+        data = self._mod_detail_dims(mod, include_name=False)
+        return {
+            key: value
+            for key, value in data.items()
+            if key in {"game", "source", "category", "item_type"}
+        }
+
+    def _mod_detail_dims(self, mod, *, include_name: bool) -> dict[str, str]:
+        if mod is None:
+            return {}
+        mod_id = self._clean_value(get_mod_id(mod))
+        gb_type, gb_id = parse_gamebanana_mod_id(mod_id)
+        game = self._clean_value(
+            mod.get("game") if isinstance(mod, dict) else getattr(mod, "game", "")
         )
+        category = self._clean_value(
+            (
+                mod.get("gamebanana_category")
+                if isinstance(mod, dict)
+                else getattr(mod, "gamebanana_category", None)
+            )
+            or (
+                mod.get("category")
+                if isinstance(mod, dict)
+                else getattr(mod, "category", None)
+            )
+        )
+        dims = {
+            "game": game or "unknown",
+            "source": "gamebanana" if gb_id else "local",
+        }
+        if category:
+            dims["category"] = category
+        if gb_type and gb_id:
+            dims["item_type"] = gb_type
+            dims["ref"] = f"gb_{gb_type}_{gb_id}"
+            if include_name:
+                name = self._clean_value(get_mod_name(mod))
+                if name and name != "unknown":
+                    dims["name"] = name
+        return dims
+
+    def _record_mod_detail(
+        self, event: str, field_name: str, field_value: str, mod
+    ) -> None:
+        dims = self._mod_detail_dims(mod, include_name=True)
+        if "ref" not in dims:
+            return
+        payload = {**dims}
+        payload[self._clean_value(field_name)] = self._clean_value(field_value)
+        self.count(event, scope="opt_in", **payload)
+
+    def _normalized_mod_refs(
+        self, mod_refs: list[dict[str, str]] | None
+    ) -> list[dict[str, str]]:
+        result: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in mod_refs or []:
+            if not isinstance(item, dict):
+                continue
+            ref = self._clean_value(item.get("ref"))
+            if not ref or ref in seen:
+                continue
+            seen.add(ref)
+            payload = {"ref": ref}
+            name = self._clean_value(item.get("name"))
+            if name:
+                payload["name"] = name
+            result.append(payload)
+        return result
+
+    def _plugin_payload_dims(
+        self,
+        plugin,
+        *,
+        source: str = "",
+    ) -> dict[str, str]:
+        if isinstance(plugin, dict):
+            plugin_id = plugin.get("id") or plugin.get("plugin_id")
+            plugin_name = plugin.get("name")
+            version = plugin.get("version")
+            plugin_source = plugin.get("source", source)
+        else:
+            plugin_id = getattr(plugin, "id", None) or getattr(
+                plugin, "plugin_id", None
+            )
+            plugin_name = getattr(plugin, "name", None)
+            version = getattr(plugin, "version", None)
+            plugin_source = source
+        dims = {
+            "plugin_id": self._clean_value(plugin_id),
+            "plugin_name": self._clean_value(plugin_name),
+            "plugin_version": self._clean_value(version),
+            "source": self._clean_value(plugin_source) or "installed",
+        }
+        return {key: value for key, value in dims.items() if value}
+
+    def _record_plugin_detail(self, event: str, plugin, *, source: str) -> None:
+        dims = self._plugin_payload_dims(plugin, source=source)
+        if not dims.get("plugin_id"):
+            return
+        self.count(event, scope="opt_in", **dims)
+
+    def _download_common_dims(self, record) -> dict[str, str]:
+        metadata = getattr(record, "metadata", None) or {}
+        dims = {
+            "source": self._clean_value(getattr(record, "source_kind", "unknown"))
+            or "unknown",
+            "target": self._clean_value(getattr(record, "target_kind", "unknown"))
+            or "unknown",
+            "auto": "yes" if bool(getattr(record, "auto_use", False)) else "no",
+            "cleanup": "yes"
+            if bool(getattr(record, "delete_after_use", False))
+            else "no",
+        }
+        game = self._clean_value(metadata.get("game"))
+        if game:
+            dims["game"] = game
+        return dims
+
+    def _download_detail_dims(self, record) -> dict[str, str]:
+        metadata = getattr(record, "metadata", None) or {}
+        dims = self._download_common_dims(record)
+        if metadata.get("gb_mod_id"):
+            item_type = self._clean_value(metadata.get("item_type") or "mod") or "mod"
+            mod_id = self._clean_value(metadata.get("gb_mod_id"))
+            if mod_id:
+                dims["ref"] = f"gb_{item_type}_{mod_id}"
+                dims["item_type"] = item_type
+                name = self._clean_value(metadata.get("name"))
+                if name:
+                    dims["name"] = name
+            file_id = self._clean_value(metadata.get("gb_file_id"))
+            if file_id:
+                dims["file_id"] = file_id
+            file_name = self._clean_value(metadata.get("file_name"))
+            if file_name:
+                dims["file"] = file_name
+            compatibility = self._clean_value(metadata.get("compatibility"))
+            if compatibility:
+                dims["compat"] = compatibility
+            category = self._clean_value(metadata.get("category"))
+            if category:
+                dims["category"] = category
+        elif metadata.get("plugin_id"):
+            dims.update(
+                self._plugin_payload_dims(
+                    metadata,
+                    source=metadata.get("source", "catalog"),
+                )
+            )
+        else:
+            ext = self._file_extension(
+                metadata.get("file_name")
+                or getattr(record, "file_path", "")
+                or getattr(record, "source_file_path", "")
+                or getattr(record, "source_url", "")
+            )
+            if ext:
+                dims["ext"] = self._clean_value(ext)
+        size_bucket = self._bucket_bytes(
+            getattr(record, "bytes_total", 0)
+            or getattr(record, "bytes_received", 0)
+        )
+        if size_bucket != "unknown":
+            dims["size"] = size_bucket
+        return dims
+
+    def _file_extension(self, value: Any) -> str:
+        filename = str(value or "").split("?", 1)[0].split("#", 1)[0]
+        _, ext = os.path.splitext(filename)
+        return ext.lstrip(".").lower()[:10]
+
+    def _on_download_record_added(self, record) -> None:
+        self.count("download_enqueued", **self._download_common_dims(record))
+        detail_dims = self._download_detail_dims(record)
+        if detail_dims:
+            self.count("download_enqueued_detail", scope="opt_in", **detail_dims)
 
     def _on_download_record_updated(self, record) -> None:
         state = (
             self._clean_value(getattr(record, "download_status", "")),
             self._clean_value(getattr(record, "use_status", "")),
+            bool(getattr(record, "ever_installed", False)),
         )
         record_id = getattr(record, "id", "")
         if not record_id or self._download_states.get(record_id) == state:
             return
         self._download_states[record_id] = state
-        dims = {
-            "source": self._clean_value(getattr(record, "source_kind", "unknown")),
-            "target": self._clean_value(getattr(record, "target_kind", "unknown")),
-        }
-        match state:
-            case ("downloading", _):
-                self.count("download_started", **dims)
-            case ("downloaded", _):
-                self.count("download_completed", **dims)
-            case ("failed", _):
-                self.count("download_failed", **dims)
-            case ("cancelled", _):
-                self.count("download_cancelled", **dims)
-            case (_, "using"):
-                self.count("use_started", **dims)
-            case (_, "needs_manual"):
-                self.count("use_manual_needed", **dims)
-            case (_, "failed"):
-                self.count("use_failed", **dims)
+        common_dims = self._download_common_dims(record)
+        detail_dims = self._download_detail_dims(record)
+        download_state, use_state, was_installed = state
+        match (download_state, use_state, was_installed):
+            case ("downloading", _, _):
+                self.count("download_started", **common_dims)
+                if detail_dims:
+                    self.count(
+                        "download_started_detail",
+                        scope="opt_in",
+                        **detail_dims,
+                    )
+            case ("downloaded", "pending_auto_use", _):
+                self.count("download_completed", **common_dims)
+                if detail_dims:
+                    self.count(
+                        "download_completed_detail",
+                        scope="opt_in",
+                        **detail_dims,
+                    )
+            case ("downloaded", "ready_to_use", False):
+                self.count("download_completed", **common_dims)
+                self.count("download_ready", **common_dims)
+                if detail_dims:
+                    self.count(
+                        "download_completed_detail",
+                        scope="opt_in",
+                        **detail_dims,
+                    )
+            case ("failed", _, _):
+                self.count("download_failed", **common_dims)
+                if detail_dims:
+                    self.count("download_failed_detail", scope="opt_in", **detail_dims)
+            case ("cancelled", _, _):
+                self.count("download_cancelled", **common_dims)
+                if detail_dims:
+                    self.count(
+                        "download_cancelled_detail",
+                        scope="opt_in",
+                        **detail_dims,
+                    )
+            case (_, "using", _):
+                self.count("use_started", **common_dims)
+                if detail_dims:
+                    self.count("use_started_detail", scope="opt_in", **detail_dims)
+            case (_, "needs_manual_install", _):
+                self.count("use_manual_needed", **common_dims)
+                if detail_dims:
+                    self.count(
+                        "use_manual_needed_detail",
+                        scope="opt_in",
+                        **detail_dims,
+                    )
+            case (_, "failed", _):
+                self.count("use_failed", **common_dims)
+                if detail_dims:
+                    self.count("use_failed_detail", scope="opt_in", **detail_dims)
+            case (_, "ready_to_use", True):
+                self.count("use_completed", **common_dims)
+                if detail_dims:
+                    self.count("use_completed_detail", scope="opt_in", **detail_dims)

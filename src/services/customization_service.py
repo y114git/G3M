@@ -3,19 +3,23 @@
 import contextlib
 import logging
 import os
-import platform
-import time
 from collections.abc import Callable
+from multiprocessing import Process
 
-from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap
-from PyQt6.QtWidgets import QLabel
 
 from config.config import DEFAULT_COLORS
 from config.settings_schema import get_theme_color_key
 from services.localization_service import tr
 from ui.common.styling import install_panel_style_handler, qt_hex_to_display_hex
 from utils.path_utils import resource_path
+
+
+def _play_background_music_process(music_path: str) -> None:
+    from playsound3 import playsound
+
+    playsound(music_path)
 
 
 class CustomizationManager(QObject):
@@ -26,10 +30,10 @@ class CustomizationManager(QObject):
     def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
         self.app_state, self.parent_widget = app_state, parent
-        self._bg_music_running = self._music_starting = False
-        self._bg_music_thread = self._bg_music_instance = self.bg_fallback_proc = (
-            self._current_music_path
-        ) = None
+        self._music_starting = False
+        self._bg_music_instance: Process | None = None
+        self._current_music_path = None
+        self._focus_pause_active = False
 
     def _get_custom_file_path(self, base_name: str, extensions: list[str]) -> str:
         for ext in extensions:
@@ -92,125 +96,64 @@ class CustomizationManager(QObject):
                 attr_name="_translucent_background_style_filter",
             )
 
-    def start_background_music(self):
-        if self._music_starting or (
-            self._bg_music_thread and self._bg_music_thread.isRunning()
-        ):
+    def start_background_music(self, force: bool = False):
+        if self._music_starting:
+            return
+        music_path = self.get_background_music_path()
+        if not music_path or not os.path.exists(music_path):
+            self.stop_background_music()
             return
         try:
             self._music_starting = True
-            music_path = self.get_background_music_path()
-            if not music_path or not os.path.exists(music_path):
-                self._music_starting = False
-                return
             self.stop_background_music()
-            from playsound3 import playsound
-
-            self._bg_music_running = True
-
-            class _MusicLoop(QThread):
-                def __init__(self, outer, path) -> None:
-                    super().__init__()
-                    self.outer, self.path = outer, path
-
-                def run(self):
-                    while (
-                        getattr(self.outer, "_bg_music_running", False)
-                        and not self.isInterruptionRequested()
-                    ):
-                        try:
-                            inst = playsound(self.path, block=False)
-                            self.outer._bg_music_instance = inst
-                            while (
-                                self.outer._bg_music_running
-                                and not self.isInterruptionRequested()
-                                and hasattr(inst, "is_alive")
-                                and inst.is_alive()
-                            ):
-                                time.sleep(0.05)
-                            if (
-                                not self.outer._bg_music_running
-                                or self.isInterruptionRequested()
-                            ):
-                                if hasattr(inst, "stop"):
-                                    inst.stop()
-                                break
-                        except Exception:
-                            if (
-                                not self.outer._bg_music_running
-                                or self.isInterruptionRequested()
-                            ):
-                                break
-                            time.sleep(3)
-
-            self._bg_music_thread = _MusicLoop(self, music_path)
-            self._bg_music_thread.start()
+            process = Process(
+                target=_play_background_music_process,
+                args=(os.path.abspath(music_path),),
+                daemon=True,
+            )
+            process.start()
+            self._bg_music_instance = process
             self._current_music_path = music_path
+            self._focus_pause_active = False
             self.music_started.emit()
         except Exception as e:
             logging.error(f"Failed to start background music: {e}", exc_info=True)
+            self.stop_background_music()
         finally:
             self._music_starting = False
 
-    def stop_background_music(self):
+    def stop_background_music(
+        self,
+        wait_for_thread: bool = True,
+        preserve_focus_pause: bool = False,
+    ):
         try:
-            self._bg_music_running = False
-            inst = getattr(self, "_bg_music_instance", None)
-            if inst and hasattr(inst, "stop"):
-                try:
-                    if hasattr(inst, "is_alive") and inst.is_alive():
-                        inst.stop()
-                except Exception as e:
-                    logging.debug(
-                        f"[CustomizationManager] Failed to stop background music instance: {e}",
-                        exc_info=True,
-                    )
-            self._bg_music_instance = None
-            thr = getattr(self, "_bg_music_thread", None)
-            if thr:
-                if thr.isRunning():
-                    thr.requestInterruption()
-                    thr.quit()
-
-                    if not thr.wait(100):
-                        logging.debug(
-                            "[CustomizationManager] Thread did not finish in time, terminating"
-                        )
-                        thr.terminate()
-                        thr.wait(50)
-                thr.deleteLater()
-            self._bg_music_thread = None
+            player = self._bg_music_instance
+            if player is not None and player.is_alive():
+                player.terminate()
+                if wait_for_thread:
+                    player.join(timeout=1.0)
         except Exception as e:
             logging.error(
                 f"[CustomizationManager] Error stopping music: {e}", exc_info=True
             )
-        try:
-            if (
-                hasattr(self, "bg_fallback_proc")
-                and self.bg_fallback_proc
-                and self.bg_fallback_proc.poll() is None
-            ):
-                with contextlib.suppress(Exception):
-                    self.bg_fallback_proc.kill()
-            if platform.system() == "Windows":
-                try:
-                    import winsound
-
-                    winsound.PlaySound(None, winsound.SND_PURGE)
-                except Exception as e:
-                    logging.debug(
-                        f"[CustomizationManager] Failed to purge winsound playback: {e}",
-                        exc_info=True,
-                    )
-        except Exception as e:
-            logging.debug(
-                f"[CustomizationManager] Failed to stop fallback background music process: {e}",
-                exc_info=True,
-            )
         finally:
-            self.bg_fallback_proc = None
+            self._bg_music_instance = None
             self._current_music_path = None
+            if not preserve_focus_pause:
+                self._focus_pause_active = False
+            self._music_starting = False
             self.music_stopped.emit()
+
+    def set_background_music_focus_paused(self, paused: bool) -> None:
+        paused = bool(paused)
+        if paused == self._focus_pause_active:
+            return
+        self._focus_pause_active = paused
+        if paused:
+            self.stop_background_music(wait_for_thread=False, preserve_focus_pause=True)
+        else:
+            self.maybe_start_background_music(force=True)
 
     def maybe_start_background_music(self, force=False):
         if self._music_starting:
@@ -218,7 +161,7 @@ class CustomizationManager(QObject):
         try:
             music_path = self.get_background_music_path()
             if not music_path or not os.path.exists(music_path):
-                if self._bg_music_thread and self._bg_music_thread.isRunning():
+                if self._bg_music_instance:
                     self.stop_background_music()
                 return
             if not self.parent_widget:
@@ -228,14 +171,16 @@ class CustomizationManager(QObject):
                 self.parent_widget.isVisible(),
             )
             if force or (is_shown and is_visible):
+                player = self._bg_music_instance
                 if (
-                    not force
-                    and self._bg_music_thread
-                    and self._bg_music_thread.isRunning()
+                    player is not None
+                    and player.is_alive()
                     and self._current_music_path == music_path
                 ):
                     return
-                self.start_background_music()
+                if player is not None and not player.is_alive():
+                    self._bg_music_instance = None
+                self.start_background_music(force=force)
         except Exception as e:
             logging.error(f"Error in maybe_start_background_music: {e}", exc_info=True)
             self._music_starting = False
@@ -281,7 +226,7 @@ class CustomizationManager(QObject):
                 with contextlib.suppress(Exception):
                     w._update_style()
 
-    def load_launcher_icon(self, icon_label: QLabel):
+    def load_launcher_icon(self, icon_label):
         try:
             custom = self.get_custom_logo_path()
             path = (

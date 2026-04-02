@@ -1,3 +1,4 @@
+import os
 from unittest.mock import Mock, patch
 
 try:
@@ -461,6 +462,64 @@ class TestDialogTheme:
 
 class TestModEditorDialog:
     """Tests for dialogs."""
+    def test_mod_editor_defaults_to_current_library_game(self, qapp, tmp_path):
+        """Checks that create mod defaults to the current library game."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(
+            local_config={},
+            mods_dir=str(tmp_path),
+            game_mode=SimpleNamespace(game_id="pizzatower"),
+        )
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        assert dialog.game_combo.currentData() == "pizzatower"
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_populates_metadata_schema_config(self, qapp, tmp_path):
+        """Checks that mod editor reads canonical metadata configs."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "metadata_mod"
+        mod_folder.mkdir()
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "metadata": {
+                    "id": "gb_mod_665180",
+                    "name": "Lap Hell",
+                    "author": "Unknown",
+                    "description": "desc",
+                    "version": "1.0.0",
+                    "game": "pizzatower",
+                    "homepage": "https://gamebanana.com/mods/665180",
+                    "icon": "https://images.gamebanana.com/example.jpg",
+                },
+                "files": {"pizzatower": {"data_file_path": "laphell.xdelta"}},
+                "folder_path": str(mod_folder),
+            },
+        )
+
+        assert dialog.name_edit.text() == "Lap Hell"
+        assert dialog.homepage_edit.text() == "https://gamebanana.com/mods/665180"
+        assert dialog.icon_edit.text() == "https://images.gamebanana.com/example.jpg"
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_populates_saved_files_as_relative_paths(self, qapp, tmp_path):
         """Checks that moding editor populates saved files as relative paths."""
         from types import SimpleNamespace
@@ -746,6 +805,61 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_finish_creation_saves_local_mod(self, qapp, tmp_path, monkeypatch):
+        """Checks that moding editor finish creation saves local mod instead of crashing."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from utils.file_utils import save_json
+
+        source_file = tmp_path / "source.xdelta"
+        source_file.write_text("patch", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.app_state.mods_dir = str(tmp_path / "mods")
+        os.makedirs(parent.app_state.mods_dir, exist_ok=True)
+        parent.settings_service = SimpleNamespace(write_json=save_json)
+        parent.mod_service = Mock(
+            invalidate_mods_cache=Mock(),
+            load_local_mods=Mock(),
+            mod_list_updated=SimpleNamespace(emit=Mock()),
+        )
+        parent.library_display = SimpleNamespace(update_display=Mock())
+
+        info_calls = []
+        monkeypatch.setattr(
+            QMessageBox, "information", lambda *args, **kwargs: info_calls.append((args, kwargs))
+        )
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Unexpected warning"))
+        )
+        monkeypatch.setattr(
+            QMessageBox, "critical", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Unexpected critical"))
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog.name_edit.setText("Created Mod")
+        first_tab = dialog.file_tabs.widget(0)
+        layout = first_tab._file_layout
+        dialog._create_file_frame(layout, "data")
+        data_input = next(
+            w for w in first_tab.findChildren(type(dialog.icon_edit)) if w.property("is_local_path")
+        )
+        data_input.setText(str(source_file))
+
+        dialog._save_mod()
+
+        created_dirs = [p for p in (tmp_path / "mods").iterdir() if p.is_dir()]
+        assert len(created_dirs) == 1
+        config_path = created_dirs[0] / "mod_config.json"
+        assert config_path.is_file()
+        assert info_calls
+        dialog.close()
+        parent.deleteLater()
+
 
 class TestManualInstallDialog:
     """Tests for dialogs."""
@@ -784,4 +898,66 @@ class TestManualInstallDialog:
         )
 
         assert dialog.game_combo.currentData() != "pizzatower"
+        dialog.close()
+
+    def test_manual_install_dialog_shows_deltarune_extra_hint(self, qapp, tmp_path):
+        """Checks that DELTARUNE extra files hint mentions chapter prefixes."""
+        from services.localization_service import tr
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        (prepared / "README.md").write_text("# guide", encoding="utf-8")
+
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog.game_combo.setCurrentIndex(
+            next(
+                i
+                for i in range(dialog.game_combo.count())
+                if dialog.game_combo.itemData(i) == "deltarune"
+            )
+        )
+
+        assert dialog.extra_instructions_label.text() == tr(
+            "dialogs.extra_files_path_instructions_deltarune"
+        )
+        dialog.close()
+
+    def test_manual_install_dialog_normalizes_paths_relative_to_selected_chapter(
+        self, qapp, tmp_path
+    ):
+        """Checks that manual install strips chapter root prefixes from targets."""
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        (prepared / "data.win").write_text("data", encoding="utf-8")
+
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog.game_combo.setCurrentIndex(
+            next(
+                i
+                for i in range(dialog.game_combo.count())
+                if dialog.game_combo.itemData(i) == "deltarune"
+            )
+        )
+        dialog._get_target_root_for_chapter = Mock(
+            return_value=str(tmp_path / "chapter1_windows")
+        )
+
+        assert (
+            dialog._normalize_relative_target_path(
+                "chapter1_windows/lang_es/",
+                "deltarune_1",
+                trailing_slash=True,
+            )
+            == "lang_es/"
+        )
+        assert (
+            dialog._normalize_relative_target_path(
+                "chapter_1/lang_es/file.txt",
+                "deltarune_1",
+            )
+            == "lang_es/file.txt"
+        )
         dialog.close()

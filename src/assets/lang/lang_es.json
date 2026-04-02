@@ -259,6 +259,7 @@
   "checkboxes": {
     "disable_background": "Desactivar fondo",
     "disable_startup_sound": "Desactivar sonido de inicio",
+    "pause_background_music_unfocused": "Detener música sin foco",
     "xdelta_modpack": "XDELTA en lugar de data.win/.ios",
     "merge_properties": "Fusión de propiedades",
     "merge_code": "Fusión de código",
@@ -331,6 +332,7 @@
     "language": "Elige el idioma usado por la interfaz de G3M.",
     "ui_scale": "Aumenta o reduce toda la interfaz. Los valores más altos hacen el texto y los controles más grandes.",
     "analytics_opt_in": "Ayuda a mejorar G3M compartiendo estadísticas de uso adicionales, agregadas y anónimas, como uso de funciones, aperturas de diálogos, descargas, búsquedas y resultados del inicio del juego. No se envían datos personales, rutas sin procesar, consultas exactas ni identificadores directos.",
+    "pause_background_music_unfocused": "Detiene la música de fondo cuando G3M pierde el foco o se minimiza. Debido a limitaciones de reproducción, al volver a la app la música empieza otra vez desde el principio.",
     "sort_mode": "Elige cómo se debe ordenar la lista actual.",
     "select_game": "Elige para qué juego quieres ver mods o ajustes.",
     "filter_by_tag": "Filtra la lista actual por categoría del mod.",
@@ -442,6 +444,7 @@
     "select_xdelta_patch_info": "Seleccione un archivo xdelta para usar como parche adicional",
     "no_xdelta_files_available": "No hay archivos xdelta disponibles para agregar como parches",
     "extra_files_path_instructions": "Ingrese la ruta de la carpeta donde se debe colocar cada archivo, relativa a la carpeta del juego.\nEjemplo: 'sprites/bgs' colocará el archivo en el directorio sprites/bgs/ de la carpeta del juego.\nUse barras diagonales (/) para separar carpetas.",
+    "extra_files_path_instructions_deltarune": "Ingrese la ruta de la carpeta donde se debe colocar cada archivo, relativa a la carpeta del juego.\nEjemplo: 'sprites/bgs' colocará el archivo en el directorio sprites/bgs/ de la carpeta del juego.\nPara DELTARUNE, también puede comenzar la ruta con una carpeta de capítulo como 'chapter_1/' o 'chapter1_windows/' para vincular el archivo a ese capítulo.\nUse barras diagonales (/) para separar carpetas.",
     "enter_relative_path": "ej., sprites/bgs",
     "path_outside_game_folder": "La carpeta seleccionada debe estar dentro de la carpeta del juego.",
     "conflicts": {

@@ -21,7 +21,7 @@ if _dotenv_path.is_file():
     load_dotenv(dotenv_path=_dotenv_path)
 
 """Application identity and external service configuration."""
-APP_VERSION = "3.0.0stable"
+APP_VERSION = "3.0.1stable"
 APP_DISPLAY_NAME = "G3M"
 APP_ORGANIZATION_NAME = "g3m"
 APP_DATA_DIR_NAME = "G3M"
@@ -199,6 +199,16 @@ WIDGET_LOCALIZATIONS = [
         "setText",
         "checkboxes.disable_startup_sound",
     ),
+    (
+        "pause_background_music_unfocused_checkbox",
+        "setText",
+        "checkboxes.pause_background_music_unfocused",
+    ),
+    (
+        "pause_background_music_unfocused_checkbox",
+        "setToolTip",
+        "tooltips.pause_background_music_unfocused",
+    ),
     ("blocklist_button", "setToolTip", "ui.blocklist_tooltip"),
     ("priority_button", "setText", "ui.priority"),
     ("priority_button", "setToolTip", "tooltips.mod_priority"),
@@ -250,7 +260,7 @@ NETWORK_TIMEOUT_MEDIUM = 15
 NETWORK_TIMEOUT_LONG = 45
 NETWORK_TIMEOUT_HEAD = 15
 INITIALIZATION_TIMEOUT = 5000
-ONLINE_UPDATE_INTERVAL = 600000
+ONLINE_UPDATE_INTERVAL = 1800000
 LAUNCHER_FALLBACK_TIMEOUT = 8000
 SPLASH_WATCHDOG_TIMEOUT = 15000
 SPLASH_RETRY_DELAY = 100
@@ -286,6 +296,7 @@ MOD_VERSIONS_DIR = "mod_versions"
 DATA_FILE_EXTENSIONS = (
     ".xdelta",
     ".vcdiff",
+    ".csx",
     ".win",
     ".unx",
     ".ios",
@@ -312,6 +323,7 @@ META_JSON_FILENAME = "meta.json"
 ICON_PNG_FILENAME = "icon.png"
 MOD_TYPE_G3MPATCH = "g3mpatch"
 MOD_TYPE_XDELTA = "xdelta"
+MOD_TYPE_CSX = "csx"
 MOD_TYPE_DATAFILE = "datafile"
 DELTAMOD_INFO_FILENAME = "_deltamodInfo.json"
 MAX_PATCHING_ARCHIVES = 10

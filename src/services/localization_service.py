@@ -1,6 +1,7 @@
 """Localization management."""
 
 import contextlib
+import html
 import json
 import locale
 import logging
@@ -279,9 +280,20 @@ class LocalizationManager:
             if not isinstance(value, str):
                 return None
             value = self._process_escape_sequences(value)
-            return value.format(**kwargs) if kwargs else value
+            if kwargs:
+                return value.format(**self._normalize_format_kwargs(kwargs))
+            return value
         except (KeyError, TypeError, AttributeError):
             return None
+
+    def _normalize_format_kwargs(self, kwargs: dict) -> dict:
+        normalized = {}
+        for key, value in kwargs.items():
+            if isinstance(value, str):
+                normalized[key] = html.unescape(value)
+            else:
+                normalized[key] = value
+        return normalized
 
     def get_text(self, key: str, **kwargs) -> str:
         plugin_result = self._resolve_plugin_text(key, **kwargs)
@@ -290,9 +302,7 @@ class LocalizationManager:
         result = self._resolve_key(self.strings, key, **kwargs)
         if result is not None:
             return result
-        if self.current_language != "en":
-            return self._get_fallback_text(key, **kwargs)
-        return f"[{key}]"
+        return self._get_fallback_text(key, **kwargs)
 
     def _get_fallback_text(self, key: str, **kwargs) -> str:
         """Get text from preloaded fallback strings."""

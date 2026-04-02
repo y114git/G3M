@@ -14,8 +14,8 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from config.config import (
+    DATA_FILE_EXTENSIONS,
     DELTAMOD_INFO_FILENAME,
-    GAME_DATA_FILE_EXTENSIONS,
     ICON_PNG_FILENAME,
     IS_WINDOWS_PLATFORM,
     META_JSON_FILENAME,
@@ -126,7 +126,7 @@ def download_and_extract_archive(
     downloaded_ref, session = downloaded_ref or [0], session or get_session()
     os.makedirs(target_dir, exist_ok=True)
     fname = get_filename_from_url(session, url)
-    with tempfile.TemporaryDirectory(prefix="g3m-dl-") as tmp:
+    with managed_temporary_directory(prefix="g3m-dl-") as tmp:
         tmp_path = os.path.join(tmp, fname)
         download_file(
             session,
@@ -416,7 +416,7 @@ def get_file_filter(filter_type: str) -> str:
         "image_files": "*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg",
         "background_images": "*.jpg *.png *.bmp *.gif *.webp *.ico *.jpeg *.mp4 *.webm *.avi *.mkv *.mov *.m4v *.3gp *.mpg *.mpeg *.flv *.wmv",
         "xdelta_files": "*.xdelta *.vcdiff",
-        "data_files": " ".join(f"*{ext}" for ext in GAME_DATA_FILE_EXTENSIONS),
+        "data_files": " ".join(f"*{ext}" for ext in DATA_FILE_EXTENSIONS),
         "archive_files": "*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma",
         "all_files": "*",
         "extended_archives": "*.zip *.rar *.7z *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma",
@@ -541,6 +541,12 @@ def _rmtree_error_handler(func, path, _):
             pass
 
 
+def _verified_rmtree(path: str, rmtree_kwargs: dict) -> None:
+    shutil.rmtree(path, **rmtree_kwargs)
+    if os.path.exists(path):
+        raise PermissionError(f"Directory still exists after rmtree: {path}")
+
+
 def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
     if not os.path.exists(path):
         return True
@@ -559,7 +565,7 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
     )
     try:
         _retry_operation(
-            lambda: shutil.rmtree(path, **rmtree_kwargs),
+            lambda: _verified_rmtree(path, rmtree_kwargs),
             max_retries,
             delay,
             "safe_rmtree",
@@ -581,10 +587,62 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
                         ),
                         daemon=True,
                     ).start()
-                    return True
             except Exception as e:
                 logging.debug(
                     f"safe_rmtree: failed to rename {path} for deferred cleanup: {e}",
                     exc_info=True,
                 )
         return False
+
+
+def cleanup_temporary_directory(
+    path: str, max_retries: int = 5, delay: float = 0.2
+) -> bool:
+    if not path or not os.path.exists(path):
+        return True
+    if safe_rmtree(path, max_retries=max_retries, delay=delay):
+        return True
+
+    deferred_path = path
+    renamed_path = os.path.join(
+        tempfile.gettempdir(),
+        f"g3m_cleanup_{int(time.time() * 1000)}_{os.getpid()}_{threading.get_ident()}",
+    )
+    try:
+        if not os.path.exists(renamed_path):
+            os.replace(path, renamed_path)
+            deferred_path = renamed_path
+    except OSError as e:
+        logging.warning(
+            "cleanup_temporary_directory: failed to move %s for deferred cleanup: %s",
+            path,
+            e,
+        )
+
+    def _deferred_cleanup() -> None:
+        for attempt in range(max_retries):
+            if safe_rmtree(deferred_path, max_retries=1, delay=delay):
+                return
+            time.sleep(delay * (attempt + 1))
+        logging.warning(
+            "cleanup_temporary_directory: deferred cleanup still failed for %s",
+            deferred_path,
+        )
+
+    threading.Thread(target=_deferred_cleanup, daemon=True).start()
+    return not os.path.exists(path)
+
+
+@contextlib.contextmanager
+def managed_temporary_directory(
+    *, suffix: str = "", prefix: str = "", root_dir: str | None = None
+):
+    temp_dir = tempfile.mkdtemp(suffix=suffix, prefix=prefix, dir=root_dir)
+    try:
+        yield temp_dir
+    finally:
+        if not cleanup_temporary_directory(temp_dir):
+            logging.warning(
+                "managed_temporary_directory: temporary directory scheduled for deferred cleanup: %s",
+                temp_dir,
+            )

@@ -199,6 +199,31 @@ def test_main_runs_startup_with_cleaned_argv(monkeypatch):
     run_app.assert_called_once_with(["--force-start"])
 
 
+def test_main_prepares_process_runtime_before_startup(monkeypatch):
+    """Checks that main prepares multiprocessing runtime before startup."""
+    import main as main_module
+
+    call_order = []
+    cleanup_old_updater_files = Mock(side_effect=lambda: call_order.append("cleanup"))
+    run_app = Mock(side_effect=lambda _: call_order.append("run_app") or 0)
+    freeze_support = Mock(side_effect=lambda: call_order.append("freeze_support"))
+    monkeypatch.setattr(main_module.multiprocessing, "freeze_support", freeze_support)
+    monkeypatch.setitem(
+        sys.modules,
+        "utils.path_utils",
+        types.SimpleNamespace(cleanup_old_updater_files=cleanup_old_updater_files),
+    )
+    monkeypatch.setitem(sys.modules, "app.startup", types.SimpleNamespace(run_app=run_app))
+
+    assert main_module.main(["main.py"]) == 0
+    freeze_support.assert_called_once_with()
+    cleanup_old_updater_files.assert_called_once_with()
+    run_app.assert_called_once_with([])
+    assert call_order == ["freeze_support", "cleanup", "run_app"], (
+        f"Expected freeze_support to be called first, got: {call_order}"
+    )
+
+
 def test_close_splash_and_show_launcher_delays_splash_close():
     """Checks that closing splash and show launcher delays splash close."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator

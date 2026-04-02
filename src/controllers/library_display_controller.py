@@ -541,7 +541,7 @@ class LibraryDisplayController:
             self.clear_all_selections()
             target_widget.set_selected(True)
             if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_mod_opened("library")
+                analytics.record_mod_opened("library", mod_data)
             self._show_mod_in_summary(mod_data)
 
     def _show_mod_in_summary(self, mod_data):
@@ -635,7 +635,7 @@ class LibraryDisplayController:
             controller = getattr(self.app, "mod_import_export_controller", None)
             if controller:
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_details_opened("library")
+                    analytics.record_mod_details_opened("library", mod_data)
                 controller.show_mod_details_dialog(mod_data)
         except Exception as e:
             logging.error(f"Failed to open mod details: {e}", exc_info=True)
@@ -705,7 +705,7 @@ class LibraryDisplayController:
             if reply == QMessageBox.StandardButton.Yes:
                 self.mod_service.uninstall_mod(mod_data)
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.count("mod_deleted_from_library")
+                    analytics.record_mod_removed(mod_data, action="delete_from_library")
                 self._clear_summary()
                 self._safe_update_after_mod_deletion()
         except Exception as e:
