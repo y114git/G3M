@@ -11,6 +11,8 @@
     "use_button": "Usar carpeta",
     "folder_item_hint": "Esta carpeta se aplicara despues del parcheo y se restaurara al cerrar el juego.",
     "current_game_hint": "La carpeta seleccionada se aplica despues del parcheo de mods y se restaura cuando el juego se cierra.",
+    "open_appdata_button": "Abrir AppData",
+    "open_appdata_tooltip": "Abrir la carpeta AppData del usuario",
     "add_folder": "Agregar carpeta de guardado",
     "name_label": "Nombre de la carpeta de guardado",
     "name_placeholder": "Escribe un nombre de carpeta",

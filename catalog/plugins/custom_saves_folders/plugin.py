@@ -9,7 +9,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -111,7 +112,7 @@ class _InteractiveRow(QFrame):
         self._apply_state_style()
         super().enterEvent(event)
 
-    def leaveEvent(self, event) -> None:  # noqa: N802
+    def leaveEvent(self, event) -> None:
         self._hovered = False
         self._apply_state_style()
         super().leaveEvent(event)
@@ -488,10 +489,19 @@ class _CustomSavesFoldersWidget(QWidget):
         outer.setContentsMargins(18, 18, 18, 18)
         outer.setSpacing(14)
 
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        header.addStretch(1)
         self._title_label = QLabel(self._tr("ui.title"), self)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setObjectName("customSavesFoldersTitle")
-        outer.addWidget(self._title_label)
+        header.addWidget(self._title_label)
+        self._appdata_btn = QPushButton(self)
+        self._appdata_btn.setObjectName("customSavesFoldersAppDataButton")
+        self._appdata_btn.clicked.connect(self._open_appdata_folder)
+        header.addWidget(self._appdata_btn)
+        header.addStretch(1)
+        outer.addLayout(header)
 
         self._hint_label = QLabel(self._tr("ui.current_game_hint"), self)
         self._hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -561,6 +571,20 @@ class _CustomSavesFoldersWidget(QWidget):
                 font-size: 24px;
                 font-weight: 800;
             }}
+            QPushButton#customSavesFoldersAppDataButton {{
+                background-color: {colors["background"]};
+                border: 2px solid {colors["border"]};
+                border-radius: {small_radius}px;
+                padding: 6px 10px;
+            }}
+            QPushButton#customSavesFoldersAppDataButton:hover:enabled {{
+                background-color: {colors["hover"]};
+                border-color: {colors["select"]};
+            }}
+            QPushButton#customSavesFoldersAppDataButton:disabled {{
+                background-color: {colors["background"]};
+                border-color: #6f6f6f;
+            }}
             QLabel#customSavesFoldersHint {{
                 color: {colors["secondary_text"]};
                 font-size: 13px;
@@ -597,6 +621,9 @@ class _CustomSavesFoldersWidget(QWidget):
             }}
             """
         )
+        self._appdata_btn.setIcon(colored_icon("folder", colors["main_text"]))
+        self._appdata_btn.setText(self._tr("ui.open_appdata_button"))
+        self._appdata_btn.setToolTip(self._tr("ui.open_appdata_tooltip"))
         self.add_btn.setIcon(colored_icon("add", colors["main_text"]))
         self.add_btn.setToolTip(self._tr("ui.add_tooltip"))
         for row in self._game_rows.values():
@@ -604,6 +631,13 @@ class _CustomSavesFoldersWidget(QWidget):
         for row in self._folder_rows.values():
             row.refresh_theme()
         self._refresh_folders()
+
+    def _open_appdata_folder(self) -> None:
+        path = get_user_data_root()
+        if not path:
+            return
+        os.makedirs(path, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def _current_game_id(self) -> str:
         item = self.games_list.currentItem()
@@ -744,6 +778,8 @@ class _CustomSavesFoldersWidget(QWidget):
 
     def refresh_language(self) -> None:
         self._title_label.setText(self._tr("ui.title"))
+        self._appdata_btn.setText(self._tr("ui.open_appdata_button"))
+        self._appdata_btn.setToolTip(self._tr("ui.open_appdata_tooltip"))
         self._hint_label.setText(self._tr("ui.current_game_hint"))
         self._games_title_label.setText(self._tr("ui.games_title"))
         self._folders_title_label.setText(self._tr("ui.folders_title"))
@@ -806,6 +842,8 @@ class CustomSavesFoldersPlugin:
                 tab.tab_id,
                 getattr(game, "macos_app_names", ("DELTARUNE.app", "DELTARUNEdemo.app")),
             )
+            if not resource_dir or not os.path.isdir(resource_dir):
+                resource_dir = game_path
             if not resource_dir or not os.path.isdir(resource_dir):
                 continue
             data_path = find_supported_game_data_file(

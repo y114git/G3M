@@ -11,6 +11,8 @@
     "use_button": "使用此資料夾",
     "folder_item_hint": "這個資料夾會在修補完成後套用，並在遊戲關閉後還原。",
     "current_game_hint": "所選資料夾會在模組修補完成後套用，並在遊戲關閉後還原。",
+    "open_appdata_button": "開啟 AppData",
+    "open_appdata_tooltip": "開啟使用者的 AppData 資料夾",
     "add_folder": "新增存檔資料夾",
     "name_label": "存檔資料夾名稱",
     "name_placeholder": "輸入資料夾名稱",

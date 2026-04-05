@@ -11,6 +11,8 @@
     "use_button": "Use Folder",
     "folder_item_hint": "This folder will be applied after patching and restored when the game closes.",
     "current_game_hint": "The selected folder is applied after mod patching and restored after the game closes.",
+    "open_appdata_button": "Open AppData",
+    "open_appdata_tooltip": "Open the user's AppData folder",
     "add_folder": "Add Custom Save Folder",
     "name_label": "Save folder name",
     "name_placeholder": "Enter a folder name",

@@ -389,21 +389,25 @@ class TestWriteShortcutFile:
         with open(filepath, encoding="utf-8") as f:
             assert "--shortcut" in f.read()
 
-    @pytest.mark.skipif(platform.system() != "Windows", reason="VBS specific")
     def test_windows_vbs_no_console(self, shortcut_temp_dir):
         """Checks that windowsing vbs no console."""
-        filepath = os.path.join(shortcut_temp_dir, "test.vbs")
+        filepath = os.path.join(shortcut_temp_dir, f"test{_get_platform_extension()}")
         _write_shortcut_file(filepath, {"game_id": "deltarune"})
         with open(filepath, encoding="utf-8") as f:
             content = f.read()
-        assert "WScript.Shell" in content and ", 0, False" in content
+        if platform.system() == "Windows":
+            assert "WScript.Shell" in content and ", 0, False" in content
+        else:
+            assert content.startswith("#!/bin/bash") and "--shortcut" in content
 
-    @pytest.mark.skipif(platform.system() == "Windows", reason="Unix specific")
     def test_unix_executable(self, shortcut_temp_dir):
         """Checks that unixing executable."""
         filepath = os.path.join(shortcut_temp_dir, f"test{_get_platform_extension()}")
         _write_shortcut_file(filepath, {"game_id": "deltarune"})
-        assert os.access(filepath, os.X_OK)
+        if platform.system() == "Windows":
+            assert os.path.isfile(filepath)
+        else:
+            assert os.access(filepath, os.X_OK)
 
     def test_config_roundtrip_via_base64(self, shortcut_temp_dir):
         """Checks that configing roundtrip via base64."""

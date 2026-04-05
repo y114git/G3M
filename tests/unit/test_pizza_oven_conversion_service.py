@@ -1,12 +1,9 @@
 import json
 import os
-import platform
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
-
-import pytest
 
 from models.game_modes import get_game
 from presentation.pizza_oven_conversion_presenter import PizzaOvenConversionPresenter
@@ -263,7 +260,6 @@ def test_convert_builds_canonical_g3m_mod_from_pizzaoven_result(tmp_path):
     assert (target_mod_dir / "Install Instructions.txt").exists()
 
 
-@pytest.mark.skipif(platform.system() == "Darwin", reason="G3MTool patching test is flaky on macOS")
 def test_converted_mod_applies_expected_files_to_clean_game(
     tmp_path, app_state, monkeypatch
 ):

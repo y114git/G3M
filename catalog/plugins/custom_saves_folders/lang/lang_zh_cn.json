@@ -11,6 +11,8 @@
     "use_button": "使用此文件夹",
     "folder_item_hint": "这个文件夹会在补丁完成后应用，并在游戏关闭后恢复。",
     "current_game_hint": "所选文件夹会在模组补丁完成后应用，并在游戏关闭后恢复。",
+    "open_appdata_button": "打开 AppData",
+    "open_appdata_tooltip": "打开用户的 AppData 文件夹",
     "add_folder": "添加存档文件夹",
     "name_label": "存档文件夹名称",
     "name_placeholder": "输入文件夹名称",

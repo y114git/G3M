@@ -2,16 +2,15 @@ import json
 import os
 from pathlib import Path
 
-import pytest
+from utils.file_utils import get_chapter_folder_name
 
 
 class TestModStructure:
     """Tests for mod system."""
-    def test_mod_config_parsing(self, mods_dir, full_mod_structure_dir):
+    def test_mod_config_parsing(self, full_mod_structure_dir):
         """Checks that moding config parsing."""
         config_path = Path(full_mod_structure_dir) / 'mod_config.json'
-        if not config_path.exists():
-            pytest.skip('mod_config.json not found. Please create test mod structure.')
+        assert config_path.is_file(), 'mod_config.json not found.'
         with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         assert 'id' in config
@@ -24,31 +23,25 @@ class TestModStructure:
         """Checks that moding structure validation."""
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
-        if not config_path.exists():
-            pytest.skip('mod_config.json not found.')
+        assert config_path.is_file(), 'mod_config.json not found.'
         with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         files = config.get('files', {})
         for chapter_key in files:
-            if chapter_key == '0':
-                chapter_dir = mod_path / 'chapter_0'
-            elif chapter_key == 'demo':
-                chapter_dir = mod_path / 'demo'
-            else:
-                chapter_dir = mod_path / f'chapter_{chapter_key}'
-            if files[chapter_key].get('data_file_url') and chapter_dir.exists():
-                assert chapter_dir.is_dir()
+            chapter_dir = mod_path / get_chapter_folder_name(chapter_key, config.get('game'))
+            assert chapter_dir.is_dir(), chapter_dir
+            if files[chapter_key].get('data_file_path') or files[chapter_key].get('data_file_url'):
+                assert any(chapter_dir.iterdir()), chapter_dir
 
     def test_mod_file_discovery(self, full_mod_structure_dir):
         """Checks that moding file discovery."""
         mod_path = Path(full_mod_structure_dir)
-        if not mod_path.exists():
-            pytest.skip(f'Test mod structure not found at {full_mod_structure_dir}. Please create test mod structure.')
+        assert mod_path.is_dir(), f'Test mod structure not found at {full_mod_structure_dir}.'
         chapter_dirs = [d for d in mod_path.iterdir() if d.is_dir() and d.name.startswith('chapter_')]
         assert len(chapter_dirs) > 0, 'No chapter directories found'
         for chapter_dir in chapter_dirs:
             files = list(chapter_dir.glob('*'))
-            _ = [f for f in files if f.suffix in ['.win', '.xdelta', '.vcdiff']]
+            assert any(f.suffix in ['.win', '.xdelta', '.vcdiff'] for f in files), chapter_dir
             assert chapter_dir.is_dir()
 
 
@@ -130,20 +123,14 @@ class TestModProcessing:
         """Checks that moding file resolution."""
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
-        if not config_path.exists():
-            pytest.skip('mod_config.json not found.')
+        assert config_path.is_file(), 'mod_config.json not found.'
         with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         files = config.get('files', {})
         for chapter_key, chapter_data in files.items():
             data_file_url = chapter_data.get('data_file_url')
             if data_file_url:
-                if chapter_key == '0':
-                    chapter_dir = mod_path / 'chapter_0'
-                elif chapter_key == 'demo':
-                    chapter_dir = mod_path / 'demo'
-                else:
-                    chapter_dir = mod_path / f'chapter_{chapter_key}'
+                chapter_dir = mod_path / get_chapter_folder_name(chapter_key, config.get('game'))
                 if chapter_dir.exists():
                     file_path = chapter_dir / data_file_url
                     assert file_path.parent == chapter_dir
@@ -152,18 +139,13 @@ class TestModProcessing:
         """Checks that moding chapter mapping."""
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
-        if not config_path.exists():
-            pytest.skip('mod_config.json not found.')
+        assert config_path.is_file(), 'mod_config.json not found.'
         with open(config_path, encoding='utf-8') as f:
             config = json.load(f)
         files = config.get('files', {})
-        chapter_map = {'0': 'chapter_0', '1': 'chapter_1', '2': 'chapter_2', '3': 'chapter_3', '4': 'chapter_4', 'demo': 'demo'}
         for chapter_key in files:
-            expected_dir_name = chapter_map.get(chapter_key)
-            if expected_dir_name:
-                expected_dir = mod_path / expected_dir_name
-                if expected_dir.exists():
-                    assert expected_dir.is_dir()
+            expected_dir = mod_path / get_chapter_folder_name(chapter_key, config.get('game'))
+            assert expected_dir.is_dir(), expected_dir
 
 
 class TestModMergingWithStructure:
