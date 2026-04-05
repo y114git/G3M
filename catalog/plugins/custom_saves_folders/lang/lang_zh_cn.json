@@ -1,0 +1,46 @@
+{
+  "name": "自定义存档文件夹",
+  "description": "为每个游戏创建独立的自定义存档文件夹，并且只在当前启动会话中临时应用。",
+  "ui": {
+    "title": "自定义存档文件夹",
+    "games_title": "游戏",
+    "folders_title": "自定义存档文件夹",
+    "empty_games": "没有可用的游戏。",
+    "empty_folders": "这个游戏还没有自定义存档文件夹。",
+    "empty_selection": "请选择一个游戏来管理它的自定义存档文件夹。",
+    "use_button": "使用此文件夹",
+    "folder_item_hint": "这个文件夹会在补丁完成后应用，并在游戏关闭后恢复。",
+    "current_game_hint": "所选文件夹会在模组补丁完成后应用，并在游戏关闭后恢复。",
+    "add_folder": "添加存档文件夹",
+    "name_label": "存档文件夹名称",
+    "name_placeholder": "输入文件夹名称",
+    "name_hint": "填写这个游戏要使用的独立存档文件夹名称。",
+    "create_button": "创建",
+    "cancel_button": "取消",
+    "delete_tooltip": "从插件中移除此文件夹",
+    "add_tooltip": "创建新的自定义存档文件夹",
+    "applying_status": "正在应用自定义存档文件夹...",
+    "applying_progress": "正在应用自定义存档文件夹 {current}/{total}...",
+    "applied_status": "已为 {game} 应用自定义存档文件夹 \"{name}\"。",
+    "restored_status": "自定义存档会话结束后，原始 data 文件已恢复。"
+  },
+  "dialogs": {
+    "delete_title": "删除这个自定义文件夹？",
+    "delete_body": "\"{name}\" 只会从此插件中删除，磁盘上已经存在的存档文件夹不会受到影响。"
+  },
+  "errors": {
+    "name_required": "请输入存档文件夹名称。",
+    "name_too_long": "存档文件夹名称过长。",
+    "name_invalid_chars": "存档文件夹名称包含不安全的字符。",
+    "name_invalid_suffix": "存档文件夹名称不能以空格或句点结尾。",
+    "name_reserved": "这个存档文件夹名称是 Windows 保留名称。",
+    "folder_exists": "所选游戏已经存在这个存档文件夹。",
+    "selection_missing": "请先选择一个游戏。",
+    "game_path_missing": "所选游戏的路径尚未配置。",
+    "data_file_missing": "找不到 {game} 的受支持 data 文件。",
+    "script_missing": "缺少自定义存档文件夹脚本。",
+    "g3mtool_missing": "G3MTool 不可用。",
+    "apply_failed": "应用自定义存档文件夹失败：{error}",
+    "restore_failed": "恢复原始 data 文件失败：{error}"
+  }
+}

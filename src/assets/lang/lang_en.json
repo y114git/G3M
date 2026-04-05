@@ -4,7 +4,7 @@
     "language_name": "English",
     "font": "main.ttf",
     "qt_translation": "qtbase_en",
-    "version": "1.0.1"
+    "version": "3.0.2"
   },
   "blocklist": {
     "title": "Blocklist Manager",
@@ -84,6 +84,7 @@
     "language_label": "Language:",
     "launch_button": "Launch",
     "library_tab": "Library",
+    "library_tab_easter_egg": "Librarby",
     "help_menu": "Help",
     "about_title": "About",
     "about_dialog_text": "The ultimate mod manager for DELTARUNE, UNDERTALE, Pizza Tower, and more.",
@@ -221,6 +222,7 @@
     "settings_tab_game": "Game",
     "settings_tab_general": "General",
     "settings_tab_library": "Library",
+    "settings_tab_library_easter_egg": "Librarby",
     "settings_tab_mods_browser": "Mods Browser",
     "settings_tab_plugins": "Plugins",
     "open_mod_folder": "Open Mod Folder",
@@ -765,7 +767,15 @@
   },
   "mods": {
     "archive_files": "Mod Archives (*.zip *.7z *.rar *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma);;All Files (*)",
-    "installation_error": "Installation error: {error}"
+    "installation_error": "Installation error: {error}",
+    "import_mods": "Import mods",
+    "import_instructions": "Import mods from a local file or a direct link.",
+    "import_from_file": "Choose file",
+    "import_from_url": "Import from URL",
+    "url_placeholder": "Enter URL",
+    "import_from_url_button": "Load URL",
+    "url_required": "Please enter a URL.",
+    "select_mod_archive": "Select mod archive"
   },
   "downloads": {
     "title": "Downloads",

@@ -14,10 +14,12 @@ class TestImportDialog:
     """Tests for dialogs."""
     def test_import_dialog_creation(self, qapp, feedback_service):
         """Checks that importing dialog creation."""
+        from services.localization_service import tr
         from ui.dialogs.import_dialog import ImportDialog
         dialog = ImportDialog(None, feedback_service, 'mods')
         assert dialog is not None
         assert isinstance(dialog, QDialog)
+        assert dialog.windowTitle() == tr("mods.import_mods")
 
 
 class TestGameBananaFilePickerDialog:

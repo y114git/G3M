@@ -287,6 +287,12 @@ class ThemeController:
             update_chapter_tabs_style(self.app)
             if hasattr(self.app, "library_tab_builder"):
                 self.app.library_tab_builder.update_priority_button_style()
+                if hasattr(self.app.library_tab_builder, "refresh_filter_scroll_styles"):
+                    self.app.library_tab_builder.refresh_filter_scroll_styles()
+            if hasattr(self.app, "search_tab_builder") and hasattr(
+                self.app.search_tab_builder, "refresh_dynamic_styles"
+            ):
+                self.app.search_tab_builder.refresh_dynamic_styles()
             summary = getattr(self.app, "mod_summary_panel", None)
             if summary and hasattr(summary, "refresh_theme"):
                 summary.refresh_theme()
@@ -364,7 +370,11 @@ class ThemeController:
         for fs in self._iter_filter_scrolls():
             w = fs.widget()
             if w:
-                w.adjustSize()
+                with contextlib.suppress(RuntimeError):
+                    w.adjustSize()
+                    w.updateGeometry()
+                    fs.updateGeometry()
+                    fs.setMaximumHeight(w.sizeHint().height())
 
     def on_background_ready(self, obj):
         import logging

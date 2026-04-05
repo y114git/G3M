@@ -1,8 +1,6 @@
 import os
 from unittest.mock import Mock
 
-import pytest
-
 from config.config import APP_VERSION
 
 
@@ -15,7 +13,6 @@ def test_get_update_info_returns_platform_specific_payload(app_state):
             "version": "9.9.9",
             "urls": {"linux": "https://example.com/g3m.tar.gz"},
             "message": "Update",
-            "sha256": {"linux": "abc123"},
         }
     }
     checker = UpdateChecker(app_state=app_state, feedback_service=Mock())
@@ -28,7 +25,6 @@ def test_get_update_info_returns_platform_specific_payload(app_state):
         "message": "Update",
         "message_ru": None,
         "message_en": None,
-        "sha256": "abc123",
     }
 
 
@@ -47,21 +43,6 @@ def test_get_update_info_skips_current_version(app_state):
 
     assert checker.get_update_info(system="Linux", beta_enabled=False) is None
     feedback_service.update_status.assert_called_once()
-
-
-def test_verify_archive_checksum_rejects_mismatch(app_state, temp_dir):
-    """Checks that verifying archive checksum rejects mismatch."""
-    from models.exceptions import AppError
-    from services.updatecheck_service import UpdateChecker
-
-    checker = UpdateChecker(app_state=app_state, feedback_service=Mock())
-    archive_path = os.path.join(temp_dir, "update.zip")
-    with open(archive_path, "wb") as file_obj:
-        file_obj.write(b"invalid")
-
-    with pytest.raises(AppError) as exc_info:
-        checker._verify_archive_checksum(archive_path, "0" * 64)
-    assert "Checksum mismatch" in exc_info.value.kwargs["error"]
 
 
 def test_build_unix_updater_script_contains_backup_restore(app_state):

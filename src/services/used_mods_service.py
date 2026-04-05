@@ -246,18 +246,20 @@ class UsedModsManager(QObject):
             if is_chapter_mode
             else {get_chapter_id_for_game_mode(gm)}
         )
-        self.used_mods = {
+        previous_used_mods = {
             chapter_id: mods
             for chapter_id, mods in self.used_mods.items()
             if chapter_id in active_ids
         }
+        self.used_mods = {}
 
         modes_to_load = [is_chapter_mode]
-        if len(self.used_mods) == 0:
+        if len(previous_used_mods) == 0:
             modes_to_load = [True, False]
 
         needs_save = False
         did_process = False
+        next_pending_mod_ids: dict[str, list[str]] = {}
         for chapter_mode in modes_to_load:
             config_key = self.get_used_mods_config_key(
                 self.app_state.game_mode, chapter_mode
@@ -296,6 +298,14 @@ class UsedModsManager(QObject):
                     if isinstance(mod_data_raw, str)
                     else (mod_data_raw if isinstance(mod_data_raw, list) else [])
                 )
+                previous_mod_ids = {
+                    mod_id
+                    for mod_id in (
+                        get_mod_id(mod)
+                        for mod in previous_used_mods.get(chapter_id, [])
+                    )
+                    if mod_id
+                }
                 if isinstance(mod_data_raw, str):
                     needs_save = True
                 if not mod_ids:
@@ -310,25 +320,20 @@ class UsedModsManager(QObject):
                         missing_mod_ids.append(mod_id)
                 if mods_list:
                     self.used_mods[chapter_id] = mods_list
-                if missing_mod_ids:
-                    if not hasattr(self, "_pending_mod_ids"):
-                        self._pending_mod_ids = {}
-                    self._pending_mod_ids[chapter_id] = missing_mod_ids
-                else:
-                    if (
-                        hasattr(self, "_pending_mod_ids")
-                        and chapter_id in self._pending_mod_ids
-                    ):
-                        del self._pending_mod_ids[chapter_id]
+                unresolved_mod_ids = [
+                    mod_id
+                    for mod_id in missing_mod_ids
+                    if mod_id not in previous_mod_ids
+                ]
+                if unresolved_mod_ids:
+                    next_pending_mod_ids[chapter_id] = unresolved_mod_ids
+                if len(unresolved_mod_ids) != len(missing_mod_ids):
+                    needs_save = True
                 if (
-                    not missing_mod_ids
+                    not unresolved_mod_ids
                     and not mods_list
                     and chapter_id_str in used_mods_data
-                    and not (
-                        hasattr(self, "_pending_mod_ids")
-                        and chapter_id in self._pending_mod_ids
-                    )
-                    ):
+                ):
                     del used_mods_data[chapter_id_str]
                     needs_save = True
             if migrations_needed:
@@ -341,6 +346,10 @@ class UsedModsManager(QObject):
                         del used_mods_data[old_chapter_id]
                 self.app_state.local_config[config_key] = used_mods_data
                 needs_save = True
+        if next_pending_mod_ids:
+            self._pending_mod_ids = next_pending_mod_ids
+        elif hasattr(self, "_pending_mod_ids"):
+            del self._pending_mod_ids
         if did_process or (
             hasattr(self.app_state, "all_mods") and self.app_state.all_mods
         ):

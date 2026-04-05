@@ -31,8 +31,10 @@ from ui.common.styling import (
     build_tag_checkbox_style,
     get_theme_color,
     get_ui_scale_factor,
+    install_scroll_area_update_handlers,
     install_scroll_viewport_clip,
     install_size_hint_height_sync,
+    style_filter_scroll_area,
 )
 
 
@@ -45,6 +47,9 @@ class ModsBrowserTabBuilder(QObject):
 
     def refresh_dynamic_styles(self) -> None:
         show_nsfw_checkbox = self.widgets.get("show_nsfw_checkbox")
+        filters_scroll = self.widgets.get("filters_scroll")
+        if filters_scroll:
+            style_filter_scroll_area(filters_scroll, getattr(self.app_state, "local_config", None))
         if not show_nsfw_checkbox:
             return
         config = getattr(self.app_state, "local_config", None)
@@ -74,7 +79,6 @@ class ModsBrowserTabBuilder(QObject):
         f_scroll = QScrollArea(widget)
         f_scroll.setWidgetResizable(True)
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        f_scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         f_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         f_scroll.setMinimumWidth(200)
@@ -82,6 +86,13 @@ class ModsBrowserTabBuilder(QObject):
         f_scroll.setWidget(f_widget)
         install_size_hint_height_sync(
             f_widget, f_scroll, attr_name="_filters_scroll_height_filter"
+        )
+        install_scroll_area_update_handlers(
+            f_scroll,
+            lambda target=f_scroll: style_filter_scroll_area(
+                target, getattr(self.app_state, "local_config", None)
+            ),
+            "search_filters_scroll",
         )
         layout.addWidget(f_scroll)
         self.widgets.update({"filters_scroll": f_scroll, "filters_widget": f_widget})

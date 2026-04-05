@@ -656,13 +656,15 @@ class ModOperationsController:
     def uninstall_mod(self, mod):
         try:
             self.mod_service.delete_mod_files(mod)
+            if used_mods_service := getattr(self.app, "used_mods_service", None):
+                used_mods_service.remove_mod_from_all_chapters(mod)
             if analytics := getattr(self.app, "analytics_service", None):
                 analytics.record_mod_removed(mod, action="uninstall")
-            self.app.search_display.update_search_cards()
+            if hasattr(self.app, "search_display"):
+                self.app.search_display.update_search_cards()
+                self.app.search_display.update_filtered_mods(preserve_page=True)
             if hasattr(self.app, "library_display"):
                 self.app.library_display.update_display()
-            if hasattr(self.app, "search_display"):
-                self.app.search_display.update_filtered_mods(preserve_page=True)
         except Exception as e:
             logging.error(
                 f"ModOperationsController: Failed to uninstall mod: {e}", exc_info=True

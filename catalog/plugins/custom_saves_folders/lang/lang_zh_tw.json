@@ -1,0 +1,46 @@
+{
+  "name": "自訂存檔資料夾",
+  "description": "為每個遊戲建立獨立的自訂存檔資料夾，並且只在目前的啟動階段暫時套用。",
+  "ui": {
+    "title": "自訂存檔資料夾",
+    "games_title": "遊戲",
+    "folders_title": "自訂存檔資料夾",
+    "empty_games": "沒有可用的遊戲。",
+    "empty_folders": "這個遊戲目前還沒有自訂存檔資料夾。",
+    "empty_selection": "請先選擇一個遊戲來管理它的自訂存檔資料夾。",
+    "use_button": "使用此資料夾",
+    "folder_item_hint": "這個資料夾會在修補完成後套用，並在遊戲關閉後還原。",
+    "current_game_hint": "所選資料夾會在模組修補完成後套用，並在遊戲關閉後還原。",
+    "add_folder": "新增存檔資料夾",
+    "name_label": "存檔資料夾名稱",
+    "name_placeholder": "輸入資料夾名稱",
+    "name_hint": "填入這個遊戲要使用的獨立存檔資料夾名稱。",
+    "create_button": "建立",
+    "cancel_button": "取消",
+    "delete_tooltip": "從外掛中移除此資料夾",
+    "add_tooltip": "建立新的自訂存檔資料夾",
+    "applying_status": "正在套用自訂存檔資料夾...",
+    "applying_progress": "正在套用自訂存檔資料夾 {current}/{total}...",
+    "applied_status": "已為 {game} 套用自訂存檔資料夾「{name}」。",
+    "restored_status": "自訂存檔階段結束後，原始 data 檔案已還原。"
+  },
+  "dialogs": {
+    "delete_title": "刪除這個自訂資料夾？",
+    "delete_body": "「{name}」只會從這個外掛中移除，磁碟上已建立的存檔資料夾不會受到影響。"
+  },
+  "errors": {
+    "name_required": "請輸入存檔資料夾名稱。",
+    "name_too_long": "存檔資料夾名稱過長。",
+    "name_invalid_chars": "存檔資料夾名稱包含不安全的字元。",
+    "name_invalid_suffix": "存檔資料夾名稱不能以空白或句點結尾。",
+    "name_reserved": "這個存檔資料夾名稱是 Windows 保留名稱。",
+    "folder_exists": "所選遊戲已存在這個存檔資料夾。",
+    "selection_missing": "請先選擇一個遊戲。",
+    "game_path_missing": "尚未設定所選遊戲的資料夾路徑。",
+    "data_file_missing": "找不到 {game} 的支援 data 檔案。",
+    "script_missing": "缺少自訂存檔資料夾腳本。",
+    "g3mtool_missing": "G3MTool 無法使用。",
+    "apply_failed": "套用自訂存檔資料夾失敗：{error}",
+    "restore_failed": "還原原始 data 檔案失敗：{error}"
+  }
+}

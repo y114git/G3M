@@ -701,6 +701,8 @@ def build_scrollbar_qss(
     radius: int,
     thickness: int = 16,
     background: str = "transparent",
+    handle_border_color: str | None = None,
+    track_border_color: str | None = None,
     vertical_margin=(0, 0, 0, 0),
     horizontal_margin=(0, 0, 0, 0),
     min_handle: int = 25,
@@ -724,6 +726,16 @@ def build_scrollbar_qss(
         horizontal_bottom,
         handle_margin=handle_margin,
     )
+    handle_border_rule = (
+        "border: none;"
+        if not handle_border_color
+        else f"border: 1px solid {handle_border_color};"
+    )
+    track_border_rule = (
+        "border: none;"
+        if not track_border_color
+        else f"border: 1px solid {track_border_color};"
+    )
     corner_rule = (
         ""
         if not include_corner
@@ -735,7 +747,7 @@ def build_scrollbar_qss(
     )
     return f"""
                 QScrollBar:vertical {{
-                    border: none;
+                    {track_border_rule}
                     background: {background};
                     width: {thickness}px;
                     margin: {_format_box_values(vertical_margin)};
@@ -744,12 +756,12 @@ def build_scrollbar_qss(
                 QScrollBar::handle:vertical {{
                     background-color: {handle_color};
                     min-height: {min_handle}px;
-                    border: none;
+                    {handle_border_rule}
                     border-radius: {vertical_handle_radius}px;
                     margin: {handle_margin}px;
                 }}
                 QScrollBar:horizontal {{
-                    border: none;
+                    {track_border_rule}
                     background: {background};
                     height: {thickness}px;
                     margin: {_format_box_values(horizontal_margin)};
@@ -758,7 +770,7 @@ def build_scrollbar_qss(
                 QScrollBar::handle:horizontal {{
                     background-color: {handle_color};
                     min-width: {min_handle}px;
-                    border: none;
+                    {handle_border_rule}
                     border-radius: {horizontal_handle_radius}px;
                     margin: {handle_margin}px;
                 }}
@@ -780,6 +792,46 @@ def build_scrollbar_qss(
                     height: 0px;
                 }}{corner_rule}
             """
+
+
+def style_filter_scroll_area(scroll_area, config, cache_attr="_filter_scroll_qss_cache") -> str:
+    """Apply a high-contrast scrollbar style for horizontal filter strips."""
+    if not scroll_area:
+        return ""
+    scale = get_ui_scale_factor(config)
+    thickness = max(12, round(14 * scale))
+    min_handle = max(20, round(24 * scale))
+    radius = get_border_radius(config)
+    groove_background = rgba_from_color(
+        get_theme_color(config, "elements", "#202326"),
+        alpha=150,
+        fallback="rgba(32, 35, 38, 150)",
+    )
+    border_color = get_theme_color(config, "border", "#ffffff")
+    qss = build_scrollbar_qss(
+        get_theme_color(config, "main_text", "#ffffff"),
+        radius,
+        thickness=thickness,
+        background=groove_background,
+        handle_border_color=border_color,
+        track_border_color=border_color,
+        vertical_margin=(4, 0, 4, 0),
+        horizontal_margin=(2, 6, 2, 6),
+        min_handle=min_handle,
+    )
+    apply_stylesheet_if_changed(
+        scroll_area,
+        f"QScrollArea {{ background-color: transparent; border: none; }}{qss}",
+        cache_attr=cache_attr,
+    )
+    apply_scroll_area_chrome(
+        scroll_area,
+        max(0, radius - 2),
+        scrollbar_radius=radius,
+        qss=qss,
+        minimum_extent=thickness,
+    )
+    return qss
 
 
 def get_section_line_color(config) -> str:

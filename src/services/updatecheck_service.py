@@ -1,7 +1,6 @@
 """Application update checking and installation."""
 
 import contextlib
-import hashlib
 import logging
 import os
 import platform
@@ -137,9 +136,6 @@ class UpdateChecker(QObject):
             ),
             "message_ru": launcher_files.get("message_ru"),
             "message_en": launcher_files.get("message_en"),
-            "sha256": self._get_platform_value(
-                launcher_files.get("sha256"), platform_key
-            ),
         }
 
     def perform_update(self, update_info):
@@ -197,26 +193,11 @@ class UpdateChecker(QObject):
                 downloaded_size += len(chunk)
                 if total_size > 0:
                     self.progress_updated.emit(int(downloaded_size / total_size * 100))
-        sha256 = str(update_info.get("sha256", "")).strip().lower()
-        if sha256:
-            self._verify_archive_checksum(archive_path, sha256)
         logging.info(
             "[UPDATE] Successfully downloaded update archive (%s bytes)",
             downloaded_size,
         )
         return archive_path
-
-    def _verify_archive_checksum(self, archive_path: str, expected_sha256: str) -> None:
-        digest = hashlib.sha256()
-        with open(archive_path, "rb") as file_obj:
-            for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
-                digest.update(chunk)
-        actual_sha256 = digest.hexdigest().lower()
-        if actual_sha256 != expected_sha256:
-            raise AppError(
-                "errors.update_failed",
-                error=f"Checksum mismatch: expected {expected_sha256}, got {actual_sha256}",
-            )
 
     def _extract_archive(
         self, system: str, archive_path: str, extraction_dir: str

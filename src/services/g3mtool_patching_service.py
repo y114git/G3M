@@ -840,7 +840,12 @@ class G3MToolPatchingService(QObject):
                         os.remove(temp_input)
             return True
 
-        patch_files = [pf for pf, _, _ in mod_infos]
+        patch_files: list[str] = []
+        for patch_file, _mod_type, _source_dir in mod_infos:
+            if patch_file:
+                patch_files.append(patch_file)
+        if not patch_files:
+            return True
         report_path = (
             os.path.join(self._temp_dir, f"merge_report_{chapter_id}.md")
             if self._temp_dir
@@ -848,7 +853,10 @@ class G3MToolPatchingService(QObject):
         )
 
         self.patching_logger.info(
-            f"Merging {len(patch_files)} mods for chapter {chapter_id}"
+            "Merging %s mods for chapter %s using direct inputs: %s",
+            len(patch_files),
+            chapter_id,
+            ", ".join(os.path.basename(path) for path in patch_files),
         )
 
         merge_code = self.app_state.local_config.get("merge_code", False)
@@ -865,7 +873,7 @@ class G3MToolPatchingService(QObject):
             progress_callback=lambda progress, _label: self._emit_chapter_progress(
                 chapter_start,
                 chapter_end,
-                0.22 + (progress / 100 * 0.50),
+                0.20 + (progress / 100 * 0.52),
                 tr(
                     "status.patching_chapter",
                     chapter=display_name,
@@ -932,6 +940,122 @@ class G3MToolPatchingService(QObject):
                     return False
 
         return True
+
+    def _materialize_merge_patch(
+        self,
+        data_win_path: str,
+        mod_info: tuple,
+        chapter_id: str,
+        index: int,
+        total_mods: int,
+        chapter_start: int,
+        chapter_end: int,
+        display_name: str,
+    ) -> str | None:
+        patch_file, mod_type, _mod_source_dir = mod_info
+        materialize_window_start = 0.20
+        materialize_window_end = 0.44
+        per_mod_span = (materialize_window_end - materialize_window_start) / max(
+            total_mods, 1
+        )
+        mod_start = materialize_window_start + ((index - 1) * per_mod_span)
+        mod_end = mod_start + per_mod_span
+        create_start = mod_start + (per_mod_span * 0.25)
+
+        def emit_materialize_progress(fraction: float) -> None:
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                mod_start + ((mod_end - mod_start) * fraction),
+                tr(
+                    "status.patching_chapter",
+                    chapter=display_name,
+                    current=index,
+                    total=total_mods,
+                ),
+            )
+
+        if mod_type == MOD_TYPE_G3MPATCH:
+            emit_materialize_progress(1.0)
+            return patch_file
+
+        temp_root = self._temp_dir or tempfile.gettempdir()
+        modified_output = os.path.join(
+            temp_root,
+            f"merge_src_{chapter_id}_{index}.win",
+        )
+        generated_patch = os.path.join(
+            temp_root,
+            f"merge_src_{chapter_id}_{index}.g3mpatch",
+        )
+
+        if mod_type == MOD_TYPE_XDELTA:
+            returncode, _stdout, stderr = self.g3mtool.xpatch_apply(
+                data_win_path,
+                patch_file,
+                modified_output,
+                progress_callback=lambda progress, _label: emit_materialize_progress(
+                    (progress / 100) * 0.25
+                ),
+            )
+            if returncode != 0 or not os.path.exists(modified_output):
+                error_text = stderr[:200] or "Unknown error"
+                self.patching_logger.error(
+                    "Failed to materialize xdelta merge patch %s: %s",
+                    patch_file,
+                    stderr[:500],
+                )
+                self.status_update.emit(
+                    tr("errors.patching_failed", error=error_text), "error"
+                )
+                return None
+        elif mod_type == MOD_TYPE_DATAFILE:
+            emit_materialize_progress(0.25)
+            try:
+                shutil.copy2(patch_file, modified_output)
+            except Exception as e:
+                self.patching_logger.error(
+                    "Failed to materialize data replacement merge patch %s: %s",
+                    patch_file,
+                    e,
+                    exc_info=True,
+                )
+                self.status_update.emit(
+                    tr("errors.patching_failed", error=str(e)), "error"
+                )
+                return None
+        else:
+            return patch_file
+
+        returncode, _stdout, stderr = self.g3mtool.patch_create(
+            data_win_path,
+            modified_output,
+            generated_patch,
+            progress_callback=lambda progress, _label: self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                create_start + ((mod_end - create_start) * (progress / 100)),
+                tr(
+                    "status.patching_chapter",
+                    chapter=display_name,
+                    current=index,
+                    total=total_mods,
+                ),
+            ),
+        )
+        if returncode != 0 or not os.path.exists(generated_patch):
+            error_text = stderr[:200] or "Unknown error"
+            self.patching_logger.error(
+                "Failed to create mergeable g3mpatch from %s: %s",
+                patch_file,
+                stderr[:500],
+            )
+            self.status_update.emit(
+                tr("errors.patching_failed", error=error_text), "error"
+            )
+            return None
+        emit_materialize_progress(1.0)
+        return generated_patch
 
     def _save_report_to_archive(self, report_path: str, chapter_id: str) -> str | None:
         """Copy the merge report into logs/patching/ with a timestamp."""

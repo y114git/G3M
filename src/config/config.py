@@ -21,7 +21,7 @@ if _dotenv_path.is_file():
     load_dotenv(dotenv_path=_dotenv_path)
 
 """Application identity and external service configuration."""
-APP_VERSION = "3.0.1stable"
+APP_VERSION = "3.0.2stable"
 APP_DISPLAY_NAME = "G3M"
 APP_ORGANIZATION_NAME = "g3m"
 APP_DATA_DIR_NAME = "G3M"
@@ -67,6 +67,7 @@ PLUGIN_HOOKS = {
     "app_shutdown",
     "before_mod_apply",
     "after_mod_apply_before_launch",
+    "mod_apply_cancelled",
     "after_game_started",
     "before_restore_after_exit",
     "after_restore_after_exit",

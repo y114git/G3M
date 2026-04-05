@@ -4,7 +4,7 @@
     "language_name": "Русский",
     "font": "main.ttf",
     "qt_translation": "qtbase_ru",
-    "version": "1.0.1"
+    "version": "3.0.2"
   },
   "blocklist": {
     "title": "Менеджер блоклиста",
@@ -84,6 +84,7 @@
     "language_label": "Язык:",
     "launch_button": "Запустить",
     "library_tab": "Библиотека",
+    "library_tab_easter_egg": "Библиоека",
     "help_menu": "Справка",
     "about_title": "О программе",
     "about_dialog_text": "Универсальный менеджер модов для DELTARUNE, UNDERTALE, Pizza Tower и не только.",
@@ -196,6 +197,7 @@
     "settings_tab_appearance": "Внешний вид",
     "settings_tab_mods_browser": "Браузер модов",
     "settings_tab_library": "Библиотека",
+    "settings_tab_library_easter_egg": "Библиоека",
     "settings_tab_game": "Игра",
     "settings_tab_plugins": "Плагины",
     "hide_mods_browser_tab": "Скрыть вкладку Браузер модов",
@@ -765,7 +767,15 @@
   },
   "mods": {
     "archive_files": "Архивы модов (*.zip *.7z *.rar *.tar.gz *.tar.bz2 *.tar.xz *.tar *.tgz *.tbz2 *.txz *.lzma);;Все файлы (*)",
-    "installation_error": "Ошибка установки: {error}"
+    "installation_error": "Ошибка установки: {error}",
+    "import_mods": "Импорт модов",
+    "import_instructions": "Импортируйте моды из локального файла или прямой ссылки.",
+    "import_from_file": "Выбрать файл",
+    "import_from_url": "Импорт по URL",
+    "url_placeholder": "Введите URL",
+    "import_from_url_button": "Загрузить URL",
+    "url_required": "Пожалуйста, введите URL.",
+    "select_mod_archive": "Выберите архив мода"
   },
   "downloads": {
     "title": "Загрузки",

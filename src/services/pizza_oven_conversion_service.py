@@ -18,6 +18,7 @@ from config.config import MOD_CONFIG_FILENAME, MOD_ROOT_DOC_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import get_unique_mod_dir, remove_archive_extension, save_json
 from utils.mod_config_parser import build_mod_config_data
+from utils.patching.patch_verification_utils import files_match, verify_generated_patch
 
 logger = logging.getLogger(__name__)
 
@@ -686,18 +687,7 @@ class PizzaOvenConversionService:
 
     @staticmethod
     def _files_differ(original_path: str, modified_path: str) -> bool:
-        if os.path.getsize(original_path) != os.path.getsize(modified_path):
-            return True
-        with open(original_path, "rb") as original_handle, open(
-            modified_path, "rb"
-        ) as modified_handle:
-            while True:
-                original_chunk = original_handle.read(1024 * 1024)
-                modified_chunk = modified_handle.read(1024 * 1024)
-                if original_chunk != modified_chunk:
-                    return True
-                if not original_chunk:
-                    return False
+        return not files_match(original_path, modified_path)
 
     @staticmethod
     def _scan_file_map(root_dir: str) -> dict[str, str]:
@@ -871,22 +861,14 @@ class PizzaOvenConversionService:
         *,
         patch_type: str,
     ) -> bool:
-        temp_dir = tempfile.mkdtemp(prefix="g3m_po_verify_")
-        try:
-            temp_output = os.path.join(temp_dir, os.path.basename(modified_data))
-            if patch_type == "g3mpatch":
-                returncode, _stdout, _stderr = self._g3mtool.apply_patch(
-                    original_data, patch_path, temp_output
-                )
-            else:
-                returncode, _stdout, _stderr = self._g3mtool.xpatch_apply(
-                    original_data, patch_path, temp_output
-                )
-            if returncode != 0 or not os.path.isfile(temp_output):
-                return False
-            return not self._files_differ(temp_output, modified_data)
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        verified, _message = verify_generated_patch(
+            self._g3mtool,
+            original_data,
+            modified_data,
+            patch_path,
+            patch_type=patch_type,
+        )
+        return verified
 
     @staticmethod
     def _copy_icon_asset(

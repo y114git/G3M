@@ -1,0 +1,46 @@
+{
+  "name": "Carpetas de guardado personalizadas",
+  "description": "Crea carpetas de guardado personalizadas por juego y las aplica solo durante la sesion actual.",
+  "ui": {
+    "title": "Carpetas de guardado personalizadas",
+    "games_title": "Juegos",
+    "folders_title": "Carpetas de guardado personalizadas",
+    "empty_games": "No hay juegos disponibles.",
+    "empty_folders": "Todavia no hay carpetas de guardado personalizadas.",
+    "empty_selection": "Selecciona un juego para administrar sus carpetas de guardado personalizadas.",
+    "use_button": "Usar carpeta",
+    "folder_item_hint": "Esta carpeta se aplicara despues del parcheo y se restaurara al cerrar el juego.",
+    "current_game_hint": "La carpeta seleccionada se aplica despues del parcheo de mods y se restaura cuando el juego se cierra.",
+    "add_folder": "Agregar carpeta de guardado",
+    "name_label": "Nombre de la carpeta de guardado",
+    "name_placeholder": "Escribe un nombre de carpeta",
+    "name_hint": "Elige el nombre de la carpeta de guardado separada que usara este juego.",
+    "create_button": "Crear",
+    "cancel_button": "Cancelar",
+    "delete_tooltip": "Quitar esta carpeta del plugin",
+    "add_tooltip": "Crear una nueva carpeta de guardado personalizada",
+    "applying_status": "Aplicando carpeta de guardado personalizada...",
+    "applying_progress": "Aplicando carpeta de guardado personalizada {current}/{total}...",
+    "applied_status": "Se aplico la carpeta de guardado personalizada \"{name}\" para {game}.",
+    "restored_status": "Se restauraron los data files originales despues de la sesion de carpeta de guardado personalizada."
+  },
+  "dialogs": {
+    "delete_title": "Eliminar esta carpeta personalizada?",
+    "delete_body": "\"{name}\" solo se eliminara de este plugin. Las carpetas de guardado ya existentes en el disco no se tocaran."
+  },
+  "errors": {
+    "name_required": "Introduce un nombre para la carpeta de guardado.",
+    "name_too_long": "El nombre de la carpeta de guardado es demasiado largo.",
+    "name_invalid_chars": "El nombre de la carpeta de guardado contiene caracteres no seguros.",
+    "name_invalid_suffix": "El nombre de la carpeta de guardado no puede terminar con un espacio o un punto.",
+    "name_reserved": "Este nombre de carpeta de guardado esta reservado por Windows.",
+    "folder_exists": "Esta carpeta de guardado ya existe para el juego seleccionado.",
+    "selection_missing": "Primero selecciona un juego.",
+    "game_path_missing": "La carpeta del juego seleccionado no esta configurada.",
+    "data_file_missing": "No se encontro un data file compatible para {game}.",
+    "script_missing": "Falta el script de carpeta de guardado personalizada.",
+    "g3mtool_missing": "G3MTool no esta disponible.",
+    "apply_failed": "No se pudo aplicar la carpeta de guardado personalizada: {error}",
+    "restore_failed": "No se pudieron restaurar los data files originales: {error}"
+  }
+}

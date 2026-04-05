@@ -549,12 +549,82 @@ class TestCommonWidgets:
         with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):
             panel = ModSummaryPanel(host)
             panel.show_mod(mod_data, is_active=False)
-            assert 'something.thing' in panel._data_label.text()
+            assert 'something.' in panel._data_label.text()
+            assert 'thing' in panel._data_label.text()
             assert 'folder/something.thing' not in panel._data_label.text()
             assert 'somefolder/' in panel._extra_label.text()
             assert 'older/somefolder/' not in panel._extra_label.text()
-            assert 'final.bin' in panel._extra_label.text()
+            assert 'final.' in panel._extra_label.text()
+            assert 'bin' in panel._extra_label.text()
             assert 'nested/final.bin' not in panel._extra_label.text()
+        panel.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_summary_panel_keeps_full_description_visible(self, qapp):
+        """Checks that moding summary panel keeps the full description text."""
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
+
+        host = QWidget()
+        host.local_config = {}
+        description = "A" * 420
+        mod_data = ModInfo(
+            id='test_mod',
+            name='Test Mod',
+            version='1.0.0',
+            author='Test Author',
+            description=description,
+            game_version='1.0',
+            description_url='',
+            downloads=0,
+            game='deltarune',
+        )
+        with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):
+            panel = ModSummaryPanel(host)
+            panel.show_mod(mod_data, is_active=False)
+            assert panel._description_label.text() == description
+        panel.deleteLater()
+        host.deleteLater()
+        for _ in range(3):
+            qapp.processEvents()
+            time.sleep(0.05)
+
+    def test_mod_summary_panel_inserts_wrap_opportunities_for_long_file_names(self, qapp):
+        """Checks that moding summary panel can wrap long file names in popup layouts."""
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
+
+        host = QWidget()
+        host.local_config = {}
+        mod_data = ModInfo(
+            id='test_mod',
+            name='Test Mod',
+            version='1.0.0',
+            author='Test Author',
+            description='Test description',
+            game_version='1.0',
+            description_url='',
+            downloads=0,
+            game='deltarune',
+            files={
+                'deltarune_4': {
+                    'data_file_path': 'chapter4/Ch4_Dojo_allStar.xdelta',
+                    'extra_files': ['audio/extra_file_mus_castle_town_ch4USDX.ogg.zip'],
+                }
+            },
+        )
+        with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):
+            panel = ModSummaryPanel(host)
+            panel.show_mod(mod_data, is_active=False)
+            assert '&#8203;' in panel._data_label.text()
+            assert '&#8203;' in panel._extra_label.text()
         panel.deleteLater()
         host.deleteLater()
         for _ in range(3):

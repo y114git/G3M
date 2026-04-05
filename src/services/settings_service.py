@@ -744,6 +744,9 @@ class SettingsManager(QObject):
                 for key, value in theme_settings.items():
                     if key != "config_version":
                         self.app_state.local_config[key] = value
+                self.app_state.local_config["active_theme_name"] = os.path.splitext(
+                    os.path.basename(theme_file_path)
+                )[0]
 
                 for base in ("background_music", "startup_sound"):
                     self._remove_files(self._get_audio_paths(base))

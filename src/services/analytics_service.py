@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import QApplication
 
 from config.config import APP_VERSION, CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_SHORT
 from ui.utils.ui_utils import safe_stop_thread
-from utils.file_utils import load_json, save_json
 from utils.mod_utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
 from utils.network_utils import cloud_function_request
 
@@ -74,11 +73,9 @@ class AnalyticsService(QObject):
     _ALWAYS_FLUSH_THRESHOLD = 90
     _OPT_IN_FLUSH_THRESHOLD = 140
 
-    def __init__(self, app_state, base_dir: str, parent=None) -> None:
+    def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
         self.app_state = app_state
-        self._dir = os.path.join(base_dir, "analytics")
-        self._state_path = os.path.join(self._dir, "telemetry_state.json")
         self._always_on = Counter()
         self._opt_in = Counter()
         self._always_total = 0
@@ -545,49 +542,14 @@ class AnalyticsService(QObject):
         return payload
 
     def _load_state(self) -> None:
-        os.makedirs(self._dir, exist_ok=True)
-        data = load_json(self._state_path) or {}
-        pending = data.get("pending")
-        if isinstance(pending, list):
-            self._pending = [item for item in pending if isinstance(item, dict)][
-                -self._MAX_PENDING_PAYLOADS :
-            ]
-        self._always_on = self._restore_counter(data.get("always_on"))
-        self._opt_in = self._restore_counter(data.get("opt_in"))
-        self._always_total = sum(self._always_on.values())
-        self._opt_total = sum(self._opt_in.values())
+        self._pending = []
+        self._always_on = Counter()
+        self._opt_in = Counter()
+        self._always_total = 0
+        self._opt_total = 0
 
     def _save_state(self) -> None:
-        os.makedirs(self._dir, exist_ok=True)
-        pending = []
-        for item in self._pending[-self._MAX_PENDING_PAYLOADS :]:
-            if not isinstance(item, dict):
-                continue
-            normalized = dict(item)
-            if not normalized.get("id"):
-                normalized["id"] = self._payload_id(normalized)
-            pending.append(normalized)
-        save_json(
-            self._state_path,
-            {
-                "pending": pending,
-                "always_on": dict(self._always_on),
-                "opt_in": dict(self._opt_in),
-            },
-            indent=2,
-        )
-
-    @staticmethod
-    def _restore_counter(data: Any) -> Counter:
-        if not isinstance(data, dict):
-            return Counter()
-        return Counter(
-            {
-                str(key): int(value)
-                for key, value in data.items()
-                if isinstance(key, str) and isinstance(value, int) and value > 0
-            }
-        )
+        self._state_timer.stop()
 
     def _event_key(self, event: str, dims: dict[str, Any]) -> str:
         parts = [self._clean_value(event)]

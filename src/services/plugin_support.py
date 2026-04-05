@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import sys
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -184,7 +185,12 @@ def load_plugin_factory(plugin_id: str, entry_path: str):
     if spec is None or spec.loader is None:
         raise PluginValidationError("invalid_entry_spec")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     factory = getattr(module, "create_plugin", None)
     if not callable(factory):
         raise PluginValidationError("missing_factory")

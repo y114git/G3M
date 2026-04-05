@@ -16,7 +16,7 @@ from app.game_ui import (
 from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 from config.config import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
-from services.localization_service import tr
+from services.localization_service import get_library_tab_title, tr
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +339,10 @@ class SettingsUiController:
                 tab_widget.addTab(self.app.mods_browser_tab, tr("ui.search_tab"))
                 main_tabs_visible += 1
             if not hide_library and hasattr(self.app, "library_tab"):
-                tab_widget.addTab(self.app.library_tab, tr("ui.library_tab"))
+                tab_widget.addTab(
+                    self.app.library_tab,
+                    get_library_tab_title(self.app.app_state),
+                )
                 main_tabs_visible += 1
 
             self.app._num_main_tabs_visible = main_tabs_visible

@@ -55,7 +55,11 @@ from presentation.update_presenter import (
 )
 from presentation.window_composition import WindowComposition
 from presentation.window_state import initialize_window_runtime
-from services.localization_service import localization_service, tr
+from services.localization_service import (
+    get_library_tab_title,
+    localization_service,
+    tr,
+)
 from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import (
     apply_rounded_mask,
@@ -533,7 +537,9 @@ class AppWindow(QWidget):
             self.main_tab_widget.addTab(self.mods_browser_tab, tr("ui.search_tab"))
             self._num_main_tabs_visible += 1
         if not self.app_state.local_config.get("hide_library_tab", False):
-            self.main_tab_widget.addTab(self.library_tab, tr("ui.library_tab"))
+            self.main_tab_widget.addTab(
+                self.library_tab, get_library_tab_title(self.app_state)
+            )
             self._num_main_tabs_visible += 1
         if self._num_main_tabs_visible == 0:
             self._show_empty_main_tabs_placeholder()
@@ -1143,6 +1149,47 @@ class AppWindow(QWidget):
     def _on_application_state_changed(self, _state):
         self._sync_background_audio_focus()
 
+    def _widget_belongs_to_window(self, widget) -> bool:
+        seen = set()
+        while widget is not None and id(widget) not in seen:
+            seen.add(id(widget))
+            if widget is self:
+                return True
+            parent_widget = widget.parentWidget() if hasattr(widget, "parentWidget") else None
+            if parent_widget is None and hasattr(widget, "parent"):
+                parent_widget = widget.parent()
+            if (
+                parent_widget is None
+                and hasattr(widget, "window")
+                and callable(widget.window)
+            ):
+                top_level = widget.window()
+                if top_level is not widget:
+                    parent_widget = top_level
+            widget = parent_widget
+        return False
+
+    def _has_owned_active_window(self, app: QApplication) -> bool:
+        app_is_active = (
+            app.applicationState() == Qt.ApplicationState.ApplicationActive
+        )
+        for widget in (
+            app.activeWindow(),
+            app.focusWidget(),
+            app.activeModalWidget(),
+            app.activePopupWidget(),
+        ):
+            if self._widget_belongs_to_window(widget):
+                return True
+        for widget in app.topLevelWidgets():
+            if widget is None or not widget.isVisible():
+                continue
+            if not (widget.isActiveWindow() or (app_is_active and widget.isModal())):
+                continue
+            if self._widget_belongs_to_window(widget):
+                return True
+        return False
+
     def _should_pause_background_audio(self) -> bool:
         if not self.app_state.local_config.get("pause_background_music_unfocused", False):
             return False
@@ -1151,11 +1198,8 @@ class AppWindow(QWidget):
             return True
         if not app:
             return False
-        for widget in (app.activeWindow(), app.focusWidget(), app.activeModalWidget()):
-            while widget is not None:
-                if widget is self:
-                    return False
-                widget = widget.parent() if hasattr(widget, "parent") else None
+        if self._has_owned_active_window(app):
+            return False
         return app.applicationState() != Qt.ApplicationState.ApplicationActive
 
     def _sync_background_audio_focus(self):

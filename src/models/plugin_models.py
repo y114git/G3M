@@ -104,6 +104,42 @@ class PluginSettingsAccessor:
 
 
 @dataclass(slots=True)
+class PluginTaskRuntime:
+    set_progress_callback: Any = None
+    set_status_callback: Any = None
+    is_cancelled_callback: Any = None
+    get_backup_manager_callback: Any = None
+    restore_backups_callback: Any = None
+    copy_backups_callback: Any = None
+
+    def set_progress(self, progress: int, message: str = "") -> None:
+        if callable(self.set_progress_callback):
+            self.set_progress_callback(int(progress), str(message or ""))
+
+    def set_status(self, message: str, status_type: str = "info") -> None:
+        if callable(self.set_status_callback):
+            self.set_status_callback(str(message or ""), str(status_type or "info"))
+
+    def is_cancelled(self) -> bool:
+        return bool(self.is_cancelled_callback()) if callable(self.is_cancelled_callback) else False
+
+    def raise_if_cancelled(self) -> None:
+        if self.is_cancelled():
+            raise InterruptedError("Plugin task cancelled")
+
+    def get_host_backup_manager(self) -> Any:
+        return self.get_backup_manager_callback() if callable(self.get_backup_manager_callback) else None
+
+    def restore_host_backups(self) -> bool:
+        return bool(self.restore_backups_callback()) if callable(self.restore_backups_callback) else False
+
+    def copy_host_backups_to(self, destination_dir: str) -> list[str]:
+        if callable(self.copy_backups_callback):
+            return self.copy_backups_callback(destination_dir)
+        return []
+
+
+@dataclass(slots=True)
 class PluginContext:
     plugin_id: str
     app_state: Any
@@ -115,6 +151,7 @@ class PluginContext:
     downloads_manager: Any
     localization_service: Any
     plugin_settings: PluginSettingsAccessor
+    task_runtime: PluginTaskRuntime | None = None
 
 
 @dataclass(slots=True)

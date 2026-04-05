@@ -1,0 +1,26 @@
+{
+  "config_version": 1,
+  "id": "custom_saves_folders",
+  "name": "plugins.custom_saves_folders.name",
+  "description": "plugins.custom_saves_folders.description",
+  "author": "Y114",
+  "version": "1.0.0",
+  "api_version": ">=1.0.0",
+  "entry": "plugin.py",
+  "icon": "icon.png",
+  "homepage": "https://github.com/y114git/G3M/tree/stable/catalog/plugins/custom_saves_folders",
+  "tags": [
+    "tool",
+    "game_experience"
+  ],
+  "relations": {},
+  "hooks": [
+    "main_view",
+    "after_mod_apply_before_launch",
+    "before_restore_after_exit",
+    "language_changed",
+    "theme_changed",
+    "profile_changed"
+  ],
+  "settings_schema": {}
+}

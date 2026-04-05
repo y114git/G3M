@@ -1,0 +1,46 @@
+{
+  "name": "Custom Save Folders",
+  "description": "Create custom save folders per game and apply them only for the current launch session.",
+  "ui": {
+    "title": "Custom Save Folders",
+    "games_title": "Games",
+    "folders_title": "Custom Save Folders",
+    "empty_games": "No games available.",
+    "empty_folders": "No custom save folders yet.",
+    "empty_selection": "Select a game to manage its custom save folders.",
+    "use_button": "Use Folder",
+    "folder_item_hint": "This folder will be applied after patching and restored when the game closes.",
+    "current_game_hint": "The selected folder is applied after mod patching and restored after the game closes.",
+    "add_folder": "Add Custom Save Folder",
+    "name_label": "Save folder name",
+    "name_placeholder": "Enter a folder name",
+    "name_hint": "Choose the name for the separate save folder that this game should use.",
+    "create_button": "Create",
+    "cancel_button": "Cancel",
+    "delete_tooltip": "Remove this folder from the plugin",
+    "add_tooltip": "Create a new custom save folder",
+    "applying_status": "Applying custom save folder...",
+    "applying_progress": "Applying custom save folder {current}/{total}...",
+    "applied_status": "Applied custom save folder \"{name}\" for {game}.",
+    "restored_status": "Restored original data files after the custom save folder session."
+  },
+  "dialogs": {
+    "delete_title": "Remove this custom save folder?",
+    "delete_body": "\"{name}\" will only be removed from this plugin. Existing save folders on disk will stay untouched."
+  },
+  "errors": {
+    "name_required": "Enter a save folder name.",
+    "name_too_long": "The save folder name is too long.",
+    "name_invalid_chars": "The save folder name contains characters that are not safe for a save folder.",
+    "name_invalid_suffix": "The save folder name cannot end with a space or a dot.",
+    "name_reserved": "This save folder name is reserved by Windows.",
+    "folder_exists": "This save folder already exists for the selected game.",
+    "selection_missing": "Select a game first.",
+    "game_path_missing": "The selected game's folder is not configured.",
+    "data_file_missing": "Could not find a supported data file for {game}.",
+    "script_missing": "The custom save folder script is missing.",
+    "g3mtool_missing": "G3MTool is not available.",
+    "apply_failed": "Failed to apply the custom save folder: {error}",
+    "restore_failed": "Failed to restore original data files: {error}"
+  }
+}

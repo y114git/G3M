@@ -1,5 +1,5 @@
 #define AppName        "G3M"
-#define AppVersion     "3.0.1stable"
+#define AppVersion     "3.0.2stable"
 #define AppExeName     "G3M.exe"
 #define AppIcon        "assets\\icons\\icon.ico"
 #define AppSmallIcon   "assets\\SmallIcon.bmp"

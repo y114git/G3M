@@ -11,7 +11,7 @@ class _Response:
 
 def test_analytics_service_respects_opt_in_and_flushes_batch(qapp, tmp_path):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
 
     service.count("always_event")
     service.count("opt_event", scope="opt_in")
@@ -37,7 +37,7 @@ def test_analytics_service_respects_opt_in_and_flushes_batch(qapp, tmp_path):
 
 def test_analytics_service_records_mods_browser_search_bucket(qapp, tmp_path):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
 
     service.record_mods_browser_search("roaring edition")
 
@@ -51,7 +51,7 @@ def test_analytics_service_records_single_character_mods_browser_search_bucket(
     qapp, tmp_path
 ):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
 
     service.record_mods_browser_search("a")
 
@@ -61,7 +61,7 @@ def test_analytics_service_records_single_character_mods_browser_search_bucket(
     )
 
 
-def test_analytics_service_persists_local_counters_between_instances(qapp, tmp_path):
+def test_analytics_service_does_not_persist_local_counters_between_instances(qapp, tmp_path):
     app_state = SimpleNamespace(
         local_config={
             "language": "en",
@@ -69,7 +69,7 @@ def test_analytics_service_persists_local_counters_between_instances(qapp, tmp_p
             "analytics_opt_in_enabled": True,
         }
     )
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
 
     service.record_launch_started(
         mode="subprocess",
@@ -78,26 +78,32 @@ def test_analytics_service_persists_local_counters_between_instances(qapp, tmp_p
         mod_count=2,
         mod_refs=[{"ref": "gb_mod_123", "name": "Roaring Patch"}],
     )
-    service._save_state()
+    restored = AnalyticsService(app_state)
 
-    restored = AnalyticsService(app_state, str(tmp_path))
-
-    assert any(key.startswith("game_launch_started") for key in restored._always_on)
-    assert any(key.startswith("launch_mod_selected") for key in restored._opt_in)
+    assert not any(key.startswith("game_launch_started") for key in restored._always_on)
+    assert not any(key.startswith("launch_mod_selected") for key in restored._opt_in)
 
 
-def test_analytics_service_persists_stable_pending_payload_ids(qapp, tmp_path):
+def test_analytics_service_keeps_stable_pending_payload_ids_in_memory(qapp, tmp_path):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
 
     service.count("always_event")
     service._enqueue_session_payload()
     first_payload_id = service._pending[0]["id"]
+
+    recomputed_id = service._payload_id(service._pending[0])
+    assert recomputed_id == first_payload_id
+
+
+def test_analytics_service_never_creates_analytics_dir(qapp, tmp_path):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+
+    service.count("always_event")
     service._save_state()
 
-    restored = AnalyticsService(app_state, str(tmp_path))
-
-    assert restored._pending[0]["id"] == first_payload_id
+    assert not (tmp_path / "analytics").exists()
 
 
 def test_analytics_service_records_download_use_completion_details(qapp, tmp_path):
@@ -108,7 +114,7 @@ def test_analytics_service_records_download_use_completion_details(qapp, tmp_pat
             "analytics_opt_in_enabled": True,
         }
     )
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
     record = SimpleNamespace(
         id="rec1",
         source_kind="gamebanana",
@@ -143,7 +149,7 @@ def test_analytics_service_records_download_use_completion_details(qapp, tmp_pat
 
 def test_analytics_service_shutdown_waits_for_upload_completion(qapp, tmp_path, monkeypatch):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
     service.count("always_event")
     wait_calls = []
     real_wait_for_upload_shutdown = service._wait_for_upload_shutdown
@@ -165,7 +171,7 @@ def test_analytics_service_shutdown_uses_less_aggressive_fallback_timeout(
     qapp, tmp_path, monkeypatch
 ):
     app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
-    service = AnalyticsService(app_state, str(tmp_path))
+    service = AnalyticsService(app_state)
 
     class _StuckThread:
         def wait(self, _timeout):

@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
 from config.config import (
     BASE_TAG_NAMES,
     CYOP_AFOM_TAG,
-    QSS_TRANSPARENT_SCROLL,
 )
 from models.game_modes import get_visible_game_entries
 from presentation.drag_drop import normalize_local_path
@@ -47,6 +46,7 @@ from ui.common.styling import (
     install_panel_style_handler,
     install_scroll_area_update_handlers,
     install_size_hint_height_sync,
+    style_filter_scroll_area,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,7 +123,6 @@ class LibraryTabBuilder(QObject):
         f_scroll = QScrollArea(widget)
         f_scroll.setWidgetResizable(True)
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        f_scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         f_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         f_scroll.setMinimumWidth(200)
@@ -131,6 +130,15 @@ class LibraryTabBuilder(QObject):
         f_scroll.setWidget(filters)
         install_size_hint_height_sync(
             filters, f_scroll, attr_name="_library_filters_scroll_height_filter"
+        )
+        install_scroll_area_update_handlers(
+            f_scroll,
+            lambda target=f_scroll: style_filter_scroll_area(
+                target,
+                getattr(self.app_state, "local_config", None),
+                cache_attr="_library_filter_scroll_qss_cache",
+            ),
+            "library_filters_scroll",
         )
         if self.app_state.local_config.get("hide_library_filters", False):
             f_scroll.setVisible(False)
@@ -423,6 +431,15 @@ class LibraryTabBuilder(QObject):
             }
         )
         return widget
+
+    def refresh_filter_scroll_styles(self) -> None:
+        filters_scroll = self.widgets.get("filters_scroll")
+        if filters_scroll:
+            style_filter_scroll_area(
+                filters_scroll,
+                getattr(self.app_state, "local_config", None),
+                cache_attr="_library_filter_scroll_qss_cache",
+            )
 
     def _create_library_filters_widget(self) -> QFrame:
         w, layout = create_filters_frame()

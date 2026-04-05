@@ -41,7 +41,7 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
         os.path.join(plugin_dir, "plugin_config.json"),
         "w",
         encoding="utf-8",
-    ) as handle:
+        ) as handle:
         json.dump(
             {
                 "config_version": 1,
@@ -66,6 +66,67 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
             "class _Plugin:\n"
             "    def on_load(self, context):\n"
             "        self.context = context\n"
+            "    def on_after_mod_apply_before_launch(self, context, *args):\n"
+            "        self.hook_context = context\n"
+            "        return True\n"
+            "\n"
+            "def create_plugin():\n"
+            "    return _Plugin()\n"
+        )
+    with open(
+        os.path.join(plugin_dir, "lang", "lang_en.json"),
+        "w",
+        encoding="utf-8",
+        ) as handle:
+        json.dump(
+            {
+                "name": "Sample Plugin",
+                "description": "Sample description",
+            },
+            handle,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def _write_dataclass_plugin(plugins_dir, plugin_id="dataclass_plugin"):
+    plugin_dir = os.path.join(plugins_dir, plugin_id)
+    os.makedirs(os.path.join(plugin_dir, "lang"), exist_ok=True)
+    with open(
+        os.path.join(plugin_dir, "plugin_config.json"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(
+            {
+                "config_version": 1,
+                "id": plugin_id,
+                "name": f"plugins.{plugin_id}.name",
+                "description": f"plugins.{plugin_id}.description",
+                "author": "Tester",
+                "version": "1.0.0",
+                "api_version": "1.0.0",
+                "entry": "plugin.py",
+                "tags": ["tool"],
+                "relations": {},
+                "hooks": [],
+                "settings_schema": {},
+            },
+            handle,
+            ensure_ascii=False,
+            indent=2,
+        )
+    with open(os.path.join(plugin_dir, "plugin.py"), "w", encoding="utf-8") as handle:
+        handle.write(
+            "from dataclasses import dataclass\n"
+            "\n"
+            "@dataclass\n"
+            "class _State:\n"
+            "    value: str = 'ok'\n"
+            "\n"
+            "class _Plugin:\n"
+            "    def __init__(self):\n"
+            "        self.state = _State()\n"
             "\n"
             "def create_plugin():\n"
             "    return _Plugin()\n"
@@ -77,8 +138,8 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
     ) as handle:
         json.dump(
             {
-                "name": "Sample Plugin",
-                "description": "Sample description",
+                "name": "Dataclass Plugin",
+                "description": "Dataclass plugin description",
             },
             handle,
             ensure_ascii=False,
@@ -152,6 +213,68 @@ def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir)
     assert localization_service.get_text("plugins.sample_plugin.name") == "Sample Plugin"
     assert localization_service.get_text("plugins.sample_plugin.description") == "Sample description"
     localization_service.clear_plugin_strings("sample_plugin")
+
+
+def test_plugin_runtime_loads_dataclass_plugin(temp_dir):
+    """Checks that plugin runtime loads plugins that use dataclasses."""
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_dataclass_plugin(temp_dir)
+    state_service.set_enabled("dataclass_plugin", True)
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+
+    installed = runtime.scan_installed_plugins()
+
+    assert "dataclass_plugin" in installed
+    assert installed["dataclass_plugin"].status != "broken"
+
+
+def test_plugin_runtime_reports_enabled_hook_and_passes_task_runtime(temp_dir):
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_plugin(temp_dir, "hook_plugin")
+    state_service.set_enabled("hook_plugin", True)
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+
+    runtime.scan_installed_plugins()
+
+    assert runtime.has_enabled_hook("after_mod_apply_before_launch") is True
+    task_runtime = Mock()
+    results = runtime.execute_hook_with_runtime(
+        "after_mod_apply_before_launch",
+        task_runtime,
+        {"deltarune_1": []},
+        False,
+    )
+
+    assert results == [True]
+    assert runtime._instances["hook_plugin"].hook_context.task_runtime is task_runtime
 
 
 def test_plugin_install_service_accepts_plugin_folder(temp_dir):

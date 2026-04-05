@@ -1,5 +1,6 @@
 """Game launch and mod patching management."""
 
+import contextlib
 import logging
 import os
 import platform
@@ -27,6 +28,7 @@ from utils.path_utils import (
     resolve_game_executable,
 )
 from workers.game_monitor_worker import GameMonitorWorker
+from workers.plugin_hook_worker import PluginHookThread
 
 
 class GameLauncher(QObject):
@@ -49,6 +51,7 @@ class GameLauncher(QObject):
         self.mod_patcher.status_update.connect(self._on_patching_status)
         self.mod_patcher.progress_update.connect(self._on_patching_progress)
         self._patching_thread = None
+        self._plugin_hook_thread = None
         self.restore_window_callback = None
         self._launch_started_at = None
         self._launch_mod_ids: list[str] = []
@@ -75,6 +78,10 @@ class GameLauncher(QObject):
 
     def _launch_status_color(self) -> str:
         return get_launch_status_color(getattr(self.app_state, "local_config", None))
+
+    def _plugin_runtime_service(self):
+        parent = self.parent()
+        return getattr(parent, "plugin_runtime_service", None) if parent else None
 
     def close_game(self):
         worker = getattr(self, "monitor_worker", None)
@@ -610,10 +617,6 @@ class GameLauncher(QObject):
         patching_thread.confirm_warning(should_continue)
 
     def _on_patching_finished(self, selections: dict[int, Any], success: bool):
-        self.app_state.progress_bar_visible = False
-        self.app_state.is_patching = False
-        self.app_state.clear_current_task()
-        self.app_state.action_button_text = None
         patching_thread = self._patching_thread
         if patching_thread:
             try:
@@ -638,6 +641,7 @@ class GameLauncher(QObject):
             finally:
                 self._patching_thread = None
         if not success:
+            self._finish_background_launch_operation()
             if patching_thread and (
                 patching_thread.isInterruptionRequested()
                 or getattr(patching_thread, "_cancelled", False)
@@ -671,13 +675,71 @@ class GameLauncher(QObject):
 
         Returns an iterable of hook results, or an empty iterable if no runtime service.
         """
-        parent = self.parent()
-        runtime_service = (
-            getattr(parent, "plugin_runtime_service", None) if parent else None
-        )
+        runtime_service = self._plugin_runtime_service()
         if runtime_service:
             return runtime_service.execute_hook(hook_name, *args)
         return []
+
+    def _restore_host_backups_for_plugin_task(self) -> bool:
+        if not self.mod_patcher:
+            return False
+        return bool(self.mod_patcher.restore_all_backups())
+
+    def _start_plugin_hook_thread(
+        self,
+        hook_name: str,
+        *hook_args,
+        base_progress: int = 0,
+        progress_span: int = 100,
+    ) -> bool:
+        runtime_service = self._plugin_runtime_service()
+        if not runtime_service or not runtime_service.has_enabled_hook(hook_name):
+            return False
+        self.app_state.progress_bar_visible = True
+        self.app_state.is_patching = True
+        self.app_state.action_button_text = tr("ui.cancel_button")
+        self.app_state.action_button_enabled = True
+        thread = PluginHookThread(
+            runtime_service,
+            hook_name,
+            hook_args,
+            base_progress=base_progress,
+            progress_span=progress_span,
+            backup_manager_provider=lambda: getattr(self.mod_patcher, "backup_service", None),
+            restore_backups_callback=self._restore_host_backups_for_plugin_task,
+            parent=self,
+        )
+        thread.progress_update.connect(self._on_patching_progress)
+        thread.status_update.connect(self._on_patching_status)
+        thread.finished.connect(lambda success: self._on_plugin_hook_finished(hook_args, success))
+        self._plugin_hook_thread = thread
+        self.app_state.current_task = thread
+        thread.start()
+        return True
+
+    def _finish_background_launch_operation(self) -> None:
+        self.app_state.progress_bar_visible = False
+        self.app_state.is_patching = False
+        self.app_state.clear_current_task()
+        self.app_state.action_button_text = None
+
+    def _on_plugin_hook_finished(self, hook_args: tuple[Any, ...], success: bool) -> None:
+        thread = self._plugin_hook_thread
+        self._plugin_hook_thread = None
+        if thread:
+            with contextlib.suppress(Exception):
+                if not thread.isRunning():
+                    thread.deleteLater()
+        selections = hook_args[0] if hook_args else {}
+        needs_multi_mod = bool(hook_args[1]) if len(hook_args) > 1 else False
+        if not success:
+            self._finish_background_launch_operation()
+            if thread and (thread.isInterruptionRequested() or getattr(thread, "_cancelled", False)):
+                logging.info("Plugin hook execution was cancelled by user")
+            self._cleanup_direct_launch_files()
+            self._handle_launch_failure("plugin")
+            return
+        self._finalize_launch_after_plugin_hooks(selections, needs_multi_mod)
 
     def _continue_after_patching(
         self,
@@ -687,18 +749,23 @@ class GameLauncher(QObject):
     ):
         if not patching_success:
             return
-        if any(
-            result is False
-            for result in self._execute_plugin_hook(
-                "after_mod_apply_before_launch", selections, needs_multi_mod
-            )
+        if self._start_plugin_hook_thread(
+            "after_mod_apply_before_launch",
+            selections,
+            needs_multi_mod,
+            base_progress=96 if needs_multi_mod else 0,
+            progress_span=4 if needs_multi_mod else 100,
         ):
-            self._cleanup_direct_launch_files()
-            self._handle_launch_failure()
             return
-        if needs_multi_mod:
-            pass
-        elif self.restore_window_callback:
+        self._finalize_launch_after_plugin_hooks(selections, needs_multi_mod)
+
+    def _finalize_launch_after_plugin_hooks(
+        self,
+        selections: dict[int, Any],
+        needs_multi_mod: bool = False,
+    ) -> None:
+        self._finish_background_launch_operation()
+        if not needs_multi_mod and self.restore_window_callback:
             self.game_launch_started.emit()
         has_selected_mods = self._has_selected_mods(selections)
         use_steam = self.app_state.local_config.get("launch_via_steam", False)

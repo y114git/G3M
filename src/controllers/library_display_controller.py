@@ -704,6 +704,7 @@ class LibraryDisplayController:
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.mod_service.uninstall_mod(mod_data)
+                self.used_mods_service.remove_mod_from_all_chapters(mod_data)
                 if analytics := getattr(self.app, "analytics_service", None):
                     analytics.record_mod_removed(mod_data, action="delete_from_library")
                 self._clear_summary()

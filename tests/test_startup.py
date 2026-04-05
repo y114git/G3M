@@ -7,7 +7,7 @@ Can be used both as a standalone script and as pytest tests.
 
 import os
 import pathlib
-import subprocess
+import subprocess  # noqa: S404
 import sys
 import tempfile
 import types

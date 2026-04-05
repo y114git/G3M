@@ -187,7 +187,7 @@ class TestAppWindow:
     def test_background_audio_pause_detection_accepts_child_windows(
         self, qapp, temp_dir
     ):
-        from PyQt6.QtWidgets import QDialog
+        from PyQt6.QtWidgets import QDialog, QFileDialog
 
         from app.window import AppWindow
 
@@ -195,6 +195,7 @@ class TestAppWindow:
         with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
             window = AppWindow()
             dialog = QDialog(window)
+            file_dialog = QFileDialog(window)
             try:
                 window.app_state.local_config["pause_background_music_unfocused"] = True
                 qapp.processEvents()
@@ -205,10 +206,18 @@ class TestAppWindow:
                 qapp.processEvents()
                 assert window._should_pause_background_audio() is False
                 dialog.close()
+                file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+                file_dialog.show()
+                file_dialog.raise_()
+                file_dialog.activateWindow()
+                qapp.processEvents()
+                assert window._should_pause_background_audio() is False
+                file_dialog.close()
                 window.showMinimized()
                 qapp.processEvents()
                 assert window._should_pause_background_audio() is True
             finally:
+                file_dialog.close()
                 dialog.close()
                 window.close()
 
@@ -236,6 +245,8 @@ class TestTabBuilders:
         assert widgets["chapter_mode_checkbox"].toolTip() == tr("tooltips.chapter_mode")
         assert widgets["full_install_checkbox"].toolTip() == tr("tooltips.full_install_toggle")
         assert widgets["priority_button"].toolTip() == tr("tooltips.mod_priority")
+        assert "QScrollBar::handle:horizontal" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        assert "border: 1px solid" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
         widget.deleteLater()
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
@@ -257,6 +268,8 @@ class TestTabBuilders:
         assert "show_nsfw_checkbox" in widgets
         assert widgets["show_nsfw_checkbox"].isChecked() is False
         assert widgets["show_nsfw_checkbox"].toolTip() == tr("tooltips.show_nsfw")
+        assert "QScrollBar::handle:horizontal" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        assert "border: 1px solid" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
         widget.deleteLater()
 
     def test_mods_browser_show_nsfw_checkbox_scales_with_ui_scale(

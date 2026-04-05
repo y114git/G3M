@@ -44,7 +44,14 @@ class DeltamodConverter:
             config_data = self._generate_config_json()
             if not config_data:
                 return None
-            mod_name = self._normalize_folder_name(config_data.get("name") or self._fallback_mod_name())
+            config_metadata = (
+                config_data.get("metadata", config_data)
+                if isinstance(config_data, dict)
+                else {}
+            )
+            mod_name = self._normalize_folder_name(
+                config_metadata.get("name") or self._fallback_mod_name()
+            )
             folder_name = get_unique_mod_dir(self.mods_dir, mod_name)
             target_mod_dir = os.path.join(self.mods_dir, folder_name)
             if os.path.exists(target_mod_dir):
@@ -74,7 +81,7 @@ class DeltamodConverter:
             if not os.path.exists(icon_path):
                 icon_path = os.path.join(target_mod_dir, "icon.png")
             if os.path.exists(icon_path):
-                config_data["icon"] = (
+                config_metadata["icon"] = (
                     "_icon.png"
                     if os.path.basename(icon_path) == "_icon.png"
                     else "icon.png"

@@ -44,7 +44,7 @@ class TestPathUtils:
     def test_resource_path_development(self):
         """Checks that resourceing path development."""
         frozen_attr = getattr(sys, "frozen", None)
-        _meipass_attr = getattr(sys, "_MEIPASS", None)
+        meipass_attr = getattr(sys, "_MEIPASS", None)
         try:
             if hasattr(sys, "frozen"):
                 del sys.frozen
@@ -55,8 +55,8 @@ class TestPathUtils:
         finally:
             if frozen_attr is not None:
                 sys.frozen = frozen_attr
-            if _meipass_attr is not None:
-                sys._MEIPASS = _meipass_attr
+            if meipass_attr is not None:
+                sys._MEIPASS = meipass_attr
 
     def test_replace_svg_color_tokens_matches_root_fill_without_required_space(self):
         """Checks that replaceing svg color tokens matches root fill without required space."""

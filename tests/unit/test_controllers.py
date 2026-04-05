@@ -28,8 +28,33 @@ class TestModOperationsController:
         assert controller.app_state == app_state
         assert controller.mod_service == mod_service
 
+    def test_uninstall_mod_removes_deleted_mod_from_used_mods(
+        self, app_state, feedback_service
+    ):
+        """Checks that uninstalling mod clears it from used mods immediately."""
+        from controllers.mod_operations_controller import ModOperationsController
 
-class TestGameLaunchController:
+        mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
+        mod_service = Mock()
+        app_window = Mock()
+        app_window.used_mods_service = Mock()
+        app_window.search_display = Mock()
+        app_window.library_display = Mock()
+        controller = ModOperationsController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            app_window=app_window,
+        )
+
+        controller.uninstall_mod(mod)
+
+        app_window.used_mods_service.remove_mod_from_all_chapters.assert_called_once_with(
+            mod
+        )
+
+
+class TestGameLaunchControllerRefresh:
     def test_refresh_mods_in_use_replaces_mod_objects_inside_lists(
         self, app_state, feedback_service
     ):
@@ -294,6 +319,40 @@ class TestLibraryDisplayController:
 
         app_window.mod_summary_panel.show_empty.assert_called_once()
 
+    def test_summary_delete_removes_deleted_mod_from_used_mods(
+        self, app_state, feedback_service
+    ):
+        """Checks that deleting from summary clears used mod selections."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.mod_summary_panel = Mock()
+        app_window.installed_mods_layout.count.return_value = 1
+        app_window.game_launch = Mock()
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
+        controller._clear_summary = Mock()
+        controller._safe_update_after_mod_deletion = Mock()
+
+        with patch(
+            "PyQt6.QtWidgets.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            controller._on_summary_delete(mod)
+
+        controller.mod_service.uninstall_mod.assert_called_once_with(mod)
+        controller.used_mods_service.remove_mod_from_all_chapters.assert_called_once_with(
+            mod
+        )
+
 
 class TestModImportExportController:
     """Tests for controllers."""
@@ -347,6 +406,50 @@ class TestModImportExportController:
 
         assert os.path.isdir(os.path.join(temp_dir, "Real Mod Name"))
         assert not os.path.exists(os.path.join(temp_dir, "archive-name"))
+
+    def test_install_mod_from_file_uses_metadata_name_for_target_folder(self, temp_dir):
+        """Checks that nested metadata configs import with the normalized mod name."""
+        from controllers.mod_import_export_controller import ModImportExportController
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        mod_service = Mock()
+        controller = ModImportExportController(app_state, mod_service, Mock())
+        content_path = os.path.join(temp_dir, "extract_metadata")
+        os.makedirs(content_path, exist_ok=True)
+        save_json(
+            os.path.join(content_path, "mod_config.json"),
+            {
+                "config_version": "1.0.0",
+                "metadata": {
+                    "id": "meta_mod",
+                    "name": "Metadata Mod Name",
+                    "author": "Author",
+                    "version": "1.0.0",
+                    "game": "pizzatower",
+                },
+                "files": {"pizzatower": {"data_file_path": "patch.g3mpatch"}},
+            },
+            indent=2,
+        )
+        with open(
+            os.path.join(content_path, "patch.g3mpatch"), "w", encoding="utf-8"
+        ) as handle:
+            handle.write("patch")
+
+        controller._materialize_local_import = Mock(return_value=content_path)
+        controller._refresh_mod_list = Mock()
+
+        with (
+            patch("controllers.mod_import_export_controller.QMessageBox.information"),
+            patch(
+                "controllers.mod_import_export_controller.find_deltamod_info_file",
+                return_value=False,
+            ),
+        ):
+            controller._install_mod_from_file(os.path.join(temp_dir, "metadata.zip"))
+
+        assert os.path.isdir(os.path.join(temp_dir, "Metadata Mod Name"))
+        assert not os.path.exists(os.path.join(temp_dir, "Unknown"))
 
     def test_library_sort_order_name_ascending_and_date_descending(
         self, app_state, feedback_service
@@ -1140,6 +1243,48 @@ class TestThemeController:
             controller._reload_custom_font()
         remove_mock.assert_not_called()
         add_mock.assert_not_called()
+
+    def test_resync_filter_scroll_heights_applies_current_size_hint(
+        self, app_state, feedback_service
+    ):
+        from controllers.theme_controller import ThemeController
+
+        settings_service = Mock()
+        customization_service = Mock()
+        app_window = Mock()
+        controller = ThemeController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=settings_service,
+            customization_service=customization_service,
+            app_window=app_window,
+        )
+
+        search_widget = Mock()
+        search_widget.sizeHint.return_value.height.return_value = 68
+        search_scroll = Mock()
+        search_scroll.widget.return_value = search_widget
+
+        library_widget = Mock()
+        library_widget.sizeHint.return_value.height.return_value = 74
+        library_scroll = Mock()
+        library_scroll.widget.return_value = library_widget
+
+        controller._iter_filter_scrolls = Mock(
+            return_value=iter((search_scroll, library_scroll))
+        )
+
+        controller._resync_filter_scroll_heights()
+
+        search_widget.adjustSize.assert_called_once()
+        search_widget.updateGeometry.assert_called_once()
+        search_scroll.updateGeometry.assert_called_once()
+        search_scroll.setMaximumHeight.assert_called_once_with(68)
+
+        library_widget.adjustSize.assert_called_once()
+        library_widget.updateGeometry.assert_called_once()
+        library_scroll.updateGeometry.assert_called_once()
+        library_scroll.setMaximumHeight.assert_called_once_with(74)
 
 
 class TestGameLaunchController:

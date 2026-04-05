@@ -108,7 +108,7 @@ def build_application_context(parent=None) -> ApplicationContext:
     profile_service.initialize()
     settings_service.profile_service = profile_service
     session_manager = SessionManager(app_state, parent=parent)
-    analytics_service = AnalyticsService(app_state, get_user_data_root(), parent)
+    analytics_service = AnalyticsService(app_state, parent)
     mod_service = ModManager(app_state, feedback_service, settings_service, parent)
     pizza_oven_conversion_service = PizzaOvenConversionService()
     game_launcher = GameLauncher(app_state, feedback_service, mod_service, parent)

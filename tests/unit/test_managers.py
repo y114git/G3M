@@ -465,6 +465,60 @@ class TestCustomizationManager:
 
         maybe_start.assert_called_once_with(force=True)
 
+    def test_customization_service_does_not_start_music_while_game_running(self, app_state):
+        """Checks that background music stays off while the game is running."""
+        from unittest.mock import Mock, patch
+
+        from PyQt6.QtWidgets import QWidget
+
+        from services.customization_service import CustomizationManager
+
+        parent = QWidget()
+        parent.show()
+        app_state.is_shown_to_user = True
+        app_state.game_is_running = True
+        try:
+            manager = CustomizationManager(app_state, parent)
+            manager.get_background_music_path = Mock(return_value="music.mp3")
+
+            with patch(
+                "services.customization_service.os.path.exists", return_value=True
+            ), patch.object(manager, "start_background_music") as start_music:
+                manager.maybe_start_background_music(force=True)
+
+            start_music.assert_not_called()
+        finally:
+            parent.close()
+
+    def test_customization_service_monitor_restarts_finished_music(self, app_state):
+        """Checks that finished background music starts again when playback ends."""
+        from unittest.mock import Mock, patch
+
+        from PyQt6.QtWidgets import QWidget
+
+        from services.customization_service import CustomizationManager
+
+        parent = QWidget()
+        parent.show()
+        app_state.is_shown_to_user = True
+        app_state.game_is_running = False
+        try:
+            manager = CustomizationManager(app_state, parent)
+            manager.get_background_music_path = Mock(return_value="music.mp3")
+            player = Mock()
+            player.is_alive.return_value = False
+            manager._bg_music_instance = player
+            manager._current_music_path = "music.mp3"
+
+            with patch(
+                "services.customization_service.os.path.exists", return_value=True
+            ), patch.object(manager, "start_background_music") as start_music:
+                manager._ensure_background_music_state()
+
+            start_music.assert_called_once_with(force=False)
+        finally:
+            parent.close()
+
     def test_customization_service_get_font_path(self, app_state, temp_dir):
         """Checks that customizationing service get font path."""
         from services.customization_service import CustomizationManager

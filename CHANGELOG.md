@@ -1,3 +1,12 @@
+### Version 3.0.2 — 05.04.26
+
+- Added a new built-in theme SUGARYG3M (Thanks to @Super Bear5 65 real)
+- Fixed both Chinese translations (Huge thanks to @chesscloudy)
+- Fixed an auto-update error related to incorrect checksums (For those who have 3.0.0 or 3.0.1 and encounter this error, you will need to manually update to 3.0.2)
+- Significantly sped up the patching and merging process, also fixed a bunch of bugs related to G3MTool and G3MPATCH
+- If you enable the DELTAG3M theme, something interesting will happen to the name of one of the tabs
+- New plugin for custom save folders (Requested by Jevil)
+
 ### Version 3.0.1 — 02.04.26
 
 - **Manual Install and DELTARUNE file placement improvements**

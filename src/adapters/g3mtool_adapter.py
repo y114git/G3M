@@ -54,7 +54,10 @@ class G3MToolManager:
     ) -> tuple[int, str, str]:
         if not self.g3mtool_path:
             return self._unavailable_result()
-        return self._run([self.g3mtool_path, *args], progress_callback=progress_callback)
+        return self._run(
+            [self.g3mtool_path, *args],
+            progress_callback=progress_callback,
+        )
 
     def merge_patches(
         self,
@@ -80,7 +83,10 @@ class G3MToolManager:
             cmd.extend(["--report", report_path])
         if log_path:
             cmd.extend(["--log", log_path])
-        return self._run_command(cmd, progress_callback=progress_callback)
+        return self._run_command(
+            cmd,
+            progress_callback=progress_callback,
+        )
 
     def apply_patch(
         self,
@@ -100,7 +106,10 @@ class G3MToolManager:
         ]
         if log_path:
             cmd.extend(["--log", log_path])
-        return self._run_command(cmd, progress_callback=progress_callback)
+        return self._run_command(
+            cmd,
+            progress_callback=progress_callback,
+        )
 
     def xpatch_apply(
         self,
@@ -117,7 +126,10 @@ class G3MToolManager:
             patch_path,
             output_path,
         ]
-        return self._run_command(cmd, progress_callback=progress_callback)
+        return self._run_command(
+            cmd,
+            progress_callback=progress_callback,
+        )
 
     def xpatch_create(
         self,
@@ -134,17 +146,22 @@ class G3MToolManager:
             modified_file,
             output_path,
         ]
-        return self._run_command(cmd, progress_callback=progress_callback)
+        return self._run_command(
+            cmd,
+            progress_callback=progress_callback,
+        )
 
     def patch_create(
         self,
         original_file: str,
         modified_file: str,
         output_path: str,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch create <original> <modified> [output]."""
         return self._run_command(
-            ["patch", "create", original_file, modified_file, output_path]
+            ["patch", "create", original_file, modified_file, output_path],
+            progress_callback=progress_callback,
         )
 
     def info(
@@ -189,7 +206,10 @@ class G3MToolManager:
             cmd.extend(["--output", output_path])
         if input_path:
             cmd.extend(["--input", input_path])
-        return self._run_command(cmd, progress_callback=progress_callback)
+        return self._run_command(
+            cmd,
+            progress_callback=progress_callback,
+        )
 
     def cancel_active_processes(self):
         for process in list(self._active_processes):
@@ -239,7 +259,6 @@ class G3MToolManager:
     def _run(
         self,
         cmd: list[str],
-        timeout: int = 600,
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         cmd = [str(c) for c in cmd if c is not None]
@@ -280,12 +299,8 @@ class G3MToolManager:
             stdout_thread.start()
             stderr_thread.start()
             try:
-                process.wait(timeout=timeout)
+                process.wait()
                 returncode = process.returncode
-            except subprocess.TimeoutExpired:
-                process.kill()
-                returncode = -1
-                logging.warning(f"G3MTool command timed out after {timeout}s")
             finally:
                 stdout_thread.join()
                 stderr_thread.join()

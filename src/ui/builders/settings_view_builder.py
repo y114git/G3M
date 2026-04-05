@@ -28,7 +28,11 @@ from config.config import (
 )
 from config.settings_schema import get_theme_color_key
 from models.game_modes import get_visible_game_entries
-from services.localization_service import localization_service, tr
+from services.localization_service import (
+    get_settings_library_tab_title,
+    localization_service,
+    tr,
+)
 from ui.common.styling import (
     get_border_radius,
     get_theme_color,
@@ -90,7 +94,8 @@ class SettingsViewBuilder:
             self._build_mods_browser_tab(tab_widget), tr("ui.settings_tab_mods_browser")
         )
         tab_widget.addTab(
-            self._build_library_tab(tab_widget), tr("ui.settings_tab_library")
+            self._build_library_tab(tab_widget),
+            get_settings_library_tab_title(self.app_state),
         )
         plugins_tab = self._build_plugins_tab(tab_widget)
         tab_widget.addTab(

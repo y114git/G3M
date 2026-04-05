@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QApplication
 
 from app.dialogs import on_downloads_record_updated, on_downloads_use_completed
 from app.game_ui import on_games_registry_changed, on_used_mods_updated
-from app.localization_utils import relocalize_ui
+from app.localization_utils import relocalize_texts, relocalize_ui
 from controllers.game_launch_controller import GameLaunchController
 from controllers.library_display_controller import LibraryDisplayController
 from controllers.mod_operations_controller import ModOperationsController
@@ -229,6 +229,7 @@ class WindowComposition:
         window.settings_service.theme_changed.connect(
             window.theme.on_theme_changed_by_service
         )
+        window.settings_service.theme_changed.connect(lambda: relocalize_texts(window))
         window.settings_service.settings_changed.connect(
             window.search_display.update_filtered_mods
         )

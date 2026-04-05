@@ -2,8 +2,6 @@ import io
 import json
 import logging
 import os
-import shutil
-import tempfile
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -492,40 +490,6 @@ class TestReportParsing:
 
 class TestXdeltaPatchApplication:
     """Tests for patching and merging."""
-    def test_xdelta_patch_with_g3mtool(
-        self, game_data_dir, patches_game_dirs, deltarune_chapter_dirs
-    ):
-        """Checks that xdeltaing patch with g3mtool."""
-        chapter1_dir = deltarune_chapter_dirs["chapter1"]
-        data_win_path = Path(chapter1_dir) / "data.win"
-        if not data_win_path.exists():
-            pytest.skip("Test data.win not found.")
-        patch_file = None
-        if "deltarune" in patches_game_dirs:
-            chapter1_patches = patches_game_dirs["deltarune"].get("chapter1")
-            if chapter1_patches:
-                patch_path = Path(chapter1_patches)
-                xdelta_patches = list(patch_path.glob("*.xdelta"))
-                if xdelta_patches:
-                    patch_file = str(xdelta_patches[0])
-        if not patch_file:
-            pytest.skip("No xdelta patches found.")
-        g3mtool = G3MToolManager()
-        if not g3mtool.is_available():
-            pytest.skip("G3MTool executable not found")
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_data_win = os.path.join(temp_dir, "data.win")
-            shutil.copy2(data_win_path, temp_data_win)
-            output_path = os.path.join(temp_dir, "patched_data.win")
-            returncode, _stdout, stderr = g3mtool.xpatch_apply(
-                temp_data_win, patch_file, output_path
-            )
-            if returncode != 0:
-                pytest.fail(f"xpatch apply failed: {stderr[:500]}")
-            assert os.path.exists(output_path)
-            patched_size = os.path.getsize(output_path)
-            assert patched_size > 0
-
     def test_xdelta_missing_output_uses_warning_fallback(self, tmp_path):
         """Checks that xdeltaing missing output uses warning fallback."""
         app_state = Mock()
@@ -727,3 +691,190 @@ class TestG3MPatchProgressText:
         assert all(
             "status.merging_patches" not in message for message in progress_messages
         )
+
+    def test_multi_patch_passes_raw_inputs_directly_to_merge(self, tmp_path):
+        """Checks that multi merge forwards xdelta/datafile inputs directly to G3MTool."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher._temp_dir = str(tmp_path)
+        patcher.report_has_conflicts = Mock(return_value=False)
+        patcher.status_update = Mock()
+
+        original = tmp_path / "data.win"
+        original.write_text("original", encoding="utf-8")
+        replacement = tmp_path / "replacement.win"
+        replacement.write_text("replacement", encoding="utf-8")
+        out = tmp_path / "out.win"
+
+        captured = {}
+
+        def fake_merge_patches(_original, patches, output, **_kwargs):
+            captured["patches"] = list(patches)
+            Path(output).write_text("merged", encoding="utf-8")
+            return (0, "", "")
+
+        patcher.g3mtool.merge_patches = Mock(side_effect=fake_merge_patches)
+
+        assert patcher._apply_multi_mod(
+            str(original),
+            [
+                ("raw_patch.xdelta", MOD_TYPE_XDELTA, "x"),
+                (str(replacement), MOD_TYPE_DATAFILE, "y"),
+                ("already.g3mpatch", MOD_TYPE_G3MPATCH, "z"),
+            ],
+            str(out),
+            str(tmp_path / "g3mtool.log"),
+            "chapter1",
+            0,
+            100,
+            "Chapter 1",
+        )
+
+        assert out.read_text(encoding="utf-8") == "merged"
+        assert len(captured["patches"]) == 3
+        assert captured["patches"][0] == "raw_patch.xdelta"
+        assert captured["patches"][1] == str(replacement)
+        assert captured["patches"][2] == "already.g3mpatch"
+        assert not getattr(patcher.g3mtool.xpatch_apply, "called", False)
+        assert not getattr(patcher.g3mtool.patch_create, "called", False)
+
+    def test_multi_patch_direct_merge_reports_progress(self, tmp_path):
+        """Checks that direct merge progress advances chapter progress across the merge window."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher._temp_dir = str(tmp_path)
+        patcher.report_has_conflicts = Mock(return_value=False)
+        patcher.status_update = Mock()
+        progress_fractions = []
+
+        original = tmp_path / "data.win"
+        original.write_text("original", encoding="utf-8")
+        replacement = tmp_path / "replacement.win"
+        replacement.write_text("replacement", encoding="utf-8")
+        out = tmp_path / "out.win"
+
+        def fake_merge_patches(_original, _patches, output, **kwargs):
+            kwargs["progress_callback"](10, "merge")
+            kwargs["progress_callback"](50, "merge")
+            kwargs["progress_callback"](100, "merge")
+            Path(output).write_text("merged", encoding="utf-8")
+            return (0, "", "")
+
+        patcher.g3mtool.merge_patches = Mock(side_effect=fake_merge_patches)
+        patcher._emit_chapter_progress = Mock(
+            side_effect=lambda _start, _end, fraction, _message: progress_fractions.append(
+                round(fraction, 4)
+            )
+        )
+
+        assert patcher._apply_multi_mod(
+            str(original),
+            [
+                ("raw_patch.xdelta", MOD_TYPE_XDELTA, "x"),
+                (str(replacement), MOD_TYPE_DATAFILE, "y"),
+            ],
+            str(out),
+            str(tmp_path / "g3mtool.log"),
+            "chapter1",
+            0,
+            100,
+            "Chapter 1",
+        )
+
+        assert out.read_text(encoding="utf-8") == "merged"
+        assert any(0.20 < fraction < 0.35 for fraction in progress_fractions)
+        assert any(0.45 < fraction < 0.60 for fraction in progress_fractions)
+        assert any(0.70 <= fraction <= 0.72 for fraction in progress_fractions)
+
+    def test_patch_chapter_excludes_override_only_mods_from_merge_but_applies_them(
+        self, monkeypatch, tmp_path
+    ):
+        """Checks that override-only mods are skipped for merge and still applied as file overrides."""
+        app_state = Mock()
+        app_state.local_config = {}
+        app_state.game_mode = SimpleNamespace(game_id="pizzatower")
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher._temp_dir = str(tmp_path)
+        patcher.backup_service = Mock()
+        patcher.backup_service.backup_file.return_value = True
+        patcher._emit_chapter_progress = Mock()
+        patcher._check_g3mpatch_validate_warning = Mock(return_value=True)
+
+        target_dir = tmp_path / "Pizza Tower"
+        target_dir.mkdir()
+        data_win = target_dir / "data.win"
+        data_win.write_text("original", encoding="utf-8")
+
+        captured = {"merged": None, "overrides": []}
+
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.get_target_dir",
+            lambda *_args, **_kwargs: str(target_dir),
+        )
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.mod_content.find_data_win",
+            lambda *_args, **_kwargs: str(data_win),
+        )
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.shutil.move",
+            lambda src, dst: Path(dst).write_text(
+                Path(src).read_text(encoding="utf-8"), encoding="utf-8"
+            ),
+        )
+
+        patcher._collect_mod_infos = Mock(
+            return_value=[
+                ("mod_a.g3mpatch", MOD_TYPE_G3MPATCH, "mod_a_dir"),
+                (None, MOD_TYPE_OVERRIDES_ONLY, "override_dir"),
+                ("mod_b.xdelta", MOD_TYPE_XDELTA, "mod_b_dir"),
+            ]
+        )
+
+        def fake_apply_multi_mod(
+            _data_win_path,
+            mod_infos,
+            output_path,
+            *_args,
+            **_kwargs,
+        ):
+            captured["merged"] = list(mod_infos)
+            Path(output_path).write_text("patched", encoding="utf-8")
+            return True
+
+        def fake_apply_file_overrides(
+            mod_source_dir,
+            *_args,
+            **_kwargs,
+        ):
+            captured["overrides"].append(mod_source_dir)
+            return True
+
+        patcher._apply_multi_mod = Mock(side_effect=fake_apply_multi_mod)
+        patcher._apply_file_overrides = Mock(side_effect=fake_apply_file_overrides)
+        patcher._get_mod_source_dir = Mock(
+            side_effect=lambda mod_data, _chapter_id: f"{mod_data}_dir"
+        )
+
+        assert patcher._patch_chapter(
+            "pizzatower",
+            ["mod_a", "override_only", "mod_b"],
+            is_modpack=False,
+            modpack_dir=None,
+            chapter_start=0,
+            chapter_end=100,
+            display_name="Pizza Tower",
+            chapter_index=1,
+            total_chapters=1,
+        )
+
+        assert captured["merged"] == [
+            ("mod_a.g3mpatch", MOD_TYPE_G3MPATCH, "mod_a_dir"),
+            ("mod_b.xdelta", MOD_TYPE_XDELTA, "mod_b_dir"),
+        ]
+        assert captured["overrides"] == [
+            "mod_a_dir",
+            "override_only_dir",
+            "mod_b_dir",
+        ]

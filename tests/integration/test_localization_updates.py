@@ -83,7 +83,7 @@ class TestUIElementsUseTrFunction:
         for py_file in ui_dir.rglob('*.py'):
             lines = py_file.read_text(encoding='utf-8').split('\n')
             for line_num, line in enumerate(lines, 1):
-                if re.search('setText\\([\\\'"][^\\\'"]+[\\\'"]\\)|setToolTip\\([\\\'"][^\\\'"]+[\\\'"]\\)|setWindowTitle\\([\\\'"][^\\\'"]+[\\\'"]\\)', line) and 'tr(' not in line and not ('{' in line and '}' in line) and ('+' not in line and 'f"' not in line and "f'" not in line) and not line.strip().startswith('#') and not any(skip in line.lower() for skip in ['n/a', 'n/a', 'none', 'true', 'false', '0', '1']):
+                if re.search(r'setText\\([\\\'"][^\\\'"]+[\\\'"]\\)|setToolTip\\([\\\'"][^\\\'"]+[\\\'"]\\)|setWindowTitle\\([\\\'"][^\\\'"]+[\\\'"]\\)', line) and 'tr(' not in line and not ('{' in line and '}' in line) and ('+' not in line and 'f"' not in line and "f'" not in line) and not line.strip().startswith('#') and not any(skip in line.lower() for skip in ['n/a', 'n/a', 'none', 'true', 'false', '0', '1']):
                     issues.append(f'{py_file.relative_to(Path.cwd())}:{line_num} - Hardcoded text: {line.strip()[:80]}')
         if issues:
             pytest.fail(f'Found {len(issues)} potential hardcoded UI texts (should use tr()):\n' + '\n'.join(issues[:30]))
@@ -104,7 +104,7 @@ class TestWidgetRelocalizeMethods:
                 continue
             content = widget_path.read_text(encoding='utf-8')
             has_localization = 'tr(' in content
-            has_relocalize = bool(re.search('def\\s+relocalize', content, re.IGNORECASE))
+            has_relocalize = bool(re.search(r'def\\s+relocalize', content, re.IGNORECASE))
             if has_localization and (not has_relocalize) and 'class' in content and ('Widget' in content or 'QFrame' in content or 'QWidget' in content):
                 issues.append(f'{widget_file} uses localization but may not have relocalize method')
         if issues:

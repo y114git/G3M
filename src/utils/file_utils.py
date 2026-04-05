@@ -541,10 +541,14 @@ def _rmtree_error_handler(func, path, _):
             pass
 
 
+class _DirectoryStillExistsError(PermissionError):
+    """Raised when rmtree returns without actually removing the directory."""
+
+
 def _verified_rmtree(path: str, rmtree_kwargs: dict) -> None:
     shutil.rmtree(path, **rmtree_kwargs)
     if os.path.exists(path):
-        raise PermissionError(f"Directory still exists after rmtree: {path}")
+        raise _DirectoryStillExistsError(f"Directory still exists after rmtree: {path}")
 
 
 def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
@@ -572,7 +576,9 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
             path,
         )
         return True
-    except Exception:
+    except Exception as exc:
+        if isinstance(exc, _DirectoryStillExistsError):
+            return False
         if not IS_WINDOWS_PLATFORM:
             try:
                 renamed = os.path.join(

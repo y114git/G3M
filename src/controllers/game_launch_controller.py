@@ -113,6 +113,7 @@ class GameLaunchController(QObject):
             else None
         )
         patching_thread = getattr(self.game_launcher, "_patching_thread", None)
+        plugin_thread = getattr(self.game_launcher, "_plugin_hook_thread", None)
         if patching_thread:
             try:
                 patching_thread.progress_update.disconnect()
@@ -149,6 +150,27 @@ class GameLaunchController(QObject):
                 )
             finally:
                 self.game_launcher._patching_thread = None
+            runtime_service = getattr(self.app, "plugin_runtime_service", None)
+            if runtime_service:
+                with contextlib.suppress(Exception):
+                    runtime_service.execute_hook(
+                        "mod_apply_cancelled",
+                        {"hook": "patching", "reason": "cancelled"},
+                    )
+        if plugin_thread:
+            try:
+                plugin_thread.progress_update.disconnect()
+                plugin_thread.status_update.disconnect()
+                plugin_thread.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            plugin_thread.cancel()
+            if plugin_thread.isRunning():
+                plugin_thread.wait(5000)
+            with contextlib.suppress(Exception):
+                if not plugin_thread.isRunning():
+                    plugin_thread.deleteLater()
+            self.game_launcher._plugin_hook_thread = None
         if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
             try:
                 import shutil

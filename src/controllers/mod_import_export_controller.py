@@ -169,6 +169,9 @@ class ModImportExportController:
                 if os.path.exists(config_path_to_read):
                     with open(config_path_to_read, encoding="utf-8") as f:
                         config = json.load(f)
+                    from utils.mod_config_parser import normalize_mod_config_data
+
+                    normalize_mod_config_data(config, mod_root_path=content_path)
                     mod_id = config.get("id")
                     mod_name = config.get("name", "Unknown")
 
@@ -216,8 +219,6 @@ class ModImportExportController:
                                 else "icon.png"
                             )
                             config_updated = True
-                        from utils.mod_config_parser import normalize_mod_config_data
-
                         config_updated = normalize_mod_config_data(
                             config, mod_root_path=target_mod_dir
                         ) or config_updated

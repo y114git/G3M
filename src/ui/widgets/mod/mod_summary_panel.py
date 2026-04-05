@@ -287,8 +287,6 @@ class ModSummaryPanel(QFrame):
         self._scroll.show()
         self._name_label.setText(getattr(mod_data, "name", "") or "")
         description = getattr(mod_data, "description", "") or tr("ui.no_description")
-        if len(description) > 300:
-            description = description[:297] + "..."
         self._description_label.setText(description)
         config = self._get_config()
         br = get_border_radius(config) if config else 0
@@ -439,13 +437,13 @@ class ModSummaryPanel(QFrame):
                             exc_info=True,
                         )
                 data_lines.append(
-                    f"<span style='color:{tc}'>{html.escape(chapter_label)}:</span> <span style='color:{sc}'>{html.escape(display_name)}{size_str}</span>"
+                    f"<span style='color:{tc}'>{html.escape(chapter_label)}:</span> <span style='color:{sc}'>{self._wrap_display_text(display_name)}{html.escape(size_str)}</span>"
                 )
             extra_paths = self._collect_extra_paths(extra_files)
             if extra_paths:
                 extra_total += len(extra_paths)
                 file_lines = [
-                    f"&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{sc}'>{html.escape(self._format_display_path(file_path))}</span>"
+                    f"&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{sc}'>{self._wrap_display_text(self._format_display_path(file_path))}</span>"
                     for file_path in extra_paths
                 ]
                 extra_chapters.append((chapter_label, len(extra_paths), file_lines))
@@ -537,6 +535,15 @@ class ModSummaryPanel(QFrame):
             return "/"
         name = os.path.basename(trimmed) or trimmed
         return f"{name}/" if is_dir else name
+
+    @staticmethod
+    def _wrap_display_text(text: str) -> str:
+        escaped = html.escape(str(text or ""))
+        for separator in ("/", "_", "-", ".", ")", "]"):
+            escaped = escaped.replace(separator, f"{separator}&#8203;")
+        for separator in ("(", "["):
+            escaped = escaped.replace(separator, f"&#8203;{separator}")
+        return escaped
 
     @staticmethod
     def _format_chapter_label(chapter_key) -> str:

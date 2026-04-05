@@ -6,7 +6,7 @@ import os
 from collections.abc import Callable
 from multiprocessing import Process
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap
 
 from config.config import DEFAULT_COLORS
@@ -34,6 +34,10 @@ class CustomizationManager(QObject):
         self._bg_music_instance: Process | None = None
         self._current_music_path = None
         self._focus_pause_active = False
+        self._music_monitor = QTimer(self)
+        self._music_monitor.setInterval(1000)
+        self._music_monitor.timeout.connect(self._ensure_background_music_state)
+        self._music_monitor.start()
 
     def _get_custom_file_path(self, base_name: str, extensions: list[str]) -> str:
         for ext in extensions:
@@ -99,6 +103,8 @@ class CustomizationManager(QObject):
     def start_background_music(self, force: bool = False):
         if self._music_starting:
             return
+        if self._focus_pause_active or getattr(self.app_state, "game_is_running", False):
+            return
         music_path = self.get_background_music_path()
         if not music_path or not os.path.exists(music_path):
             self.stop_background_music()
@@ -159,6 +165,10 @@ class CustomizationManager(QObject):
         if self._music_starting:
             return
         try:
+            if self._focus_pause_active or getattr(self.app_state, "game_is_running", False):
+                if self._bg_music_instance:
+                    self.stop_background_music(wait_for_thread=False, preserve_focus_pause=True)
+                return
             music_path = self.get_background_music_path()
             if not music_path or not os.path.exists(music_path):
                 if self._bg_music_instance:
@@ -184,6 +194,15 @@ class CustomizationManager(QObject):
         except Exception as e:
             logging.error(f"Error in maybe_start_background_music: {e}", exc_info=True)
             self._music_starting = False
+
+    def _ensure_background_music_state(self) -> None:
+        try:
+            self.maybe_start_background_music()
+        except Exception as e:
+            logging.debug(
+                f"[CustomizationManager] Background music monitor tick failed: {e}",
+                exc_info=True,
+            )
 
     def load_custom_style_settings(
         self, color_widgets: dict, apply_theme_callback: Callable | None = None
@@ -265,4 +284,5 @@ class CustomizationManager(QObject):
         icon_label.setPixmap(fb)
 
     def cleanup(self):
+        self._music_monitor.stop()
         self.stop_background_music()

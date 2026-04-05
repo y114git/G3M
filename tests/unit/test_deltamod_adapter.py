@@ -172,3 +172,39 @@ def test_process_files_uses_legacy_chapter_layout_for_deltamod_assets(tmp_path):
     chapter_dir = target_dir / "chapter_1"
     assert (chapter_dir / "patch.xdelta").read_text(encoding="utf-8") == "patch"
     assert (chapter_dir / "sprites" / "hero.png").read_text(encoding="utf-8") == "hero"
+
+
+def test_convert_uses_metadata_name_for_target_folder(tmp_path):
+    """Checks that converted deltamod mods use metadata name instead of temp dir."""
+    source_dir = tmp_path / "gb_convert_deadbeef"
+    source_dir.mkdir()
+    (source_dir / "_deltamodInfo.json").write_text(
+        """
+        {
+            "metadata": {
+                "name": "Boss Rush Deluxe",
+                "author": ["Author"],
+                "game": "toby.deltarune"
+            }
+        }
+        """,
+        encoding="utf-8",
+    )
+    (source_dir / "modding.xml").write_text(
+        """
+        <patches>
+            <patch to="./chapter4_windows/data.win" patch="./chapter4.xdelta" type="xdelta" />
+        </patches>
+        """,
+        encoding="utf-8",
+    )
+    (source_dir / "chapter4.xdelta").write_text("patch", encoding="utf-8")
+    mods_dir = tmp_path / "mods"
+    mods_dir.mkdir()
+
+    converter = DeltamodConverter(str(source_dir), str(mods_dir))
+
+    result = converter.convert()
+
+    assert result is not None
+    assert result.endswith("Boss Rush Deluxe")

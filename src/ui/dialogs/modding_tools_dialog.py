@@ -33,6 +33,7 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
+from utils.patching.patch_verification_utils import verify_generated_patch
 
 logger = logging.getLogger(__name__)
 
@@ -192,11 +193,69 @@ class _ConvertWorkerThread(QThread):
                     rc, out, err = self._g3m.xpatch_create(
                         self._orig, temp_modified, self._output
                     )
+                    patch_type = "xdelta"
                 else:
                     rc, out, err = self._g3m.patch_create(
                         self._orig, temp_modified, self._output
                     )
+                    patch_type = "g3mpatch"
+                if rc == 0:
+                    verified, verify_error = verify_generated_patch(
+                        self._g3m,
+                        self._orig,
+                        temp_modified,
+                        self._output,
+                        patch_type=patch_type,
+                    )
+                    if not verified:
+                        with suppress(OSError):
+                            os.remove(self._output)
+                        self.finished.emit(1, out, verify_error)
+                        return
                 self.finished.emit(rc, out, err)
+        except Exception as e:
+            self.finished.emit(-1, "", str(e))
+
+
+class _CreatePatchWorkerThread(QThread):
+    """Create a patch from two data files and verify the generated artifact."""
+
+    finished = pyqtSignal(int, str, str)
+
+    def __init__(self, g3m, orig, modified, output, target_is_xdelta, parent=None) -> None:
+        super().__init__(parent)
+        self._g3m = g3m
+        self._orig = orig
+        self._modified = modified
+        self._output = output
+        self._target_is_xdelta = target_is_xdelta
+
+    def run(self):
+        try:
+            if self._target_is_xdelta:
+                rc, out, err = self._g3m.xpatch_create(
+                    self._orig, self._modified, self._output
+                )
+                patch_type = "xdelta"
+            else:
+                rc, out, err = self._g3m.patch_create(
+                    self._orig, self._modified, self._output
+                )
+                patch_type = "g3mpatch"
+            if rc == 0:
+                verified, verify_error = verify_generated_patch(
+                    self._g3m,
+                    self._orig,
+                    self._modified,
+                    self._output,
+                    patch_type=patch_type,
+                )
+                if not verified:
+                    with suppress(OSError):
+                        os.remove(self._output)
+                    self.finished.emit(1, out, verify_error)
+                    return
+            self.finished.emit(rc, out, err)
         except Exception as e:
             self.finished.emit(-1, "", str(e))
 
@@ -403,12 +462,18 @@ class _PatchTab(QWidget):
                     self._g3m.execute,
                     (second, None, orig, out),
                 )
+            elif is_create:
+                self._worker = _CreatePatchWorkerThread(
+                    self._g3m,
+                    orig,
+                    second,
+                    out,
+                    mode == "xdelta",
+                )
             elif mode == "xdelta":
-                func = self._g3m.xpatch_create if is_create else self._g3m.xpatch_apply
-                self._worker = _WorkerThread(func, (orig, second, out))
+                self._worker = _WorkerThread(self._g3m.xpatch_apply, (orig, second, out))
             else:
-                func = self._g3m.patch_create if is_create else self._g3m.apply_patch
-                self._worker = _WorkerThread(func, (orig, second, out))
+                self._worker = _WorkerThread(self._g3m.apply_patch, (orig, second, out))
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
@@ -558,15 +623,30 @@ class _DataConvertWorkerThread(QThread):
                             rc, _, err = self._g3m.xpatch_create(
                                 original, temp_modified, new_path
                             )
+                            patch_type = "xdelta"
                         else:
                             rc, _, err = self._g3m.patch_create(
                                 original, temp_modified, new_path
                             )
+                            patch_type = "g3mpatch"
                         if rc != 0:
                             self.finished.emit(False, err[:300])
                             return
+                        verified, verify_error = verify_generated_patch(
+                            self._g3m,
+                            original,
+                            temp_modified,
+                            new_path,
+                            patch_type=patch_type,
+                        )
+                        if not verified:
+                            with suppress(OSError):
+                                os.remove(new_path)
+                            self.finished.emit(False, verify_error[:300])
+                            return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
-                        os.remove(patch_path)
+                        with suppress(OSError):
+                            os.remove(patch_path)
                     ch_info["data_file_path"] = new_name
                     converted += 1
 

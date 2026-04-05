@@ -18,7 +18,12 @@ from config.config import (
     SETTINGS_COLOR_CONFIG,
     WIDGET_LOCALIZATIONS,
 )
-from services.localization_service import localization_service, tr
+from services.localization_service import (
+    get_library_tab_title,
+    get_settings_library_tab_title,
+    localization_service,
+    tr,
+)
 
 
 def relocalize_texts(w):
@@ -35,7 +40,7 @@ def relocalize_texts(w):
     if hasattr(w, "mods_browser_tab"):
         tab_labels.append((w.mods_browser_tab, tr("ui.search_tab")))
     if hasattr(w, "library_tab"):
-        tab_labels.append((w.library_tab, tr("ui.library_tab")))
+        tab_labels.append((w.library_tab, get_library_tab_title(w.app_state)))
     for tab_widget, label in tab_labels:
         idx = w.main_tab_widget.indexOf(tab_widget)
         if idx >= 0:
@@ -70,7 +75,7 @@ def relocalize_texts(w):
         w.settings_tab_widget.setTabText(1, tr("ui.settings_tab_appearance"))
         w.settings_tab_widget.setTabText(2, tr("ui.settings_tab_game"))
         w.settings_tab_widget.setTabText(3, tr("ui.settings_tab_mods_browser"))
-        w.settings_tab_widget.setTabText(4, tr("ui.settings_tab_library"))
+        w.settings_tab_widget.setTabText(4, get_settings_library_tab_title(w.app_state))
         if hasattr(w, "plugins_tab"):
             plugins_index = w.settings_tab_widget.indexOf(w.plugins_tab)
             if plugins_index >= 0:

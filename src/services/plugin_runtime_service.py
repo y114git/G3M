@@ -12,6 +12,7 @@ from models.plugin_models import (
     PluginContext,
     PluginManifest,
     PluginSettingsAccessor,
+    PluginTaskRuntime,
     PluginUiContext,
 )
 from services.localization_service import localization_service
@@ -141,7 +142,12 @@ class PluginRuntimeService:
             for code, strings in load_plugin_langs(plugin.path).items():
                 localization_service.merge_plugin_strings(plugin.plugin_id, code, strings)
 
-    def _build_context(self, plugin_id: str) -> PluginContext:
+    def _build_context(
+        self,
+        plugin_id: str,
+        *,
+        task_runtime: PluginTaskRuntime | None = None,
+    ) -> PluginContext:
         return PluginContext(
             plugin_id=plugin_id,
             app_state=self.app_state,
@@ -153,6 +159,7 @@ class PluginRuntimeService:
             downloads_manager=self.downloads_manager,
             localization_service=localization_service,
             plugin_settings=PluginSettingsAccessor(plugin_id, self.plugin_state_service),
+            task_runtime=task_runtime,
         )
 
     def _build_ui_context(self, plugin_id: str) -> PluginUiContext:
@@ -290,6 +297,15 @@ class PluginRuntimeService:
             self._enabled_instances.remove(plugin_id)
 
     def execute_hook(self, hook_name: str, *args, **kwargs) -> list[Any]:
+        return self.execute_hook_with_runtime(hook_name, None, *args, **kwargs)
+
+    def execute_hook_with_runtime(
+        self,
+        hook_name: str,
+        task_runtime: PluginTaskRuntime | None,
+        *args,
+        **kwargs,
+    ) -> list[Any]:
         results: list[Any] = []
         method_name = f"on_{hook_name}"
         for plugin_id, instance in list(self._instances.items()):
@@ -299,13 +315,29 @@ class PluginRuntimeService:
             if not hasattr(instance, method_name):
                 continue
             try:
-                results.append(getattr(instance, method_name)(self._build_context(plugin_id), *args, **kwargs))
+                results.append(
+                    getattr(instance, method_name)(
+                        self._build_context(plugin_id, task_runtime=task_runtime),
+                        *args,
+                        **kwargs,
+                    )
+                )
+            except InterruptedError:
+                raise
             except Exception as e:
                 logger.error("PluginRuntimeService: hook %s failed for %s: %s", hook_name, plugin_id, e, exc_info=True)
                 if record:
                     record.error = str(e)
                     record.status = "broken"
         return results
+
+    def has_enabled_hook(self, hook_name: str) -> bool:
+        method_name = f"on_{hook_name}"
+        for plugin_id, instance in self._instances.items():
+            record = self._installed.get(plugin_id)
+            if record and record.enabled and hasattr(instance, method_name):
+                return True
+        return False
 
     def get_settings_widget(self, plugin_id: str, parent=None):
         try:
@@ -315,7 +347,7 @@ class PluginRuntimeService:
             if hasattr(plugin, "create_settings_widget"):
                 return plugin.create_settings_widget(self._build_ui_context(plugin_id), parent)
         except Exception as e:
-            logger.debug(
+            logger.error(
                 "PluginRuntimeService: settings widget failed for %s: %s",
                 plugin_id,
                 e,
@@ -331,7 +363,7 @@ class PluginRuntimeService:
             if hasattr(plugin, "create_main_widget"):
                 return plugin.create_main_widget(self._build_ui_context(plugin_id), parent)
         except Exception as e:
-            logger.debug(
+            logger.error(
                 "PluginRuntimeService: main widget failed for %s: %s",
                 plugin_id,
                 e,
