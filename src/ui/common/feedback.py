@@ -65,6 +65,7 @@ class FeedbackManager(QObject):
         message_key: str,
         details: str = "",
         default_yes: bool = False,
+        details_is_html: bool = False,
         **kwargs,
     ) -> bool:
         if not self._should_show_dialog():
@@ -76,7 +77,7 @@ class FeedbackManager(QObject):
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setWindowTitle(title)
         if details:
-            details_html = self._format_html(details)
+            details_html = details if details_is_html else self._format_html(details)
             message_html = self._format_html(message)
             full_message = f"{message_html}<br><br>{details_html}"
         else:

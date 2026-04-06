@@ -214,7 +214,11 @@ def prompt_for_update(app, update_info):
         "dialogs.app_will_restart"
     )
     if app.feedback_service.ask_question(
-        "status.update_available", "status.update_available", update_message, True
+        "status.update_available",
+        "status.update_available",
+        update_message,
+        True,
+        details_is_html=True,
     ):
         if hasattr(app, "_perform_update_ui_prep"):
             app._perform_update_ui_prep()
