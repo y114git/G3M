@@ -1,0 +1,18 @@
+{
+    "config_version": "1.0.0",
+    "metadata": {
+        "id": "local_test_mod_undertale",
+        "name": "Test Mod UNDERTALE",
+        "version": "1.0.0",
+        "author": "Test Author",
+        "description": "Test mod for UNDERTALE - place data.win or xdelta patch in undertale/",
+        "game": "undertale",
+        "game_version": "1.0.0"
+    },
+    "files": {
+        "undertale": {
+            "description": "UNDERTALE modification",
+            "data_file_path": "undertale/data.win"
+        }
+    }
+}

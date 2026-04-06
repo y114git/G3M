@@ -1,0 +1,24 @@
+{
+    "config_version": "1.0.0",
+    "id": "local_test_mod_full_structure",
+    "name": "Test Mod Full Structure",
+    "version": "1.0.0",
+    "author": "Test Author",
+    "description": "A test mod with full structure for testing mod system",
+    "game": "deltarune",
+    "game_version": "1.0.0",
+    "files": {
+        "deltarune_0": {
+            "description": "Menu modification",
+            "data_file_path": "data.win"
+        },
+        "deltarune_1": {
+            "description": "Chapter 1 modification",
+            "data_file_path": "data.win"
+        },
+        "deltarune_2": {
+            "description": "Chapter 2 modification",
+            "data_file_path": "data.win"
+        }
+    }
+}

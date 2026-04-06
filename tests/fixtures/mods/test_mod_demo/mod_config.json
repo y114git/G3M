@@ -1,0 +1,18 @@
+{
+    "config_version": "1.0.0",
+    "metadata": {
+        "id": "local_test_mod_demo",
+        "name": "Test Mod Demo",
+        "version": "1.0.0",
+        "author": "Test Author",
+        "description": "Test mod for DELTARUNE Demo - place data.win or xdelta patch in demo/",
+        "game": "deltarunedemo",
+        "game_version": "1.0.0"
+    },
+    "files": {
+        "deltarunedemo": {
+            "description": "Demo modification",
+            "data_file_path": "demo/data.win"
+        }
+    }
+}
