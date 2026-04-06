@@ -27,11 +27,6 @@ from utils.path_utils import (
     get_user_data_root,
     resolve_game_executable,
 )
-from utils.pizzatower_afom_utils import (
-    apply_afom_towers_from_mod_source,
-    is_top_level_towers_archive,
-    is_towers_subpath,
-)
 
 logger = logging.getLogger("shortcut_runner")
 
@@ -112,6 +107,29 @@ def _resolve_chapter_source_dir(mod_source_dir: str, chapter_id: str) -> str | N
     return mod_source_dir
 
 
+def _load_chapter_config_entry(mod_root_dir: str, chapter_id: str) -> dict:
+    config_path = os.path.join(mod_root_dir, "mod_config.json")
+    if not os.path.isfile(config_path):
+        return {}
+    try:
+        with open(config_path, encoding="utf-8") as handle:
+            config_data = json.load(handle)
+        from utils.mod_config_parser import normalize_mod_config_data
+
+        normalize_mod_config_data(config_data, mod_root_path=mod_root_dir)
+        files_data = config_data.get("files", {})
+        chapter_info = files_data.get(chapter_id)
+        return chapter_info if isinstance(chapter_info, dict) else {}
+    except Exception as e:
+        logger.debug(
+            "_load_chapter_config_entry: failed to inspect %s: %s",
+            config_path,
+            e,
+            exc_info=True,
+        )
+        return {}
+
+
 def _classify_mod(mod_source_dir: str):
     """Classify a mod chapter dir and return (patch_file, mod_type)."""
     from utils.patching import mod_content_utils as mod_content
@@ -135,72 +153,64 @@ def _classify_mod(mod_source_dir: str):
 
 
 def _apply_file_overrides(
-    mod_source_dir: str, target_dir: str, backup_mgr, chapter_id: str, g3mtool
+    mod_root_dir: str,
+    mod_source_dir: str,
+    target_dir: str,
+    backup_mgr,
+    chapter_id: str,
+    g3mtool,
 ):
     """Copy non-patch files from mod source into game target, with backup."""
-    from config.config import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
+    from utils.patching.file_override_utils import apply_file_overrides
 
     if not os.path.isdir(mod_source_dir):
         return
-    if str(chapter_id).strip().lower() == "pizzatower":
-        from utils.archive_utils import extract_any_archive
 
-        if not apply_afom_towers_from_mod_source(
-            mod_source_dir,
-            backup_or_mark=lambda target_file: (
-                backup_mgr.backup_file(chapter_id, target_file)
-                if os.path.exists(target_file)
-                else backup_mgr.mark_file_added(chapter_id, target_file)
-            ),
-            logger=logger,
-            extract_archive=extract_any_archive,
-        ):
-            logger.error(f"Failed to apply AFOM towers from {mod_source_dir}")
-            return
-    for root, _dirs, files in os.walk(mod_source_dir):
-        for file in files:
-            if file.lower() in SKIP_FILES:
-                continue
-            source_path = os.path.join(root, file)
-            rel_path = os.path.relpath(source_path, mod_source_dir)
-            if is_towers_subpath(rel_path) or is_top_level_towers_archive(rel_path):
-                continue
-            file_lower = file.lower()
-            if file_lower.endswith((".xdelta", ".vcdiff")):
-                from utils.patching import mod_content_utils as mod_content
+    class _ShortcutPatcher:
+        def __init__(self):
+            self.xdelta_modpack = False
+            self.patching_logger = logger
 
-                target_files = mod_content.find_target_files_for_xdelta(
-                    target_dir, file
-                )
-                for tf in target_files:
-                    if os.path.exists(tf):
-                        backup_mgr.backup_file(chapter_id, tf)
-                    temp_out = tf + ".tmp"
-                    rc, _, _ = g3mtool.xpatch_apply(tf, source_path, temp_out)
-                    if rc == 0 and os.path.exists(temp_out):
-                        shutil.move(temp_out, tf)
-                        logger.info(f"Applied xdelta override {file} -> {tf}")
-                    elif os.path.exists(temp_out):
-                        os.remove(temp_out)
-                continue
+        def _backup_or_mark_file(self, chapter_key, target_file: str) -> None:
+            if os.path.exists(target_file):
+                backup_mgr.backup_file(chapter_key, target_file)
+            else:
+                backup_mgr.mark_file_added(chapter_key, target_file)
 
-            if file_lower.endswith(DATA_FILE_EXTENSIONS):
-                continue
-            if file_lower.endswith(ARCHIVE_EXTENSIONS):
-                continue
-            target_path = os.path.join(target_dir, rel_path)
-            backup_mgr.backup_file(chapter_id, target_path)
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-            try:
-                shutil.copy2(source_path, target_path)
-            except Exception as e:
-                logger.error(
-                    f"Failed to copy override {source_path} -> {target_path}: {e}"
-                )
+        def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:
+            temp_out = target_file + ".tmp"
+            rc, _, _ = g3mtool.xpatch_apply(target_file, patch_path, temp_out)
+            if rc == 0 and os.path.exists(temp_out):
+                shutil.move(temp_out, target_file)
+                return True
+            if os.path.exists(temp_out):
+                os.remove(temp_out)
+            return False
+
+        def _request_warning(self, _message: str, _details: str = "", _report_path=None):
+            return True
+
+    chapter_info = _load_chapter_config_entry(mod_root_dir, chapter_id)
+    configured_paths = (
+        chapter_info.get("extra_files", []) if isinstance(chapter_info, dict) else None
+    )
+    apply_file_overrides(
+        _ShortcutPatcher(),
+        mod_source_dir,
+        target_dir,
+        set(),
+        False,
+        chapter_id,
+        mod_name=os.path.basename(mod_root_dir),
+        game_id="deltarune",
+        configured_paths=configured_paths,
+        mod_root_dir=mod_root_dir,
+    )
 
 
 def _patch_chapter(
     chapter_id: str,
+    mod_root_dir: str,
     mod_source_dir: str,
     game_path: str,
     game_mode,
@@ -227,7 +237,7 @@ def _patch_chapter(
                 f"Chapter {chapter_id}: no data.win found, applying overrides only"
             )
         _apply_file_overrides(
-            mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
+            mod_root_dir, mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
         )
         return True
 
@@ -292,7 +302,9 @@ def _patch_chapter(
             logger.error(f"Failed to move patched file: {e}")
             return False
 
-    _apply_file_overrides(mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool)
+    _apply_file_overrides(
+        mod_root_dir, mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
+    )
     return True
 
 
@@ -343,6 +355,7 @@ def _patch_all_chapters(
 
             ok = _patch_chapter(
                 chapter_id,
+                mod_source_dir,
                 chapter_source_dir,
                 game_path,
                 game_mode,

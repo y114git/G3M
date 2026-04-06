@@ -31,8 +31,10 @@ from utils.file_utils import ensure_writable, get_chapter_folder_name, safe_rmtr
 from utils.patching import mod_content_utils as mod_content
 from utils.patching.mod_resolve_utils import (
     get_mod_configured_data_file,
+    get_mod_configured_extra_files,
     get_mod_source_dir,
     get_target_dir,
+    has_mod_configured_chapter_entry,
 )
 from utils.path_utils import get_user_data_root
 
@@ -1133,6 +1135,7 @@ class G3MToolPatchingService(QObject):
         chapter_end: int,
         progress_start: float,
         progress_end: float,
+        mod_data: Any | None = None,
     ) -> bool:
         override_mods = [
             (mod_data, self._get_mod_source_dir(mod_data, chapter_id))
@@ -1161,6 +1164,7 @@ class G3MToolPatchingService(QObject):
                 mod_start,
                 mod_end,
                 mod_name,
+                mod_data,
             ):
                 return False
         return True
@@ -1176,10 +1180,38 @@ class G3MToolPatchingService(QObject):
         progress_start: float,
         progress_end: float,
         mod_name: str,
-        mod_data,
+        mod_data=None,
     ) -> bool:
+        from utils.mod_utils import get_mod_id
         from utils.patching.file_override_utils import apply_file_overrides
 
+        has_config_entry = (
+            has_mod_configured_chapter_entry(
+                mod_data,
+                chapter_id,
+                self.mod_service,
+                self.app_state,
+                self.patching_logger,
+            )
+            if mod_data is not None
+            else False
+        )
+        configured_paths = (
+            get_mod_configured_extra_files(
+                mod_data,
+                chapter_id,
+                self.mod_service,
+                self.app_state,
+                self.patching_logger,
+            )
+            if has_config_entry
+            else None
+        )
+        mod_root_dir = (
+            self.mod_service.get_mod_folder_path(get_mod_id(mod_data))
+            if mod_data is not None
+            else None
+        )
         return apply_file_overrides(
             self,
             mod_source_dir,
@@ -1195,6 +1227,8 @@ class G3MToolPatchingService(QObject):
             ),
             mod_name=mod_name,
             game_id=self._resolve_mod_game(mod_data),
+            configured_paths=configured_paths,
+            mod_root_dir=mod_root_dir,
         )
 
     def _backup_or_mark_file(self, chapter_id, target_file: str) -> None:

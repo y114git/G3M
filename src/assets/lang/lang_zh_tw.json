@@ -4,7 +4,7 @@
     "language_name": "繁體中文",
     "font": "main.ttf",
     "qt_translation": "qtbase_zh_tw",
-    "version": "3.0.2"
+    "version": "3.0.3"
   },
   "blocklist": {
     "title": "封鎖清單管理器",
@@ -961,6 +961,7 @@
     "convert_no_data_files": "此模組沒有可轉換的 DATA 補丁檔案。",
     "convert_game_path_missing": "請先在設定中配置 {game} 遊戲路徑以存取原始 DATA 檔案。",
     "convert_original_not_found": "未找到原始資料檔案：{path}",
+    "convert_unsupported_source": "不支援的轉換來源：{file}",
     "convert_saving_version": "正在建立已轉換的模組版本「{version}」...",
     "convert_progress": "正在轉換 {current}/{total}：{file}...",
     "convert_data_success": "已轉換 {count} 個檔案。新版本「{version}」已出現在模組版本中。",

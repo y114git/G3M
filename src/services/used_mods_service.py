@@ -306,6 +306,11 @@ class UsedModsManager(QObject):
                     )
                     if mod_id
                 }
+                previous_mods_by_id = {
+                    mod_id: mod
+                    for mod in previous_used_mods.get(chapter_id, [])
+                    if (mod_id := get_mod_id(mod))
+                }
                 if isinstance(mod_data_raw, str):
                     needs_save = True
                 if not mod_ids:
@@ -316,6 +321,10 @@ class UsedModsManager(QObject):
                         continue
                     if mod_data := self._find_mod_by_id(mod_id):
                         mods_list.append(mod_data)
+                    elif mod_id in previous_mods_by_id and not self._is_mod_confirmed_missing(
+                        mod_id
+                    ):
+                        mods_list.append(previous_mods_by_id[mod_id])
                     else:
                         missing_mod_ids.append(mod_id)
                 if mods_list:
@@ -359,6 +368,23 @@ class UsedModsManager(QObject):
         self.used_mods_updated.emit()
         self.mod_widgets_update_needed.emit()
         self.action_button_update_needed.emit()
+
+    def _is_mod_confirmed_missing(self, mod_id: str) -> bool:
+        if not mod_id:
+            return False
+        is_installed = getattr(self.mod_service, "is_mod_installed", None)
+        if not callable(is_installed):
+            return False
+        try:
+            return not bool(is_installed(mod_id))
+        except Exception as e:
+            logging.debug(
+                "load_used_mods_state: failed to verify installed state for %s: %s",
+                mod_id,
+                e,
+                exc_info=True,
+            )
+            return False
 
     def _find_mod_by_id(self, mod_id: str):
         """Find mod by id from all_mods, installed mods, or config."""

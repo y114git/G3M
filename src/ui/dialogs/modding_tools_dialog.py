@@ -45,6 +45,7 @@ _DATA_PATCH_FILTER = (
     "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
 )
 _ALL_FILTER = "All Files (*)"
+_CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", "data.win", "game.ios")
 
 
 def _is_g3mpatch_source(path: str) -> bool:
@@ -77,6 +78,54 @@ def _apply_source_to_data(g3m, original: str, patch: str, output: str):
     if _is_csx_source(patch):
         return g3m.execute(patch, data_file=original, output_path=output)
     return -1, "", f"Unsupported source patch format: {patch}"
+
+
+def _convert_target_mode(index: int) -> str:
+    if 0 <= index < len(_CONVERT_TARGET_OPTIONS):
+        return _CONVERT_TARGET_OPTIONS[index]
+    return _CONVERT_TARGET_OPTIONS[0]
+
+
+def _is_ready_data_source(path: str) -> bool:
+    return str(path or "").lower().endswith((".win", ".ios", ".unx", ".droid"))
+
+
+def _target_is_ready_data(target_mode: str) -> bool:
+    return target_mode in {"data.win", "game.ios"}
+
+
+def _target_version_label(target_mode: str) -> str:
+    return target_mode
+
+
+def _rename_data_output_name(source_path: str, target_name: str) -> str:
+    source_name = os.path.basename(source_path or "").strip()
+    return target_name if source_name else target_name
+
+
+def _should_convert_source_to_target(path: str, target_mode: str) -> bool:
+    lower_path = str(path or "").lower()
+    if not lower_path:
+        return False
+    source_name = os.path.basename(lower_path)
+    if target_mode == "g3mpatch":
+        return _is_xdelta_source(path) or _is_csx_source(path)
+    if target_mode == "xdelta":
+        return _is_g3mpatch_source(path) or _is_csx_source(path)
+    if target_mode in {"data.win", "game.ios"}:
+        if _is_g3mpatch_source(path) or _is_xdelta_source(path) or _is_csx_source(path):
+            return True
+        if _is_ready_data_source(path):
+            if source_name not in {"data.win", "game.ios"}:
+                return False
+            return source_name != target_mode
+    return False
+
+
+def _resolve_target_data_name(original_path: str, target_mode: str) -> str:
+    if target_mode in {"data.win", "game.ios"}:
+        return target_mode
+    return os.path.basename(original_path)
 
 
 def _get_app_font(app_state) -> str:
@@ -512,14 +561,14 @@ class _DataConvertWorkerThread(QThread):
     finished = pyqtSignal(bool, str)
 
     def __init__(
-        self, g3m, mod_folder, config_data, game_path, target_xdelta, parent=None
+        self, g3m, mod_folder, config_data, game_path, target_mode, parent=None
     ) -> None:
         super().__init__(parent)
         self._g3m = g3m
         self._mod_folder = mod_folder
         self._config_data = config_data
         self._game_path = game_path
-        self._target_xdelta = target_xdelta
+        self._target_mode = target_mode
 
     def run(self):
         try:
@@ -545,14 +594,7 @@ class _DataConvertWorkerThread(QThread):
                 patch_path = resolve_mod_file_path(self._mod_folder, data_path)
                 if not patch_path:
                     continue
-                is_xdelta = _is_xdelta_source(data_path)
-                is_g3m = _is_g3mpatch_source(patch_path)
-                is_csx = _is_csx_source(data_path)
-                if self._target_xdelta and is_xdelta:
-                    continue
-                if not self._target_xdelta and is_g3m:
-                    continue
-                if not is_xdelta and not is_g3m and not is_csx:
+                if not _should_convert_source_to_target(patch_path, self._target_mode):
                     continue
                 if not os.path.isfile(patch_path):
                     continue
@@ -585,7 +627,7 @@ class _DataConvertWorkerThread(QThread):
             version = (version.split("|", 1)[0].strip() if version else "") or "1.0.0"
             version_name = get_unique_version_name(
                 self._mod_folder,
-                f"{version} - {'xdelta' if self._target_xdelta else 'g3mpatch'}",
+                f"{version} - {_target_version_label(self._target_mode)}",
             )
             self.progress.emit(
                 tr("modding_tools.convert_saving_version", version=version_name)
@@ -614,40 +656,69 @@ class _DataConvertWorkerThread(QThread):
                         rc, _, err = _apply_source_to_data(
                             self._g3m, original, patch_path, temp_modified
                         )
-                        if rc != 0:
-                            self.finished.emit(False, err[:300])
-                            return
-                        new_name = f"{os.path.splitext(os.path.basename(patch_path))[0]}{'.xdelta' if self._target_xdelta else '.g3mpatch'}"
-                        new_path = os.path.join(os.path.dirname(patch_path), new_name)
-                        if self._target_xdelta:
-                            rc, _, err = self._g3m.xpatch_create(
-                                original, temp_modified, new_path
+                        if _target_is_ready_data(self._target_mode):
+                            target_name = _resolve_target_data_name(
+                                original, self._target_mode
                             )
-                            patch_type = "xdelta"
+                            new_name = _rename_data_output_name(patch_path, target_name)
+                            new_path = os.path.join(os.path.dirname(patch_path), new_name)
+                            if (
+                                rc == 0
+                                and (
+                                    _is_g3mpatch_source(patch_path)
+                                    or _is_xdelta_source(patch_path)
+                                    or _is_csx_source(patch_path)
+                                )
+                            ):
+                                shutil.copy2(temp_modified, new_path)
+                            elif _is_ready_data_source(patch_path):
+                                shutil.copy2(patch_path, new_path)
+                            else:
+                                self.finished.emit(
+                                    False,
+                                    tr(
+                                        "modding_tools.convert_unsupported_source",
+                                        file=os.path.basename(patch_path),
+                                    ),
+                                )
+                                return
                         else:
-                            rc, _, err = self._g3m.patch_create(
-                                original, temp_modified, new_path
+                            if rc != 0:
+                                self.finished.emit(False, err[:300])
+                                return
+                            new_name = f"{os.path.splitext(os.path.basename(patch_path))[0]}{'.xdelta' if self._target_mode == 'xdelta' else '.g3mpatch'}"
+                            new_path = os.path.join(os.path.dirname(patch_path), new_name)
+                            if self._target_mode == "xdelta":
+                                rc, _, err = self._g3m.xpatch_create(
+                                    original, temp_modified, new_path
+                                )
+                                patch_type = "xdelta"
+                            else:
+                                rc, _, err = self._g3m.patch_create(
+                                    original, temp_modified, new_path
+                                )
+                                patch_type = "g3mpatch"
+                            if rc != 0:
+                                self.finished.emit(False, err[:300])
+                                return
+                            verified, verify_error = verify_generated_patch(
+                                self._g3m,
+                                original,
+                                temp_modified,
+                                new_path,
+                                patch_type=patch_type,
                             )
-                            patch_type = "g3mpatch"
-                        if rc != 0:
-                            self.finished.emit(False, err[:300])
-                            return
-                        verified, verify_error = verify_generated_patch(
-                            self._g3m,
-                            original,
-                            temp_modified,
-                            new_path,
-                            patch_type=patch_type,
-                        )
-                        if not verified:
-                            with suppress(OSError):
-                                os.remove(new_path)
-                            self.finished.emit(False, verify_error[:300])
-                            return
+                            if not verified:
+                                with suppress(OSError):
+                                    os.remove(new_path)
+                                self.finished.emit(False, verify_error[:300])
+                                return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
                         with suppress(OSError):
                             os.remove(patch_path)
-                    ch_info["data_file_path"] = new_name
+                    ch_info["data_file_path"] = os.path.relpath(
+                        new_path, converted_mod_folder
+                    ).replace("\\", "/")
                     converted += 1
 
                 from utils.mod_config_parser import build_mod_config_data
@@ -709,7 +780,7 @@ class _DataConvertTab(QWidget):
         self._fmt_label = QLabel(tr("modding_tools.convert_target_format"))
         fmt_row.addWidget(self._fmt_label)
         self._fmt_combo = QComboBox()
-        self._fmt_combo.addItems(["g3mpatch", "xdelta"])
+        self._fmt_combo.addItems(list(_CONVERT_TARGET_OPTIONS))
         self._fmt_combo.setToolTip(tr("tooltips.modding_tools_target_format"))
         self._fmt_combo.currentIndexChanged.connect(self._scan_mods)
         fmt_row.addWidget(self._fmt_combo)
@@ -782,7 +853,7 @@ class _DataConvertTab(QWidget):
         if not os.path.isdir(mods_root):
             self._status_label.setText(tr("modding_tools.convert_no_mods"))
             return
-        target_xdelta = self._fmt_combo.currentIndex() == 1
+        target_mode = _convert_target_mode(self._fmt_combo.currentIndex())
         found = 0
         for folder_name in sorted(os.listdir(mods_root)):
             folder_path = os.path.join(mods_root, folder_name)
@@ -810,15 +881,10 @@ class _DataConvertTab(QWidget):
                 url = ch.get("data_file_path") or ch.get("data_file_url", "")
                 if not url:
                     continue
-                low = url.lower()
-                patch_path = os.path.join(folder_path, url)
-                if target_xdelta and _is_g3mpatch_source(patch_path):
-                    has_convertible = True
-                    break
-                if not target_xdelta and (_is_xdelta_source(low) or _is_csx_source(low)):
-                    has_convertible = True
-                    break
-                if target_xdelta and _is_csx_source(low):
+                from utils.mod_config_parser import resolve_mod_file_path
+
+                source_path = resolve_mod_file_path(folder_path, url)
+                if _should_convert_source_to_target(source_path, target_mode):
                     has_convertible = True
                     break
             if not has_convertible:
@@ -884,11 +950,11 @@ class _DataConvertTab(QWidget):
             )
             return
 
-        target_xdelta = self._fmt_combo.currentIndex() == 1
+        target_mode = _convert_target_mode(self._fmt_combo.currentIndex())
         self._set_busy(True)
         self._status_label.setText(tr("modding_tools.running"))
         self._worker = _DataConvertWorkerThread(
-            self._g3m, mod_folder, config_data, game_path, target_xdelta
+            self._g3m, mod_folder, config_data, game_path, target_mode
         )
         self._worker.progress.connect(self._status_label.setText)
         self._worker.finished.connect(self._on_finished)

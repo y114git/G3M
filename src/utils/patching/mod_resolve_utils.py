@@ -68,6 +68,67 @@ def _resolve_mod_root_dir(
     return mod_id, None
 
 
+def _load_chapter_config_entry(source_dir: str, mod_data: Any, chapter_id: str) -> dict:
+    config_path = os.path.join(source_dir, "mod_config.json")
+    if not os.path.exists(config_path):
+        return {}
+    try:
+        config_data = load_json(config_path)
+        normalize_mod_config_data(config_data, mod_root_path=source_dir)
+        game = resolve_mod_game(mod_data, source_dir)
+        normalized_id = normalize_chapter_id(chapter_id, game)
+        files_data = config_data.get("files", {})
+        chapter_info = files_data.get(normalized_id) or files_data.get(chapter_id)
+        return chapter_info if isinstance(chapter_info, dict) else {}
+    except Exception as e:
+        logger.debug(
+            "Failed to load chapter config entry for %s from %s: %s",
+            chapter_id,
+            config_path,
+            e,
+            exc_info=True,
+        )
+        return {}
+
+
+def _get_configured_chapter_dir(source_dir: str, mod_data: Any, chapter_id: str) -> str | None:
+    chapter_info = _load_chapter_config_entry(source_dir, mod_data, chapter_id)
+    if not chapter_info:
+        return None
+
+    candidate_dirs: list[str] = []
+    configured_paths = []
+    data_file_path = chapter_info.get("data_file_path") or chapter_info.get("data_file_url")
+    if isinstance(data_file_path, str) and data_file_path.strip():
+        configured_paths.append(data_file_path)
+    extra_files = chapter_info.get("extra_files")
+    if isinstance(extra_files, list):
+        configured_paths.extend(
+            path for path in extra_files if isinstance(path, str) and path.strip()
+        )
+
+    for rel_path in configured_paths:
+        resolved_path = resolve_mod_file_path(source_dir, rel_path)
+        if not resolved_path:
+            continue
+        candidate_dir = (
+            resolved_path
+            if os.path.isdir(resolved_path)
+            else os.path.dirname(resolved_path)
+        )
+        if candidate_dir:
+            candidate_dirs.append(os.path.normpath(candidate_dir))
+
+    if not candidate_dirs:
+        return None
+
+    try:
+        common_dir = os.path.commonpath(candidate_dirs)
+        return common_dir if os.path.isdir(common_dir) else None
+    except ValueError:
+        return None
+
+
 def get_mod_configured_data_file(
     mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
 ) -> str | None:
@@ -91,26 +152,60 @@ def get_mod_configured_data_file(
                 chapter_data, "data_file_url", None
             )
     if not configured_path:
-        config_path = os.path.join(source_dir, "mod_config.json")
-        if os.path.exists(config_path):
-            try:
-                config_data = load_json(config_path)
-                normalize_mod_config_data(config_data, mod_root_path=source_dir)
-                game = resolve_mod_game(mod_data, source_dir)
-                normalized_id = normalize_chapter_id(chapter_id, game)
-                files_data = config_data.get("files", {})
-                chapter_info = files_data.get(normalized_id) or files_data.get(chapter_id)
-                if isinstance(chapter_info, dict):
-                    configured_path = chapter_info.get("data_file_path") or chapter_info.get(
-                        "data_file_url"
-                    )
-            except Exception as e:
-                caller_logger.debug(
-                    f"get_mod_configured_data_file: failed to inspect {config_path}: {e}",
-                    exc_info=True,
-                )
+        chapter_info = _load_chapter_config_entry(source_dir, mod_data, chapter_id)
+        configured_path = chapter_info.get("data_file_path") or chapter_info.get(
+            "data_file_url"
+        )
     resolved_path = resolve_mod_file_path(source_dir, configured_path)
     return resolved_path or None
+
+
+def get_mod_configured_extra_files(
+    mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
+) -> list[str]:
+    _mod_id, source_dir = _resolve_mod_root_dir(
+        mod_data, mod_service, app_state, caller_logger
+    )
+    if not source_dir:
+        return []
+
+    configured_paths: list[str] = []
+    if hasattr(mod_data, "get_chapter_data"):
+        try:
+            chapter_data = mod_data.get_chapter_data(chapter_id)
+        except Exception as e:
+            caller_logger.debug(
+                "get_mod_configured_extra_files: get_chapter_data failed for %s: %s",
+                chapter_id,
+                e,
+                exc_info=True,
+            )
+            chapter_data = None
+        if chapter_data:
+            configured_paths.extend(
+                str(path)
+                for path in getattr(chapter_data, "extra_files", []) or []
+                if isinstance(path, str) and path.strip()
+            )
+    if not configured_paths:
+        chapter_info = _load_chapter_config_entry(source_dir, mod_data, chapter_id)
+        configured_paths.extend(
+            str(path)
+            for path in chapter_info.get("extra_files", []) or []
+            if isinstance(path, str) and path.strip()
+        )
+    return configured_paths
+
+
+def has_mod_configured_chapter_entry(
+    mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
+) -> bool:
+    _mod_id, source_dir = _resolve_mod_root_dir(
+        mod_data, mod_service, app_state, caller_logger
+    )
+    if not source_dir:
+        return False
+    return bool(_load_chapter_config_entry(source_dir, mod_data, chapter_id))
 
 
 def get_mod_source_dir(
@@ -125,19 +220,29 @@ def get_mod_source_dir(
     game = resolve_mod_game(mod_data, source_dir)
     chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
     chapter_dir = os.path.join(source_dir, chapter_folder_name)
-    if not os.path.isdir(chapter_dir):
-        if chapter_id.endswith("_0"):
-            if game == "pizzatower":
-                pizzatower_dir = os.path.join(source_dir, "pizzatower")
-                if os.path.isdir(pizzatower_dir):
-                    return pizzatower_dir
-            alt_menu_dir = os.path.join(source_dir, "menu")
-            if os.path.isdir(alt_menu_dir):
-                return alt_menu_dir
-        elif "_" not in str(chapter_id):
-            return source_dir
-        return None
-    return chapter_dir
+    if os.path.isdir(chapter_dir):
+        return chapter_dir
+
+    alt_dirs = []
+    if chapter_folder_name.startswith("chapter_"):
+        alt_dirs.append(os.path.join(source_dir, chapter_folder_name.replace("chapter_", "chapter", 1)))
+    alt_dirs.append(_get_configured_chapter_dir(source_dir, mod_data, chapter_id))
+
+    for alt_dir in alt_dirs:
+        if alt_dir and os.path.isdir(alt_dir):
+            return alt_dir
+
+    if chapter_id.endswith("_0"):
+        if game == "pizzatower":
+            pizzatower_dir = os.path.join(source_dir, "pizzatower")
+            if os.path.isdir(pizzatower_dir):
+                return pizzatower_dir
+        alt_menu_dir = os.path.join(source_dir, "menu")
+        if os.path.isdir(alt_menu_dir):
+            return alt_menu_dir
+    elif "_" not in str(chapter_id):
+        return source_dir
+    return None
 
 
 def get_target_dir(

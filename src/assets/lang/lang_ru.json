@@ -4,7 +4,7 @@
     "language_name": "Русский",
     "font": "main.ttf",
     "qt_translation": "qtbase_ru",
-    "version": "3.0.2"
+    "version": "3.0.3"
   },
   "blocklist": {
     "title": "Менеджер блоклиста",
@@ -961,6 +961,7 @@
     "convert_no_data_files": "У этого мода нет DATA патч-файлов для конвертации.",
     "convert_game_path_missing": "Путь к игре {game} не указан. Пожалуйста, укажите путь к игре в настройках, чтобы получить доступ к оригинальным DATA файлам.",
     "convert_original_not_found": "Оригинальный файл данных не найден: {path}",
+    "convert_unsupported_source": "Неподдерживаемый источник конвертации: {file}",
     "convert_saving_version": "Создание новой версии мода \"{version}\"...",
     "convert_progress": "Конвертация {current}/{total}: {file}...",
     "convert_data_success": "Конвертировано {count} файл(ов). Новая версия \"{version}\" доступна в версиях мода.",

@@ -60,6 +60,7 @@ from services.localization_service import (
     localization_service,
     tr,
 )
+from services.profile_service import is_profile_key
 from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import (
     apply_rounded_mask,
@@ -1255,9 +1256,14 @@ class AppWindow(QWidget):
             if hasattr(self, "profile_service")
             else None
         )
-        self.app_state.local_config = (
-            self.settings_service.read_json(self.app_state.config_path) or {}
-        )
+        profile_values = {
+            key: value
+            for key, value in self.app_state.local_config.items()
+            if is_profile_key(key)
+        }
+        refreshed_settings = self.settings_service.read_json(self.app_state.config_path) or {}
+        refreshed_settings.update(profile_values)
+        self.app_state.local_config = refreshed_settings
         if active_profile:
             self.app_state.local_config["active_profile"] = active_profile
         self.app_state.local_config["last_selected_profile"] = last_selected_profile

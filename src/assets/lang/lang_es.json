@@ -4,7 +4,7 @@
     "language_name": "Español",
     "font": "main.ttf",
     "qt_translation": "qtbase_es",
-    "version": "3.0.2"
+    "version": "3.0.3"
   },
   "blocklist": {
     "title": "Gestor de Blocklist",
@@ -961,6 +961,7 @@
     "convert_no_data_files": "Este mod no tiene archivos DATA de parche para convertir.",
     "convert_game_path_missing": "La ruta del juego {game} no está configurada. Configúrela en Ajustes para acceder a los archivos DATA originales.",
     "convert_original_not_found": "Archivo de datos original no encontrado: {path}",
+    "convert_unsupported_source": "Fuente de conversión no compatible: {file}",
     "convert_saving_version": "Creando la versión convertida del mod \"{version}\"...",
     "convert_progress": "Convirtiendo {current}/{total}: {file}...",
     "convert_data_success": "Se convirtieron {count} archivo(s). La nueva versión \"{version}\" está disponible en versiones del mod.",

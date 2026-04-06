@@ -155,7 +155,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
             "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
         },
         str(tmp_path / "game_root"),
-        False,
+        "g3mpatch",
     )
     result = []
     worker.finished.connect(lambda success, message: result.append((success, message)))
@@ -229,7 +229,7 @@ def test_data_convert_accepts_g3mpatch_zip_as_source(tmp_path, monkeypatch):
             "files": {"deltarune_1": {"data_file_path": "data.zip"}},
         },
         str(tmp_path / "game_root"),
-        True,
+        "xdelta",
     )
     result = []
     worker.finished.connect(lambda success, message: result.append((success, message)))
@@ -294,7 +294,7 @@ def test_data_convert_accepts_csx_source(tmp_path, monkeypatch):
             "files": {"deltarune_1": {"data_file_path": "data.csx"}},
         },
         str(tmp_path / "game_root"),
-        False,
+        "g3mpatch",
     )
     result = []
     worker.finished.connect(lambda success, message: result.append((success, message)))
@@ -309,6 +309,76 @@ def test_data_convert_accepts_csx_source(tmp_path, monkeypatch):
         assert "data.g3mpatch" in zf.namelist()
         converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
     assert converted_config["files"]["deltarune_1"]["data_file_path"] == "data.g3mpatch"
+
+
+def test_data_convert_preserves_chapter_relative_path_in_converted_config(
+    tmp_path, monkeypatch
+):
+    """Checks that chapter-scoped conversions keep chapter folders in mod_config."""
+    mod_folder = tmp_path / "mod"
+    versions_dir = mod_folder / "mod_versions"
+    patch_dir = mod_folder / "chapter_3"
+    patch_dir.mkdir(parents=True)
+    versions_dir.mkdir()
+    patch_path = patch_dir / "data.xdelta"
+    patch_path.write_text("old patch", encoding="utf-8")
+    config_path = mod_folder / "mod_config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "version": "1.2.3",
+                "game": "deltarune",
+                "files": {"deltarune_3": {"data_file_path": "chapter_3/data.xdelta"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    game_dir = tmp_path / "game"
+    game_dir.mkdir()
+    (game_dir / "data.win").write_text("original", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "models.game_modes.get_game",
+        lambda game: SimpleNamespace(
+            get_tab=lambda file_key: SimpleNamespace(tab_id=file_key)
+        ),
+    )
+    monkeypatch.setattr(
+        "utils.mod_config_parser.resolve_mod_file_path",
+        lambda folder, stored_path: str(mod_folder / stored_path),
+    )
+    monkeypatch.setattr(
+        "utils.path_utils.find_chapter_resource_dir",
+        lambda game_path, chapter_id: str(game_dir),
+    )
+
+    worker = _DataConvertWorkerThread(
+        _FakeG3M(),
+        str(mod_folder),
+        {
+            "version": "1.2.3",
+            "game": "deltarune",
+            "files": {"deltarune_3": {"data_file_path": "chapter_3/data.xdelta"}},
+        },
+        str(tmp_path / "game_root"),
+        "g3mpatch",
+    )
+    result = []
+    worker.finished.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert result == [
+        (True, tr("modding_tools.convert_data_success", count=1, version="1.2.3 - g3mpatch"))
+    ]
+    version_zip = versions_dir / "1.2.3 - g3mpatch.zip"
+    with zipfile.ZipFile(version_zip) as zf:
+        assert "chapter_3/data.g3mpatch" in zf.namelist()
+        converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
+    assert (
+        converted_config["files"]["deltarune_3"]["data_file_path"]
+        == "chapter_3/data.g3mpatch"
+    )
 
 
 def test_convert_worker_rejects_generated_patch_that_fails_roundtrip(tmp_path):
@@ -410,7 +480,7 @@ def test_data_convert_rejects_unverifiable_generated_patch(tmp_path, monkeypatch
             "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
         },
         str(tmp_path / "game_root"),
-        False,
+        "g3mpatch",
     )
     result = []
     worker.finished.connect(lambda success, message: result.append((success, message)))

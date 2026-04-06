@@ -290,7 +290,82 @@ class TestModClassification:
 
         mod_infos = patcher._collect_mod_infos([mod_data], "deltarune_0")
 
-        assert mod_infos == [(str(data_file), MOD_TYPE_DATAFILE, None)]
+        assert mod_infos == [(str(data_file), MOD_TYPE_DATAFILE, str(mod_dir))]
+
+    def test_get_mod_source_dir_uses_configured_root_files_when_chapter_folder_missing(
+        self, tmp_path
+    ):
+        """Checks that root overrides still resolve to the mod root without chapter_0 folder."""
+        mod_dir = tmp_path / "cozy_root"
+        mod_dir.mkdir()
+        (mod_dir / "data.g3mpatch").write_bytes(b"patch")
+        (mod_dir / "ru_data.json").write_text("{}", encoding="utf-8")
+        (mod_dir / "mod_config.json").write_text(
+            json.dumps(
+                {
+                    "id": "cozy_root",
+                    "name": "cozy_root",
+                    "author": "Local author",
+                    "version": "1.0.0",
+                    "game": "deltarune",
+                    "files": {
+                        "deltarune_0": {
+                            "data_file_path": "data.g3mpatch",
+                            "extra_files": ["ru_data.json"],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        app_state = Mock()
+        app_state.local_config = {}
+        app_state.mods_dir = str(tmp_path)
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = str(mod_dir)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        mod_data = SimpleNamespace(id="cozy_root", name="cozy_root", game="deltarune")
+
+        assert patcher._get_mod_source_dir(mod_data, "deltarune_0") == str(mod_dir)
+
+    def test_get_mod_source_dir_uses_configured_chapter_directory_without_legacy_name(
+        self, tmp_path
+    ):
+        """Checks that chapter3/ chapter4 style folders still resolve for overrides."""
+        mod_dir = tmp_path / "cozy_ch3"
+        chapter_dir = mod_dir / "chapter3" / "lang"
+        chapter_dir.mkdir(parents=True)
+        (mod_dir / "chapter3" / "data.g3mpatch").write_bytes(b"patch")
+        (chapter_dir / "lang_en.json").write_text("{}", encoding="utf-8")
+        (mod_dir / "mod_config.json").write_text(
+            json.dumps(
+                {
+                    "id": "cozy_ch3",
+                    "name": "cozy_ch3",
+                    "author": "Local author",
+                    "version": "1.0.0",
+                    "game": "deltarune",
+                    "files": {
+                        "deltarune_3": {
+                            "data_file_path": "chapter3/data.g3mpatch",
+                            "extra_files": ["chapter3/lang/lang_en.json"],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        app_state = Mock()
+        app_state.local_config = {}
+        app_state.mods_dir = str(tmp_path)
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = str(mod_dir)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        mod_data = SimpleNamespace(id="cozy_ch3", name="cozy_ch3", game="deltarune")
+
+        assert patcher._get_mod_source_dir(mod_data, "deltarune_3") == str(
+            mod_dir / "chapter3"
+        )
 
     def test_classify_csx(self, tmp_path):
         """Checks that classifying csx scripts."""
@@ -586,6 +661,112 @@ class TestCsxPatchApplication:
 
 class TestFileOverrideProgress:
     """Tests for patching and merging."""
+    def test_apply_file_overrides_uses_only_configured_root_entries(self, tmp_path):
+        """Checks that config-driven root overrides do not copy unrelated chapter folders."""
+        from utils.patching.file_override_utils import apply_file_overrides
+
+        mod_dir = tmp_path / "mod"
+        target_dir = tmp_path / "target"
+        mod_dir.mkdir()
+        target_dir.mkdir()
+        (mod_dir / "ru_data.json").write_text("{}", encoding="utf-8")
+        (mod_dir / "chapter3").mkdir()
+        (mod_dir / "chapter3" / "lang_en.json").write_text("broken", encoding="utf-8")
+
+        patcher = Mock()
+        patcher.xdelta_modpack = False
+        patcher._backup_or_mark_file = Mock()
+        patcher._request_warning = Mock(return_value=True)
+        patcher.patching_logger = Mock()
+
+        result = apply_file_overrides(
+            patcher,
+            str(mod_dir),
+            str(target_dir),
+            set(),
+            False,
+            chapter_id="deltarune_0",
+            mod_name="Test Mod",
+            game_id="deltarune",
+            configured_paths=["ru_data.json"],
+            mod_root_dir=str(mod_dir),
+        )
+
+        assert result is True
+        assert (target_dir / "ru_data.json").read_text(encoding="utf-8") == "{}"
+        assert not (target_dir / "chapter3").exists()
+
+    def test_apply_file_overrides_strips_chapter_prefix_for_configured_entries(
+        self, tmp_path
+    ):
+        """Checks that chapter-prefixed extra_files land inside the target chapter root."""
+        from utils.patching.file_override_utils import apply_file_overrides
+
+        mod_dir = tmp_path / "mod"
+        target_dir = tmp_path / "target"
+        (mod_dir / "chapter3" / "lang").mkdir(parents=True)
+        (mod_dir / "chapter3" / "lang" / "lang_en.json").write_text(
+            "hello", encoding="utf-8"
+        )
+        target_dir.mkdir()
+
+        patcher = Mock()
+        patcher.xdelta_modpack = False
+        patcher._backup_or_mark_file = Mock()
+        patcher._request_warning = Mock(return_value=True)
+        patcher.patching_logger = Mock()
+
+        result = apply_file_overrides(
+            patcher,
+            str(mod_dir / "chapter3"),
+            str(target_dir),
+            set(),
+            False,
+            chapter_id="deltarune_3",
+            mod_name="Test Mod",
+            game_id="deltarune",
+            configured_paths=["chapter3/lang/"],
+            mod_root_dir=str(mod_dir),
+        )
+
+        assert result is True
+        assert (target_dir / "lang" / "lang_en.json").read_text(encoding="utf-8") == "hello"
+        assert not (target_dir / "chapter3").exists()
+
+    def test_apply_file_overrides_skips_legacy_walk_when_config_has_no_extra_files(
+        self, tmp_path
+    ):
+        """Checks that config-driven chapters with no extra_files do not copy stray files."""
+        from utils.patching.file_override_utils import apply_file_overrides
+
+        mod_dir = tmp_path / "mod"
+        target_dir = tmp_path / "target"
+        mod_dir.mkdir()
+        target_dir.mkdir()
+        (mod_dir / "readme.txt").write_text("hello", encoding="utf-8")
+
+        patcher = Mock()
+        patcher.xdelta_modpack = False
+        patcher._backup_or_mark_file = Mock()
+        patcher._request_warning = Mock(return_value=True)
+        patcher.patching_logger = Mock()
+
+        result = apply_file_overrides(
+            patcher,
+            str(mod_dir),
+            str(target_dir),
+            set(),
+            False,
+            chapter_id="deltarune_4",
+            mod_name="Test Mod",
+            game_id="deltarune",
+            configured_paths=[],
+            mod_root_dir=str(mod_dir),
+        )
+
+        assert result is True
+        assert not (target_dir / "readme.txt").exists()
+
     def test_apply_file_overrides_reports_incremental_progress(self, tmp_path):
         """Checks that applying file overrides reports incremental progress."""
         from utils.patching.file_override_utils import apply_file_overrides

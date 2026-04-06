@@ -37,6 +37,7 @@ from ui.common.styling import (
     round_pixmap,
 )
 from utils.file_utils import (
+    get_chapter_folder_name,
     get_file_filter,
     get_unique_mod_dir,
 )
@@ -1067,46 +1068,94 @@ class ModEditorDialog(QDialog):
             if data_path:
                 resolved = self._resolve_file_path(data_path)
                 if os.path.exists(resolved):
-                    dest = os.path.join(mod_dir, os.path.basename(resolved))
-                    if os.path.abspath(resolved) != os.path.abspath(dest):
-                        if os.path.exists(dest):
-                            if os.path.isdir(dest):
-                                shutil.rmtree(dest)
-                            else:
-                                os.remove(dest)
-                        if os.path.isdir(resolved):
-                            shutil.copytree(resolved, dest)
-                        else:
-                            shutil.copy2(resolved, dest)
-                    new_fd["data_file_path"] = self._format_config_path(
-                        os.path.basename(resolved), is_directory=os.path.isdir(resolved)
+                    stored_path = self._build_storage_path(
+                        mod_dir,
+                        file_key,
+                        data_path,
+                        resolved,
+                        game,
                     )
+                    dest = resolve_mod_file_path(mod_dir, stored_path)
+                    self._copy_path_into_mod_dir(resolved, dest)
+                    new_fd["data_file_path"] = stored_path
             for path in parse_extra_files_raw(fd.get("extra_files", [])):
                 if not path:
                     continue
                 resolved = self._resolve_file_path(path)
                 if not os.path.exists(resolved):
                     continue
-                dest = os.path.join(mod_dir, os.path.basename(resolved))
-                if os.path.abspath(resolved) != os.path.abspath(dest):
-                    if os.path.exists(dest):
-                        if os.path.isdir(dest):
-                            shutil.rmtree(dest)
-                        else:
-                            os.remove(dest)
-                    if os.path.isdir(resolved):
-                        shutil.copytree(resolved, dest)
-                    else:
-                        shutil.copy2(resolved, dest)
+                stored_path = self._build_storage_path(
+                    mod_dir,
+                    file_key,
+                    path,
+                    resolved,
+                    game,
+                )
+                dest = resolve_mod_file_path(mod_dir, stored_path)
+                self._copy_path_into_mod_dir(resolved, dest)
                 new_fd.setdefault("extra_files", []).append(
-                    self._format_config_path(
-                        os.path.basename(resolved),
-                        is_directory=os.path.isdir(resolved),
-                    )
+                    stored_path
                 )
             if new_fd:
                 processed[file_key] = new_fd
         return processed
+
+    @classmethod
+    def _copy_path_into_mod_dir(cls, resolved: str, dest: str) -> None:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        if os.path.abspath(resolved) == os.path.abspath(dest):
+            return
+        if os.path.exists(dest):
+            if os.path.isdir(dest):
+                shutil.rmtree(dest)
+            else:
+                os.remove(dest)
+        if os.path.isdir(resolved):
+            shutil.copytree(resolved, dest)
+        else:
+            shutil.copy2(resolved, dest)
+
+    def _build_storage_path(
+        self,
+        mod_dir: str,
+        file_key: str,
+        original_path: str,
+        resolved: str,
+        game: str,
+    ) -> str:
+        normalized_original = self._format_config_path(
+            original_path,
+            is_directory=os.path.isdir(resolved),
+        )
+        if not os.path.isabs(normalized_original):
+            return normalized_original
+
+        try:
+            rel_from_mod = os.path.relpath(resolved, mod_dir).replace("\\", "/")
+            if not rel_from_mod.startswith("../") and rel_from_mod != "..":
+                return self._format_config_path(
+                    rel_from_mod,
+                    is_directory=os.path.isdir(resolved),
+                )
+        except ValueError:
+            pass
+
+        chapter_root = self._chapter_storage_root(file_key, game)
+        target_name = os.path.basename(resolved.rstrip("\\/"))
+        if chapter_root:
+            return self._format_config_path(
+                f"{chapter_root}/{target_name}",
+                is_directory=os.path.isdir(resolved),
+            )
+        return self._format_config_path(target_name, is_directory=os.path.isdir(resolved))
+
+    @staticmethod
+    def _chapter_storage_root(file_key: str, game: str) -> str:
+        normalized_key = str(file_key or "")
+        if normalized_key.endswith("_0") or normalized_key == game:
+            return ""
+        folder_name = get_chapter_folder_name(normalized_key, game=game)
+        return folder_name or ""
 
     def _refresh_after_save(self):
         self.parent_app.mod_service.invalidate_mods_cache()

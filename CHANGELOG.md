@@ -1,3 +1,8 @@
+### Version 3.0.3 — 06.04.26
+
+- Added the ability to convert your mods into data.win or game.ios format (You can perform the conversion once and in the future applying the desired mod will be instant, however the mod will take up as much space as the original game plus the patch)
+- Fixed a bunch of bugs related to the library, mod editor, and tests
+
 ### Version 3.0.2 — 05.04.26
 
 - Added a new built-in theme SUGARYG3M (Thanks to @Super Bear5 65 real)

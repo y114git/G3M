@@ -4,7 +4,7 @@
     "language_name": "English",
     "font": "main.ttf",
     "qt_translation": "qtbase_en",
-    "version": "3.0.2"
+    "version": "3.0.3"
   },
   "blocklist": {
     "title": "Blocklist Manager",
@@ -961,6 +961,7 @@
     "convert_no_data_files": "This mod has no DATA patch files to convert.",
     "convert_game_path_missing": "{game} game path is not set. Please set it in Settings to resolve original DATA files.",
     "convert_original_not_found": "Original data file not found: {path}",
+    "convert_unsupported_source": "Unsupported conversion source: {file}",
     "convert_saving_version": "Creating converted mod version \"{version}\"...",
     "convert_progress": "Converting {current}/{total}: {file}...",
     "convert_data_success": "Converted {count} file(s). New version \"{version}\" is available in mod versions.",

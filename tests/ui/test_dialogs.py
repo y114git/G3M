@@ -862,6 +862,79 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_copy_preserves_existing_relative_chapter_paths(
+        self, qapp, tmp_path
+    ):
+        """Checks that editing keeps stored chapter-relative paths intact."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_dir = tmp_path / "mod"
+        (mod_dir / "chapter3" / "lang").mkdir(parents=True)
+        (mod_dir / "chapter3" / "data.g3mpatch").write_text("patch", encoding="utf-8")
+        (mod_dir / "chapter3" / "lang" / "lang_en.json").write_text(
+            "lang", encoding="utf-8"
+        )
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog._find_mod_folder = Mock(return_value=str(mod_dir))
+
+        processed = dialog._copy_files_to_mod_dir(
+            str(mod_dir),
+            {
+                "deltarune_3": {
+                    "data_file_path": "chapter3/data.g3mpatch",
+                    "extra_files": ["chapter3/lang/lang_en.json"],
+                }
+            },
+            "deltarune",
+        )
+
+        assert processed["deltarune_3"]["data_file_path"] == "chapter3/data.g3mpatch"
+        assert processed["deltarune_3"]["extra_files"] == ["chapter3/lang/lang_en.json"]
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_copy_places_external_chapter_files_under_chapter_folder(
+        self, qapp, tmp_path
+    ):
+        """Checks that chapter-specific external files are stored under the chapter folder."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        patch_file = source_dir / "data.g3mpatch"
+        patch_file.write_text("patch", encoding="utf-8")
+
+        mods_dir = tmp_path / "mods"
+        mods_dir.mkdir()
+        mod_dir = mods_dir / "created"
+        mod_dir.mkdir()
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(mods_dir))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        processed = dialog._copy_files_to_mod_dir(
+            str(mod_dir),
+            {"deltarune_3": {"data_file_path": str(patch_file)}},
+            "deltarune",
+        )
+
+        assert processed["deltarune_3"]["data_file_path"] == "chapter_3/data.g3mpatch"
+        assert (mod_dir / "chapter_3" / "data.g3mpatch").is_file()
+        dialog.close()
+        parent.deleteLater()
+
 
 class TestManualInstallDialog:
     """Tests for dialogs."""

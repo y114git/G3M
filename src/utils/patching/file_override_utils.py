@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 
-from config.config import ARCHIVE_EXTENSIONS, SKIP_FILES
+from config.config import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
 from services.localization_service import tr
 from utils.patching import mod_content_utils as mod_content
 from utils.pizzatower_afom_utils import (
@@ -12,6 +12,278 @@ from utils.pizzatower_afom_utils import (
     is_top_level_towers_archive,
     is_towers_subpath,
 )
+
+
+def _normalize_override_path(path: str) -> str:
+    normalized = str(path or "").replace("\\", "/").strip().lstrip("/")
+    if not normalized:
+        return ""
+    if str(path).rstrip().endswith(("/", "\\")):
+        normalized = normalized.rstrip("/")
+        return f"{normalized}/" if normalized else ""
+    return normalized.rstrip("/")
+
+
+def _chapter_path_prefixes(chapter_id: str, game_id: str | None = None) -> tuple[str, ...]:
+    prefixes: list[str] = []
+    chapter_name = str(chapter_id or "")
+    if chapter_name.startswith("deltarune_"):
+        chapter_suffix = chapter_name.rsplit("_", 1)[-1]
+        if chapter_suffix.isdigit():
+            prefixes.extend(
+                (
+                    f"chapter_{chapter_suffix}/",
+                    f"chapter{chapter_suffix}/",
+                    f"chapter{chapter_suffix}_windows/",
+                    f"chapter_{chapter_suffix}_windows/",
+                )
+            )
+    elif chapter_name == "deltarunedemo":
+        prefixes.extend(("demo/",))
+    elif chapter_name == "undertale":
+        prefixes.extend(("undertale/", "chapter_0/"))
+    elif chapter_name == "pizzatower":
+        prefixes.extend(("pizzatower/",))
+    elif chapter_name:
+        prefixes.extend((f"{chapter_name}/",))
+    if game_id == "deltarune" and chapter_name.endswith("_0"):
+        prefixes.extend(("menu/",))
+    return tuple(dict.fromkeys(prefixes))
+
+
+def _target_relative_override_path(
+    stored_path: str, chapter_id: str | None, game_id: str | None = None
+) -> str:
+    normalized = _normalize_override_path(stored_path)
+    if not normalized:
+        return ""
+    for prefix in _chapter_path_prefixes(str(chapter_id or ""), game_id):
+        if normalized.startswith(prefix):
+            return normalized[len(prefix) :]
+    return normalized
+
+
+def _iter_configured_override_entries(
+    mod_root_dir: str,
+    configured_paths: list[str] | None,
+    chapter_id: str | None,
+    game_id: str | None = None,
+):
+    for stored_path in configured_paths or []:
+        normalized = _normalize_override_path(stored_path)
+        if not normalized:
+            continue
+        source_path = os.path.normpath(os.path.join(mod_root_dir, normalized.rstrip("/")))
+        target_relative = _target_relative_override_path(normalized, chapter_id, game_id)
+        if not target_relative:
+            continue
+        yield {
+            "source": source_path,
+            "target_relative": target_relative,
+            "is_directory": normalized.endswith("/"),
+            "display_name": normalized,
+        }
+
+
+def _count_entry_files(entries) -> int:
+    total = 0
+    for entry in entries:
+        source_path = entry["source"]
+        if entry["is_directory"]:
+            if not os.path.isdir(source_path):
+                continue
+            total += sum(
+                1
+                for root, _dirs, files in os.walk(source_path)
+                for file in files
+                if file.lower() not in SKIP_FILES
+            )
+        elif os.path.isfile(source_path):
+            total += 1
+    return total
+
+
+def _copy_override_file(
+    patcher,
+    source_path: str,
+    target_path: str,
+    target_dir: str,
+    chapter_id: int | None,
+    is_modpack: bool,
+    processed_archives: set,
+    progress_callback,
+    progress_state: dict[str, int],
+    mod_name: str,
+):
+    file = os.path.basename(source_path)
+    file_lower = file.lower()
+    progress_state["processed"] += 1
+    if progress_callback:
+        progress_callback(
+            progress_state["processed"] / max(progress_state["total"], 1),
+            tr(
+                "status.applying_file_overrides",
+                mod=mod_name,
+                current=progress_state["processed"],
+                total=progress_state["total"],
+            ),
+        )
+
+    if file_lower.endswith((".xdelta", ".vcdiff")):
+        if not is_modpack:
+            xdelta_chapter_id = (
+                chapter_id
+                if chapter_id is not None
+                else mod_content.extract_chapter_id_from_path(target_dir)
+            )
+            patch_result = apply_xdelta_override(
+                patcher,
+                file,
+                source_path,
+                target_dir,
+                xdelta_chapter_id,
+            )
+            if (patch_result is False) and (
+                not patcher._request_warning(
+                    tr(
+                        "dialogs.patching_warning.xdelta_override_skipped",
+                        patch=file,
+                        target=target_dir,
+                    )
+                )
+            ):
+                return False
+        elif patcher.xdelta_modpack:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            try:
+                shutil.copy2(source_path, target_path)
+            except Exception as e:
+                patcher.patching_logger.warning(
+                    f"Failed to copy xdelta file {source_path}: {e}"
+                )
+                return False
+        return True
+
+    if file_lower.endswith(DATA_FILE_EXTENSIONS):
+        return True
+
+    if file_lower.endswith(ARCHIVE_EXTENSIONS):
+        normalized_source = os.path.normpath(source_path)
+        if normalized_source in processed_archives:
+            return True
+        processed_archives.add(normalized_source)
+        if is_modpack:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            try:
+                shutil.copy2(source_path, target_path)
+            except Exception as e:
+                patcher.patching_logger.error(
+                    f"Failed to copy archive {source_path}: {e}"
+                )
+                return False
+        else:
+            if not extract_archive_to_target(
+                patcher,
+                source_path,
+                os.path.dirname(target_path) if target_path else target_dir,
+                chapter_id,
+                progress_callback=progress_callback,
+                mod_name=mod_name,
+            ):
+                return False
+        return True
+
+    if not is_modpack:
+        patcher._backup_or_mark_file(chapter_id, target_path)
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    try:
+        shutil.copy2(source_path, target_path)
+    except Exception as e:
+        patcher.patching_logger.error(
+            f"Failed to copy override file {source_path}: {e}"
+        )
+        return False
+    return True
+
+
+def _apply_configured_override_entries(
+    patcher,
+    entries,
+    target_dir: str,
+    chapter_id: int | None,
+    is_modpack: bool,
+    progress_callback=None,
+    mod_name: str = "",
+) -> bool:
+    total_files = _count_entry_files(entries)
+    progress_state = {"processed": 0, "total": total_files}
+    processed_archives = set()
+    for entry in entries:
+        source_path = entry["source"]
+        target_relative = entry["target_relative"]
+        if entry["is_directory"]:
+            if not os.path.isdir(source_path):
+                patcher.patching_logger.warning(
+                    "Configured extra directory not found, skipping: %s",
+                    source_path,
+                )
+                continue
+            for root, _dirs, files in os.walk(source_path):
+                rel_root = os.path.relpath(root, source_path)
+                for file in files:
+                    if file.lower() in SKIP_FILES:
+                        continue
+                    file_source = os.path.join(root, file)
+                    rel_file = (
+                        file
+                        if rel_root == "."
+                        else os.path.join(rel_root, file)
+                    )
+                    target_path = os.path.join(
+                        target_dir,
+                        target_relative.rstrip("/"),
+                        rel_file,
+                    )
+                    if not _copy_override_file(
+                        patcher,
+                        file_source,
+                        target_path,
+                        target_dir,
+                        chapter_id,
+                        is_modpack,
+                        processed_archives,
+                        progress_callback,
+                        progress_state,
+                        mod_name,
+                    ):
+                        return False
+            continue
+        if not os.path.isfile(source_path):
+            patcher.patching_logger.warning(
+                "Configured extra file not found, skipping: %s",
+                source_path,
+            )
+            continue
+        target_path = os.path.join(target_dir, target_relative)
+        if not _copy_override_file(
+            patcher,
+            source_path,
+            target_path,
+            target_dir,
+            chapter_id,
+            is_modpack,
+            processed_archives,
+            progress_callback,
+            progress_state,
+            mod_name,
+        ):
+            return False
+    if progress_callback and total_files == 0:
+        progress_callback(
+            1.0,
+            tr("status.applying_file_overrides", mod=mod_name, current=0, total=0),
+        )
+    return True
 
 
 def apply_xdelta_override(
@@ -148,6 +420,8 @@ def apply_file_overrides(
     progress_callback=None,
     mod_name: str = "",
     game_id: str | None = None,
+    configured_paths: list[str] | None = None,
+    mod_root_dir: str | None = None,
 ) -> bool:
     if not os.path.isdir(mod_source_dir):
         return True
@@ -173,6 +447,24 @@ def apply_file_overrides(
             extract_archive=extract_any_archive,
         ):
             return False
+    if configured_paths is not None:
+        configured_entries = list(
+            _iter_configured_override_entries(
+                mod_root_dir or mod_source_dir,
+                configured_paths,
+                str(chapter_id or ""),
+                game_id,
+            )
+        )
+        return _apply_configured_override_entries(
+            patcher,
+            configured_entries,
+            target_dir,
+            chapter_id,
+            is_modpack,
+            progress_callback=progress_callback,
+            mod_name=mod_name,
+        )
     total_files = sum(
         1
         for root, _dirs, files in os.walk(mod_source_dir)
