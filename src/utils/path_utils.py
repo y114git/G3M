@@ -267,20 +267,33 @@ def find_chapter_resource_dir(
             return None
         target_base = base_dir
         if CURRENT_PLATFORM == "Darwin":
-            if not target_base.endswith(".app"):
+            resources_dir = os.path.join(target_base, "Contents", "Resources")
+            if os.path.isdir(resources_dir):
+                target_base = resources_dir
+            elif target_base.endswith(".app"):
+                target_base = resources_dir
+                if not os.path.isdir(target_base):
+                    return None
+            else:
                 for app_name in macos_app_names:
                     candidate = os.path.join(target_base, app_name)
-                    if os.path.isdir(candidate):
-                        target_base = candidate
+                    resources_dir = os.path.join(candidate, "Contents", "Resources")
+                    if os.path.isdir(resources_dir):
+                        target_base = resources_dir
                         break
-            target_base = os.path.join(target_base, "Contents", "Resources")
-            if not os.path.isdir(target_base):
-                return None
+                else:
+                    if not any(
+                        os.path.isdir(os.path.join(target_base, f"chapter{n}_"))
+                        for n in range(1, 8)
+                    ) and not find_supported_game_data_file(
+                        target_base, current_platform=CURRENT_PLATFORM
+                    ):
+                        return None
         if "_" in str(chapter_id):
             _, suffix = chapter_id.rsplit("_", 1)
             if suffix.isdigit() and int(suffix) > 0:
                 prefix = f"chapter{suffix}_"
-                return next(
+                chapter_dir = next(
                     (
                         os.path.join(target_base, e)
                         for e in os.listdir(target_base)
@@ -289,6 +302,11 @@ def find_chapter_resource_dir(
                     ),
                     None,
                 )
+                if chapter_dir:
+                    return chapter_dir
+                if find_supported_game_data_file(target_base, current_platform=CURRENT_PLATFORM):
+                    return target_base
+                return None
         return target_base
     except Exception as e:
         logging.debug(

@@ -241,6 +241,15 @@ class TestPathUtilsEdgeCases:
             if result:
                 assert 'Resources' in result or 'chapter1' in result.lower()
 
+    def test_find_chapter_resource_dir_macos_plain_game_folder(self, temp_dir):
+        """Checks that finding chapter resource dir macos plain game folder."""
+        game_dir = os.path.join(temp_dir, 'game')
+        os.makedirs(game_dir, exist_ok=True)
+        with patch('utils.path_utils.CURRENT_PLATFORM', 'Darwin'):
+            open(os.path.join(game_dir, 'game.ios'), 'w').close()
+            result = find_chapter_resource_dir(game_dir, 'deltarune_1')
+            assert result == game_dir
+
     def test_autodetect_path_common_game_locations(self):
         """Checks that autodetecting path common game locations."""
         game_name = 'TestGame'
