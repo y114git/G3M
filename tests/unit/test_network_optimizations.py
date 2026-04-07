@@ -1,5 +1,7 @@
 from unittest.mock import Mock, patch
 
+import requests
+
 from presentation.update_presenter import reload_global_settings
 from services.chat_service import ChatManager
 
@@ -69,3 +71,63 @@ def test_reload_global_settings_force_refresh_ignores_cache():
     callback.assert_called_once_with(True)
     assert app.app_state.global_settings["announce"]["version"] == 2
     assert session.get.called
+
+
+def test_chat_get_messages_returns_empty_when_no_internet():
+    """Simulates macOS: gstatic blocked → check_internet_connection returns False → get_messages returns []."""
+    manager = ChatManager()
+    manager.base_url = "https://example.test"
+    session = Mock()
+
+    with patch("services.chat_service.check_internet_connection", return_value=False), patch(
+        "services.chat_service.get_session", return_value=session
+    ):
+        result = manager.get_messages("en", force_refresh=True)
+
+    assert result == []
+    session.get.assert_not_called()
+
+
+def test_chat_send_message_returns_false_when_no_internet():
+    """Simulates macOS: gstatic blocked → check_internet_connection returns False → send_message fails."""
+    manager = ChatManager()
+    manager.base_url = "https://example.test"
+    session = Mock()
+
+    with patch("services.chat_service.check_internet_connection", return_value=False), patch(
+        "services.chat_service.get_session", return_value=session
+    ):
+        success, _ = manager.send_message("en", "hello")
+
+    assert success is False
+    session.post.assert_not_called()
+
+
+def test_chat_get_messages_returns_empty_when_ssl_error():
+    """Simulates macOS PyInstaller: HTTPS request raises SSLError (certifi missing) → get_messages returns []."""
+    manager = ChatManager()
+    manager.base_url = "https://example.test"
+    session = Mock()
+    session.get.side_effect = requests.exceptions.SSLError("certificate verify failed")
+
+    with patch("services.chat_service.check_internet_connection", return_value=True), patch(
+        "services.chat_service.get_session", return_value=session
+    ):
+        result = manager.get_messages("en", force_refresh=True)
+
+    assert result == []
+
+
+def test_chat_send_message_returns_false_when_ssl_error():
+    """Simulates macOS PyInstaller: HTTPS POST raises SSLError → send_message returns (False, 'send_error')."""
+    manager = ChatManager()
+    manager.base_url = "https://example.test"
+    session = Mock()
+    session.post.side_effect = requests.exceptions.SSLError("certificate verify failed")
+
+    with patch("services.chat_service.check_internet_connection", return_value=True), patch(
+        "services.chat_service.get_session", return_value=session
+    ):
+        success, _ = manager.send_message("en", "hello")
+
+    assert success is False

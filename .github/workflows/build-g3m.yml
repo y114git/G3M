@@ -187,7 +187,7 @@ jobs:
         shell: pwsh
         run: |
           $envContent = "CLOUD_FUNCTIONS_BASE_URL=$env:CLOUD_FUNCTIONS_BASE_URL"
-          [System.IO.File]::WriteAllText('src\.env', $envContent)
+          [System.IO.File]::WriteAllText((Join-Path 'src' '.env'), $envContent)
 
       - name: Build via spec
         run: pyinstaller -y builds/G3MExecutable.spec
