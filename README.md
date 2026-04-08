@@ -191,7 +191,7 @@ The repository includes unit, integration, and Qt UI coverage for core areas suc
 
 Bundled themes live in `src/assets/themes/`, and bundled language packs live in `src/assets/lang/`. Theme import and export are archive-based, and localization supports external `lang_*.json` files plus per-language custom fonts loaded from the same directory as the language file.
 
-If you want implementation details or contributor-facing guides for themes, localization, plugins, or mod formats, the README intentionally keeps those out of the main flow. The GitHub wiki is the better place for step-by-step documentation.
+If you want implementation details or contributor-facing guides for themes, localization, plugins, or mod formats, the README intentionally keeps those out of the main flow. The [G3MWiki](https://g3m.gitbook.io/) is the better place for step-by-step documentation.
 
 ## Legal
 

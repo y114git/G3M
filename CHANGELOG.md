@@ -384,7 +384,7 @@
 
 - **Plugin System + Migration of Save Manager, Mod Editor, and XDELTA Patcher to Plugin Format**
 
-  - For those who wanted to extend DELTAHUB's functionality, a convenient plugin system has been added, along with a Plugins page where you can configure plugins, enable/disable them, download and import them (even via URL). All details about this system are here: <https://github.com/y114git/DELTAHUB/wiki/Plugins-Guide.md>.
+  - For those who wanted to extend DELTAHUB's functionality, a convenient plugin system has been added, along with a Plugins page where you can configure plugins, enable/disable them, download and import them (even via URL). All details about this system are in the [G3MWiki](https://g3m.gitbook.io/).
   - Also, the built-in functions of Mod Management, XDELTA Patcher, and Save Manager are now separate plugins. The migration was made because not everyone needed these functions, and for some they were just clutter on the screen. Now you can choose and download what you need yourself.
 
 - **Built-in Chat**
@@ -430,10 +430,10 @@
 ### Version 2.1.0 — 03.09.25
 
 - **Complete Localization System Remake + Chinese Language Support**
-  - Previously, you could only use the languages built into the launcher, and you had to restart the launcher to switch, plus there were a lot of bugs. However, the era of localization has now arrived! From now on, languages are stored in the `lang` folder, next to the `settings` and `mods` folders. In addition to the official languages (A huge thank you to the Chinese community for their support), you can now add your own fan translations or even make FUNNY translations (WHAT?!). What's more, you can now choose the font for the launcher yourself by simply editing the lang file. In the `font` field, specify the name of the font file, which must be in the same folder as the language file! All other details are [HERE](https://github.com/y114git/DELTAHUB/wiki/Localization-and-Lang-system-Guide).
+  - Previously, you could only use the languages built into the launcher, and you had to restart the launcher to switch, plus there were a lot of bugs. However, the era of localization has now arrived! From now on, languages are stored in the `lang` folder, next to the `settings` and `mods` folders. In addition to the official languages (A huge thank you to the Chinese community for their support), you can now add your own fan translations or even make FUNNY translations (WHAT?!). What's more, you can now choose the font for the launcher yourself by simply editing the lang file. In the `font` field, specify the name of the font file, which must be in the same folder as the language file! All other details are in the [G3M documentation](https://g3m.gitbook.io/).
 
 - **Deltamod Compatibility + .LZMA and .TAR.GZ Support**
-  - In addition to supporting two new archive formats, you can now literally drop a mod created for the Deltamod format into the `mods` folder (regardless of whether it's an archive or a folder) and DELTAHUB will automatically convert it to the local mod format for DH! Downloading via links (`deltahub://`) is also fully supported, so mod developers won't have to worry either. More details [HERE](https://github.com/y114git/DELTAHUB/wiki/Deltamod-compatibility).
+  - In addition to supporting two new archive formats, you can now literally drop a mod created for the Deltamod format into the `mods` folder (regardless of whether it's an archive or a folder) and DELTAHUB will automatically convert it to the local mod format for DH! Downloading via links (`deltahub://`) is also fully supported, so mod developers won't have to worry either. More details in the [G3M documentation](https://g3m.gitbook.io/).
 
 - **Theme Manager**
   - You can now **import and export** your launcher's appearance settings! A new button has appeared in the customization settings that allows you to save your colors, background image, music, and sounds into a single `.dhtheme` file and share it with friends.
