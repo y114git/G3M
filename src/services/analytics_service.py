@@ -13,6 +13,7 @@ import platform
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
 from typing import Any
 
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
@@ -92,6 +93,7 @@ class AnalyticsService(QObject):
         self._upload_worker = None
         self._upload_batch_size = 0
         self._upload_in_flight: list[dict[str, Any]] = []
+        self._shutdown_callbacks: list[Callable[[], None]] = []
         self._load_state()
         self._flush_timer = QTimer(self)
         self._flush_timer.setSingleShot(True)
@@ -409,36 +411,21 @@ class AnalyticsService(QObject):
         if self._session_closed:
             return
         self._session_closed = True
-        duration = time.monotonic() - self._session_started_at
-        self.count("session_end", duration=self._bucket_seconds(duration))
-        self.count(
-            "session_end_detail",
-            scope="opt_in",
-            duration=self._bucket_seconds(duration),
-            locale=self._clean_value(self.app_state.local_config.get("language", "en")),
-            scale=self._clean_value(
-                int(float(self.app_state.local_config.get("ui_scale", 1.0)) * 100)
-            ),
-            theme=self._clean_value(
-                "custom"
-                if any(
-                    self.app_state.local_config.get(k)
-                    for k in (
-                        "custom_background_color",
-                        "custom_elements_color",
-                        "custom_border_color",
-                        "custom_hover_color",
-                        "custom_select_color",
-                        "custom_main_text_color",
-                        "custom_secondary_text_color",
-                    )
-                )
-                else "default"
-            ),
-        )
+        self._record_session_end()
         self._enqueue_session_payload()
         self._flush_async(force=True)
         self._wait_for_upload_shutdown()
+
+    def shutdown_async(self, on_finished=None) -> bool:
+        if on_finished is not None:
+            self._shutdown_callbacks.append(on_finished)
+        if not self._session_closed:
+            self._session_closed = True
+            self._record_session_end()
+            self._enqueue_session_payload()
+        self._flush_async(force=True)
+        self._notify_shutdown_complete_if_idle()
+        return self._upload_thread is None and not self._pending
 
     def flush(self, force: bool = False) -> bool:
         self._flush_async(force=force)
@@ -483,6 +470,7 @@ class AnalyticsService(QObject):
         self._save_state()
         if self._pending and not self._session_closed:
             self._schedule_flush(250)
+        self._notify_shutdown_complete_if_idle()
 
     def _schedule_flush(self, delay_ms: int = 3000) -> None:
         if self._session_closed:
@@ -491,6 +479,48 @@ class AnalyticsService(QObject):
 
     def _schedule_state_save(self) -> None:
         self._state_timer.start(self._STATE_SAVE_DELAY_MS)
+
+    def _record_session_end(self) -> None:
+        duration = time.monotonic() - self._session_started_at
+        self.count("session_end", duration=self._bucket_seconds(duration))
+        self.count(
+            "session_end_detail",
+            scope="opt_in",
+            duration=self._bucket_seconds(duration),
+            locale=self._clean_value(self.app_state.local_config.get("language", "en")),
+            scale=self._clean_value(
+                int(float(self.app_state.local_config.get("ui_scale", 1.0)) * 100)
+            ),
+            theme=self._clean_value(
+                "custom"
+                if any(
+                    self.app_state.local_config.get(k)
+                    for k in (
+                        "custom_background_color",
+                        "custom_elements_color",
+                        "custom_border_color",
+                        "custom_hover_color",
+                        "custom_select_color",
+                        "custom_main_text_color",
+                        "custom_secondary_text_color",
+                    )
+                )
+                else "default"
+            ),
+        )
+
+    def _notify_shutdown_complete_if_idle(self) -> None:
+        if self._upload_thread is not None or self._pending:
+            return
+        callbacks = self._shutdown_callbacks[:]
+        self._shutdown_callbacks.clear()
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception as e:
+                logger.debug(
+                    "Analytics shutdown callback failed: %s", e, exc_info=True
+                )
 
     def _wait_for_upload_shutdown(self, timeout_ms: int = 1500) -> None:
         """Drain the final upload thread so QObject shutdown does not race Qt teardown."""

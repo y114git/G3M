@@ -453,3 +453,39 @@ class TestDownloadsManager:
         assert manager._mods_dir is None
         manager.set_app_context(mods_dir='/some/path')
         assert manager._mods_dir == '/some/path'
+
+    def test_progress_updates_are_coalesced_when_progress_has_not_meaningfully_changed(
+        self,
+    ):
+        """Checks that repeated low-signal progress updates do not spam UI signals."""
+        rid, _ = self.manager.enqueue(
+            display_name='Progress Test',
+            source_url='https://example.com/progress.zip',
+        )
+        record = self.manager.store.find(rid)
+        events = []
+        self.manager.record_updated.connect(
+            lambda rec: events.append((rec.progress, rec.bytes_received, rec.bytes_total))
+        )
+
+        self.manager._on_download_progress(rid, 10, 1000, 1000000)
+        self.manager._on_download_progress(rid, 10, 1100, 1000000)
+        self.manager._on_download_progress(rid, 10, 1200, 1000000)
+
+        assert events == [(10, 1000, 1000000)]
+        assert record.progress == 10
+        assert record.bytes_received == 1000
+
+    def test_progress_updates_emit_when_percentage_changes(self):
+        """Checks that progress updates still emit when visible progress changes."""
+        rid, _ = self.manager.enqueue(
+            display_name='Progress Step Test',
+            source_url='https://example.com/progress-step.zip',
+        )
+        events = []
+        self.manager.record_updated.connect(lambda rec: events.append(rec.progress))
+
+        self.manager._on_download_progress(rid, 10, 1000, 1000000)
+        self.manager._on_download_progress(rid, 11, 2000, 1000000)
+
+        assert events[-2:] == [10, 11]

@@ -378,3 +378,70 @@ def test_fetch_mods_thread_keeps_remote_card_object_separate_from_local_state():
     assert result_mod.files["deltarune_1"].data_file_url == "patch.xdelta"
     assert local_mod.name == "Library Name"
     assert local_mod.last_updated == "N/A"
+
+
+def test_get_installed_mods_list_does_not_rewrite_mod_configs_during_read(
+    app_state, feedback_service, monkeypatch
+):
+    """Checks that installed-mod scans stay read-only and avoid needless disk writes."""
+    import os
+
+    mod_folder = os.path.join(app_state.mods_dir, "read_only_mod")
+    os.makedirs(mod_folder, exist_ok=True)
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {
+            "id": "read_only_mod",
+            "name": "Read Only Mod",
+            "author": "Author",
+            "version": "1.0.0",
+            "game": "deltarune",
+            "files": {"deltarune_1": {"data_file_path": "patch.xdelta"}},
+        },
+        indent=4,
+    )
+    manager = ModManager(app_state, feedback_service)
+    save_calls = []
+    monkeypatch.setattr(
+        "services.mod_service.save_json",
+        lambda *args, **kwargs: save_calls.append((args, kwargs)),
+    )
+
+    mods = manager.get_installed_mods_list()
+
+    assert [mod["id"] for mod in mods] == ["read_only_mod"]
+    assert all(call[0][0] != os.path.join(mod_folder, "mod_config.json") for call in save_calls)
+
+
+def test_load_local_mods_runs_corrupted_cleanup_only_once_per_session(
+    app_state, feedback_service, monkeypatch
+):
+    """Checks that repeated reloads do not rescan corruption every refresh."""
+    import os
+
+    mod_folder = os.path.join(app_state.mods_dir, "stable_mod")
+    os.makedirs(mod_folder, exist_ok=True)
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {
+            "id": "stable_mod",
+            "name": "Stable Mod",
+            "author": "Author",
+            "version": "1.0.0",
+            "game": "deltarune",
+            "files": {"deltarune_1": {"data_file_path": "patch.xdelta"}},
+        },
+        indent=4,
+    )
+    manager = ModManager(app_state, feedback_service)
+    cleanup_calls = []
+    monkeypatch.setattr(
+        "services.mod_service.cleanup_corrupted_mods",
+        lambda mods_dir: cleanup_calls.append(mods_dir),
+    )
+
+    manager.load_local_mods()
+    manager.invalidate_mods_cache()
+    manager.load_local_mods()
+
+    assert cleanup_calls == [app_state.mods_dir]

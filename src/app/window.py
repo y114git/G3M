@@ -1124,20 +1124,56 @@ class AppWindow(QWidget):
                 combo.setItemText(i, tr(key))
 
     def closeEvent(self, event):
+        if getattr(self, "_close_cleanup_started", False):
+            event.accept()
+            return
+        self._close_cleanup_started = True
         app = QApplication.instance()
         if app:
             with contextlib.suppress(Exception):
                 app.removeEventFilter(self)
             with contextlib.suppress(Exception):
                 app.applicationStateChanged.disconnect(self._on_application_state_changed)
-        with contextlib.suppress(Exception):
-            self.analytics_service.shutdown()
-        if hasattr(self, 'plugins_ui') and self.plugins_ui:
-            self.plugins_ui.shutdown()
-        from app.cleanup import perform_close_cleanup
+            with contextlib.suppress(Exception):
+                app.setQuitOnLastWindowClosed(False)
+        event.accept()
+        self.hide()
+        self._pending_close_tasks = {"analytics": False, "cleanup": False}
+        if hasattr(self, "analytics_service") and self.analytics_service:
+            analytics_done = False
+            try:
+                analytics_done = self.analytics_service.shutdown_async(
+                    lambda: self._mark_close_task_complete("analytics")
+                )
+            except Exception:
+                analytics_done = True
+            if analytics_done:
+                self._mark_close_task_complete("analytics")
+        else:
+            self._mark_close_task_complete("analytics")
+        QTimer.singleShot(0, self._run_deferred_close_cleanup)
 
-        perform_close_cleanup(self)
-        super().closeEvent(event)
+    def _run_deferred_close_cleanup(self) -> None:
+        try:
+            if hasattr(self, "plugins_ui") and self.plugins_ui:
+                self.plugins_ui.shutdown()
+            from app.cleanup import perform_close_cleanup
+
+            perform_close_cleanup(self)
+        finally:
+            self._mark_close_task_complete("cleanup")
+
+    def _mark_close_task_complete(self, task_name: str) -> None:
+        pending = getattr(self, "_pending_close_tasks", None)
+        if pending is None:
+            return
+        pending[task_name] = True
+        if not all(pending.values()):
+            return
+        app = QApplication.instance()
+        if app:
+            with contextlib.suppress(Exception):
+                app.quit()
 
     def changeEvent(self, event):
         super().changeEvent(event)

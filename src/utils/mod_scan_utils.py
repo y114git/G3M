@@ -7,12 +7,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from config.config import MOD_CONFIG_FILENAME
-from utils.file_utils import load_json, save_json
+from utils.file_utils import load_json
 from utils.mod_config_parser import (
     MOD_ALLOWED_TAGS,
     MOD_CONFIG_VERSION,
     MOD_FIELD_LIMITS,
-    build_mod_config_data,
     normalize_mod_config_data,
 )
 
@@ -230,7 +229,9 @@ def scan_mods_directory(
                             continue
 
                     try:
-                        config_data = load_json(config_path)
+                        config_data = load_json(
+                            config_path, persist_normalized=False
+                        )
                         if not config_data or not isinstance(config_data, dict):
                             logging.warning(
                                 f"scan_mods_directory: Empty config data in {config_path}, skipping mod",
@@ -240,14 +241,9 @@ def scan_mods_directory(
                                 },
                             )
                             continue
-                        if normalize_mod_config_data(
+                        normalize_mod_config_data(
                             config_data, mod_root_path=folder_path
-                        ):
-                            save_json(
-                                config_path,
-                                build_mod_config_data(config_data),
-                                indent=4,
-                            )
+                        )
                         if not validate_mod_config(
                             config_data, config_path, folder_name
                         ):
@@ -371,7 +367,7 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
                             )
                         else:
                             try:
-                                load_json(config_path)
+                                load_json(config_path, persist_normalized=False)
                             except (
                                 json.JSONDecodeError,
                                 OSError,

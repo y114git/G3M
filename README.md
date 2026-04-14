@@ -82,6 +82,7 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 - Convert Deltamod packages into G3M mods during import. The converter keeps game mappings and patch layouts instead of treating Deltamod archives as opaque files.
 - Convert PizzaOven packages for Pizza Tower into standard G3M mods when the source layout is eligible. GMLoader-style packages are explicitly rejected instead of being installed incorrectly.
 - Import CYOP/AFOM-style Pizza Tower archives through a dedicated conversion path. Converted mods keep the required `towers` data and are tagged as `CYOP/AFOM`.
+- These archive detection and conversion paths are shared across local import, Downloads auto-use, one-click installs, and supported mod version archive flows, so the same formats are not documented differently depending on entry point.
 
 ### Patching and modding tools
 

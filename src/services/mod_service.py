@@ -68,6 +68,7 @@ class ModManager(QObject):
         self._mods_cache_valid = False
         self._scan_thread: ModScanThread | None = None
         self._scan_in_progress = False
+        self._corrupted_cleanup_done = False
 
     def cleanup_stale_used_mods(self):
         if not self._mods_cache:
@@ -217,7 +218,9 @@ class ModManager(QObject):
         if not os.path.exists(self.app_state.mods_dir):
             os.makedirs(self.app_state.mods_dir, exist_ok=True)
             return False
-        cleanup_corrupted_mods(self.app_state.mods_dir)
+        if not self._corrupted_cleanup_done:
+            cleanup_corrupted_mods(self.app_state.mods_dir)
+            self._corrupted_cleanup_done = True
         try:
             cache = self._get_mods_cache(use_async=False)
         except Exception as e:
@@ -1076,16 +1079,11 @@ class ModManager(QObject):
             if not os.path.exists(config_path):
                 continue
             try:
-                config_data = load_json(config_path)
+                config_data = load_json(config_path, persist_normalized=False)
                 if config_data and isinstance(config_data, dict):
-                    if normalize_mod_config_data(
+                    normalize_mod_config_data(
                         config_data, mod_root_path=folder_path
-                    ):
-                        save_json(
-                            config_path,
-                            build_mod_config_data(config_data),
-                            indent=4,
-                        )
+                    )
                     yield folder_name, folder_path, config_path, config_data
             except Exception as e:
                 logging.warning(

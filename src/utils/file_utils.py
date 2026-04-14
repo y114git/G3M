@@ -283,7 +283,7 @@ def save_json(
             raise ValueError(f"Data is not JSON-serializable: {e}") from e
 
 
-def load_json(path: str) -> dict:
+def load_json(path: str, *, persist_normalized: bool = True) -> dict:
     """Load JSON file."""
     try:
         if not os.path.exists(path):
@@ -314,7 +314,7 @@ def load_json(path: str) -> dict:
                 if legacy_field in data:
                     data.pop(legacy_field, None)
                     changed = True
-            if changed:
+            if changed and persist_normalized:
                 save_json(path, data)
         return data
     except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError) as e:

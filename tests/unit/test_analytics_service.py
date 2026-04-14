@@ -192,3 +192,43 @@ def test_analytics_service_shutdown_uses_less_aggressive_fallback_timeout(
     service._wait_for_upload_shutdown(timeout_ms=0)
 
     assert fallback_calls == [(service._upload_thread, 750, True)]
+
+
+def test_analytics_service_shutdown_async_completes_immediately_when_idle(
+    qapp, tmp_path
+):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+    callbacks = []
+
+    with patch("services.analytics_service.cloud_function_request", return_value=_Response()):
+        done = service.shutdown_async(lambda: callbacks.append("done"))
+
+        assert done is False
+        deadline = time.time() + 2
+        while not callbacks and time.time() < deadline:
+            qapp.processEvents()
+            time.sleep(0.01)
+
+    assert callbacks == ["done"]
+
+
+def test_analytics_service_shutdown_async_defers_callback_until_upload_finishes(
+    qapp, tmp_path
+):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+    service.count("always_event")
+    callbacks = []
+
+    with patch(
+        "services.analytics_service.cloud_function_request", return_value=_Response()
+    ):
+        done = service.shutdown_async(lambda: callbacks.append("done"))
+        assert done is False
+        deadline = time.time() + 2
+        while not callbacks and time.time() < deadline:
+            qapp.processEvents()
+            time.sleep(0.01)
+
+    assert callbacks == ["done"]

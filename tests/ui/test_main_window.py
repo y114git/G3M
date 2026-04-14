@@ -221,6 +221,45 @@ class TestAppWindow:
                 dialog.close()
                 window.close()
 
+    def test_close_event_hides_window_and_defers_cleanup(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        scheduled = []
+        app_mock = Mock()
+
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+            patch("app.window.QApplication.instance", return_value=app_mock),
+            patch("app.window.QTimer.singleShot", side_effect=lambda _ms, cb: scheduled.append(cb)),
+        ):
+            window = AppWindow()
+            try:
+                event = Mock()
+                with patch.object(
+                    window.analytics_service,
+                    "shutdown_async",
+                    side_effect=lambda cb: False,
+                ) as shutdown_async:
+                    window.closeEvent(event)
+
+                event.accept.assert_called_once_with()
+                assert window.isHidden() is True
+                shutdown_async.assert_called_once()
+                assert scheduled, "expected deferred cleanup to be scheduled"
+            finally:
+                window._close_cleanup_started = True
+                window.hide()
+
 
 class TestTabBuilders:
     """Tests for main window."""

@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import uuid
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
@@ -60,6 +61,7 @@ class DownloadsManager(QObject):
         self._workers = {}
         self._mods_dir: str | None = None
         self._plugin_install_service = None
+        self._progress_emit_state: dict[str, tuple[int, int, int, float]] = {}
 
     def set_app_context(self, *, mods_dir: str, plugin_install_service=None):
         self._mods_dir = mods_dir
@@ -188,6 +190,26 @@ class DownloadsManager(QObject):
         record = self._store.find(record_id)
         if not record:
             return
+        now = time.monotonic()
+        previous = self._progress_emit_state.get(record_id)
+        if previous is not None:
+            prev_pct, prev_recv, prev_total, prev_ts = previous
+            unchanged = (
+                pct == prev_pct
+                and bytes_recv == prev_recv
+                and bytes_total == prev_total
+            )
+            if unchanged:
+                return
+            if (
+                pct != 100
+                and bytes_total == prev_total
+                and pct == prev_pct
+                and (bytes_recv - prev_recv) < 256 * 1024
+                and (now - prev_ts) < 0.075
+            ):
+                return
+        self._progress_emit_state[record_id] = (pct, bytes_recv, bytes_total, now)
         record.progress = pct
         record.bytes_received = bytes_recv
         record.bytes_total = bytes_total
@@ -200,6 +222,7 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
+        self._progress_emit_state.pop(record_id, None)
         _cleanup_worker(worker)
 
         if not success:
@@ -340,6 +363,7 @@ class DownloadsManager(QObject):
             with contextlib.suppress(Exception):
                 worker.finished.connect(worker.deleteLater)
         _cleanup_worker(worker)
+        self._progress_emit_state.pop(record_id, None)
         record.download_status = DownloadStatus.CANCELLED
         record.use_status = UseStatus.CANCELLED
         record.file_exists = False
@@ -379,6 +403,7 @@ class DownloadsManager(QObject):
             with contextlib.suppress(Exception):
                 worker.finished.connect(worker.deleteLater)
         _cleanup_worker(worker)
+        self._progress_emit_state.pop(record_id, None)
         self._store.delete_file_for_record(record)
         self._store.remove(record_id)
         self.record_removed.emit(record_id)
