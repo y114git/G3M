@@ -263,6 +263,7 @@
     "disable_startup_sound": "Desactivar sonido de inicio",
     "pause_background_music_unfocused": "Detener música sin foco",
     "xdelta_modpack": "XDELTA en lugar de data.win/.ios",
+    "g3mpatch_xdelta_fallback": "Incluir fallback xdelta",
     "merge_properties": "Fusión de propiedades",
     "merge_code": "Fusión de código",
     "disable_animations": "Desactivar animaciones"
@@ -389,6 +390,7 @@
     "modding_tools_target_format": "Elige el formato al que se convertirán los mods seleccionados.",
     "modding_tools_mod_list": "Elige un mod del perfil seleccionado para procesarlo.",
     "run_tool": "Ejecuta la acción seleccionada de la herramienta.",
+    "g3mpatch_xdelta_fallback": "Añade un parche xdelta exacto en Xdelta/ dentro del .g3mpatch. Úsalo solo si necesitas recuperación byte a byte cuando falle la aplicación semántica; aumenta el tamaño del parche y lo hace menos orientado a fusión.",
     "theme_current_settings": "Muestra qué personalizaciones del tema están activas ahora mismo.",
     "import_theme": "Importa un archivo de tema en G3M.",
     "export_theme": "Exporta la configuración actual del tema a un archivo.",
@@ -465,7 +467,9 @@
       "xdelta_override_skipped": "No se pudo aplicar el xdelta override \"{patch}\" a archivos objetivo coincidentes en:\n{target}\n\nEse paso del parche será omitido.\n\n¿Desea continuar?",
       "archive_extract_failed": "No se pudo extraer el archivo \"{archive}\" en:\n{target}\n\nEs posible que algunos archivos se omitan.\n\n¿Desea continuar?",
       "g3mpatch_validate_title": "Advertencia: el archivo de datos no coincide con G3MPatch",
-      "g3mpatch_validate_body": "Este G3MPatch fue creado para un archivo de datos diferente.\n\nParche: {patch_name}\n\nArchivo esperado: {expected_file}\nMD5 esperado: {expected_md5}\n\nArchivo actual: {actual_file}\nMD5 actual: {actual_md5}\n\nSi su archivo de datos solo difiere un poco, por ejemplo por una versión distinta del juego o de la plataforma, el parche aún podría funcionar.\n\n¿Desea continuar de todos modos?"
+      "g3mpatch_validate_body": "Este G3MPatch fue creado para un archivo de datos diferente.\n\nParche: {patch_name}\n\nArchivo esperado: {expected_file}\nMD5 esperado: {expected_md5}\n\nArchivo actual: {actual_file}\nMD5 actual: {actual_md5}\n\nSi su archivo de datos solo difiere un poco, por ejemplo por una versión distinta del juego o de la plataforma, el parche aún podría funcionar.\n\n¿Desea continuar de todos modos?",
+      "g3mpatch_newer_tool_title": "Advertencia: G3MPatch creado con un G3MTool más nuevo",
+      "g3mpatch_newer_tool_body": "Este G3MPatch fue creado con una versión de G3MTool más nueva que la incluida en su G3M actual.\n\nParche: {patch_name}\nVersión de G3MTool del parche: {patch_tool_version}\nVersión de G3MTool incluida: {current_tool_version}\n\nEl parche puede usar comportamiento o detalles de formato que este G3MTool antiguo no admite por completo.\n\n¿Desea continuar de todos modos?"
     },
     "app_will_restart": "La aplicación se reiniciará.",
     "are_you_sure": "¿Estás seguro?",

@@ -263,6 +263,7 @@
     "disable_startup_sound": "禁用啟動音效",
     "pause_background_music_unfocused": "失去焦點時停止背景音樂",
     "xdelta_modpack": "使用XDELTA代替data.win/.ios",
+    "g3mpatch_xdelta_fallback": "嵌入 xdelta 備援",
     "merge_properties": "屬性合併",
     "merge_code": "程式碼合併",
     "disable_animations": "停用動畫"
@@ -392,6 +393,7 @@
     "modding_tools_target_format": "選擇要把所選模組轉換成哪種格式。",
     "modding_tools_mod_list": "從所選設定檔中選擇要處理的模組。",
     "run_tool": "執行目前選擇的工具動作。",
+    "g3mpatch_xdelta_fallback": "在 .g3mpatch 內的 Xdelta/ 資料夾加入精確 xdelta 補丁。僅在語意套用失敗時需要位元組級還原時使用；這會增大補丁並降低其可合併性。",
     "theme_current_settings": "顯示目前啟用的主題自訂內容。",
     "import_theme": "將主題檔案匯入 G3M。",
     "export_theme": "把目前主題設定匯出到檔案。",
@@ -465,7 +467,9 @@
       "xdelta_override_skipped": "無法將 xdelta 覆蓋補丁「{patch}」套用到以下位置中的相符目標檔案：\n{target}\n\n此補丁步驟將被略過。\n\n是否繼續？",
       "archive_extract_failed": "無法將壓縮檔「{archive}」解壓到：\n{target}\n\n部分檔案可能會被略過。\n\n是否繼續？",
       "g3mpatch_validate_title": "警告：G3MPatch 資料檔不相符",
-      "g3mpatch_validate_body": "這個 G3MPatch 是為另一個資料檔建立的。\n\n補丁：{patch_name}\n\n預期檔案：{expected_file}\n預期 MD5：{expected_md5}\n\n目前檔案：{actual_file}\n目前 MD5：{actual_md5}\n\n如果您的資料檔只有些微差異，例如遊戲版本或平台不同，補丁仍然可能可用。\n\n是否仍要繼續？"
+      "g3mpatch_validate_body": "這個 G3MPatch 是為另一個資料檔建立的。\n\n補丁：{patch_name}\n\n預期檔案：{expected_file}\n預期 MD5：{expected_md5}\n\n目前檔案：{actual_file}\n目前 MD5：{actual_md5}\n\n如果您的資料檔只有些微差異，例如遊戲版本或平台不同，補丁仍然可能可用。\n\n是否仍要繼續？",
+      "g3mpatch_newer_tool_title": "警告：G3MPatch 由較新的 G3MTool 建立",
+      "g3mpatch_newer_tool_body": "這個 G3MPatch 是由比目前 G3M 內建版本更新的 G3MTool 建立的。\n\n補丁：{patch_name}\n補丁 G3MTool 版本：{patch_tool_version}\n內建 G3MTool 版本：{current_tool_version}\n\n此補丁可能使用舊版 G3MTool 無法完整支援的行為或格式細節。\n\n是否仍要繼續？"
     },
     "app_will_restart": "應用程式將重新啟動。",
     "are_you_sure": "您確定嗎？",

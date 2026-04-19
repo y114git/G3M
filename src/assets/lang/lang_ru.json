@@ -263,6 +263,7 @@
     "disable_startup_sound": "Отключить стартовый звук",
     "pause_background_music_unfocused": "Останавливать фоновую музыку вне фокуса",
     "xdelta_modpack": "XDELTA вместо data.win/.ios",
+    "g3mpatch_xdelta_fallback": "Встроить xdelta fallback",
     "merge_properties": "Слияние свойств",
     "merge_code": "Слияние кода",
     "disable_animations": "Отключить анимации"
@@ -389,6 +390,7 @@
     "modding_tools_target_format": "Выберите формат, в который нужно конвертировать выбранные моды.",
     "modding_tools_mod_list": "Выберите мод из текущего профиля для обработки.",
     "run_tool": "Запустить выбранное действие инструмента.",
+    "g3mpatch_xdelta_fallback": "Добавляет точный xdelta-патч в папку Xdelta/ внутри .g3mpatch. Используйте только если нужен байт-в-байт fallback при сбое semantic apply; патч станет больше и менее ориентированным на слияние.",
     "theme_current_settings": "Показывает, какие настройки темы сейчас активны.",
     "import_theme": "Импортировать файл темы в G3M.",
     "export_theme": "Экспортировать текущие настройки темы в файл.",
@@ -465,7 +467,9 @@
       "xdelta_override_skipped": "Xdelta-override \"{patch}\" не удалось применить к подходящим целевым файлам в:\n{target}\n\nЭтот шаг патча будет пропущен.\n\nХотите продолжить?",
       "archive_extract_failed": "Не удалось распаковать архив \"{archive}\" в:\n{target}\n\nЧасть файлов может быть пропущена.\n\nХотите продолжить?",
       "g3mpatch_validate_title": "Предупреждение: файл данных не совпадает с G3MPatch",
-      "g3mpatch_validate_body": "Этот G3MPatch был создан для другого файла данных.\n\nПатч: {patch_name}\n\nОжидаемый файл: {expected_file}\nОжидаемый MD5: {expected_md5}\n\nТекущий файл: {actual_file}\nТекущий MD5: {actual_md5}\n\nЕсли ваш файл данных отличается лишь немного, например из-за другой версии игры или платформы, патч всё ещё может сработать.\n\nХотите продолжить в любом случае?"
+      "g3mpatch_validate_body": "Этот G3MPatch был создан для другого файла данных.\n\nПатч: {patch_name}\n\nОжидаемый файл: {expected_file}\nОжидаемый MD5: {expected_md5}\n\nТекущий файл: {actual_file}\nТекущий MD5: {actual_md5}\n\nЕсли ваш файл данных отличается лишь немного, например из-за другой версии игры или платформы, патч всё ещё может сработать.\n\nХотите продолжить в любом случае?",
+      "g3mpatch_newer_tool_title": "Предупреждение: G3MPatch создан более новым G3MTool",
+      "g3mpatch_newer_tool_body": "Этот G3MPatch был создан более новой версией G3MTool, чем та, которая встроена в ваш текущий G3M.\n\nПатч: {patch_name}\nВерсия G3MTool в патче: {patch_tool_version}\nВстроенная версия G3MTool: {current_tool_version}\n\nПатч может использовать поведение или детали формата, которые эта старая версия G3MTool поддерживает не полностью.\n\nХотите продолжить в любом случае?"
     },
     "app_will_restart": "Приложение будет перезапущено.",
     "are_you_sure": "Вы уверены?",

@@ -128,6 +128,7 @@ class G3MToolPatchingService(QObject):
 
         _rotate_patching_files()
         self.patching_logger = _get_patching_logger()
+        self._g3mtool_version: str | None = None
 
     def _emit_progress(self, progress: int, message: str):
         self.progress_update.emit(max(0, min(progress, 100)), message)
@@ -192,6 +193,54 @@ class G3MToolPatchingService(QObject):
             logging.debug("Failed to compute MD5 for %s: %s", path, e)
             return None
 
+    @staticmethod
+    def _version_tuple(version: str | None) -> tuple[int, ...] | None:
+        if not version:
+            return None
+        parts = re.findall(r"\d+", str(version))
+        if not parts:
+            return None
+        numbers = [int(part) for part in parts[:4]]
+        numbers.extend([0] * (4 - len(numbers)))
+        return tuple(numbers)
+
+    def _get_g3mtool_version(self) -> str | None:
+        if self._g3mtool_version is None:
+            self._g3mtool_version = self.g3mtool.get_version() or ""
+        return self._g3mtool_version or None
+
+    def _check_g3mpatch_tool_version_warning(
+        self, patch_path: str, manifest: dict
+    ) -> bool:
+        tool = manifest.get("tool") if isinstance(manifest, dict) else None
+        patch_tool_version = tool.get("version") if isinstance(tool, dict) else None
+        patch_version_tuple = self._version_tuple(patch_tool_version)
+        current_tool_version = self._get_g3mtool_version()
+        current_version_tuple = self._version_tuple(current_tool_version)
+        if not patch_version_tuple or not current_version_tuple:
+            return True
+        if patch_version_tuple <= current_version_tuple:
+            return True
+
+        should_continue = self._request_warning(
+            tr("dialogs.patching_warning.g3mpatch_newer_tool_title"),
+            tr(
+                "dialogs.patching_warning.g3mpatch_newer_tool_body",
+                patch_name=os.path.basename(patch_path),
+                patch_tool_version=patch_tool_version,
+                current_tool_version=current_tool_version,
+            ),
+        )
+        if not should_continue:
+            return False
+        self.patching_logger.warning(
+            "G3MPatch %s was created by newer G3MTool %s; current bundled G3MTool is %s",
+            patch_path,
+            patch_tool_version,
+            current_tool_version,
+        )
+        return True
+
     def _check_g3mpatch_validate_warning(
         self, patch_path: str, data_win_path: str
     ) -> bool:
@@ -207,6 +256,9 @@ class G3MToolPatchingService(QObject):
                 "G3MPatch validation skipped for %s: %s", patch_path, e
             )
             return True
+
+        if not self._check_g3mpatch_tool_version_warning(patch_path, manifest):
+            return False
 
         expected_md5 = (
             (manifest.get("original") or {}).get("md5")

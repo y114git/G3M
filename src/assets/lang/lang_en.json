@@ -263,6 +263,7 @@
     "disable_startup_sound": "Disable startup sound",
     "pause_background_music_unfocused": "Stop music when unfocused",
     "xdelta_modpack": "XDELTA instead of data.win/.ios",
+    "g3mpatch_xdelta_fallback": "Embed xdelta fallback",
     "merge_properties": "Properties merge",
     "merge_code": "Code merge",
     "disable_animations": "Disable animations"
@@ -389,6 +390,7 @@
     "modding_tools_target_format": "Choose the format to convert selected mods into.",
     "modding_tools_mod_list": "Choose a mod from the selected profile to process.",
     "run_tool": "Run the selected tool action.",
+    "g3mpatch_xdelta_fallback": "Adds an exact xdelta patch to Xdelta/ inside the .g3mpatch. Use only when you need byte-perfect recovery if semantic apply fails; it makes the patch larger and less merge-oriented.",
     "theme_current_settings": "Shows which theme customizations are currently active.",
     "import_theme": "Import a theme file into G3M.",
     "export_theme": "Export your current theme settings to a file.",
@@ -465,7 +467,9 @@
       "xdelta_override_skipped": "The xdelta override \"{patch}\" could not be applied to matching target files in:\n{target}\n\nThat patch step will be skipped.\n\nDo you want to continue?",
       "archive_extract_failed": "Failed to extract archive \"{archive}\" into:\n{target}\n\nSome files may be skipped.\n\nDo you want to continue?",
       "g3mpatch_validate_title": "Warning: G3MPatch Data File Mismatch",
-      "g3mpatch_validate_body": "This G3MPatch was built for a different data file.\n\nPatch: {patch_name}\n\nExpected file: {expected_file}\nExpected MD5: {expected_md5}\n\nCurrent file: {actual_file}\nCurrent MD5: {actual_md5}\n\nIf your data file only differs slightly, for example because of a game version or platform difference, the patch may still work.\n\nDo you want to continue anyway?"
+      "g3mpatch_validate_body": "This G3MPatch was built for a different data file.\n\nPatch: {patch_name}\n\nExpected file: {expected_file}\nExpected MD5: {expected_md5}\n\nCurrent file: {actual_file}\nCurrent MD5: {actual_md5}\n\nIf your data file only differs slightly, for example because of a game version or platform difference, the patch may still work.\n\nDo you want to continue anyway?",
+      "g3mpatch_newer_tool_title": "Warning: G3MPatch Created by Newer G3MTool",
+      "g3mpatch_newer_tool_body": "This G3MPatch was created by a newer G3MTool than the one bundled with your current G3M.\n\nPatch: {patch_name}\nPatch G3MTool version: {patch_tool_version}\nBundled G3MTool version: {current_tool_version}\n\nThe patch may use behavior or format details that this older G3MTool does not fully support.\n\nDo you want to continue anyway?"
     },
     "app_will_restart": "The application will be restarted.",
     "are_you_sure": "Are you sure?",

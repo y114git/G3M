@@ -98,9 +98,8 @@ def _target_version_label(target_mode: str) -> str:
     return target_mode
 
 
-def _rename_data_output_name(source_path: str, target_name: str) -> str:
-    source_name = os.path.basename(source_path or "").strip()
-    return target_name if source_name else target_name
+def _rename_data_output_name(target_name: str) -> str:
+    return target_name
 
 
 def _should_convert_source_to_target(path: str, target_mode: str) -> bool:
@@ -222,11 +221,21 @@ class _ConvertWorkerThread(QThread):
 
     finished = pyqtSignal(int, str, str)
 
-    def __init__(self, g3m, orig, patch, output, target_is_xdelta, parent=None) -> None:
+    def __init__(
+        self,
+        g3m,
+        orig,
+        patch,
+        output,
+        target_is_xdelta,
+        include_xdelta_fallback=False,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._g3m = g3m
         self._orig, self._patch, self._output = orig, patch, output
         self._target_is_xdelta = target_is_xdelta
+        self._include_xdelta_fallback = include_xdelta_fallback
 
     def run(self):
         try:
@@ -245,7 +254,10 @@ class _ConvertWorkerThread(QThread):
                     patch_type = "xdelta"
                 else:
                     rc, out, err = self._g3m.patch_create(
-                        self._orig, temp_modified, self._output
+                        self._orig,
+                        temp_modified,
+                        self._output,
+                        include_xdelta_fallback=self._include_xdelta_fallback,
                     )
                     patch_type = "g3mpatch"
                 if rc == 0:
@@ -271,13 +283,23 @@ class _CreatePatchWorkerThread(QThread):
 
     finished = pyqtSignal(int, str, str)
 
-    def __init__(self, g3m, orig, modified, output, target_is_xdelta, parent=None) -> None:
+    def __init__(
+        self,
+        g3m,
+        orig,
+        modified,
+        output,
+        target_is_xdelta,
+        include_xdelta_fallback=False,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._g3m = g3m
         self._orig = orig
         self._modified = modified
         self._output = output
         self._target_is_xdelta = target_is_xdelta
+        self._include_xdelta_fallback = include_xdelta_fallback
 
     def run(self):
         try:
@@ -288,7 +310,10 @@ class _CreatePatchWorkerThread(QThread):
                 patch_type = "xdelta"
             else:
                 rc, out, err = self._g3m.patch_create(
-                    self._orig, self._modified, self._output
+                    self._orig,
+                    self._modified,
+                    self._output,
+                    include_xdelta_fallback=self._include_xdelta_fallback,
                 )
                 patch_type = "g3mpatch"
             if rc == 0:
@@ -362,6 +387,15 @@ class _PatchTab(QWidget):
         self._original_row.text_changed.connect(self._maybe_suggest_output_path)
         self._second_row.text_changed.connect(self._maybe_suggest_output_path)
 
+        self._xdelta_fallback_checkbox = QCheckBox(
+            tr("checkboxes.g3mpatch_xdelta_fallback")
+        )
+        self._xdelta_fallback_checkbox.setToolTip(
+            tr("tooltips.g3mpatch_xdelta_fallback")
+        )
+        lay.addWidget(self._xdelta_fallback_checkbox)
+        self._update_xdelta_fallback_visibility()
+
         lay.addStretch()
 
         btn_row = QHBoxLayout()
@@ -398,6 +432,7 @@ class _PatchTab(QWidget):
         self._second_row._label.setText(tr(key))
         self._second_row._label_key = key
         self._update_filters()
+        self._update_xdelta_fallback_visibility()
         self._maybe_suggest_output_path()
 
     def _on_mode_changed(self, _idx):
@@ -409,7 +444,15 @@ class _PatchTab(QWidget):
             self._action_combo.setCurrentIndex(1)
             self._action_combo.blockSignals(False)
         self._update_filters()
+        self._update_xdelta_fallback_visibility()
         self._maybe_suggest_output_path()
+
+    def _update_xdelta_fallback_visibility(self) -> None:
+        visible = (
+            self._mode_combo.currentText() == "g3mpatch"
+            and self._action_combo.currentIndex() in {0, 2}
+        )
+        self._xdelta_fallback_checkbox.setVisible(visible)
 
     def _update_filters(self):
         mode = self._mode_combo.currentText()
@@ -502,7 +545,12 @@ class _PatchTab(QWidget):
         if action == 2:
             target_is_xdelta = mode == "xdelta"
             self._worker = _ConvertWorkerThread(
-                self._g3m, orig, second, out, target_is_xdelta
+                self._g3m,
+                orig,
+                second,
+                out,
+                target_is_xdelta,
+                self._xdelta_fallback_checkbox.isChecked(),
             )
         else:
             is_create = action == 0
@@ -518,6 +566,7 @@ class _PatchTab(QWidget):
                     second,
                     out,
                     mode == "xdelta",
+                    self._xdelta_fallback_checkbox.isChecked(),
                 )
             elif mode == "xdelta":
                 self._worker = _WorkerThread(self._g3m.xpatch_apply, (orig, second, out))
@@ -551,6 +600,12 @@ class _PatchTab(QWidget):
         self._original_row.relocalize()
         self._second_row.relocalize()
         self._output_row.relocalize()
+        self._xdelta_fallback_checkbox.setText(
+            tr("checkboxes.g3mpatch_xdelta_fallback")
+        )
+        self._xdelta_fallback_checkbox.setToolTip(
+            tr("tooltips.g3mpatch_xdelta_fallback")
+        )
         self._run_btn.setText(tr("modding_tools.run"))
 
 
@@ -660,7 +715,7 @@ class _DataConvertWorkerThread(QThread):
                             target_name = _resolve_target_data_name(
                                 original, self._target_mode
                             )
-                            new_name = _rename_data_output_name(patch_path, target_name)
+                            new_name = _rename_data_output_name(target_name)
                             new_path = os.path.join(os.path.dirname(patch_path), new_name)
                             if (
                                 rc == 0

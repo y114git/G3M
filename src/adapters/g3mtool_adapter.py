@@ -43,6 +43,16 @@ class G3MToolManager:
     def is_available(self) -> bool:
         return self.g3mtool_path is not None
 
+    def get_version(self) -> str | None:
+        """Return the bundled G3MTool version string."""
+        if not self.g3mtool_path:
+            return None
+        returncode, stdout, _stderr = self._run([self.g3mtool_path, "--version"])
+        if returncode != 0:
+            return None
+        version = (stdout or "").strip().splitlines()
+        return version[0].strip() if version else None
+
     @staticmethod
     def _unavailable_result() -> tuple[int, str, str]:
         return (-1, "", "G3MTool is not available")
@@ -156,11 +166,15 @@ class G3MToolManager:
         original_file: str,
         modified_file: str,
         output_path: str,
+        include_xdelta_fallback: bool = False,
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch create <original> <modified> [output]."""
+        cmd = ["patch", "create", original_file, modified_file, output_path]
+        if include_xdelta_fallback:
+            cmd.append("--xdelta-fallback")
         return self._run_command(
-            ["patch", "create", original_file, modified_file, output_path],
+            cmd,
             progress_callback=progress_callback,
         )
 

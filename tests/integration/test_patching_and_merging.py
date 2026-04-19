@@ -23,6 +23,21 @@ from services.g3mtool_patching_service import (
 
 class TestG3MToolAdapter:
     """Tests for patching and merging."""
+    class _FakeProcess:
+        def __init__(self, stdout="", stderr="") -> None:
+            self.stdout = io.StringIO(stdout)
+            self.stderr = io.StringIO(stderr)
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -1
+
     def test_adapter_initialization(self):
         """Checks that adaptering initialization."""
         g3mtool = G3MToolManager()
@@ -53,28 +68,15 @@ class TestG3MToolAdapter:
 
     def test_run_returns_stdout_stderr_and_progress(self, monkeypatch):
         """Checks that runing returns stdout stderr and progress."""
-
-        class _FakeProcess:
-            def __init__(self) -> None:
-                self.stdout = io.StringIO("Applying patch: 25%\nok\n")
-                self.stderr = io.StringIO("warn\n")
-                self.returncode = 0
-
-            def wait(self, timeout=None):
-                return self.returncode
-
-            def poll(self):
-                return self.returncode
-
-            def kill(self):
-                self.returncode = -1
-
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = "g3mtool"
         progress = []
         monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
         monkeypatch.setattr(
-            "adapters.g3mtool_adapter.subprocess.Popen", lambda *_args, **_kwargs: _FakeProcess()
+            "adapters.g3mtool_adapter.subprocess.Popen",
+            lambda *_args, **_kwargs: self._FakeProcess(
+                "Applying patch: 25%\nok\n", "warn\n"
+            ),
         )
 
         result = g3mtool._run(
@@ -85,6 +87,20 @@ class TestG3MToolAdapter:
         assert result == (0, "Applying patch: 25%\nok\n", "warn\n")
         assert progress == [(25, "Applying patch")]
         assert g3mtool._active_processes == []
+
+    def test_get_version_uses_version_flag(self, monkeypatch):
+        """Checks that version lookup uses the exact CLI contract."""
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "g3mtool"
+        calls = []
+        monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.subprocess.Popen",
+            lambda cmd, **kwargs: calls.append(cmd) or self._FakeProcess("1.0.2\n"),
+        )
+
+        assert g3mtool.get_version() == "1.0.2"
+        assert calls == [["g3mtool", "--version"]]
 
     @pytest.mark.parametrize(
         ("caller", "expected_cmd"),
@@ -180,6 +196,38 @@ class TestG3MToolAdapter:
 
         assert caller(g3mtool) == (7, "stdout", "stderr")
         assert run.call_args.args[0] == expected_cmd
+
+    def test_patch_create_with_xdelta_fallback_uses_flag(self, monkeypatch):
+        """Checks that patch creation forwards the fallback flag exactly."""
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "g3mtool"
+        calls = []
+        monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.subprocess.Popen",
+            lambda cmd, **kwargs: calls.append(cmd) or self._FakeProcess(),
+        )
+
+        assert (
+            g3mtool.patch_create(
+                "original.win",
+                "modified.win",
+                "out.g3mpatch",
+                include_xdelta_fallback=True,
+            )
+            == (0, "", "")
+        )
+        assert calls == [
+            [
+                "g3mtool",
+                "patch",
+                "create",
+                "original.win",
+                "modified.win",
+                "out.g3mpatch",
+                "--xdelta-fallback",
+            ]
+        ]
 
     @pytest.mark.parametrize(
         "caller",
@@ -477,6 +525,54 @@ class TestServiceInitialization:
         patcher.warning_handler = Mock(return_value=False)
 
         assert patcher._request_warning("warning text") is True
+        patcher.warning_handler.assert_not_called()
+
+    def test_g3mpatch_newer_tool_version_warning_can_abort(self):
+        """Checks that newer G3MTool patches can be rejected by the user."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher.g3mtool.get_version = Mock(return_value="1.0.2")
+        patcher.warning_handler = Mock(return_value=False)
+
+        result = patcher._check_g3mpatch_tool_version_warning(
+            "newer_patch.g3mpatch",
+            {"tool": {"name": "G3MTool", "version": "1.0.3"}},
+        )
+
+        assert result is False
+        patcher.warning_handler.assert_called_once()
+
+    def test_g3mpatch_equal_tool_version_with_extra_zero_does_not_warn(self):
+        """Checks that equivalent version strings do not create false warnings."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher.g3mtool.get_version = Mock(return_value="1.0.2")
+        patcher.warning_handler = Mock(return_value=False)
+
+        result = patcher._check_g3mpatch_tool_version_warning(
+            "same_patch.g3mpatch",
+            {"tool": {"name": "G3MTool", "version": "1.0.2.0"}},
+        )
+
+        assert result is True
+        patcher.warning_handler.assert_not_called()
+
+    def test_g3mpatch_missing_tool_version_is_allowed(self):
+        """Checks that old manifests without tool version remain compatible."""
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher.g3mtool.get_version = Mock(return_value="1.0.2")
+        patcher.warning_handler = Mock(return_value=False)
+
+        result = patcher._check_g3mpatch_tool_version_warning(
+            "legacy_patch.g3mpatch",
+            {},
+        )
+
+        assert result is True
         patcher.warning_handler.assert_not_called()
 
 
