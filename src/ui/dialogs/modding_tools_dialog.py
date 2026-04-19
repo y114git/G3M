@@ -80,6 +80,28 @@ def _apply_source_to_data(g3m, original: str, patch: str, output: str):
     return -1, "", f"Unsupported source patch format: {patch}"
 
 
+def _patch_create(
+    g3m,
+    original: str,
+    modified: str,
+    output: str,
+    *,
+    include_xdelta_fallback: bool = False,
+):
+    """Call patch_create with optional fallback support when available."""
+    try:
+        return g3m.patch_create(
+            original,
+            modified,
+            output,
+            include_xdelta_fallback=include_xdelta_fallback,
+        )
+    except TypeError as exc:
+        if "include_xdelta_fallback" not in str(exc):
+            raise
+        return g3m.patch_create(original, modified, output)
+
+
 def _convert_target_mode(index: int) -> str:
     if 0 <= index < len(_CONVERT_TARGET_OPTIONS):
         return _CONVERT_TARGET_OPTIONS[index]
@@ -253,7 +275,8 @@ class _ConvertWorkerThread(QThread):
                     )
                     patch_type = "xdelta"
                 else:
-                    rc, out, err = self._g3m.patch_create(
+                    rc, out, err = _patch_create(
+                        self._g3m,
                         self._orig,
                         temp_modified,
                         self._output,
@@ -309,7 +332,8 @@ class _CreatePatchWorkerThread(QThread):
                 )
                 patch_type = "xdelta"
             else:
-                rc, out, err = self._g3m.patch_create(
+                rc, out, err = _patch_create(
+                    self._g3m,
                     self._orig,
                     self._modified,
                     self._output,
@@ -749,8 +773,11 @@ class _DataConvertWorkerThread(QThread):
                                 )
                                 patch_type = "xdelta"
                             else:
-                                rc, _, err = self._g3m.patch_create(
-                                    original, temp_modified, new_path
+                                rc, _, err = _patch_create(
+                                    self._g3m,
+                                    original,
+                                    temp_modified,
+                                    new_path,
                                 )
                                 patch_type = "g3mpatch"
                             if rc != 0:
