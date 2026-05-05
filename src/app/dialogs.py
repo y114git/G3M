@@ -79,6 +79,22 @@ def open_downloads_dialog(w):
     w._downloads_dialog.show()
 
 
+def open_log_viewer_dialog(w):
+    from ui.dialogs.log_viewer_dialog import LogViewerDialog
+
+    if w._log_viewer_dialog is None:
+        analytics = getattr(w, "analytics_service", None)
+        if analytics:
+            analytics.record_dialog_opened("log_viewer")
+        w._log_viewer_dialog = LogViewerDialog(w.app_state, w)
+        w._log_viewer_dialog.destroyed.connect(
+            lambda: setattr(w, "_log_viewer_dialog", None)
+        )
+    w._log_viewer_dialog.show()
+    w._log_viewer_dialog.raise_()
+    w._log_viewer_dialog.activateWindow()
+
+
 def open_game_versions_dialog(w):
     from ui.dialogs.game_versions_dialog import GameVersionsDialog
 

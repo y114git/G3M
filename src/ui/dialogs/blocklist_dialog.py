@@ -149,9 +149,6 @@ class BlocklistDialog(QDialog):
                 QComboBox {{
                     border: 2px solid {border_color};
                 }}
-                QComboBox:hover, QComboBox:focus {{
-                    border: 2px solid {theme["hover"]};
-                }}
                 QComboBox QAbstractItemView {{
                     background-color: {theme["elements"]};
                     border: 2px solid {border_color};

@@ -3,6 +3,8 @@ import platform
 import sys
 from unittest.mock import patch
 
+import pytest
+
 from utils.path_utils import (
     _replace_svg_color_tokens,
     find_chapter_resource_dir,
@@ -12,6 +14,8 @@ from utils.path_utils import (
     resolve_game_executable,
     resource_path,
 )
+
+pytestmark = pytest.mark.skip_user_data_override
 
 
 class TestPathUtils:

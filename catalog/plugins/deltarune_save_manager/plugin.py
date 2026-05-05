@@ -312,4 +312,3 @@ class DRSaveManagerPlugin:
 
 def create_plugin():
     return DRSaveManagerPlugin()
-

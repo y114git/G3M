@@ -85,7 +85,9 @@
     "launch_button": "Launch",
     "library_tab": "Library",
     "library_tab_easter_egg": "Librarby",
+    "windows_menu": "Windows",
     "help_menu": "Help",
+    "log_viewer": "Log Viewer",
     "about_title": "About",
     "about_dialog_text": "The ultimate mod manager for DELTARUNE, UNDERTALE, Pizza Tower, and more.",
     "about_version_label": "Version: {version}",
@@ -816,6 +818,23 @@
     "confirm_link": "Link: {link}",
     "confirm_yes": "Yes",
     "confirm_no": "No"
+  },
+  "log_viewer": {
+    "title": "Log Viewer",
+    "latest_live": "Latest / Live",
+    "open_folder": "Open logs folder",
+    "current_source": "Current source: {file_name}",
+    "no_source": "No log file",
+    "empty": {
+      "g3m": "No G3M log file found yet.",
+      "patching": "No patching log file found yet.",
+      "conflicts": "No conflicts log file found yet."
+    },
+    "tabs": {
+      "g3m": "G3M",
+      "patching": "Patching",
+      "conflicts": "Conflicts"
+    }
   },
   "themes": {
     "downloading_theme": "Downloading theme...",

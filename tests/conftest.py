@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import os
 import sys
@@ -11,6 +10,59 @@ from PyQt6.QtWidgets import QApplication
 
 from models.app_state import AppState
 from ui.common.feedback import FeedbackManager
+from utils.path_utils import set_user_data_root_override
+
+_THREAD_ATTRS = (
+    "_compatibility_thread",
+    "_icon_loader_runnable",
+    "thread",
+    "_thread",
+    "worker_thread",
+    "_worker_thread",
+    "monitor_thread",
+    "fetch_thread",
+    "details_thread",
+    "metadata_thread",
+    "install_thread",
+    "full_install_thread",
+    "current_install_thread",
+    "changelog_thread",
+    "presence_thread",
+)
+
+
+def _pump_events(app: QApplication, cycles: int = 3) -> None:
+    for _ in range(cycles):
+        app.processEvents()
+
+
+def _stop_known_widget_threads(app: QApplication) -> None:
+    from PyQt6.QtCore import QThread
+
+    for widget in list(app.allWidgets()):
+        for attr_name in _THREAD_ATTRS:
+            try:
+                thread = getattr(widget, attr_name, None)
+                if not isinstance(thread, QThread):
+                    continue
+                if thread.isRunning():
+                    thread.requestInterruption()
+                    thread.quit()
+                    if not thread.wait(50):
+                        thread.terminate()
+                        thread.wait(50)
+                thread.deleteLater()
+            except Exception as e:
+                logging.debug(f'_stop_known_widget_threads: {attr_name}: {e}')
+
+
+def _close_widgets(app: QApplication) -> None:
+    for widget in list(app.topLevelWidgets()):
+        try:
+            widget.close()
+            widget.deleteLater()
+        except Exception as e:
+            logging.debug("_close_widgets: failed closing top-level widget: %s", e, exc_info=True)
 
 
 @pytest.fixture(scope='session')
@@ -19,66 +71,82 @@ def qapp():
     if app is None:
         app = QApplication(sys.argv)
     yield app
-    import time
 
     from PyQt6.QtCore import QThread, QThreadPool
 
     from ui.utils.ui_utils import safe_stop_thread
-    app.processEvents()
-    time.sleep(0.2)
-    app.processEvents()
+    _pump_events(app)
     thread_pool = QThreadPool.globalInstance()
     if thread_pool is not None:
         thread_pool.clear()
         if thread_pool.activeThreadCount() > 0:
-            thread_pool.waitForDone(2000)
+            thread_pool.waitForDone(200)
     for widget in app.allWidgets():
-        for attr_name in ['_compatibility_thread', '_icon_loader_runnable', 'thread', '_thread', 'worker_thread', '_worker_thread', 'monitor_thread', 'fetch_thread', 'details_thread', 'metadata_thread']:
+        for attr_name in _THREAD_ATTRS:
             try:
                 thread = getattr(widget, attr_name, None)
                 if thread and isinstance(thread, QThread):
-                    safe_stop_thread(thread, timeout=500, blocking=False)
+                    safe_stop_thread(thread, timeout=100, blocking=False)
             except Exception as e:
                 logging.debug(f'teardown_qt_threads: failed to stop thread attribute {attr_name}: {e}', exc_info=True)
-    app.processEvents()
-    time.sleep(0.1)
+    _close_widgets(app)
+    _pump_events(app)
 
 
 @pytest.fixture(autouse=True)
-def cleanup_threads(qapp):
+def sandbox_user_data_paths(monkeypatch, request, temp_dir):
+    sandbox_root = Path(temp_dir) / "G3M"
+    sandbox_root.mkdir(parents=True, exist_ok=True)
+    temp_path = sandbox_root
+    home_dir = temp_path / "home"
+    appdata_dir = temp_path / "appdata"
+    localappdata_dir = temp_path / "localappdata"
+    for path in (home_dir, appdata_dir, localappdata_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("USERPROFILE", str(home_dir))
+    monkeypatch.setenv("APPDATA", str(appdata_dir))
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata_dir))
+    monkeypatch.setenv("TMP", str(temp_path))
+    monkeypatch.setenv("TEMP", str(temp_path))
+    monkeypatch.setenv("TMPDIR", str(temp_path))
+    skip_override = any(
+        marker.name == "skip_user_data_override"
+        for marker in request.node.iter_markers()
+    )
+    if not skip_override:
+        set_user_data_root_override(str(temp_path))
     yield
-    import time
+    if not skip_override:
+        set_user_data_root_override(None)
 
-    from PyQt6.QtCore import QThread, QThreadPool
-    for _ in range(3):
-        qapp.processEvents()
-        time.sleep(0.05)
+
+@pytest.fixture(autouse=True)
+def cleanup_threads(request):
+    yield
+    if "qapp" not in request.fixturenames:
+        return
+    app = QApplication.instance()
+    if app is None:
+        return
+    from PyQt6.QtCore import QThreadPool
+    _pump_events(app)
     try:
-        for widget in qapp.allWidgets():
-            for attr_name in ['_compatibility_thread', '_icon_loader_runnable', 'thread', '_thread', 'worker_thread', '_worker_thread', 'monitor_thread', 'fetch_thread', 'details_thread', 'metadata_thread', 'install_thread', 'full_install_thread', 'current_install_thread', 'changelog_thread', 'presence_thread']:
-                thread = getattr(widget, attr_name, None)
-                if thread and isinstance(thread, QThread):
-                    if thread.isRunning():
-                        thread.requestInterruption()
-                        thread.quit()
-                        if not thread.wait(500):
-                            thread.terminate()
-                            thread.wait(200)
-                    with contextlib.suppress(Exception):
-                        thread.deleteLater()
+        _stop_known_widget_threads(app)
     except Exception as e:
         logging.debug(f'cleanup_threads: failed during thread cleanup sweep: {e}', exc_info=True)
-    for _ in range(3):
-        qapp.processEvents()
-        time.sleep(0.05)
+    _close_widgets(app)
+    _pump_events(app)
     pool = QThreadPool.globalInstance()
     if pool is not None:
         pool.clear()
         if pool.activeThreadCount() > 0:
-            pool.waitForDone(2000)
-    for _ in range(5):
-        qapp.processEvents()
-        time.sleep(0.05)
+            try:
+                timeout_ms = int(os.getenv("WAIT_FOR_DONE_TIMEOUT_MS", "5000"))
+            except ValueError:
+                timeout_ms = 5000
+            pool.waitForDone(timeout_ms)
+    _pump_events(app)
 
 
 @pytest.fixture

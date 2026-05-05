@@ -5,7 +5,7 @@ import os
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -657,6 +657,35 @@ class TestReportParsing:
         patcher = G3MToolPatchingService(Mock(), Mock())
         patcher._last_report_path = str(report)
         assert patcher.report_has_conflicts() is False
+
+    def test_persist_conflict_artifacts_writes_logs_without_markdown_in_logs(
+        self, tmp_path
+    ):
+        """Checks that conflict artifacts create only log files in log folders."""
+        report = tmp_path / "report.md"
+        report.write_text("## Merge Report\n\nTotal conflicts: 2\n", encoding="utf-8")
+        patcher = G3MToolPatchingService(Mock(), Mock())
+
+        with patch(
+            "services.g3mtool_patching_service.get_user_data_root",
+            return_value=str(tmp_path),
+        ):
+            saved_path = patcher._persist_conflict_artifacts(
+                str(report), "deltarune_1"
+            )
+
+        conflicts_log = tmp_path / "logs" / "conflicts.log"
+        archived_conflicts = list((tmp_path / "logs" / "patching").glob("conflicts_*.log"))
+        archived_reports = list((tmp_path / "logs" / "patching").glob("*.md"))
+
+        assert saved_path is not None
+        assert saved_path.endswith(".md")
+        assert Path(saved_path).exists()
+        assert conflicts_log.read_text(encoding="utf-8") == report.read_text(
+            encoding="utf-8"
+        )
+        assert len(archived_conflicts) == 1
+        assert archived_reports == []
 
 
 class TestXdeltaPatchApplication:

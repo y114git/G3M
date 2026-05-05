@@ -20,6 +20,8 @@ from utils.path_utils import (
     resource_path,
 )
 
+pytestmark = pytest.mark.skip_user_data_override
+
 
 class TestPathUtilsEdgeCases:
     """Tests for path utils edge cases."""

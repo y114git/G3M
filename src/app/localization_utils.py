@@ -121,6 +121,8 @@ def relocalize_texts(w):
                 btn.setText(chapter_tab_names[i])
     if hasattr(w, "title_bar") and w.title_bar:
         w.title_bar.set_localized_texts(
+            tr("ui.windows_menu"),
+            tr("ui.log_viewer"),
             tr("ui.help_menu"),
             tr("buttons.changelog"),
             tr("ui.about_title"),
@@ -165,6 +167,12 @@ def relocalize_texts(w):
         and w._modding_tools_dialog.isVisible()
     ):
         w._modding_tools_dialog.relocalize_ui()
+    if (
+        hasattr(w, "_log_viewer_dialog")
+        and w._log_viewer_dialog
+        and w._log_viewer_dialog.isVisible()
+    ):
+        w._log_viewer_dialog.relocalize_ui()
     if (
         hasattr(w, "_announce_dialog")
         and w._announce_dialog

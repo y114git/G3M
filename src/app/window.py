@@ -271,6 +271,11 @@ class AppWindow(QWidget):
         dialog = ChangelogDialog(self, changelog_url.strip() if changelog_url else "")
         dialog.exec()
 
+    def _show_log_viewer_dialog(self):
+        from app.dialogs import open_log_viewer_dialog
+
+        open_log_viewer_dialog(self)
+
     def _toggle_maximized_from_title_bar(self):
         if self.isMaximized():
             self.showNormal()
@@ -410,6 +415,7 @@ class AppWindow(QWidget):
         self.main_layout.setSpacing(6)
         self.setMouseTracking(True)
         self.title_bar = CustomTitleBar(self, app_state=self.app_state)
+        self.title_bar.log_viewer_requested.connect(self._show_log_viewer_dialog)
         self.title_bar.changelog_requested.connect(self._show_changelog_dialog)
         self.title_bar.about_requested.connect(self._show_about_dialog)
         self.title_bar.minimize_requested.connect(self.showMinimized)
@@ -418,6 +424,8 @@ class AppWindow(QWidget):
         )
         self.title_bar.close_requested.connect(self.close)
         self.title_bar.set_localized_texts(
+            tr("ui.windows_menu"),
+            tr("ui.log_viewer"),
             tr("ui.help_menu"),
             tr("buttons.changelog"),
             tr("ui.about_title"),

@@ -121,6 +121,56 @@ class TestChangelogDialog:
         dialog.close()
 
 
+class TestLogViewerDialog:
+    """Tests for dialogs."""
+
+    def test_log_viewer_dialog_creation_and_relocalize(self, qapp, app_state, tmp_path):
+        from services.localization_service import tr
+        from ui.dialogs.log_viewer_dialog import LogViewerDialog
+
+        logs_dir = tmp_path / "logs"
+        patching_dir = logs_dir / "patching"
+        patching_dir.mkdir(parents=True)
+        (logs_dir / "g3m.log").write_text("g3m line\n", encoding="utf-8")
+        (logs_dir / "patching.log").write_text("patching line\n", encoding="utf-8")
+        (logs_dir / "conflicts.log").write_text("conflict line\n", encoding="utf-8")
+
+        dialog = LogViewerDialog(app_state, parent=None, user_data_root=str(tmp_path))
+
+        assert dialog is not None
+        assert isinstance(dialog, QDialog)
+        assert dialog._tabs.count() == 3
+        assert dialog._tabs.tabText(0) == "G3M"
+        assert dialog._tabs.tabText(1) == "Patching"
+        assert dialog._tabs.tabText(2) == "Conflicts"
+        assert dialog._history_combo.itemText(0) == tr("log_viewer.latest_live")
+        assert dialog._open_folder_button.toolTip() == tr("log_viewer.open_folder")
+        assert dialog._viewer.toPlainText() == "g3m line\n"
+
+        dialog.relocalize_ui()
+        dialog.refresh_theme()
+
+        assert dialog.windowTitle() == tr("log_viewer.title")
+        assert dialog._close_button.text() == tr("common.close")
+        dialog.close()
+
+    def test_log_viewer_dialog_shows_blank_for_existing_empty_file(
+        self, qapp, app_state, tmp_path
+    ):
+        from ui.dialogs.log_viewer_dialog import LogViewerDialog
+
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir(parents=True)
+        (logs_dir / "patching.log").write_text("", encoding="utf-8")
+
+        dialog = LogViewerDialog(app_state, parent=None, user_data_root=str(tmp_path))
+        dialog._tabs.setCurrentIndex(1)
+        qapp.processEvents()
+
+        assert dialog._viewer.toPlainText() == ""
+        dialog.close()
+
+
 class TestPizzaOvenConversionDialog:
     """Tests for dialogs."""
     def test_dialog_creation(self, qapp):

@@ -12,9 +12,6 @@ from services.downloads_manager import DownloadsManager, _safe_filename
 
 class TestDownloadsManagerEdgeCases:
     """Tests for downloads manager edge cases."""
-    def teardown_method(self, method):
-        import gc
-        gc.collect()
 
     def test_safe_filename_various_inputs(self):
         """Checks that safeing filename various inputs."""

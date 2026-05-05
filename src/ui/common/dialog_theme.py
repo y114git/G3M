@@ -6,6 +6,7 @@ from ui.common.styling import (
     get_border_radius,
     get_theme_colors,
 )
+from utils.path_utils import resource_path
 
 
 def get_dialog_theme_values(app_state):
@@ -28,6 +29,7 @@ def get_dialog_theme_values(app_state):
 
 def build_dialog_theme_stylesheet(app_state):
     theme = get_dialog_theme_values(app_state)
+    arrow_down_path = resource_path("assets/icons/arrow_down.svg").replace("\\", "/")
     return f"""
         QDialog {{
             background-color: {theme["background"]};
@@ -40,22 +42,30 @@ def build_dialog_theme_stylesheet(app_state):
             border-radius: {theme["field_radius"]}px;
             color: {theme["main_text"]};
             padding: 8px;
-            font-size: 16px;
         }}
         QComboBox {{
             background-color: {theme["elements"]};
             border: 2px solid {theme["border"]};
             border-radius: {theme["field_radius"]}px;
             color: {theme["main_text"]};
-            padding: 7px 10px;
-            font-size: 16px;
-            min-height: 36px;
+            padding: 5px 10px;
+            min-height: 30px;
         }}
         QLineEdit:focus {{
             border: 2px solid {theme["hover"]};
         }}
-        QComboBox:hover, QComboBox:focus {{
-            border: 2px solid {theme["hover"]};
+        QComboBox::drop-down {{
+            subcontrol-origin: border;
+            subcontrol-position: center right;
+            background: transparent;
+            border: none;
+            width: 30px;
+            margin-right: 4px;
+        }}
+        QComboBox::down-arrow {{
+            image: url({arrow_down_path});
+            width: 16px;
+            height: 10px;
         }}
         QLineEdit:disabled, QComboBox:disabled {{
             color: #8f8f8f;
@@ -67,7 +77,6 @@ def build_dialog_theme_stylesheet(app_state):
             border-radius: {theme["border_radius"]}px;
             color: {theme["main_text"]};
             padding: 6px;
-            font-size: 16px;
         }}
         QListWidget::item {{
             padding: 11px 8px;
@@ -80,8 +89,25 @@ def build_dialog_theme_stylesheet(app_state):
             background-color: {theme["elements"]};
             color: {theme["main_text"]};
             selection-background-color: {theme["hover"]};
-            font-size: 16px;
-            padding: 4px;
+            selection-color: {theme["main_text"]};
+            border: 2px solid {theme["border"]};
+            border-radius: {theme["border_radius"]}px;
+        }}
+        QComboBox QAbstractItemView::item {{
+            border: 2px solid transparent;
+            border-radius: {theme["field_radius"]}px;
+        }}
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {theme["hover"]};
+            color: {theme["main_text"]};
+            border: 2px solid transparent;
+            border-radius: {theme["field_radius"]}px;
+        }}
+        QComboBox QAbstractItemView::item:selected {{
+            background-color: {theme["hover"]};
+            color: {theme["main_text"]};
+            border: 2px solid {theme["border"]};
+            border-radius: {theme["field_radius"]}px;
         }}
         QPushButton {{
             background-color: {theme["elements"]};
@@ -107,7 +133,6 @@ def build_dialog_theme_stylesheet(app_state):
         }}
         QCheckBox {{
             color: {theme["main_text"]};
-            font-size: 16px;
         }}
         QCheckBox:disabled {{
             color: #8f8f8f;

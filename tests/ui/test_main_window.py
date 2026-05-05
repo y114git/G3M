@@ -1,6 +1,15 @@
 import os
-import time
 from unittest.mock import Mock, patch
+
+from PyQt6.QtTest import QTest
+
+from services.localization_service import tr
+
+
+def _drain_events(qapp, cycles: int = 3, delay_ms: int = 10) -> None:
+    for _ in range(cycles):
+        qapp.processEvents()
+        QTest.qWait(delay_ms)
 
 
 def _window_test_patches(temp_dir):
@@ -120,9 +129,7 @@ class TestAppWindow:
                 pizzatower_index = window.modgame_combo.findData("pizzatower")
                 window.modgame_combo.setCurrentIndex(pizzatower_index)
                 window.show()
-                for _ in range(12):
-                    qapp.processEvents()
-                    time.sleep(0.05)
+                _drain_events(qapp, cycles=12, delay_ms=50)
                 window.app_state.all_mods = [
                     BrowserModInfo(
                         id="gb_mod_3",
@@ -136,17 +143,13 @@ class TestAppWindow:
                     )
                 ]
                 window.search_display.update_filtered_mods()
-                for _ in range(12):
-                    qapp.processEvents()
-                    time.sleep(0.05)
+                _drain_events(qapp, cycles=12, delay_ms=50)
 
                 assert [mod.name for mod in window.app_state.filtered_mods] == ["P"]
                 assert window.mod_list_layout.count() == 1
 
                 window.tag_textedit.setChecked(True)
-                for _ in range(12):
-                    qapp.processEvents()
-                    time.sleep(0.05)
+                _drain_events(qapp, cycles=12, delay_ms=50)
 
                 assert window.app_state.filtered_mods == []
                 assert window.mod_list_layout.count() == 0
@@ -259,6 +262,47 @@ class TestAppWindow:
             finally:
                 window._close_cleanup_started = True
                 window.hide()
+
+    def test_title_bar_windows_menu_opens_log_viewer(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                assert window.title_bar.windows_button.text() == tr("ui.windows_menu")
+                assert window.title_bar.log_viewer_action.text() == tr(
+                    "ui.log_viewer"
+                )
+                assert window._log_viewer_dialog is None
+
+                window.title_bar.log_viewer_action.trigger()
+                qapp.processEvents()
+
+                assert window._log_viewer_dialog is not None
+                assert window._log_viewer_dialog.isVisible() is True
+
+                first_dialog = window._log_viewer_dialog
+                window.title_bar.log_viewer_action.trigger()
+                qapp.processEvents()
+
+                assert window._log_viewer_dialog is first_dialog
+                assert window._log_viewer_dialog.isVisible() is True
+            finally:
+                if window._log_viewer_dialog:
+                    window._log_viewer_dialog.close()
+                window.close()
 
 
 class TestTabBuilders:

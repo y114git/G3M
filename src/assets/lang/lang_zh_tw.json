@@ -85,7 +85,9 @@
     "launch_button": "啟動",
     "library_tab": "庫",
     "library_tab_easter_egg": "庫庫",
+    "windows_menu": "視窗",
     "help_menu": "說明",
+    "log_viewer": "日誌檢視器",
     "about_title": "關於",
     "about_dialog_text": "適用於 DELTARUNE、UNDERTALE、Pizza Tower 等遊戲的終極模組管理器。",
     "about_version_label": "版本：{version}",
@@ -816,6 +818,23 @@
     "confirm_link": "連結：{link}",
     "confirm_yes": "是",
     "confirm_no": "否"
+  },
+  "log_viewer": {
+    "title": "日誌檢視器",
+    "latest_live": "最新 / 即時",
+    "open_folder": "開啟日誌資料夾",
+    "current_source": "目前來源：{file_name}",
+    "no_source": "沒有日誌檔案",
+    "empty": {
+      "g3m": "尚未找到 G3M 日誌檔。",
+      "patching": "尚未找到修補日誌檔。",
+      "conflicts": "尚未找到衝突日誌檔。"
+    },
+    "tabs": {
+      "g3m": "G3M",
+      "patching": "修補",
+      "conflicts": "衝突"
+    }
   },
   "themes": {
     "downloading_theme": "正在下載主題...",

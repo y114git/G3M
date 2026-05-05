@@ -159,14 +159,6 @@ class ManualModInstallDialog(QDialog):
         size = max(14, round(base * self._ui_scale()))
         return QSize(size, size)
 
-    def _center_combo_text(self, combo: QComboBox) -> None:
-        combo.setEditable(True)
-        line_edit = combo.lineEdit()
-        if line_edit:
-            line_edit.setReadOnly(True)
-            line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            line_edit.setCursor(Qt.CursorShape.ArrowCursor)
-
     def closeEvent(self, event):
         if self.temp_dir_to_cleanup and os.path.exists(self.temp_dir_to_cleanup):
             try:
@@ -196,7 +188,6 @@ class ManualModInstallDialog(QDialog):
         self.game_combo = QComboBox()
         self.game_combo.setMinimumWidth(240)
         self.game_combo.setToolTip(tr("tooltips.manual_install_game"))
-        self._center_combo_text(self.game_combo)
         for entry in get_all_game_entries():
             self.game_combo.addItem(entry.display_name, entry.id)
         game_value = self.initial_game_type
@@ -1081,9 +1072,6 @@ class ManualModInstallDialog(QDialog):
             QComboBox {{
                 border: 2px solid {border};
                 border-radius: {clamp_border_radius(7, height=max(30, round(36 * self._ui_scale())), border_width=2)}px;
-            }}
-            QComboBox:hover, QComboBox:focus {{
-                border: 2px solid {self._theme_value("hover", "#3cb371")};
             }}
             QComboBox QAbstractItemView {{
                 background-color: {elements};

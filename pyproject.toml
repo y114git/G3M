@@ -18,21 +18,21 @@ dependencies = [
     "py7zr==1.1.0",
     "python-dotenv==1.2.2",
     "rarfile==4.2",
-    "requests==2.33.0",
+    "requests==2.33.1",
     "urllib3==2.6.3",
 ]
 
 [project.optional-dependencies]
-build = ["pyinstaller==6.19.0"]
+build = ["pyinstaller==6.20.0"]
 test = [
-    "pytest==9.0.2",
+    "pytest==9.0.3",
     "pytest-cov==7.1.0",
     "pytest-html==4.2.0",
     "pytest-mock==3.15.1",
     "pytest-qt==4.5.0",
     "responses==0.26.0",
 ]
-dev = ["ruff==0.15.8"]
+dev = ["ruff==0.15.12"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -50,6 +50,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["-ra", "--tb=short"]
+markers = [
+    "skip_user_data_override: allow tests to use native path resolution instead of sandboxed user data root",
+]
 
 [tool.coverage.run]
 branch = true

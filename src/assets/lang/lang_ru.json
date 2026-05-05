@@ -85,7 +85,9 @@
     "launch_button": "Запустить",
     "library_tab": "Библиотека",
     "library_tab_easter_egg": "Библиоека",
+    "windows_menu": "Окна",
     "help_menu": "Справка",
+    "log_viewer": "Просмотр логов",
     "about_title": "О программе",
     "about_dialog_text": "Универсальный менеджер модов для DELTARUNE, UNDERTALE, Pizza Tower и не только.",
     "about_version_label": "Версия: {version}",
@@ -816,6 +818,23 @@
     "confirm_link": "Ссылка: {link}",
     "confirm_yes": "Да",
     "confirm_no": "Нет"
+  },
+  "log_viewer": {
+    "title": "Просмотр логов",
+    "latest_live": "Последний / Live",
+    "open_folder": "Открыть папку логов",
+    "current_source": "Текущий источник: {file_name}",
+    "no_source": "Файл логов не найден",
+    "empty": {
+      "g3m": "Лог G3M пока не найден.",
+      "patching": "Лог патчинга пока не найден.",
+      "conflicts": "Лог конфликтов пока не найден."
+    },
+    "tabs": {
+      "g3m": "G3M",
+      "patching": "Патчинг",
+      "conflicts": "Конфликты"
+    }
   },
   "themes": {
     "downloading_theme": "Скачивание темы...",

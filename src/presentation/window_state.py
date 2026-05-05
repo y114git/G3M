@@ -34,4 +34,5 @@ def initialize_window_runtime(window) -> None:
     window._last_resize_cursor_shape = None
     window._downloads_dialog = None
     window._game_versions_dialog = None
+    window._log_viewer_dialog = None
     window._modding_tools_dialog = None

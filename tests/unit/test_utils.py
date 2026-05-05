@@ -137,32 +137,6 @@ class TestFileUtils:
         assert has_deltamod_info_file([]) is False
 
 
-class TestPathUtils:
-    """Tests for utils."""
-    def test_get_user_data_root(self):
-        """Checks that getting user data root."""
-        from utils.path_utils import get_user_data_root
-        root = get_user_data_root()
-        assert root is not None
-        assert isinstance(root, str)
-        assert 'G3M' in root
-
-    def test_get_user_mods_dir(self):
-        """Checks that getting user mods dir."""
-        from utils.path_utils import get_user_mods_dir
-        mods_dir = get_user_mods_dir()
-        assert mods_dir is not None
-        assert isinstance(mods_dir, str)
-        assert 'mods' in mods_dir
-
-    def test_resource_path(self):
-        """Checks that resourceing path."""
-        from utils.path_utils import resource_path
-        path = resource_path('assets/test.txt')
-        assert path is not None
-        assert isinstance(path, str)
-
-
 class TestGameUtils:
     """Tests for utils."""
     @patch('psutil.process_iter')
@@ -195,33 +169,6 @@ class TestGameUtils:
 
 class TestNetworkUtils:
     """Tests for utils."""
-    def test_get_session(self):
-        """Checks that getting session."""
-        from utils.network_utils import get_session
-        session = get_session()
-        assert session is not None
-        assert hasattr(session, 'headers')
-
-    @patch('requests.get')
-    def test_download_file(self, mock_get):
-        """Checks that downloading file."""
-        from utils.network_utils import download_file
-        mock_response = Mock()
-        mock_response.iter_content.return_value = [b'chunk1', b'chunk2']
-        mock_response.headers = {'Content-Length': '12'}
-        mock_get.return_value = mock_response
-        assert callable(download_file)
-
-
-class TestImageLoader:
-    """Tests for utils."""
-    def test_image_loader_exists(self):
-        """Checks that imageing loader exists."""
-        import importlib.util
-        spec = importlib.util.find_spec('ui.utils.image_loader')
-        if spec is None:
-            pytest.skip('ImageLoader not available')
-        assert spec is not None
 
 
 class TestCache:

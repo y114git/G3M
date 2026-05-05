@@ -1,10 +1,21 @@
 import contextlib
-import time
 from types import SimpleNamespace
 
 import pytest
 from PyQt6.QtCore import QMimeData, QUrl
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QLabel, QWidget
+
+
+def _drain_events(qapp, cycles: int = 3) -> None:
+    """Flush pending Qt events after widget cleanup (deleteLater).
+
+    Multiple cycles with short waits ensure deferred deletions and
+    signal/slot invocations are fully processed before test teardown.
+    """
+    for _ in range(cycles):
+        qapp.processEvents()
+        QTest.qWait(5)
 
 
 class TestModWidgets:
@@ -19,9 +30,7 @@ class TestModWidgets:
             assert widget is not None
             assert isinstance(widget, QWidget)
         widget.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_search_mod_card_widget_recalculates_metrics_when_ui_scale_changes(self, qapp):
         """Checks that searching mod card widget recalculates metrics when ui scale changes."""
@@ -50,9 +59,7 @@ class TestModWidgets:
             assert widget.name_label.maximumWidth() < widget.maximumWidth()
         widget.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_installed_mod_widget_scales_with_ui_scale(self, qapp):
         """Checks that installeding mod widget scales with ui scale."""
@@ -69,9 +76,7 @@ class TestModWidgets:
             assert widget.icon_label.width() > 80
         widget.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_card_widget_scales_with_ui_scale(self, qapp):
         """Checks that moding card widget scales with ui scale."""
@@ -89,9 +94,7 @@ class TestModWidgets:
             assert widget.icon_label.width() > 80
         widget.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_search_mod_card_widget_expands_on_selection_and_hides_on_focus_loss(self, qapp):
         """Checks that searching mod card widget expands on selection and hides on focus loss."""
@@ -121,14 +124,11 @@ class TestModWidgets:
             assert not hasattr(widget, 'gb_status_label')
             other.setFocus()
             qapp.processEvents()
-            time.sleep(0.05)
-            qapp.processEvents()
+            _drain_events(qapp)
             assert not widget.expanded_widget.isVisible()
         widget.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_search_mod_card_widget_metadata_icons_keep_padding_when_scaled(self, qapp):
         """Checks that searching mod card widget metadata icons keep padding when scaled."""
@@ -148,9 +148,7 @@ class TestModWidgets:
             assert widget.likes_icon_label.width() > widget.likes_icon_label.pixmap().width()
         widget.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_search_display_controller_does_not_reselect_already_selected_card(self):
         """Checks that searching display controller does not reselect already selected card."""
@@ -199,9 +197,7 @@ class TestModWidgets:
             assert hasattr(widget, 'likes_label')
             assert '123' in widget.likes_label.text()
         widget.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_installed_mod_widget_creation(self, qapp):
         """Checks that installeding mod widget creation."""
@@ -215,9 +211,7 @@ class TestModWidgets:
             assert widget is not None
             assert isinstance(widget, QWidget)
         widget.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_card_widget_creation(self, qapp):
         """Checks that moding card widget creation."""
@@ -246,9 +240,7 @@ class TestModWidgets:
                 logging.debug(f'Thread cleanup error in test: {e}')
             safe_stop_thread(thread, timeout=1000)
         widget.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_selected_mod_card_keeps_select_border_on_hover(self, qapp):
         """Checks that selecteding mod card keeps select border on hover."""
@@ -271,9 +263,7 @@ class TestModWidgets:
             assert '#111111' not in widget.styleSheet()
         widget.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
 
 class TestCommonWidgets:
@@ -285,9 +275,7 @@ class TestCommonWidgets:
         assert combo is not None
         assert isinstance(combo, QWidget)
         combo.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_creation(self, qapp):
         """Checks that moding details overlay creation."""
@@ -303,9 +291,7 @@ class TestCommonWidgets:
         assert hasattr(overlay, 'desc_text')
         assert not hasattr(overlay, 'compat_status_label')
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_hidden_during_construction(self, qapp):
         """Checks that moding details overlay hidden during construction."""
@@ -317,9 +303,7 @@ class TestCommonWidgets:
         assert not overlay.isVisible(), 'Overlay must be hidden after construction to prevent child widgets flashing'
         overlay.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_preloaded_screenshot_displays_on_navigate(self, qapp):
         """Checks that moding details overlay preloaded screenshot displays on navigate."""
@@ -342,9 +326,7 @@ class TestCommonWidgets:
         overlay._ss_on_preloaded(1, test_img)
         assert overlay._img_label.pixmap() is not None and not overlay._img_label.pixmap().isNull(), 'Preloaded screenshot should display when user is viewing that index'
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_metadata_order(self, qapp):
         """Checks that moding details overlay metadata order."""
@@ -367,9 +349,7 @@ class TestCommonWidgets:
         assert version_pos < author_pos, f"Version should come before author, but version is at position {version_pos} and author is at position {author_pos}"
 
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     @pytest.mark.parametrize(('downloads', 'expected'), [(0, '0'), (None, '0')])
     def test_mod_details_overlay_shows_downloads(self, qapp, downloads, expected):
@@ -381,9 +361,7 @@ class TestCommonWidgets:
         meta_texts = [label.text() for label in overlay.findChildren(QLabel)]
         assert any(f'>{expected}</span>' in text for text in meta_texts)
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_uses_custom_hover_color(self, qapp):
         """Checks that moding details overlay uses custom hover color."""
@@ -396,9 +374,7 @@ class TestCommonWidgets:
         assert overlay._colors['btn_hover'] == '#123456'
         overlay.deleteLater()
         parent.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_uses_custom_select_color(self, qapp):
         """Checks that moding details overlay uses custom select color."""
@@ -411,9 +387,7 @@ class TestCommonWidgets:
         assert overlay._colors['btn_select'] == '#654321'
         overlay.deleteLater()
         parent.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_update_screenshots(self, qapp):
         """Checks that moding details overlay update screenshots."""
@@ -429,9 +403,7 @@ class TestCommonWidgets:
         overlay.update_screenshots([])
         assert len(overlay._ss_urls) == 0
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_initializes_screenshots_from_mod_data(self, qapp):
         """Checks that moding details overlay initializes screenshots from mod data."""
@@ -441,9 +413,7 @@ class TestCommonWidgets:
         overlay = ModDetailsOverlay(None, mod_data)
         assert overlay._ss_urls == ['https://example.com/1.png', 'https://example.com/2.png']
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_nav(self, qapp):
         """Checks that moding details overlay nav."""
@@ -464,9 +434,7 @@ class TestCommonWidgets:
         overlay._ss_prev()
         assert overlay._ss_index == 2
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_details_overlay_reuses_dot_labels_during_navigation(self, qapp):
         """Checks that moding details overlay reuses dot labels during navigation."""
@@ -480,9 +448,7 @@ class TestCommonWidgets:
         assert overlay._dot_labels == original_dot_labels
         assert overlay._dot_labels[1].text() == '●'
         overlay.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_summary_panel_keeps_zero_playtime_visible(self, qapp):
         """Checks that moding summary panel keeps zero playtime visible."""
@@ -513,9 +479,7 @@ class TestCommonWidgets:
             assert panel._playtime_value.text() == f"0 {tr('ui.playtime_hours_suffix')}"
         panel.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_summary_panel_shows_only_final_file_and_folder_names(self, qapp):
         """Checks that moding summary panel shows only final file and folder names."""
@@ -559,9 +523,7 @@ class TestCommonWidgets:
             assert 'nested/final.bin' not in panel._extra_label.text()
         panel.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_summary_panel_keeps_full_description_visible(self, qapp):
         """Checks that moding summary panel keeps the full description text."""
@@ -590,9 +552,7 @@ class TestCommonWidgets:
             assert panel._description_label.text() == description
         panel.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_mod_summary_panel_inserts_wrap_opportunities_for_long_file_names(self, qapp):
         """Checks that moding summary panel can wrap long file names in popup layouts."""
@@ -627,9 +587,7 @@ class TestCommonWidgets:
             assert '&#8203;' in panel._extra_label.text()
         panel.deleteLater()
         host.deleteLater()
-        for _ in range(3):
-            qapp.processEvents()
-            time.sleep(0.05)
+        _drain_events(qapp)
 
     def test_library_drop_area_ignores_internal_file_drags_and_accepts_external_ones(self, qapp):
         """Checks that librarying drop area ignores internal file drags and accepts external ones."""
@@ -663,6 +621,7 @@ class TestCommonWidgets:
         assert external_event.accepted is True
         assert dropped_paths == ['C:/Mods/test_mod.zip']
         drop_area.deleteLater()
+        _drain_events(qapp)
 
     def test_installed_mod_drag_export_is_materialized_only_when_urls_are_requested(self, qapp):
         """Checks that installed mod drag export stays lazy until the drop target requests URLs."""

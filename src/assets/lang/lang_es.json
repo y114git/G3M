@@ -85,7 +85,9 @@
     "launch_button": "Iniciar",
     "library_tab": "Biblioteca",
     "library_tab_easter_egg": "Biblioetca",
+    "windows_menu": "Ventanas",
     "help_menu": "Ayuda",
+    "log_viewer": "Visor de registros",
     "about_title": "Acerca de",
     "about_dialog_text": "El gestor de mods definitivo para DELTARUNE, UNDERTALE, Pizza Tower y mucho más.",
     "about_version_label": "Versión: {version}",
@@ -816,6 +818,23 @@
     "confirm_link": "Enlace: {link}",
     "confirm_yes": "Sí",
     "confirm_no": "No"
+  },
+  "log_viewer": {
+    "title": "Visor de registros",
+    "latest_live": "Último / En vivo",
+    "open_folder": "Abrir carpeta de registros",
+    "current_source": "Fuente actual: {file_name}",
+    "no_source": "No hay archivo de registro",
+    "empty": {
+      "g3m": "Aún no se encontró ningún registro de G3M.",
+      "patching": "Aún no se encontró ningún registro de parcheo.",
+      "conflicts": "Aún no se encontró ningún registro de conflictos."
+    },
+    "tabs": {
+      "g3m": "G3M",
+      "patching": "Parcheo",
+      "conflicts": "Conflictos"
+    }
   },
   "themes": {
     "downloading_theme": "Descargando tema...",

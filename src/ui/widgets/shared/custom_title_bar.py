@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class CustomTitleBar(QWidget):
+    log_viewer_requested = pyqtSignal()
     changelog_requested = pyqtSignal()
     about_requested = pyqtSignal()
     minimize_requested = pyqtSignal()
@@ -44,6 +45,11 @@ class CustomTitleBar(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
         self._left_layout = left_layout
+
+        self.windows_button, self.windows_menu = self.add_menu_button()
+        self.log_viewer_action = QAction(self.windows_menu)
+        self.log_viewer_action.triggered.connect(self.log_viewer_requested.emit)
+        self.windows_menu.addAction(self.log_viewer_action)
 
         self.help_button, self.help_menu = self.add_menu_button()
         self.changelog_action = QAction(self.help_menu)
@@ -126,6 +132,8 @@ class CustomTitleBar(QWidget):
 
     def set_localized_texts(
         self,
+        windows_text: str,
+        log_viewer_text: str,
         help_text: str,
         changelog_text: str,
         about_text: str,
@@ -134,6 +142,9 @@ class CustomTitleBar(QWidget):
         restore_tooltip: str,
         close_tooltip: str,
     ):
+        self.windows_button.setText(windows_text)
+        self.log_viewer_action.setText(log_viewer_text)
+        self.log_viewer_action.setToolTip(log_viewer_text)
         self.help_button.setText(help_text)
         self.changelog_action.setText(changelog_text)
         self.changelog_action.setToolTip(changelog_text)

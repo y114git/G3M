@@ -737,4 +737,3 @@ class SaveManager(QObject):
         for backup_file in backup_info.values():
             if os.path.exists(backup_file):
                 os.remove(backup_file)
-

@@ -85,7 +85,9 @@
     "launch_button": "启动",
     "library_tab": "库",
     "library_tab_easter_egg": "库库",
+    "windows_menu": "窗口",
     "help_menu": "帮助",
+    "log_viewer": "日志查看器",
     "about_title": "关于",
     "about_dialog_text": "适用于 DELTARUNE、UNDERTALE、Pizza Tower 等游戏的终极模组管理器。",
     "about_version_label": "版本：{version}",
@@ -816,6 +818,23 @@
     "confirm_link": "链接：{link}",
     "confirm_yes": "是",
     "confirm_no": "否"
+  },
+  "log_viewer": {
+    "title": "日志查看器",
+    "latest_live": "最新 / 实时",
+    "open_folder": "打开日志文件夹",
+    "current_source": "当前来源: {file_name}",
+    "no_source": "没有日志文件",
+    "empty": {
+      "g3m": "尚未找到 G3M 日志文件。",
+      "patching": "尚未找到补丁日志文件。",
+      "conflicts": "尚未找到冲突日志文件。"
+    },
+    "tabs": {
+      "g3m": "G3M",
+      "patching": "补丁",
+      "conflicts": "冲突"
+    }
   },
   "themes": {
     "downloading_theme": "正在下载主题...",

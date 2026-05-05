@@ -46,6 +46,7 @@ _DATA_PATCH_FILTER = (
 )
 _ALL_FILTER = "All Files (*)"
 _CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", "data.win", "game.ios")
+_MONOSPACE_FONT_SIZE_PX = 12
 
 
 def _is_g3mpatch_source(path: str) -> bool:
@@ -1494,7 +1495,7 @@ class ModdingToolsDialog(QDialog):
                 border-radius: {theme["field_radius"]}px;
                 color: {theme["main_text"]};
                 font-family: {font_family};
-                font-size: 12px;
+                font-size: {_MONOSPACE_FONT_SIZE_PX}px;
                 padding: 6px;
             }}
             QTabWidget::tab-bar {{

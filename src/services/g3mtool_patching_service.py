@@ -46,6 +46,13 @@ def _get_patching_logs_dir() -> str:
     return d
 
 
+def _get_temp_reports_dir() -> str:
+    """Return temp dir for persisted merge reports."""
+    d = os.path.join(tempfile.gettempdir(), "g3m_conflict_reports")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def _rotate_patching_files():
     """Rotate old patching.log and g3mtool.log into logs/patching/ with a timestamp."""
     logs_dir = os.path.join(get_user_data_root(), "logs")
@@ -63,7 +70,11 @@ def _rotate_patching_files():
 
 def _enforce_archive_limit(archive_dir: str):
     """Keep at most MAX_PATCHING_ARCHIVES of each file type."""
-    for pattern in ("patching_*.log", "g3mtool_*.log", "merge_report_*.md"):
+    for pattern in (
+        "patching_*.log",
+        "g3mtool_*.log",
+        "conflicts_*.log",
+    ):
         files = sorted(glob.glob(os.path.join(archive_dir, pattern)))
         while len(files) > MAX_PATCHING_ARCHIVES:
             try:
@@ -128,7 +139,6 @@ class G3MToolPatchingService(QObject):
 
         _rotate_patching_files()
         self.patching_logger = _get_patching_logger()
-        self._g3mtool_version: str | None = None
 
     def _emit_progress(self, progress: int, message: str):
         self.progress_update.emit(max(0, min(progress, 100)), message)
@@ -204,18 +214,13 @@ class G3MToolPatchingService(QObject):
         numbers.extend([0] * (4 - len(numbers)))
         return tuple(numbers)
 
-    def _get_g3mtool_version(self) -> str | None:
-        if self._g3mtool_version is None:
-            self._g3mtool_version = self.g3mtool.get_version() or ""
-        return self._g3mtool_version or None
-
     def _check_g3mpatch_tool_version_warning(
         self, patch_path: str, manifest: dict
     ) -> bool:
         tool = manifest.get("tool") if isinstance(manifest, dict) else None
         patch_tool_version = tool.get("version") if isinstance(tool, dict) else None
         patch_version_tuple = self._version_tuple(patch_tool_version)
-        current_tool_version = self._get_g3mtool_version()
+        current_tool_version = self.g3mtool.get_version()
         current_version_tuple = self._version_tuple(current_tool_version)
         if not patch_version_tuple or not current_version_tuple:
             return True
@@ -975,7 +980,7 @@ class G3MToolPatchingService(QObject):
         if report_path and os.path.exists(report_path):
             self._last_report_path = report_path
 
-            self._saved_report_path = self._save_report_to_archive(
+            self._saved_report_path = self._persist_conflict_artifacts(
                 report_path, chapter_id
             )
             if self.report_has_conflicts():
@@ -1111,19 +1116,40 @@ class G3MToolPatchingService(QObject):
         emit_materialize_progress(1.0)
         return generated_patch
 
-    def _save_report_to_archive(self, report_path: str, chapter_id: str) -> str | None:
-        """Copy the merge report into logs/patching/ with a timestamp."""
+    def _persist_conflict_artifacts(self, report_path: str, chapter_id: str) -> str | None:
+        """Persist temp merge report and write conflict logs without archiving markdown into logs."""
         try:
             archive_dir = _get_patching_logs_dir()
+            logs_dir = os.path.join(get_user_data_root(), "logs")
+            temp_reports_dir = _get_temp_reports_dir()
+            os.makedirs(logs_dir, exist_ok=True)
             ts = time.strftime("%Y%m%d_%H%M%S")
-            dest = os.path.join(archive_dir, f"merge_report_{chapter_id}_{ts}.md")
-            shutil.copy2(report_path, dest)
+            report_dest = os.path.join(
+                temp_reports_dir, f"merge_report_{chapter_id}_{ts}.md"
+            )
+            conflicts_dest = os.path.join(archive_dir, f"conflicts_{ts}.log")
+            current_conflicts_log = os.path.join(logs_dir, "conflicts.log")
+            shutil.copy2(report_path, report_dest)
+            shutil.copy2(report_path, conflicts_dest)
+            shutil.copy2(report_path, current_conflicts_log)
             _enforce_archive_limit(archive_dir)
-            self.patching_logger.info(f"Merge report saved to {dest}")
-            return dest
+            self.patching_logger.info("Conflict artifacts saved for chapter %s", chapter_id)
+            self._enforce_temp_report_limit(temp_reports_dir)
+            return report_dest
         except Exception as e:
-            self.patching_logger.warning(f"Failed to save merge report to archive: {e}")
+            self.patching_logger.warning(f"Failed to persist conflict artifacts: {e}")
             return report_path
+
+    def _enforce_temp_report_limit(self, reports_dir: str) -> None:
+        files = sorted(glob.glob(os.path.join(reports_dir, "merge_report_*.md")))
+        while len(files) > MAX_PATCHING_ARCHIVES:
+            try:
+                os.remove(files.pop(0))
+            except Exception as e:
+                self.patching_logger.debug(
+                    "Failed to remove old temp conflict report: %s", e, exc_info=True
+                )
+                break
 
     def _collect_mod_infos(
         self, mods_list: list[Any], chapter_id: str

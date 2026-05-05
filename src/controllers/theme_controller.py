@@ -302,6 +302,7 @@ class ThemeController:
                 "_game_versions_dialog",
                 "_mod_versions_dialog",
                 "_downloads_dialog",
+                "_log_viewer_dialog",
                 "_modding_tools_dialog",
             ):
                 dialog = getattr(self.app, dialog_attr, None)
