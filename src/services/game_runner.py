@@ -27,6 +27,7 @@ from utils.path_utils import (
     get_user_data_root,
     resolve_game_executable,
 )
+from utils.process_utils import build_external_process_env
 
 logger = logging.getLogger("shortcut_runner")
 
@@ -167,7 +168,7 @@ def _apply_file_overrides(
         return
 
     class _ShortcutPatcher:
-        def __init__(self):
+        def __init__(self) -> None:
             self.xdelta_modpack = False
             self.patching_logger = logger
 
@@ -479,6 +480,7 @@ def _launch_game(
     system = platform.system()
     command = [launch_target]
     creationflags = 0
+    launch_env = build_external_process_env(system=system)
 
     if system == "Darwin":
         process = subprocess.Popen(["open", "-W", launch_target])
@@ -496,7 +498,7 @@ def _launch_game(
         if system == "Windows":
             creationflags = subprocess.DETACHED_PROCESS
         process = subprocess.Popen(
-            command, cwd=working_dir, creationflags=creationflags
+            command, cwd=working_dir, creationflags=creationflags, env=launch_env
         )
 
     logger.info(

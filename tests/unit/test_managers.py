@@ -396,6 +396,47 @@ class TestLaunchManager:
             (("xdg-open", ["steam://rungameid/1690940"]),),
         ]
 
+    def test_execute_game_sanitizes_linux_env_for_subprocess_launch(
+        self, app_state, feedback_service
+    ):
+        """Checks that Linux subprocess launch restores system library paths."""
+        from services.launch_service import GameLauncher
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        fake_process = Mock()
+
+        with (
+            patch("services.launch_service.platform.system", return_value="Linux"),
+            patch("services.launch_service.os.path.isdir", return_value=True),
+            patch("services.launch_service.subprocess.Popen", return_value=fake_process) as popen,
+            patch("services.launch_service.QThread", return_value=Mock()),
+            patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
+            patch.dict(
+                "services.launch_service.os.environ",
+                {
+                    "LD_LIBRARY_PATH": "/opt/g3m-bundle",
+                    "LD_LIBRARY_PATH_ORIG": "/usr/lib:/usr/local/lib",
+                    "PATH": os.environ.get("PATH", ""),
+                },
+                clear=False,
+            ),
+        ):
+            launcher._execute_game(
+                {
+                    "target": "/games/DELTARUNE.exe",
+                    "cwd": "/games",
+                    "type": "subprocess",
+                }
+            )
+
+        popen.assert_called_once()
+        assert popen.call_args.kwargs["cwd"] == "/games"
+        assert popen.call_args.kwargs["creationflags"] == 0
+        assert popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/usr/lib:/usr/local/lib"
+        assert popen.call_args.args[0] == ["wine", "/games/DELTARUNE.exe"]
+
 
 class TestUpdateCheckManager:
     """Tests for managers."""

@@ -27,6 +27,7 @@ from utils.path_utils import (
     is_path_in_steam_common,
     resolve_game_executable,
 )
+from utils.process_utils import build_external_process_env
 from workers.game_monitor_worker import GameMonitorWorker
 from workers.plugin_hook_worker import PluginHookThread
 
@@ -256,6 +257,7 @@ class GameLauncher(QObject):
                 process = subprocess.Popen(["open", "-W", target_path])
             else:
                 command = [target_path]
+                launch_env = build_external_process_env(system=system)
                 if system == "Linux" and target_path.lower().endswith(".exe"):
                     is_steam_launch = self.app_state.local_config.get(
                         "launch_via_steam", False
@@ -279,7 +281,10 @@ class GameLauncher(QObject):
                     creationflags = 8
                 try:
                     process = subprocess.Popen(
-                        command, cwd=working_directory, creationflags=creationflags
+                        command,
+                        cwd=working_directory,
+                        creationflags=creationflags,
+                        env=launch_env,
                     )
                 except (
                     OSError,

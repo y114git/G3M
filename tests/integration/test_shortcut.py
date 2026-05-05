@@ -20,6 +20,7 @@ from controllers.shortcut_controller import (
 )
 from services.game_runner import (
     _find_mod_source_dir,
+    _launch_game,
     _parse_shortcut_arg,
     _resolve_chapter_source_dir,
 )
@@ -120,6 +121,46 @@ class TestParseShortcutArg:
         """Checks that parsing invalid raises."""
         with pytest.raises((ValueError, TypeError, json.JSONDecodeError)):
             _parse_shortcut_arg("not_valid_anything_!!!")
+
+
+class TestShortcutLaunch:
+    def test_launch_game_sanitizes_linux_env_for_wine(self, game_mode, shortcut_temp_dir):
+        game_path = os.path.join(shortcut_temp_dir, "game")
+        os.makedirs(game_path, exist_ok=True)
+
+        shortcut_config = {
+            "launch_via_steam": False,
+            "use_portproton": False,
+            "direct_launch_chapter": "",
+            "chapter_mode": False,
+        }
+        local_config = {"portproton_path": ""}
+        fake_process = MagicMock()
+
+        with (
+            patch("services.game_runner.platform.system", return_value="Linux"),
+            patch(
+                "services.game_runner._get_executable_path",
+                return_value=os.path.join(game_path, "DELTARUNE.exe"),
+            ),
+            patch("services.game_runner.subprocess.Popen", return_value=fake_process) as popen,
+            patch("services.game_runner._wait_for_game_exit"),
+            patch.dict(
+                "services.game_runner.os.environ",
+                {
+                    "LD_LIBRARY_PATH": "/opt/g3m-bundle",
+                    "LD_LIBRARY_PATH_ORIG": "/usr/lib:/usr/local/lib",
+                    "PATH": os.environ.get("PATH", ""),
+                },
+                clear=False,
+            ),
+        ):
+            process = _launch_game(shortcut_config, game_mode, local_config, game_path)
+
+        assert process is fake_process
+        assert popen.call_args.args[0] == ["wine", os.path.join(game_path, "DELTARUNE.exe")]
+        assert popen.call_args.kwargs["cwd"] == game_path
+        assert popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/usr/lib:/usr/local/lib"
 
     def test_base64_roundtrip_unicode(self):
         """Checks that base64ing roundtrip unicode."""
