@@ -853,7 +853,16 @@
     "startup_sound": "Startup sound",
     "custom_logo": "Custom logo",
     "custom_font": "Custom font",
-    "custom_background": "Custom background"
+    "custom_background": "Custom background",
+    "import_themes": "Import theme",
+    "import_instructions": "Import a theme from a local file or direct link.",
+    "import_from_file": "Choose file",
+    "import_from_url": "Import from URL",
+    "url_placeholder": "Enter theme URL",
+    "import_from_url_button": "Load URL",
+    "url_required": "Please enter a URL.",
+    "select_theme_archive": "Select theme archive",
+    "archive_files": "Theme Archives (*.zip);;All Files (*)"
   },
   "chat": {
     "window_title": "Chat",
@@ -1080,4 +1089,3 @@
     "incompatible_api_warning": "Requires Plugin API {required_version}. Current version: {current_version}."
   }
 }
-

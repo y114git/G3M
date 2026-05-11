@@ -853,7 +853,16 @@
     "startup_sound": "启动音效",
     "custom_logo": "自定义 Logo",
     "custom_font": "自定义字体",
-    "custom_background": "自定义背景"
+    "custom_background": "自定义背景",
+    "import_themes": "导入主题",
+    "import_instructions": "从本地文件或直接链接导入主题。",
+    "import_from_file": "选择文件",
+    "import_from_url": "从链接导入",
+    "url_placeholder": "输入主题链接",
+    "import_from_url_button": "加载链接",
+    "url_required": "请输入链接。",
+    "select_theme_archive": "选择主题压缩包",
+    "archive_files": "主题压缩包 (*.zip);;所有文件 (*)"
   },
   "chat": {
     "window_title": "聊天",
@@ -1080,4 +1089,3 @@
     "incompatible_api_warning": "需要 Plugin API {required_version}。当前版本：{current_version}。"
   }
 }
-

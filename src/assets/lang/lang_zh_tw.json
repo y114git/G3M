@@ -853,7 +853,16 @@
     "startup_sound": "啟動音效",
     "custom_logo": "自定義 Logo",
     "custom_font": "自定義字體",
-    "custom_background": "自定義背景"
+    "custom_background": "自定義背景",
+    "import_themes": "匯入主題",
+    "import_instructions": "從本機檔案或直接連結匯入主題。",
+    "import_from_file": "選擇檔案",
+    "import_from_url": "從連結匯入",
+    "url_placeholder": "輸入主題連結",
+    "import_from_url_button": "載入連結",
+    "url_required": "請輸入連結。",
+    "select_theme_archive": "選擇主題壓縮檔",
+    "archive_files": "主題壓縮檔 (*.zip);;所有檔案 (*)"
   },
   "chat": {
     "window_title": "聊天",
@@ -1080,4 +1089,3 @@
     "incompatible_api_warning": "需要 Plugin API {required_version}。目前版本：{current_version}。"
   }
 }
-

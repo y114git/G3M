@@ -431,6 +431,26 @@ class TestReadmeUi:
 
 class TestThemeManagementDialog:
     """Tests for dialogs."""
+
+    def test_theme_import_dialog_uses_real_localized_text(self, qapp):
+        """Checks that theme import dialog never shows raw localization keys."""
+        from unittest.mock import Mock
+
+        from ui.dialogs.import_dialog import ImportDialog
+
+        dialog = ImportDialog(None, Mock(), "themes", "*.zip")
+        visible_text = [dialog.windowTitle(), dialog.url_input.placeholderText()]
+        visible_text.extend(
+            widget.text()
+            for widget in dialog.findChildren((QLabel, QPushButton))
+            if widget.text()
+        )
+
+        assert visible_text
+        assert all("themes." not in text for text in visible_text)
+        assert all(not (text.startswith("[") and text.endswith("]")) for text in visible_text)
+        dialog.close()
+
     def test_theme_management_dialog_creation(self, qapp, app_state):
         """Checks that themeing management dialog creation."""
         from unittest.mock import Mock

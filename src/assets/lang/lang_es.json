@@ -853,7 +853,16 @@
     "startup_sound": "Sonido de inicio",
     "custom_logo": "Logotipo personalizado",
     "custom_font": "Fuente personalizada",
-    "custom_background": "Fondo personalizado"
+    "custom_background": "Fondo personalizado",
+    "import_themes": "Importar tema",
+    "import_instructions": "Importa un tema desde un archivo local o enlace directo.",
+    "import_from_file": "Elegir archivo",
+    "import_from_url": "Importar desde URL",
+    "url_placeholder": "Introduce la URL del tema",
+    "import_from_url_button": "Cargar URL",
+    "url_required": "Introduce una URL.",
+    "select_theme_archive": "Seleccionar archivo de tema",
+    "archive_files": "Archivos de tema (*.zip);;Todos los archivos (*)"
   },
   "chat": {
     "window_title": "Chat",

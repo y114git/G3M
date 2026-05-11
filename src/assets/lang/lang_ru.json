@@ -853,7 +853,16 @@
     "startup_sound": "Звук запуска",
     "custom_logo": "Кастомное лого",
     "custom_font": "Кастомный шрифт",
-    "custom_background": "Кастомный фон"
+    "custom_background": "Кастомный фон",
+    "import_themes": "Импорт темы",
+    "import_instructions": "Импортируйте тему из локального файла или прямой ссылки.",
+    "import_from_file": "Выбрать файл",
+    "import_from_url": "Импорт по URL",
+    "url_placeholder": "Введите URL темы",
+    "import_from_url_button": "Загрузить URL",
+    "url_required": "Пожалуйста, введите URL.",
+    "select_theme_archive": "Выберите архив темы",
+    "archive_files": "Архивы тем (*.zip);;Все файлы (*)"
   },
   "chat": {
     "window_title": "Чат",
@@ -1080,4 +1089,3 @@
     "incompatible_api_warning": "Требуется Plugin API {required_version}. Текущая версия: {current_version}."
   }
 }
-
