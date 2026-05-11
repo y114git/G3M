@@ -17,6 +17,7 @@ from services.localization_service import tr
 from utils.file_utils import get_chapter_folder_name, normalize_chapter_id
 from utils.mod_config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
+from utils.patching.mod_resolve_utils import get_mod_configured_extra_files
 
 
 class CreateModpackThread(QThread):
@@ -292,7 +293,9 @@ class CreateModpackThread(QThread):
                         else ""
                     )
                     if xdelta_patch and os.path.exists(xdelta_patch):
-                        file_info["data_file_path"] = os.path.basename(xdelta_patch)
+                        file_info["data_file_path"] = (
+                            f"{chapter_folder_name}/{os.path.basename(xdelta_patch)}"
+                        )
                         files_data[chapter_key] = file_info
                         continue
                     logging.warning(
@@ -300,7 +303,14 @@ class CreateModpackThread(QThread):
                     )
                     continue
                 if data_file := find_data_win(chapter_modpack_dir, game_id=game):
-                    file_info["data_file_path"] = os.path.basename(data_file)
+                    file_info["data_file_path"] = (
+                        f"{chapter_folder_name}/{os.path.basename(data_file)}"
+                    )
+                extra_files = self._get_modpack_extra_files(
+                    mods_list, chapter_id, chapter_modpack_dir
+                )
+                if extra_files:
+                    file_info["extra_files"] = extra_files
                 if file_info:
                     files_data[chapter_key] = file_info
             mod_id = f"local_{uuid.uuid4().hex[:12]}"
@@ -326,3 +336,25 @@ class CreateModpackThread(QThread):
         except Exception as e:
             logging.error(f"Failed to create mod_config.json: {e}", exc_info=True)
             raise
+
+    def _get_modpack_extra_files(
+        self, mods_list: list[Any], chapter_id: str, chapter_modpack_dir: str
+    ) -> list[str]:
+        extra_files: list[str] = []
+        seen = set()
+        for mod_data in mods_list:
+            for rel_path in get_mod_configured_extra_files(
+                mod_data, chapter_id, self.mod_service, self.app_state, logging
+            ):
+                normalized = rel_path.replace("\\", "/").strip()
+                if not normalized or normalized in seen:
+                    continue
+                if os.path.exists(os.path.join(chapter_modpack_dir, normalized.rstrip("/"))):
+                    seen.add(normalized)
+                    extra_files.append(
+                        os.path.relpath(
+                            os.path.join(chapter_modpack_dir, normalized.rstrip("/")),
+                            self.modpack_dir,
+                        ).replace("\\", "/")
+                    )
+        return extra_files

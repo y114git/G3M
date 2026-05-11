@@ -154,13 +154,18 @@ class TestManualInstall:
         assert get_chapter_folder_name("deltarune_0") == "chapter_0"
         assert get_chapter_folder_name("deltarune_1") == "chapter_1"
         assert get_chapter_folder_name("deltarunedemo") == "demo"
-        assert get_chapter_folder_name("undertale") == "chapter_0"
+        assert get_chapter_folder_name("undertale") == "undertale"
         assert get_chapter_folder_name("pizzatower") == "pizzatower"
 
         assert get_chapter_folder_name("deltarune_0", game="deltarune") == "chapter_0"
         assert get_chapter_folder_name("pizzatower", game="pizzatower") == "pizzatower"
         assert get_chapter_folder_name("chapter_1", game="deltarune") == "chapter_1"
         assert get_chapter_folder_name("deltarune_1") == "chapter_1"
+        assert get_chapter_folder_name("undertale", game="undertale") == "undertale"
+        assert (
+            get_chapter_folder_name("undertaleyellow", game="undertaleyellow")
+            == "undertale"
+        )
 
     def test_instruction_file_detection(self):
         """Checks that instructioning file detection."""
@@ -340,4 +345,54 @@ class TestManualInstall:
 
         assert config["files"]["deltarune_1"]["extra_files"] == [
             "chapter_1/lang_es/lang.json"
+        ]
+
+    def test_modpack_config_keeps_game_folder_and_extra_files(self, tmp_path):
+        """Checks that modpacks do not leak DELTARUNE folders into UNDERTALE mods."""
+        from workers.modpack_create_worker import CreateModpackThread
+
+        mod_root = tmp_path / "mods" / "source_mod"
+        mod_root.mkdir(parents=True)
+        (mod_root / "mod_config.json").write_text(
+            json.dumps(
+                {
+                    "id": "source_mod",
+                    "game": "undertale",
+                    "files": {
+                        "undertale": {
+                            "data_file_path": "undertale/data.win",
+                            "extra_files": ["sprites/talk.png"],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        modpack_dir = tmp_path / "mods" / "Pack"
+        (modpack_dir / "undertale" / "sprites").mkdir(parents=True)
+        (modpack_dir / "undertale" / "data.win").write_text("data", encoding="utf-8")
+        (modpack_dir / "undertale" / "sprites" / "talk.png").write_text(
+            "sprite", encoding="utf-8"
+        )
+
+        mod = SimpleNamespace(id="source_mod", game="undertale")
+        mod_service = SimpleNamespace(
+            get_mod_folder_path=lambda mod_id: str(mod_root) if mod_id == "source_mod" else ""
+        )
+        worker = CreateModpackThread(
+            {"undertale": [mod]},
+            "Pack",
+            str(modpack_dir),
+            SimpleNamespace(mods_dir=str(tmp_path / "mods")),
+            mod_service,
+        )
+
+        worker._create_config_json()
+
+        config = json.loads((modpack_dir / "mod_config.json").read_text("utf-8"))
+        assert "chapter_0" not in {p.name for p in modpack_dir.iterdir()}
+        assert config["metadata"]["game"] == "undertale"
+        assert config["files"]["undertale"]["data_file_path"] == "undertale/data.win"
+        assert config["files"]["undertale"]["extra_files"] == [
+            "undertale/sprites/talk.png"
         ]

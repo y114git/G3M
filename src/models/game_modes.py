@@ -284,7 +284,7 @@ class UndertaleGame(GameDefinition):
     custom_exec_config_key = "undertale_custom_executable_path"
     path_button_key = "buttons.change_undertale_path"
     gamebanana_id = 5506
-    tabs = [GameTab("undertale", "undertale", "tabs.undertale", "chapter_0")]
+    tabs = [GameTab("undertale", "undertale", "tabs.undertale", "undertale")]
     executables = {
         "windows": ("UNDERTALE.exe", "UNDERTALE"),
         "linux": ("UNDERTALE", "UNDERTALE.exe"),
@@ -307,7 +307,7 @@ class UndertaleYellowGame(GameDefinition):
     gamebanana_id = 19606
     supports_full_install = True
     tabs = [
-        GameTab("undertaleyellow", "undertale", "tabs.undertaleyellow", "chapter_0")
+        GameTab("undertaleyellow", "undertale", "tabs.undertaleyellow", "undertale")
     ]
     executables = {
         "windows": (
