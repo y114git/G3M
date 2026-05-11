@@ -279,8 +279,6 @@ class ModEditorDialog(QDialog):
         self.author_edit = QLineEdit()
         self.author_edit.setPlaceholderText(tr("ui.enter_author_name"))
         self.author_edit.setToolTip(tr("tooltips.mod_editor_author"))
-        if not self.is_creating:
-            self.author_edit.setReadOnly(True)
         parent.addWidget(self.author_edit)
         parent.addSpacing(6)
 

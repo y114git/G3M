@@ -572,6 +572,48 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_metadata_fields_stay_editable_when_editing(self, qapp, tmp_path):
+        """Checks that editing a mod does not lock normal metadata fields."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "metadata_mod"
+        mod_folder.mkdir()
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_test_mod",
+                "name": "Test Mod",
+                "author": "Old Author",
+                "description": "desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+
+        editable_fields = [
+            dialog.name_edit,
+            dialog.author_edit,
+            dialog.description_edit,
+            dialog.homepage_edit,
+            dialog.icon_edit,
+            dialog.version_edit,
+            dialog.game_version_edit,
+        ]
+        assert all(not field.isReadOnly() and field.isEnabled() for field in editable_fields)
+        dialog.author_edit.setText("New Author")
+        assert dialog.author_edit.text() == "New Author"
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_populates_saved_files_as_relative_paths(self, qapp, tmp_path):
         """Checks that moding editor populates saved files as relative paths."""
         from types import SimpleNamespace
