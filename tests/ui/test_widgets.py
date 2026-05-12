@@ -662,6 +662,7 @@ class TestCommonWidgets:
         assert host.mod_import_export_controller.export_mod_to_path.call_count == 0
         widget.deleteLater()
         host.deleteLater()
+        _drain_events(qapp)
 
     def test_rich_html_reserves_safe_width_for_inline_media(self):
         """Checks that riching html reserves safe width for inline media."""

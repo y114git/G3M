@@ -128,9 +128,28 @@ RICH_HTML_CSS_CLASS_MAP = shared_styles.RICH_HTML_CSS_CLASS_MAP
 BASE_TAG_NAMES = ("textedit", "customization", "gameplay", "other")
 CYOP_AFOM_TAG = "CYOP/AFOM"
 LIBRARY_IMPORT_ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma", ".gz")
-MOD_README_EXTENSIONS = (".md", ".txt")
+MOD_MARKDOWN_EXTENSIONS = (".md", ".markdown")
+MOD_HTML_EXTENSIONS = (".html", ".htm")
+MOD_PDF_EXTENSIONS = (".pdf",)
+MOD_TEXT_EXTENSIONS = (".txt",)
+MOD_DOCUMENTATION_EXTENSIONS = (
+    *MOD_MARKDOWN_EXTENSIONS,
+    *MOD_TEXT_EXTENSIONS,
+    *MOD_HTML_EXTENSIONS,
+    *MOD_PDF_EXTENSIONS,
+)
 MOD_README_ENCODINGS = ("utf-8-sig", "utf-16", "cp1251", "latin-1")
-MOD_ROOT_DOC_EXTENSIONS = (".md", ".markdown", ".txt")
+MOD_README_HEADING_FONT_FACTORS = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 0.8, 6: 0.7}
+MANUAL_INSTALL_OPENABLE_DOC_EXTENSIONS = (
+    ".cfg",
+    ".ini",
+    ".json",
+    ".log",
+    ".rtf",
+    ".yaml",
+    ".yml",
+    *MOD_DOCUMENTATION_EXTENSIONS,
+)
 RICH_HTML_IMG_RE = re.compile(r"<img\b([^>]*)/?>", re.IGNORECASE | re.DOTALL)
 RICH_HTML_ATTR_RE = re.compile(r'(\w[\w-]*)=["\']([^"\']*)["\']')
 RICH_HTML_CLASS_RE = re.compile(

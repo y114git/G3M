@@ -35,6 +35,7 @@ class _AnalyticsUploadWorker(QObject):
         self._batch = batch
 
     def run(self) -> None:
+        success = False
         try:
             encoded = base64.b64encode(
                 gzip.compress(
@@ -52,13 +53,11 @@ class _AnalyticsUploadWorker(QObject):
                 json={"encoding": "gzip+base64", "payload": encoded},
                 timeout=NETWORK_TIMEOUT_SHORT,
             )
-            self.finished.emit(
-                bool(response) and getattr(response, "status_code", 500) < 300,
-                len(self._batch),
-            )
+            success = bool(response) and getattr(response, "status_code", 500) < 300
         except Exception as e:
             logger.debug("Analytics flush failed: %s", e, exc_info=True)
-            self.finished.emit(False, len(self._batch))
+        with contextlib.suppress(RuntimeError):
+            self.finished.emit(success, len(self._batch))
 
 
 class AnalyticsService(QObject):

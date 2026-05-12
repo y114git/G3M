@@ -110,7 +110,8 @@ def _create_loading_placeholder(width: int, height: int, text: str) -> QImage:
     placeholder_height = max(
         80, min(int(height) if height else max(120, placeholder_width // 3), 540)
     )
-    screen = QGuiApplication.primaryScreen()
+    app = QGuiApplication.instance()
+    screen = app.primaryScreen() if app is not None else None
     dpr = screen.devicePixelRatio() if screen else 2.0
     image = QImage(
         int(placeholder_width * dpr),

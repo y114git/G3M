@@ -9,6 +9,7 @@ import logging
 import threading
 import time
 import webbrowser
+from typing import override
 
 from PyQt6 import sip as _sip
 from PyQt6.QtCore import Qt, QThread, QThreadPool, QTimer, pyqtSignal
@@ -366,12 +367,14 @@ class ModDetailsOverlay(QWidget):
         self._ss_urls = []
         self._ss_images = []
         self._ss_loading = []
+        self._ss_load_signals = []
         self._ss_index = 0
         self._description_html = ""
         self._last_description_width = 0
         self._thread_pool = QThreadPool.globalInstance()
         self._original_resize_event = None
         self._last_geometry = None
+        self._cleanup_started = False
         self.hide()
         self._setup_ui()
         self.main_window = self._get_main_window()
@@ -1089,9 +1092,28 @@ class ModDetailsOverlay(QWidget):
             return
         self._ss_loading[idx] = True
         signals = WorkerSignals()
-        signals.result.connect(lambda qimg, i=idx: on_loaded(i, qimg))
-        signals.error.connect(lambda url, msg, i=idx: self._ss_on_error(i, msg))
+        self._ss_load_signals.append(signals)
+        signals.result.connect(
+            lambda qimg, i=idx, s=signals: self._ss_on_load_result(
+                s, i, on_loaded, qimg
+            )
+        )
+        signals.error.connect(
+            lambda url, msg, i=idx, s=signals: self._ss_on_load_error(s, i, msg)
+        )
         self._thread_pool.start(ImageLoaderRunnable(self._ss_urls[idx], signals))
+
+    def _forget_screenshot_load_signal(self, signals):
+        with contextlib.suppress(ValueError):
+            self._ss_load_signals.remove(signals)
+
+    def _ss_on_load_result(self, signals, idx, on_loaded, qimg):
+        self._forget_screenshot_load_signal(signals)
+        on_loaded(idx, qimg)
+
+    def _ss_on_load_error(self, signals, idx, msg):
+        self._forget_screenshot_load_signal(signals)
+        self._ss_on_error(idx, msg)
 
     def _ss_fade_to(self, qimg):
         if not self._can_update_screenshot():
@@ -1204,7 +1226,7 @@ class ModDetailsOverlay(QWidget):
 
     def close_overlay(self):
         """Close the overlay with fade-out animation."""
-        self._restore_main_window_resize()
+        self._cleanup_before_delete()
 
         def cleanup():
             self.hide()
@@ -1427,16 +1449,39 @@ class ModDetailsOverlay(QWidget):
             setattr(self, attr_name, None)
             self._stop_thread(thread)
 
+    def _disconnect_screenshot_loads(self):
+        for signals in self._ss_load_signals:
+            with contextlib.suppress(RuntimeError, TypeError):
+                signals.blockSignals(True)
+            with contextlib.suppress(RuntimeError, TypeError):
+                signals.result.disconnect()
+            with contextlib.suppress(RuntimeError, TypeError):
+                signals.error.disconnect()
+        self._ss_load_signals.clear()
+        self._ss_loading = [False] * len(self._ss_loading)
+
     def cleanup_thread(self):
         self._stop_timer("_sync_timer")
+        self._disconnect_screenshot_loads()
         self._stop_thread_attr("load_thread")
         self._stop_thread_attr("url_load_thread")
 
-    def closeEvent(self, event):
+    def _cleanup_before_delete(self):
+        if self._cleanup_started:
+            return
+        self._cleanup_started = True
+        self.dialog_closed = True
         self._restore_main_window_resize()
         self.cleanup_thread()
-        self.dialog_closed = True
-        event.accept()
+
+    @override
+    def deleteLater(self):
+        self._cleanup_before_delete()
+        super().deleteLater()
+
+    def closeEvent(self, event):
+        self._cleanup_before_delete()
+        super().closeEvent(event)
 
 
 def show_mod_details_overlay(parent, mod_data, source_card=None):

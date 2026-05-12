@@ -23,8 +23,9 @@ from PyQt6.QtWidgets import (
 
 from config.config import (
     DATA_FILE_EXTENSIONS,
+    MANUAL_INSTALL_OPENABLE_DOC_EXTENSIONS,
     MOD_CONFIG_FILENAME,
-    MOD_ROOT_DOC_EXTENSIONS,
+    MOD_DOCUMENTATION_EXTENSIONS,
 )
 from models.game_modes import get_all_game_entries, get_game
 from services.localization_service import tr
@@ -40,19 +41,6 @@ from utils.path_utils import colored_icon, find_chapter_resource_dir
 
 
 class ManualModInstallDialog(QDialog):
-    _OPENABLE_DOC_EXTENSIONS = {
-        ".cfg",
-        ".ini",
-        ".json",
-        ".log",
-        ".markdown",
-        ".md",
-        ".rtf",
-        ".txt",
-        ".yaml",
-        ".yml",
-    }
-
     def __init__(
         self,
         parent,
@@ -437,9 +425,12 @@ class ManualModInstallDialog(QDialog):
         if self._is_openable_doc(file_path):
             self._open_local_file(file_path)
 
-    @classmethod
-    def _is_openable_doc(cls, file_path: str) -> bool:
-        return os.path.splitext(file_path)[1].lower() in cls._OPENABLE_DOC_EXTENSIONS
+    @staticmethod
+    def _is_openable_doc(file_path: str) -> bool:
+        return (
+            os.path.splitext(file_path)[1].lower()
+            in MANUAL_INSTALL_OPENABLE_DOC_EXTENSIONS
+        )
 
     def _create_file_name_widget(self, file_path: str, rel_path: str) -> QWidget:
         file_name = os.path.basename(file_path)
@@ -1189,7 +1180,7 @@ class ManualModInstallDialog(QDialog):
         for file_path, relative_path in self.all_files:
             if os.path.dirname(relative_path):
                 continue
-            if os.path.splitext(file_path)[1].lower() not in MOD_ROOT_DOC_EXTENSIONS:
+            if os.path.splitext(file_path)[1].lower() not in MOD_DOCUMENTATION_EXTENSIONS:
                 continue
             if not os.path.isfile(file_path):
                 continue

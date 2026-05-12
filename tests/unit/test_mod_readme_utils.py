@@ -18,6 +18,17 @@ def test_find_mod_readme_files_prioritizes_readme_names(temp_dir):
     assert found == ["guide.md", "notes.txt", "README.md", "README.txt"]
 
 
+def test_find_mod_readme_files_includes_html_and_pdf(temp_dir):
+    """Checks that finding mod readme files includes HTML and PDF files."""
+    for name in ("README.html", "README.pdf", "README.md", "README.exe"):
+        with open(os.path.join(temp_dir, name), "wb") as handle:
+            handle.write(b"doc")
+
+    found = [os.path.basename(path) for path in find_mod_readme_files(temp_dir)]
+
+    assert found == ["README.html", "README.md", "README.pdf"]
+
+
 def test_find_mod_readme_files_only_uses_top_level_files(temp_dir):
     """Checks that finding mod readme files only uses top level files."""
     nested_dir = os.path.join(temp_dir, "chapter_1")

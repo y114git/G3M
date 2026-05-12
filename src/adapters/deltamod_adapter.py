@@ -10,7 +10,7 @@ from typing import Any
 
 from defusedxml import ElementTree
 
-from config.config import MOD_ROOT_DOC_EXTENSIONS
+from config.config import MOD_DOCUMENTATION_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file, get_unique_mod_dir
 from utils.mod_config_parser import build_mod_config_data
@@ -460,7 +460,7 @@ class DeltamodConverter:
                 source_path = os.path.join(self.source_path, item)
                 if not os.path.isfile(source_path):
                     continue
-                if os.path.splitext(item)[1].lower() not in MOD_ROOT_DOC_EXTENSIONS:
+                if os.path.splitext(item)[1].lower() not in MOD_DOCUMENTATION_EXTENSIONS:
                     continue
                 shutil.copy2(source_path, os.path.join(target_mod_dir, item))
         except Exception as e:

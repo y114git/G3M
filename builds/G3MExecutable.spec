@@ -73,6 +73,8 @@ a = Analysis(
         'PyQt6.QtMultimedia',
         'PyQt6.QtMultimediaWidgets',
         'PyQt6.QtPrintSupport',
+        'PyQt6.QtPdf',
+        'PyQt6.QtPdfWidgets',
         'PyQt6.QtSql',
         'PyQt6.QtSvgWidgets',
         'PyQt6.QtXml',

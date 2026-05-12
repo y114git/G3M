@@ -12,6 +12,13 @@ def _drain_events(qapp, cycles: int = 3, delay_ms: int = 10) -> None:
         QTest.qWait(delay_ms)
 
 
+def _close_app_window(qapp, window) -> None:
+    window.close()
+    _drain_events(qapp, cycles=12, delay_ms=20)
+    window.deleteLater()
+    _drain_events(qapp, cycles=6, delay_ms=10)
+
+
 def _window_test_patches(temp_dir):
     user_root = os.path.join(temp_dir, "user")
     profiles_dir = os.path.join(temp_dir, "profiles")
@@ -81,7 +88,7 @@ class TestAppWindow:
                 assert hasattr(window, "plugins_container")
                 assert window.windowTitle() == "G3M"
             finally:
-                window.close()
+                _close_app_window(qapp, window)
 
     def test_post_show_initialization_runs_once(self, qapp, temp_dir):
         """Checks that posting show initialization runs once."""
@@ -107,7 +114,7 @@ class TestAppWindow:
                 window._post_show_initialization()
                 assert post_init.call_count == 1
             finally:
-                window.close()
+                _close_app_window(qapp, window)
 
     def test_mods_browser_updates_cards_without_tab_switch_when_tag_changes(
         self, qapp, temp_dir
@@ -154,7 +161,7 @@ class TestAppWindow:
                 assert window.app_state.filtered_mods == []
                 assert window.mod_list_layout.count() == 0
             finally:
-                window.close()
+                _close_app_window(qapp, window)
 
     def test_sync_chapter_tab_buttons_hides_extra_buttons_for_single_tab_game(
         self, qapp
@@ -222,7 +229,7 @@ class TestAppWindow:
             finally:
                 file_dialog.close()
                 dialog.close()
-                window.close()
+                _close_app_window(qapp, window)
 
     def test_close_event_hides_window_and_defers_cleanup(self, qapp, temp_dir):
         from app.window import AppWindow
@@ -260,8 +267,9 @@ class TestAppWindow:
                 shutdown_async.assert_called_once()
                 assert scheduled, "expected deferred cleanup to be scheduled"
             finally:
-                window._close_cleanup_started = True
-                window.hide()
+                for callback in scheduled:
+                    callback()
+                _close_app_window(qapp, window)
 
     def test_title_bar_windows_menu_opens_log_viewer(self, qapp, temp_dir):
         from app.window import AppWindow
@@ -302,7 +310,7 @@ class TestAppWindow:
             finally:
                 if window._log_viewer_dialog:
                     window._log_viewer_dialog.close()
-                window.close()
+                _close_app_window(qapp, window)
 
 
 class TestTabBuilders:

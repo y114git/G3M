@@ -7,7 +7,14 @@ except ImportError:
     from typing import override
 
 from PyQt6.QtCore import QMimeData, Qt, QUrl
+from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
+
+
+def _close_dialog(qapp, dialog) -> None:
+    dialog.close()
+    dialog.deleteLater()
+    qapp.processEvents()
 
 
 class TestImportDialog:
@@ -85,7 +92,7 @@ class TestAboutDialog:
         assert dialog.report_issue_button.isEnabled()
         assert dialog.os_value.text()
         assert dialog.python_value.text()
-        dialog.close()
+        _close_dialog(qapp, dialog)
 
     def test_about_dialog_actions(self, qapp, app_state):
         """Checks that abouting dialog actions."""
@@ -105,7 +112,7 @@ class TestAboutDialog:
         from ui.dialogs.about_dialog import AboutDialog
         dialog = AboutDialog(None, app_state)
         assert not dialog.report_issue_button.isEnabled()
-        dialog.close()
+        _close_dialog(qapp, dialog)
 
 
 class TestChangelogDialog:
@@ -118,7 +125,7 @@ class TestChangelogDialog:
         assert isinstance(dialog, QDialog)
         assert hasattr(dialog, 'text_browser')
         assert hasattr(dialog, 'close_button')
-        dialog.close()
+        _close_dialog(qapp, dialog)
 
 
 class TestLogViewerDialog:
@@ -152,7 +159,7 @@ class TestLogViewerDialog:
 
         assert dialog.windowTitle() == tr("log_viewer.title")
         assert dialog._close_button.text() == tr("common.close")
-        dialog.close()
+        _close_dialog(qapp, dialog)
 
     def test_log_viewer_dialog_shows_blank_for_existing_empty_file(
         self, qapp, app_state, tmp_path
@@ -168,7 +175,7 @@ class TestLogViewerDialog:
         qapp.processEvents()
 
         assert dialog._viewer.toPlainText() == ""
-        dialog.close()
+        _close_dialog(qapp, dialog)
 
 
 class TestPizzaOvenConversionDialog:
@@ -185,7 +192,7 @@ class TestPizzaOvenConversionDialog:
         assert dialog.windowTitle() == tr("dialogs.po_convert_title")
         assert dialog.start_button.text() == tr("buttons.start_po_convert")
         assert dialog.cancel_button.text() == tr("dialogs.cancel")
-        dialog.close()
+        _close_dialog(qapp, dialog)
 
 
 class TestReadmeUi:
@@ -204,7 +211,218 @@ class TestReadmeUi:
         assert dialog._tabs.count() == 1
         assert "QTabWidget::pane" in dialog.styleSheet()
         assert "padding-top: 10px;" in dialog.styleSheet()
-        dialog.close()
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_markdown_heading_keeps_inline_format_size(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that heading inline markup keeps the heading font size."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.md"
+        readme_path.write_text(
+            "### Start **Bold** _Emphasis_ [Link](https://example.com) Tail",
+            encoding="utf-8",
+        )
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+        block = tab.viewer.document().begin()
+        sizes = []
+        anchors = []
+        cursor = QTextCursor(block)
+        for _ in range(block.length() - 1):
+            cursor.movePosition(
+                QTextCursor.MoveOperation.NextCharacter,
+                QTextCursor.MoveMode.KeepAnchor,
+            )
+            text = cursor.selectedText()
+            if text.strip():
+                fmt = cursor.charFormat()
+                sizes.append(round(fmt.font().pointSizeF(), 2))
+                anchors.append(fmt.anchorHref())
+            cursor.clearSelection()
+
+        assert len(set(sizes)) == 1
+        assert any(anchor == "https://example.com" for anchor in anchors)
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_markdown_accepts_indented_heading_marks(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that copied docs with indented heading marks still render headings."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.md"
+        readme_path.write_text(
+            "    ### Sigma\n\n\t### another sigma\n\n\u00a0### third sigma",
+            encoding="utf-8",
+        )
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+
+        assert tab.viewer.toPlainText() == "Sigma\nanother sigma\nthird sigma"
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_markdown_accepts_escaped_heading_marks(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that editor-escaped heading marks still render headings."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.md"
+        readme_path.write_text("\\### Sigma\n\n\\### another sigma", encoding="utf-8")
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+
+        assert tab.viewer.toPlainText() == "Sigma\nanother sigma"
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_markdown_preserves_heading_levels_and_fenced_code(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that all heading levels render while fenced code stays literal."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.md"
+        readme_path.write_text(
+            "\n".join(
+                [
+                    "# H1",
+                    "## H2",
+                    "### H3",
+                    "#### H4",
+                    "##### H5",
+                    "###### H6",
+                    "```",
+                    "\\### not a heading",
+                    "```",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+        levels = []
+        block = tab.viewer.document().begin()
+        while block.isValid():
+            level = block.blockFormat().headingLevel()
+            if level:
+                levels.append(level)
+            block = block.next()
+
+        assert levels == [1, 2, 3, 4, 5, 6]
+        assert "\\### not a heading" in tab.viewer.toPlainText()
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_markdown_renders_common_inline_formatting(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that common Markdown inline formatting survives rendering."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.md"
+        readme_path.write_text(
+            "**bold** *italic* _under_ [link](https://example.com) <u>htmlu</u>",
+            encoding="utf-8",
+        )
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+        document = tab.viewer.document()
+
+        assert document.find("bold").charFormat().fontWeight() > 400
+        assert document.find("italic").charFormat().fontItalic()
+        assert document.find("under").charFormat().fontUnderline()
+        assert document.find("link").charFormat().anchorHref() == "https://example.com"
+        assert document.find("htmlu").charFormat().fontUnderline()
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_html_renders_as_html(self, qapp, app_state, tmp_path):
+        """Checks that HTML INFO files render instead of showing raw tags."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.html"
+        readme_path.write_text("<h1>Guide</h1><p>Rendered <b>HTML</b></p>", encoding="utf-8")
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+        cursor = tab.viewer.document().find("HTML")
+
+        assert tab.viewer.toPlainText() == "Guide\nRendered HTML"
+        assert cursor.charFormat().fontWeight() > 400
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_html_renders_common_formatting(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that common HTML formatting survives rendering."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.html"
+        readme_path.write_text(
+            "<h1>Title</h1><p><strong>bold</strong> <em>italic</em> "
+            "<u>under</u> <a href='https://example.com'>link</a></p>",
+            encoding="utf-8",
+        )
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+        document = tab.viewer.document()
+
+        assert document.find("Title").block().blockFormat().headingLevel() == 1
+        assert document.find("bold").charFormat().fontWeight() > 400
+        assert document.find("italic").charFormat().fontItalic()
+        assert document.find("under").charFormat().fontUnderline()
+        assert document.find("link").charFormat().anchorHref() == "https://example.com"
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_pdf_loads_in_pdf_viewer(self, qapp, app_state, tmp_path):
+        """Checks that PDF INFO files load through Qt PDF support."""
+        from PyQt6.QtPdfWidgets import QPdfView
+
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.pdf"
+        readme_path.write_bytes(
+            b"%PDF-1.1\n"
+            b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+            b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+            b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n"
+            b"4 0 obj\n<< /Length 44 >>\nstream\n"
+            b"BT /F1 12 Tf 72 120 Td (Hello PDF) Tj ET\n"
+            b"endstream\nendobj\n"
+            b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
+            b"xref\n0 6\n0000000000 65535 f \n"
+            b"trailer\n<< /Root 1 0 R /Size 6 >>\nstartxref\n405\n%%EOF\n"
+        )
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+
+        assert isinstance(tab.pdf_viewer, QPdfView)
+        assert tab._pdf_document.pageCount() == 1
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_pdf_error_shows_loading_error(self, qapp, app_state, tmp_path):
+        """Checks that unreadable PDF INFO files show an error state."""
+        from services.localization_service import tr
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        readme_path = tmp_path / "README.pdf"
+        readme_path.write_bytes(b"not a pdf")
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+
+        assert tab.pdf_viewer.isHidden()
+        assert not tab.pdf_error_label.isHidden()
+        assert tab.pdf_error_label.text() == tr("status.loading_error")
+        _close_dialog(qapp, dialog)
 
     def test_mod_summary_panel_uses_localized_info_button(self, qapp, app_state):
         """Checks that moding summary panel uses localized info button."""
@@ -567,29 +785,35 @@ class TestModEditorDialog:
         parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
         parent.settings_service = Mock()
         parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
-        dialog = ModEditorDialog(
-            parent,
-            is_creating=False,
-            mod_data={
-                "metadata": {
-                    "id": "gb_mod_665180",
-                    "name": "Lap Hell",
-                    "author": "Unknown",
-                    "description": "desc",
-                    "version": "1.0.0",
-                    "game": "pizzatower",
-                    "homepage": "https://gamebanana.com/mods/665180",
-                    "icon": "https://images.gamebanana.com/example.jpg",
+        response = Mock()
+        response.content = b"not an image"
+        response.raise_for_status = Mock()
+        session = Mock()
+        session.get.return_value = response
+        with patch("utils.network_utils.get_session", return_value=session):
+            dialog = ModEditorDialog(
+                parent,
+                is_creating=False,
+                mod_data={
+                    "metadata": {
+                        "id": "gb_mod_665180",
+                        "name": "Lap Hell",
+                        "author": "Unknown",
+                        "description": "desc",
+                        "version": "1.0.0",
+                        "game": "pizzatower",
+                        "homepage": "https://gamebanana.com/mods/665180",
+                        "icon": "https://images.gamebanana.com/example.jpg",
+                    },
+                    "files": {"pizzatower": {"data_file_path": "laphell.xdelta"}},
+                    "folder_path": str(mod_folder),
                 },
-                "files": {"pizzatower": {"data_file_path": "laphell.xdelta"}},
-                "folder_path": str(mod_folder),
-            },
-        )
+            )
 
         assert dialog.name_edit.text() == "Lap Hell"
         assert dialog.homepage_edit.text() == "https://gamebanana.com/mods/665180"
         assert dialog.icon_edit.text() == "https://images.gamebanana.com/example.jpg"
-        dialog.close()
+        _close_dialog(qapp, dialog)
         parent.deleteLater()
 
     def test_mod_editor_metadata_fields_stay_editable_when_editing(self, qapp, tmp_path):

@@ -501,7 +501,8 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
             os.symlink(target_rel, p)
             st = os.lstat(p)
             os.chmod(
-                p, stat.S_IMODE(st.st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                p,
+                stat.S_IMODE(st.st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,  # noqa: S103
             )
     except Exception as e:
         logging.debug(f"fix_macos_python_symlink: failed: {e}")

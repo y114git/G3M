@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from adapters.g3mtool_adapter import G3MToolManager
-from config.config import MOD_CONFIG_FILENAME, MOD_ROOT_DOC_EXTENSIONS
+from config.config import MOD_CONFIG_FILENAME, MOD_DOCUMENTATION_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import get_unique_mod_dir, remove_archive_extension, save_json
 from utils.mod_config_parser import build_mod_config_data
@@ -901,6 +901,6 @@ class PizzaOvenConversionService:
                 continue
             if rel_path in used_source_files:
                 continue
-            if os.path.splitext(file_name)[1].lower() not in MOD_ROOT_DOC_EXTENSIONS:
+            if os.path.splitext(file_name)[1].lower() not in MOD_DOCUMENTATION_EXTENSIONS:
                 continue
             shutil.copy2(source_path, os.path.join(target_mod_dir, file_name))

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from config.config import MOD_README_ENCODINGS, MOD_README_EXTENSIONS
+from config.config import (
+    MOD_DOCUMENTATION_EXTENSIONS,
+    MOD_HTML_EXTENSIONS,
+    MOD_MARKDOWN_EXTENSIONS,
+    MOD_PDF_EXTENSIONS,
+    MOD_README_ENCODINGS,
+)
 
 
 def find_mod_readme_files(mod_folder: str | None) -> list[str]:
@@ -17,7 +23,7 @@ def find_mod_readme_files(mod_folder: str | None) -> list[str]:
     files = [
         path
         for path in folder.iterdir()
-        if path.is_file() and path.suffix.lower() in MOD_README_EXTENSIONS
+        if path.is_file() and path.suffix.lower() in MOD_DOCUMENTATION_EXTENSIONS
     ]
     files.sort(key=lambda path: path.name.lower())
     return [str(path) for path in files]
@@ -35,4 +41,12 @@ def read_mod_readme(file_path: str) -> str:
 
 
 def is_markdown_file(file_path: str) -> bool:
-    return Path(file_path).suffix.lower() == ".md"
+    return Path(file_path).suffix.lower() in MOD_MARKDOWN_EXTENSIONS
+
+
+def is_html_file(file_path: str) -> bool:
+    return Path(file_path).suffix.lower() in MOD_HTML_EXTENSIONS
+
+
+def is_pdf_file(file_path: str) -> bool:
+    return Path(file_path).suffix.lower() in MOD_PDF_EXTENSIONS

@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import zipfile
 
+from PyQt6 import sip
 from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
 from PyQt6.QtWidgets import QFileDialog, QWidget
@@ -969,35 +970,43 @@ class SettingsManager(QObject):
             return True
 
     def save_window_geometry(self, widget: QWidget):
-        if widget.isMinimized() or widget.isFullScreen():
-            return
-        geometry = (
-            widget.normalGeometry() if widget.isMaximized() else widget.geometry()
-        )
-        if not geometry.isValid():
-            geometry = widget.geometry()
-        if not geometry.isValid():
-            return
-        self.app_state.local_config["window_geometry_state"] = {
-            "x": geometry.x(),
-            "y": geometry.y(),
-            "width": geometry.width(),
-            "height": geometry.height(),
-            "maximized": widget.isMaximized(),
-        }
-        self.app_state.local_config.pop("window_geometry", None)
-        self.write_local_config()
+        try:
+            if widget is None or sip.isdeleted(widget):
+                return
+            if widget.isMinimized() or widget.isFullScreen():
+                return
+            geometry = (
+                widget.normalGeometry() if widget.isMaximized() else widget.geometry()
+            )
+            if not geometry.isValid():
+                geometry = widget.geometry()
+            if not geometry.isValid():
+                return
+            self.app_state.local_config["window_geometry_state"] = {
+                "x": geometry.x(),
+                "y": geometry.y(),
+                "width": geometry.width(),
+                "height": geometry.height(),
+                "maximized": widget.isMaximized(),
+            }
+            self.app_state.local_config.pop("window_geometry", None)
+            self.write_local_config()
+        except RuntimeError as e:
+            logging.debug(f"save_window_geometry: skipped deleted widget: {e}")
 
     def schedule_geometry_save(self, widget: QWidget, timeout_ms: int = 500):
+        self._geometry_save_widget = widget
         if not getattr(self, "_geometry_save_timer", None):
             self._geometry_save_timer = QTimer()
             self._geometry_save_timer.setSingleShot(True)
-            self._geometry_save_timer.timeout.connect(
-                lambda: self.save_window_geometry(widget)
-            )
+            self._geometry_save_timer.timeout.connect(self._save_scheduled_geometry)
         else:
             self._geometry_save_timer.stop()
         self._geometry_save_timer.start(timeout_ms)
+
+    def _save_scheduled_geometry(self) -> None:
+        self.save_window_geometry(getattr(self, "_geometry_save_widget", None))
+        self._geometry_save_widget = None
 
     def lock_window_size(self, widget: QWidget):
         try:

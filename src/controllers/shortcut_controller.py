@@ -124,9 +124,8 @@ def _write_shortcut_file(filepath: str, shortcut_config: dict) -> str:
     if system != "Windows":
         os.chmod(
             filepath,
-            os.stat(filepath).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH,
+            os.stat(filepath).st_mode | stat.S_IXUSR,
         )
-
     return filepath
 
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QFont, QTextCharFormat, QTextCursor
+from PyQt6.QtPdf import QPdfDocument
+from PyQt6.QtPdfWidgets import QPdfView
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -17,12 +19,55 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.config import MOD_README_HEADING_FONT_FACTORS
 from services.localization_service import tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
-from utils.mod_readme_utils import is_markdown_file, read_mod_readme
+from utils.mod_readme_utils import (
+    is_html_file,
+    is_markdown_file,
+    is_pdf_file,
+    read_mod_readme,
+)
+
+
+def _normalize_markdown_source(content: str) -> str:
+    lines = []
+    in_fence = False
+    for line in content.splitlines(keepends=True):
+        stripped = line.lstrip(" \t\u00a0")
+        if stripped.startswith("\\#"):
+            stripped = stripped[1:]
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+        if not in_fence and stripped.startswith("#"):
+            line = stripped
+        lines.append(line)
+    return "".join(lines)
+
+
+def _normalize_markdown_heading_formats(viewer: QTextBrowser) -> None:
+    document = viewer.document()
+    base_size = document.defaultFont().pointSizeF()
+    if base_size <= 0:
+        base_size = viewer.font().pointSizeF()
+    if base_size <= 0:
+        base_size = 9.0
+    block = document.begin()
+    while block.isValid():
+        level = block.blockFormat().headingLevel()
+        if level:
+            cursor = QTextCursor(block)
+            cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+            fmt = QTextCharFormat()
+            fmt.setFontWeight(QFont.Weight.Bold)
+            fmt.setFontPointSize(
+                base_size * MOD_README_HEADING_FONT_FACTORS.get(level, 1.0)
+            )
+            cursor.mergeCharFormat(fmt)
+        block = block.next()
 
 
 class _ReadmeTab(QWidget):
@@ -35,6 +80,21 @@ class _ReadmeTab(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        self.viewer = None
+        self.pdf_viewer = None
+        self.pdf_error_label = None
+        self._pdf_document = None
+        if is_pdf_file(self.file_path):
+            self._pdf_document = QPdfDocument(self)
+            self.pdf_viewer = QPdfView(self)
+            self.pdf_viewer.setPageMode(QPdfView.PageMode.MultiPage)
+            self.pdf_viewer.setZoomMode(QPdfView.ZoomMode.FitToWidth)
+            layout.addWidget(self.pdf_viewer)
+            self.pdf_error_label = QLabel(self)
+            self.pdf_error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.pdf_error_label.hide()
+            layout.addWidget(self.pdf_error_label)
+            return
         self.viewer = QTextBrowser(self)
         self.viewer.setOpenExternalLinks(False)
         self.viewer.anchorClicked.connect(self._open_link)
@@ -44,9 +104,27 @@ class _ReadmeTab(QWidget):
     def load_content(self) -> None:
         if self._loaded:
             return
+        if self._pdf_document and self.pdf_viewer:
+            error = self._pdf_document.load(self.file_path)
+            if (
+                error != QPdfDocument.Error.None_
+                or self._pdf_document.status() == QPdfDocument.Status.Error
+            ):
+                if self.pdf_error_label:
+                    self.pdf_viewer.hide()
+                    self.pdf_error_label.setText(tr("status.loading_error"))
+                    self.pdf_error_label.show()
+                self._loaded = True
+                return
+            self.pdf_viewer.setDocument(self._pdf_document)
+            self._loaded = True
+            return
         content = read_mod_readme(self.file_path)
         if is_markdown_file(self.file_path):
-            self.viewer.setMarkdown(content)
+            self.viewer.setMarkdown(_normalize_markdown_source(content))
+            _normalize_markdown_heading_formats(self.viewer)
+        elif is_html_file(self.file_path):
+            self.viewer.setHtml(content)
         else:
             self.viewer.setPlainText(content)
         self._loaded = True
@@ -54,7 +132,10 @@ class _ReadmeTab(QWidget):
     def unload_content(self) -> None:
         if not self._loaded:
             return
-        self.viewer.clear()
+        if self.viewer:
+            self.viewer.clear()
+        if self._pdf_document:
+            self._pdf_document.close()
         self._loaded = False
 
     def _open_link(self, url: QUrl) -> None:
@@ -204,7 +285,7 @@ class ModReadmeDialog(QDialog):
         self._title_label.setObjectName("readmeTitle")
         for index in range(self._tabs.count()):
             tab = self._tabs.widget(index)
-            if isinstance(tab, _ReadmeTab):
+            if isinstance(tab, _ReadmeTab) and tab.viewer:
                 tab.viewer.document().setDefaultStyleSheet(markdown_css)
 
     def relocalize_ui(self) -> None:
@@ -215,9 +296,16 @@ class ModReadmeDialog(QDialog):
         self._empty_label.setText(tr("dialogs.no_readme_files"))
         self._close_button.setText(tr("ui.close_button"))
 
-    def closeEvent(self, event) -> None:
+    def _unload_tabs(self) -> None:
         for index in range(self._tabs.count()):
             tab = self._tabs.widget(index)
             if isinstance(tab, _ReadmeTab):
                 tab.unload_content()
+
+    def done(self, result: int) -> None:
+        self._unload_tabs()
+        super().done(result)
+
+    def closeEvent(self, event) -> None:
+        self._unload_tabs()
         super().closeEvent(event)
