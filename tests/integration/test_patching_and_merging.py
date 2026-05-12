@@ -858,6 +858,40 @@ class TestFileOverrideProgress:
         assert (target_dir / "lang" / "lang_en.json").read_text(encoding="utf-8") == "hello"
         assert not (target_dir / "chapter3").exists()
 
+    def test_apply_file_overrides_copies_configured_extra_data_files(self, tmp_path):
+        """Checks that explicit extra .win files are copied instead of skipped."""
+        from utils.patching.file_override_utils import apply_file_overrides
+
+        mod_dir = tmp_path / "mod"
+        target_dir = tmp_path / "target"
+        (mod_dir / "chapter_1").mkdir(parents=True)
+        (mod_dir / "chapter_1" / "data_30tbps.win").write_text(
+            "patched data", encoding="utf-8"
+        )
+        target_dir.mkdir()
+
+        patcher = Mock()
+        patcher.xdelta_modpack = False
+        patcher._backup_or_mark_file = Mock()
+        patcher._request_warning = Mock(return_value=True)
+        patcher.patching_logger = Mock()
+
+        result = apply_file_overrides(
+            patcher,
+            str(mod_dir / "chapter_1"),
+            str(target_dir),
+            set(),
+            False,
+            chapter_id="deltarune_1",
+            mod_name="Test Mod",
+            game_id="deltarune",
+            configured_paths=["chapter_1/data_30tbps.win"],
+            mod_root_dir=str(mod_dir),
+        )
+
+        assert result is True
+        assert (target_dir / "data_30tbps.win").read_text(encoding="utf-8") == "patched data"
+
     def test_apply_file_overrides_skips_legacy_walk_when_config_has_no_extra_files(
         self, tmp_path
     ):

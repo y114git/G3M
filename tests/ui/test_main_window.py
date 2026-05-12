@@ -258,7 +258,7 @@ class TestAppWindow:
                 with patch.object(
                     window.analytics_service,
                     "shutdown_async",
-                    side_effect=lambda cb: False,
+                    side_effect=lambda cb: (cb(), False)[1],
                 ) as shutdown_async:
                     window.closeEvent(event)
 

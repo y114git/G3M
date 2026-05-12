@@ -114,6 +114,7 @@ def _copy_override_file(
     progress_callback,
     progress_state: dict[str, int],
     mod_name: str,
+    allow_data_file_copy: bool = False,
 ):
     file = os.path.basename(source_path)
     file_lower = file.lower()
@@ -164,7 +165,7 @@ def _copy_override_file(
                 return False
         return True
 
-    if file_lower.endswith(DATA_FILE_EXTENSIONS):
+    if file_lower.endswith(DATA_FILE_EXTENSIONS) and not allow_data_file_copy:
         return True
 
     if file_lower.endswith(ARCHIVE_EXTENSIONS):
@@ -255,6 +256,7 @@ def _apply_configured_override_entries(
                         progress_callback,
                         progress_state,
                         mod_name,
+                        allow_data_file_copy=True,
                     ):
                         return False
             continue
@@ -276,6 +278,7 @@ def _apply_configured_override_entries(
             progress_callback,
             progress_state,
             mod_name,
+            allow_data_file_copy=True,
         ):
             return False
     if progress_callback and total_files == 0:
