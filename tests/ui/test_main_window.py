@@ -269,7 +269,8 @@ class TestAppWindow:
             finally:
                 for callback in scheduled:
                     callback()
-                _close_app_window(qapp, window)
+                window.deleteLater()
+                _drain_events(qapp, cycles=6, delay_ms=10)
 
     def test_title_bar_windows_menu_opens_log_viewer(self, qapp, temp_dir):
         from app.window import AppWindow
