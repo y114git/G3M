@@ -18,8 +18,8 @@ dependencies = [
     "py7zr==1.1.0",
     "python-dotenv==1.2.2",
     "rarfile==4.2",
-    "requests==2.33.1",
-    "urllib3==2.6.3",
+    "requests==2.34.0",
+    "urllib3==2.7.0",
 ]
 
 [project.optional-dependencies]
