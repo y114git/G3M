@@ -52,6 +52,24 @@ class TestG3MToolAdapter:
         else:
             assert not g3mtool.is_available()
 
+    def test_adapter_logs_found_executable_only_once_per_platform(self, monkeypatch):
+        """Checks that repeated manager creation does not duplicate startup discovery logs."""
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.resource_path",
+            lambda relative_path: f"C:/bundle/{relative_path}",
+        )
+        monkeypatch.setattr("adapters.g3mtool_adapter.os.path.exists", lambda _path: True)
+        info = Mock()
+        monkeypatch.setattr("adapters.g3mtool_adapter.logging.info", info)
+        G3MToolManager._cached_executable_paths = {}
+        G3MToolManager._logged_executable_paths = set()
+
+        first = G3MToolManager()
+        second = G3MToolManager()
+
+        assert first.g3mtool_path == second.g3mtool_path
+        assert info.call_count == 1
+
     def test_cancel_active_processes(self):
         """Checks that canceling active processes."""
         g3mtool = G3MToolManager()

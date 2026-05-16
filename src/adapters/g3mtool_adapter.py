@@ -15,6 +15,8 @@ class G3MToolManager:
     """Manages G3MTool CLI execution for patching operations."""
 
     _PROGRESS_RE = re.compile(r"^(?P<label>.+?):\s*(?P<percent>\d+)%")
+    _cached_executable_paths: dict[str, str | None] = {}
+    _logged_executable_paths: set[str] = set()
 
     def __init__(self) -> None:
         self.platform = {"Windows": "windows", "Darwin": "macos"}.get(
@@ -24,6 +26,8 @@ class G3MToolManager:
         self._active_processes: list[subprocess.Popen] = []
 
     def _find_executable(self) -> str | None:
+        if self.platform in self._cached_executable_paths:
+            return self._cached_executable_paths[self.platform]
         base_path = resource_path(f"assets/bin/g3mtool_{self.platform}")
         exe_name = "G3MTool.exe" if self.platform == "windows" else "G3MTool"
         exe_path = os.path.join(base_path, exe_name)
@@ -35,9 +39,13 @@ class G3MToolManager:
                     logging.warning(
                         f"Could not set executable permission on {exe_path}: {e}"
                     )
-            logging.info(f"Found G3MTool: {exe_path}")
+            if exe_path not in self._logged_executable_paths:
+                logging.info(f"Found G3MTool: {exe_path}")
+                self._logged_executable_paths.add(exe_path)
+            self._cached_executable_paths[self.platform] = exe_path
             return exe_path
         logging.warning(f"G3MTool not found at {exe_path}")
+        self._cached_executable_paths[self.platform] = None
         return None
 
     def is_available(self) -> bool:
