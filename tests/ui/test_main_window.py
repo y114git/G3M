@@ -19,6 +19,15 @@ def _close_app_window(qapp, window) -> None:
     _drain_events(qapp, cycles=6, delay_ms=10)
 
 
+def _close_widget(qapp, widget) -> None:
+    if widget is None:
+        return
+    widget.close()
+    _drain_events(qapp, cycles=6, delay_ms=10)
+    widget.deleteLater()
+    _drain_events(qapp, cycles=6, delay_ms=10)
+
+
 def _window_test_patches(temp_dir):
     user_root = os.path.join(temp_dir, "user")
     profiles_dir = os.path.join(temp_dir, "profiles")
@@ -227,8 +236,8 @@ class TestAppWindow:
                 qapp.processEvents()
                 assert window._should_pause_background_audio() is True
             finally:
-                file_dialog.close()
-                dialog.close()
+                _close_widget(qapp, file_dialog)
+                _close_widget(qapp, dialog)
                 _close_app_window(qapp, window)
 
     def test_close_event_hides_window_and_defers_cleanup(self, qapp, temp_dir):
