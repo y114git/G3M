@@ -146,18 +146,18 @@ class LibraryTabBuilder(QObject):
         self.widgets["filters_scroll"] = f_scroll
         colors = self._get_colors()
 
-        profile_row = QHBoxLayout()
-        profile_row.setContentsMargins(0, 2, 0, 2)
-        profile_row.addStretch()
+        ctrl = QHBoxLayout()
+        ctrl.setContentsMargins(0, 2, 0, 2)
+        ctrl.addStretch()
         profile_label = self._styled_label(
             tr("ui.profile_label"), bold=True, color=colors["main_text"]
         )
-        profile_row.addWidget(profile_label)
+        ctrl.addWidget(profile_label)
         profile_combo = QComboBox()
         profile_combo.setObjectName("profile_combo")
         profile_combo.setMinimumWidth(180)
         profile_combo.setToolTip(tr("tooltips.profile_combo"))
-        profile_row.addWidget(profile_combo)
+        ctrl.addWidget(profile_combo)
         profile_settings_btn = QPushButton()
         profile_settings_btn.setObjectName("profile_settings_button")
         profile_settings_btn.setIconSize(QSize(20, 20))
@@ -166,19 +166,16 @@ class LibraryTabBuilder(QObject):
         profile_settings_btn.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
-        profile_row.addWidget(profile_settings_btn)
-        profile_row.addStretch()
-        layout.addLayout(profile_row)
+        ctrl.addWidget(profile_settings_btn)
         self.widgets["library_profile_label"] = profile_label
         self.widgets["profile_combo"] = profile_combo
         self.widgets["profile_settings_button"] = profile_settings_btn
 
-        ctrl = QHBoxLayout()
-        ctrl.setContentsMargins(0, 5, 0, 5)
+        ctrl.setSpacing(8)
         game_label = self._styled_label(
             tr("ui.game_label"), bold=True, color=colors["main_text"]
         )
-        ctrl.addStretch()
+        ctrl.addSpacing(16)
         ctrl.addWidget(game_label)
         game_combo = create_modgame_combo(
             self.app_state, get_visible_game_entries(), "selected_game_type"
@@ -188,7 +185,7 @@ class LibraryTabBuilder(QObject):
         game_versions_btn = create_game_versions_button(self.app_state)
         game_versions_btn.setToolTip(tr("tooltips.game_versions"))
         ctrl.addWidget(game_versions_btn)
-        ctrl.addSpacing(20)
+        ctrl.addSpacing(12)
         ch_cb = QCheckBox(tr("ui.chapter_mode"))
         f_cb = QCheckBox(tr("ui.full_install"))
         ch_cb.setToolTip(tr("tooltips.chapter_mode"))
