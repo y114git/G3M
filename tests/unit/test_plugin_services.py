@@ -277,6 +277,50 @@ def test_plugin_runtime_reports_enabled_hook_and_passes_task_runtime(temp_dir):
     assert runtime._instances["hook_plugin"].hook_context.task_runtime is task_runtime
 
 
+def test_plugin_runtime_context_uses_plugin_scoped_feedback(temp_dir, monkeypatch, qapp):
+    from ui.common import feedback as feedback_module
+    from ui.common.feedback import FeedbackManager
+
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_plugin(temp_dir, "sample_plugin")
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=FeedbackManager(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+    runtime.scan_installed_plugins()
+
+    box = Mock()
+    box.Icon = Mock()
+    box.StandardButton = Mock(Yes=1, No=2)
+    box.setIcon = Mock()
+    box.setWindowTitle = Mock()
+    box.setText = Mock()
+    box.setStandardButtons = Mock()
+    box.setDefaultButton = Mock()
+    box.exec = Mock(return_value=1)
+    factory = Mock(return_value=box)
+    factory.Icon = feedback_module.QMessageBox.Icon
+    factory.StandardButton = feedback_module.QMessageBox.StandardButton
+    monkeypatch.setattr(feedback_module, "QMessageBox", factory)
+
+    context = runtime._build_context("sample_plugin")
+    context.feedback_service.ask_question("name", "description")
+
+    box.setWindowTitle.assert_called_once_with("Sample Plugin")
+    assert "Sample description" in box.setText.call_args.args[0]
+
+
 def test_plugin_install_service_accepts_plugin_folder(temp_dir):
     """Checks that plugining install service accepts plugin folder."""
     settings_service = _DummySettingsService()

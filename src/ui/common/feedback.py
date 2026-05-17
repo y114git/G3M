@@ -134,3 +134,67 @@ class FeedbackManager(QObject):
 
     def update_status(self, message: str, color: str = ""):
         self.status_updated.emit(message, color)
+
+    def scoped(self, tr_func=None):
+        return _ScopedFeedbackManager(self, tr_func or self._tr)
+
+
+class _ScopedFeedbackManager:
+    """Delegates feedback behavior while overriding translation scope."""
+
+    def __init__(self, base_manager: FeedbackManager, tr_func) -> None:
+        self._base_manager = base_manager
+        self._tr = tr_func
+
+    def __getattr__(self, name):
+        return getattr(self._base_manager, name)
+
+    def show_message(
+        self, message_type: str, message_key: str, details: str = "", **kwargs
+    ):
+        return FeedbackManager.show_message(
+            self,
+            message_type,
+            message_key,
+            details,
+            **kwargs,
+        )
+
+    def ask_question(
+        self,
+        title_key: str,
+        message_key: str,
+        details: str = "",
+        default_yes: bool = False,
+        details_is_html: bool = False,
+        **kwargs,
+    ) -> bool:
+        return FeedbackManager.ask_question(
+            self,
+            title_key,
+            message_key,
+            details,
+            default_yes,
+            details_is_html,
+            **kwargs,
+        )
+
+    def ask_patching_warning(
+        self, message: str, details: str = "", report_path: str | None = None
+    ) -> bool:
+        return FeedbackManager.ask_patching_warning(
+            self,
+            message,
+            details,
+            report_path,
+        )
+
+    def update_status(self, message: str, color: str = ""):
+        self._base_manager.update_status(message, color)
+
+    def _should_show_dialog(self):
+        return self._base_manager._should_show_dialog()
+
+    @property
+    def parent_widget(self):
+        return self._base_manager.parent_widget

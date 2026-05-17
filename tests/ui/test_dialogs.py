@@ -28,6 +28,28 @@ class TestImportDialog:
         assert isinstance(dialog, QDialog)
         assert dialog.windowTitle() == tr("mods.import_mods")
 
+    def test_import_dialog_localizations_never_show_raw_keys(self, qapp, feedback_service):
+        """Checks that import dialogs resolve visible localization keys for every shipped language."""
+        from services.localization_service import localization_service
+        from ui.dialogs.import_dialog import ImportDialog
+
+        original_language = localization_service.get_current_language()
+        import_types = ("mods", "themes", "game_versions", "mod_versions")
+
+        try:
+            for language_code in localization_service.get_available_languages():
+                assert localization_service.load_language(language_code)
+                for import_type in import_types:
+                    dialog = ImportDialog(None, feedback_service, import_type)
+                    labels = [label.text() for label in dialog.findChildren(QLabel)]
+                    buttons = [button.text() for button in dialog.findChildren(QPushButton)]
+                    visible_texts = [dialog.windowTitle(), dialog.url_input.placeholderText(), *labels, *buttons]
+
+                    assert all(text and not text.startswith("[") for text in visible_texts)
+                    _close_dialog(qapp, dialog)
+        finally:
+            localization_service.load_language(original_language)
+
 
 class TestGameBananaFilePickerDialog:
     """Tests for dialogs."""

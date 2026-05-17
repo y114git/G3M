@@ -57,3 +57,34 @@ def test_ask_question_escapes_plain_details(monkeypatch, qapp):
 
     assert result is True
     assert html.escape("<b>New launcher version</b><br>Line 2") in box.text
+
+
+def test_feedback_manager_scoped_translator_localizes_titles_and_messages(
+    monkeypatch, qapp
+):
+    from ui.common import feedback as feedback_module
+    from ui.common.feedback import FeedbackManager
+
+    factory, box = _make_message_box_stub()
+    monkeypatch.setattr(feedback_module, "QMessageBox", factory)
+    manager = FeedbackManager(
+        tr_func=lambda key, **_kwargs: {
+            "dialogs.delete_save": "Delete save?",
+            "dialogs.delete_save_confirmation": "Delete permanently?",
+        }.get(key, f"[{key}]")
+    )
+    scoped = manager.scoped(
+        lambda key, **_kwargs: {
+            "dialogs.delete_save": "Delete save?",
+            "dialogs.delete_save_confirmation": "Delete permanently?",
+        }.get(key, f"[{key}]")
+    )
+
+    result = scoped.ask_question(
+        "dialogs.delete_save",
+        "dialogs.delete_save_confirmation",
+    )
+
+    assert result is True
+    box.setWindowTitle.assert_called_once_with("Delete save?")
+    assert "Delete permanently?" in box.text

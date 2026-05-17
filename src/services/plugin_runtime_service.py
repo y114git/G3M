@@ -148,10 +148,13 @@ class PluginRuntimeService:
         *,
         task_runtime: PluginTaskRuntime | None = None,
     ) -> PluginContext:
+        plugin_feedback = self.feedback_service.scoped(
+            localization_service.get_plugin_tr(plugin_id)
+        )
         return PluginContext(
             plugin_id=plugin_id,
             app_state=self.app_state,
-            feedback_service=self.feedback_service,
+            feedback_service=plugin_feedback,
             settings_service=self.settings_service,
             profile_service=self.profile_service,
             game_registry_service=self.game_registry_service,
@@ -168,7 +171,7 @@ class PluginRuntimeService:
             plugin_id=plugin_id,
             host_context=context,
             app_state=self.app_state,
-            feedback_service=self.feedback_service,
+            feedback_service=context.feedback_service,
             customization_service=self.customization_service,
             localization_service=localization_service,
             plugin_settings=context.plugin_settings,
