@@ -82,14 +82,12 @@ class TestAboutDialog:
         """Checks that abouting dialog creation."""
         from models.plugin_models import PLUGIN_API_VERSION
         from ui.dialogs.about_dialog import AboutDialog
-        app_state.global_settings = {"reportform_url": "https://example.com/form"}
         dialog = AboutDialog(None, app_state)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
         assert dialog.title_label.text() == 'G3M'
         assert dialog.data_path_edit.text() == temp_dir
         assert dialog.plugin_api_value.text() == PLUGIN_API_VERSION
-        assert dialog.report_issue_button.isEnabled()
         assert dialog.os_value.text()
         assert dialog.python_value.text()
         _close_dialog(qapp, dialog)
@@ -97,22 +95,12 @@ class TestAboutDialog:
     def test_about_dialog_actions(self, qapp, app_state):
         """Checks that abouting dialog actions."""
         from ui.dialogs.about_dialog import AboutDialog
-        app_state.global_settings = {"reportform_url": "https://example.com/form"}
         dialog = AboutDialog(None, app_state)
         with patch('ui.dialogs.about_dialog.QDesktopServices.openUrl') as open_url:
             dialog.wiki_button.click()
             dialog.open_folder_button.click()
             assert open_url.call_count == 2
-            dialog.report_issue_button.click()
-            assert open_url.call_count == 3
-        assert dialog.result() == QDialog.DialogCode.Accepted
-
-    def test_about_dialog_disables_report_issue_without_url(self, qapp, app_state):
-        """Checks that abouting dialog disables report issue without url."""
-        from ui.dialogs.about_dialog import AboutDialog
-        dialog = AboutDialog(None, app_state)
-        assert not dialog.report_issue_button.isEnabled()
-        _close_dialog(qapp, dialog)
+        assert dialog.result() == QDialog.DialogCode.Rejected
 
 
 class TestChangelogDialog:

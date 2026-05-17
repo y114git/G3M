@@ -158,9 +158,6 @@ class AboutDialog(QDialog):
         actions_layout = QHBoxLayout()
         self.open_folder_button = QPushButton(tr("buttons.open_g3m_folder"))
         self.open_folder_button.clicked.connect(self._open_data_folder)
-        self.report_issue_button = QPushButton(tr("buttons.report_issue"))
-        self.report_issue_button.clicked.connect(self._open_report_form)
-        self.report_issue_button.setEnabled(bool(self._report_form_url()))
         self.telegram_button = QPushButton(tr("buttons.telegram"))
         self.telegram_button.clicked.connect(
             lambda: self._open_url(SOCIAL_LINKS["telegram"])
@@ -172,7 +169,6 @@ class AboutDialog(QDialog):
         self.close_button = QPushButton(tr("buttons.close"))
         self.close_button.clicked.connect(self.reject)
         actions_layout.addWidget(self.open_folder_button)
-        actions_layout.addWidget(self.report_issue_button)
         actions_layout.addStretch(1)
         actions_layout.addWidget(self.telegram_button)
         actions_layout.addWidget(self.discord_button)
@@ -188,13 +184,3 @@ class AboutDialog(QDialog):
 
     def _wiki_url(self) -> str:
         return str((self.app_state.global_settings or {}).get("wiki_url", "https://github.com/y114git/G3M/")).strip()
-
-    def _report_form_url(self) -> str:
-        return str((self.app_state.global_settings or {}).get("reportform_url", "")).strip()
-
-    def _open_report_form(self):
-        url = self._report_form_url()
-        if not url:
-            return
-        self.accept()
-        self._open_url(url)
