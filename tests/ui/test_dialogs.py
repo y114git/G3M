@@ -1097,6 +1097,123 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_collects_info_files_in_custom_order(self, qapp, tmp_path):
+        """Checks that mod editor saves info file order and visibility."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        doc_a = tmp_path / "A.txt"
+        doc_b = tmp_path / "B.txt"
+        doc_a.write_text("A", encoding="utf-8")
+        doc_b.write_text("B", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        dialog._add_info_file_entry(str(doc_b), visible=False)
+        dialog._add_info_file_entry(str(doc_a), visible=True)
+
+        data = dialog._collect_mod_data()
+
+        assert data["info_files"] == {
+            "B.txt": "hide",
+            "A.txt": "show",
+        }
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_populates_existing_info_files_and_root_docs(self, qapp, tmp_path):
+        """Checks that mod editor shows saved info_files and discovered root docs together."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "info_mod"
+        mod_folder.mkdir()
+        (mod_folder / "A.txt").write_text("A", encoding="utf-8")
+        (mod_folder / "B.txt").write_text("B", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_info_mod",
+                "name": "Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"B.txt": "hide"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+
+        listed = [
+            (
+                dialog._info_files_list.item(i).data(Qt.ItemDataRole.UserRole)["path"],
+                dialog._info_files_list.item(i).data(Qt.ItemDataRole.UserRole)["state"],
+                dialog._info_files_list.item(i).data(Qt.ItemDataRole.UserRole)["custom"],
+            )
+            for i in range(dialog._info_files_list.count())
+        ]
+
+        assert listed == [
+            ("B.txt", "hide", True),
+            ("A.txt", "show", False),
+        ]
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_info_widgets_are_parented_inside_section_content(self, qapp, tmp_path):
+        """Checks that info widgets are created inside the info section, not on the dialog root."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        info_content = dialog._section_widgets["info_files"]["content"]
+
+        assert dialog._info_files_list.parentWidget() is info_content
+        assert dialog._info_add_button.parentWidget() is info_content
+        assert dialog._info_toggle_button.parentWidget() is info_content
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_sections_are_pinned_to_top_with_bottom_spacer(self, qapp, tmp_path):
+        """Checks that the outer layout keeps collapsed sections packed at the top."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        from PyQt6.QtWidgets import QScrollArea
+
+        scroll = dialog.findChild(QScrollArea)
+        outer_layout = scroll.widget().layout()
+
+        assert outer_layout.itemAt(outer_layout.count() - 1).spacerItem() is not None
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_removes_stale_managed_files_after_replace_or_delete(
         self, qapp, tmp_path
     ):

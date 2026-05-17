@@ -21,12 +21,14 @@ def test_build_mod_config_data_uses_default_order_for_new_payload():
             "homepage": "https://example.com",
             "version": "1.0.0",
             "icon": "icon.png",
+            "info_files": {"README.md": "show"},
         }
     )
 
     assert list(config) == [
         "config_version",
         "metadata",
+        "info_files",
         "files",
     ]
     assert config["config_version"] == MOD_CONFIG_VERSION
@@ -42,6 +44,7 @@ def test_build_mod_config_data_uses_default_order_for_new_payload():
         "game_version",
         "tags",
     ]
+    assert config["info_files"] == {"README.md": "show"}
 
 
 def test_normalize_mod_config_data_migrates_to_canonical_order():
@@ -194,3 +197,21 @@ def test_normalize_mod_config_data_flattens_metadata_block():
     assert config["name"] == "Test"
     assert config["homepage"] == "https://example.com/mod"
     assert list(config["files"]) == ["deltarune_1"]
+
+
+def test_normalize_mod_config_data_normalizes_info_files_order_and_values():
+    """Checks that info_files keeps insertion order and normalizes invalid values."""
+    config = {
+        "game": "deltarune",
+        "info_files": {
+            " chapter/readme.md ": "hide",
+            "README.md": "weird",
+            "": "show",
+        },
+    }
+
+    assert normalize_mod_config_data(config) is True
+    assert config["info_files"] == {
+        "chapter/readme.md": "hide",
+        "README.md": "show",
+    }

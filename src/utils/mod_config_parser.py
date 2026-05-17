@@ -37,9 +37,11 @@ MOD_METADATA_KEY_ORDER = (
     "game_version",
     "tags",
 )
+MOD_INFO_FILE_VISIBILITY = ("show", "hide")
 MOD_RUNTIME_KEY_ORDER = (
     "config_version",
     *MOD_METADATA_KEY_ORDER,
+    "info_files",
     "files",
 )
 
@@ -98,6 +100,22 @@ def _sanitize_extra_files(extra_files_raw) -> list[str]:
             continue
         if file_path not in result:
             result.append(file_path)
+    return result
+
+
+def _sanitize_info_files(info_files_raw) -> dict[str, str]:
+    """Sanitize info_files config dict. Info files must be file paths, not directories."""
+    result: dict[str, str] = {}
+    if not isinstance(info_files_raw, dict):
+        return result
+    for raw_path, raw_visibility in info_files_raw.items():
+        file_path = _normalize_extra_file_path(
+            _trim_string(raw_path, MOD_FIELD_LIMITS["file_value"])
+        ).rstrip("/")
+        if not file_path:
+            continue
+        visibility = str(raw_visibility or "").strip().lower()
+        result[file_path] = visibility if visibility in MOD_INFO_FILE_VISIBILITY else "show"
     return result
 
 
@@ -227,6 +245,7 @@ def normalize_mod_config_data(
             MOD_FIELD_LIMITS["file_value"],
         ),
         "tags": _sanitize_tags(_get_metadata_value(config_data, "tags")),
+        "info_files": _sanitize_info_files(config_data.get("info_files")),
         "files": {},
     }
     canonical["files"] = _sanitize_files(
@@ -255,12 +274,14 @@ def build_mod_config_data(config_data: dict) -> dict:
         for key in MOD_METADATA_KEY_ORDER
         if normalized.get(key) not in (None, "", [], {})
     }
+    info_files = normalized.get("info_files", {})
     files = normalized.get("files", {})
     return {
         key: value
         for key, value in (
             ("config_version", MOD_CONFIG_VERSION),
             ("metadata", metadata),
+            ("info_files", info_files),
             ("files", files),
         )
         if value not in (None, "", [], {})

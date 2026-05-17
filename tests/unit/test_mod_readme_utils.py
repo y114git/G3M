@@ -1,3 +1,4 @@
+import json
 import os
 
 from utils.mod_readme_utils import (
@@ -41,6 +42,32 @@ def test_find_mod_readme_files_only_uses_top_level_files(temp_dir):
     found = [os.path.basename(path) for path in find_mod_readme_files(temp_dir)]
 
     assert found == ["README.md"]
+
+
+def test_find_mod_readme_files_uses_info_files_order_and_hide_rules(temp_dir):
+    """Checks that info_files controls visibility and order before alphabetical fallback."""
+    for name in ("A.txt", "B.txt", "C.txt", "hidden.txt"):
+        with open(os.path.join(temp_dir, name), "w", encoding="utf-8") as handle:
+            handle.write(name)
+    with open(os.path.join(temp_dir, "mod_config.json"), "w", encoding="utf-8") as handle:
+        json.dump({"info_files": {"C.txt": "show", "hidden.txt": "hide"}}, handle)
+
+    found = [os.path.basename(path) for path in find_mod_readme_files(temp_dir)]
+
+    assert found == ["C.txt", "A.txt", "B.txt"]
+
+
+def test_find_mod_readme_files_treats_invalid_info_file_value_as_show(temp_dir):
+    """Checks that invalid info_files values default to visible."""
+    for name in ("A.txt", "B.txt"):
+        with open(os.path.join(temp_dir, name), "w", encoding="utf-8") as handle:
+            handle.write(name)
+    with open(os.path.join(temp_dir, "mod_config.json"), "w", encoding="utf-8") as handle:
+        json.dump({"info_files": {"B.txt": "later"}}, handle)
+
+    found = [os.path.basename(path) for path in find_mod_readme_files(temp_dir)]
+
+    assert found == ["B.txt", "A.txt"]
 
 
 def test_read_mod_readme_supports_utf8_sig(temp_dir):
