@@ -282,27 +282,10 @@ class GameLaunchController(QObject):
         ):
             return
         self.app_state.action_button_enabled = False
-        is_yellow = self.app_state.game_mode.game_id == "undertaleyellow"
-        is_spire = self.app_state.game_mode.game_id == "sugaryspire"
+        game_name = self.app_state.game_mode.display_label
         dlg = QDialog(cast(QWidget, self.app))
-        if is_spire:
-            dlg.setWindowTitle(tr("dialogs.full_spire_install"))
-            install_location_key = "dialogs.install_spire_location"
-            folder_name = "Sugary Spire"
-        else:
-            dlg.setWindowTitle(
-                tr(
-                    "dialogs.full_yellow_install"
-                    if is_yellow
-                    else "dialogs.full_demo_install"
-                )
-            )
-            install_location_key = (
-                "dialogs.install_yellow_location"
-                if is_yellow
-                else "dialogs.install_demo_location"
-            )
-            folder_name = "UNDERTALE Yellow" if is_yellow else "DELTARUNEdemo"
+        dlg.setWindowTitle(tr("dialogs.full_install_game", game_name=game_name))
+        folder_name = self.app_state.game_mode.display_name
         v = QVBoxLayout(dlg)
         lbl = QLabel(full_install_tooltip(self.app))
         lbl.setWordWrap(True)
@@ -317,7 +300,8 @@ class GameLaunchController(QObject):
             self.app_state.action_button_enabled = True
             return
         base_dir = QFileDialog.getExistingDirectory(
-            cast(QWidget, self.app), tr(install_location_key)
+            cast(QWidget, self.app),
+            tr("dialogs.install_game_location", game_name=game_name),
         )
         if not base_dir:
             self.app_state.action_button_enabled = True

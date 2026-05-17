@@ -55,6 +55,10 @@ class FullInstallThread(QThread):
             full_install_url = self.main_window.app_state.global_settings.get(
                 "full_spire_install_url"
             )
+        elif self.main_window.app_state.game_mode.game_id == "frickbears3":
+            full_install_url = self.main_window.app_state.global_settings.get(
+                "full_frickbears3_install_url"
+            )
         elif self.main_window.app_state.game_mode.game_id == "undertaleyellow":
             full_install_url = self.main_window.app_state.global_settings.get(
                 "full_yellow_install_url"

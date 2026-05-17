@@ -164,7 +164,7 @@ class TestManualInstall:
         assert get_chapter_folder_name("undertale", game="undertale") == "undertale"
         assert (
             get_chapter_folder_name("undertaleyellow", game="undertaleyellow")
-            == "undertale"
+            == "undertaleyellow"
         )
 
     def test_instruction_file_detection(self):

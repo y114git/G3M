@@ -394,16 +394,14 @@ def ensure_writable(path: str) -> bool:
     try:
         if os.path.exists(path):
             st = os.stat(path)
-            os.chmod(path, st.st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE)
+            os.chmod(path, st.st_mode | stat.S_IWUSR)
         if os.path.isdir(path):
             for root, dirs, files in os.walk(path):
                 for name in dirs + files:
                     p = os.path.join(root, name)
                     try:
                         st = os.stat(p)
-                        os.chmod(
-                            p, st.st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWRITE
-                        )
+                        os.chmod(p, st.st_mode | stat.S_IWUSR)
                     except (OSError, PermissionError):
                         continue
         return True

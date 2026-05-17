@@ -390,14 +390,13 @@ def _pizza_names(game_name):
 def autodetect_path(game_name: str) -> str | None:
     if not game_name:
         return None
-    if game_name in (
-        "UNDERTALE YELLOW",
-        "UndertaleYellow",
+    unsupported_autodetect_names = {
         "undertaleyellow",
-        "SUGARY SPIRE",
-        "SugarySpire",
         "sugaryspire",
-    ):
+        "frickbears3",
+    }
+    normalized_game_name = (game_name or "").replace(" ", "").casefold()
+    if normalized_game_name in unsupported_autodetect_names:
         return None
     system, paths, names = CURRENT_PLATFORM, [], _pizza_names(game_name)
     home = os.path.expanduser("~")

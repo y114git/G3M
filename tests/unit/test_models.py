@@ -4,6 +4,7 @@ from models.game_modes import (
     GAME_REGISTRY,
     DeltaruneDemoGame,
     DeltaruneGame,
+    Frickbears3Game,
     GameDefinition,
     GameTab,
     PizzaTowerGame,
@@ -395,7 +396,7 @@ class TestUndertaleYellowGame:
         assert g.game_id == 'undertaleyellow'
         assert g.supports_full_install is True
         assert g.steam_app_id == ''
-        assert g.tabs[0].files_key == 'undertale'
+        assert g.tabs[0].files_key == 'undertaleyellow'
 
 
 class TestPizzaTowerGame:
@@ -430,14 +431,26 @@ class TestSugarySpireGame:
         g = SugarySpireGame()
         assert g.game_id == 'sugaryspire'
         assert g.supports_full_install is True
-        assert g.tabs[0].files_key == 'undertale'
+        assert g.tabs[0].files_key == 'sugaryspire'
+
+
+class TestFrickbears3Game:
+    """Tests for models."""
+    def test_basic_properties(self):
+        """Checks that basicing properties."""
+        g = Frickbears3Game()
+        assert g.game_id == 'frickbears3'
+        assert g.display_name == 'FRICKBEARS3'
+        assert g.supports_full_install is True
+        assert g.tabs[0].files_key == 'frickbears3'
+        assert g.tabs[0].folder_name == 'frickbears3'
 
 
 class TestGameRegistry:
     """Tests for models."""
     def test_all_games_registered(self):
         """Checks that alling games registered."""
-        expected_ids = {'deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire'}
+        expected_ids = {'deltarune', 'deltarunedemo', 'undertale', 'undertaleyellow', 'pizzatower', 'sugaryspire', 'frickbears3'}
         assert expected_ids == set(GAME_REGISTRY.keys())
 
     def test_get_game_existing(self):
@@ -454,7 +467,7 @@ class TestGameRegistry:
     def test_get_all_games(self):
         """Checks that getting all games."""
         all_games = get_all_games()
-        assert len(all_games) == 6
+        assert len(all_games) == 7
         assert all(isinstance(g, GameDefinition) for g in all_games)
 
     def test_each_game_has_tabs(self):

@@ -43,6 +43,8 @@ DEFAULT_APP_SETTINGS = {
     "beta_updates_enabled": False,
     "pizzatower_game_path": "",
     "pizzatower_custom_executable_path": "",
+    "frickbears3_game_path": "",
+    "frickbears3_custom_executable_path": "",
     "skip_patching_warnings": False,
     "merge_properties": False,
     "merge_code": False,

@@ -307,7 +307,12 @@ class UndertaleYellowGame(GameDefinition):
     gamebanana_id = 19606
     supports_full_install = True
     tabs = [
-        GameTab("undertaleyellow", "undertale", "tabs.undertaleyellow", "undertale")
+        GameTab(
+            "undertaleyellow",
+            "undertaleyellow",
+            "tabs.undertaleyellow",
+            "undertaleyellow",
+        )
     ]
     executables = {
         "windows": (
@@ -373,7 +378,9 @@ class SugarySpireGame(GameDefinition):
     path_button_key = "buttons.change_sugaryspire_path"
     gamebanana_id = 18218
     supports_full_install = True
-    tabs = [GameTab("sugaryspire", "undertale", "tabs.sugaryspire", "sugaryspire")]
+    tabs = [
+        GameTab("sugaryspire", "sugaryspire", "tabs.sugaryspire", "sugaryspire")
+    ]
     executables = {
         "windows": ("SugarySpire_ExhibitionNight.exe", "SugarySpire_ExhibitionNight"),
         "linux": ("SugarySpire_ExhibitionNight", "SugarySpire_ExhibitionNight.exe"),
@@ -386,6 +393,28 @@ class SugarySpireGame(GameDefinition):
     )
     macos_app_names = ("SugarySpire_ExhibitionNight.app",)
     used_mods_config_key = "used_mods_sugaryspire"
+
+
+class Frickbears3Game(GameDefinition):
+    game_id = "frickbears3"
+    display_name = "FRICKBEARS3"
+    display_name_key = "ui.frickbears3"
+    path_config_key = "frickbears3_game_path"
+    custom_exec_config_key = "frickbears3_custom_executable_path"
+    path_button_key = "buttons.change_frickbears3_path"
+    gamebanana_id = 24426
+    supports_full_install = True
+    tabs = [
+        GameTab("frickbears3", "frickbears3", "tabs.frickbears3", "frickbears3")
+    ]
+    executables = {
+        "windows": ("Frickbears3.exe", "Frickbears3"),
+        "linux": ("Frickbears3", "Frickbears3.exe"),
+        "mac": ("Frickbears3.app",),
+    }
+    process_names = ("Frickbears3.exe", "Frickbears3", "runner")
+    macos_app_names = ("Frickbears3.app",)
+    used_mods_config_key = "used_mods_frickbears3"
 
 
 class CustomSingleTabGame(GameDefinition):
@@ -429,6 +458,7 @@ BUILTIN_GAME_REGISTRY: dict[str, GameDefinition] = {
         UndertaleYellowGame(),
         PizzaTowerGame(),
         SugarySpireGame(),
+        Frickbears3Game(),
     )
 }
 DEFAULT_GAME_ORDER = tuple(BUILTIN_GAME_REGISTRY)

@@ -350,11 +350,10 @@ def on_toggle_full_install(w, state):
 def full_install_tooltip(w) -> str:
     if platform.system() == "Darwin":
         return tr("tooltips.macos_install_unavailable")
-    if w.app_state.game_mode.game_id == "sugaryspire":
-        return tr("tooltips.full_spire_install_instructions")
-    elif w.app_state.game_mode.game_id == "undertaleyellow":
-        return tr("tooltips.full_yellow_install_instructions")
-    return tr("tooltips.full_install_instructions")
+    return tr(
+        "tooltips.full_install_game_instructions",
+        game_name=w.app_state.game_mode.display_label,
+    )
 
 
 def save_custom_executable(w, path: str):

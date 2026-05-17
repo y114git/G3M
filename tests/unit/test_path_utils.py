@@ -148,6 +148,26 @@ class TestPathUtils:
         resolved = resolve_game_executable(game_dir, "sugaryspire")
         assert resolved is not None
 
+    def test_resolve_game_executable_frickbears3(self, temp_dir):
+        """Checks that resolving game executable frickbears3."""
+        game_dir = os.path.join(temp_dir, "game")
+        os.makedirs(game_dir, exist_ok=True)
+        system = platform.system()
+        if system == "Darwin":
+            app_path = os.path.join(game_dir, "Frickbears3.app")
+            os.makedirs(app_path, exist_ok=True)
+        elif system == "Windows":
+            exe_path = os.path.join(game_dir, "Frickbears3.exe")
+            with open(exe_path, "w") as f:
+                f.write("mock")
+        else:
+            exe_path = os.path.join(game_dir, "Frickbears3")
+            with open(exe_path, "w") as f:
+                f.write("mock")
+            os.chmod(exe_path, 0o700)
+        resolved = resolve_game_executable(game_dir, "frickbears3")
+        assert resolved is not None
+
     def test_resolve_game_executable_not_found(self, temp_dir):
         """Checks that resolving game executable not found."""
         game_dir = os.path.join(temp_dir, "empty_game")

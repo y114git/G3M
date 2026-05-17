@@ -43,6 +43,7 @@ class TestConstants:
             "undertaleyellow",
             "pizzatower",
             "sugaryspire",
+            "frickbears3",
         ):
             assert game_id in BUILTIN_GAME_REGISTRY, f"{game_id} missing from registry"
             assert BUILTIN_GAME_REGISTRY[game_id].gamebanana_id, (
