@@ -5,8 +5,8 @@
         "name": "DR Save Manager",
         "description": "Manage DELTARUNE saves, save collections and switch them before launch.",
         "author": "Y114",
-        "version": "1.0.0",
-        "api_version": ">=1.0.0",
+        "version": "1.1.0",
+        "api_version": ">=1.1.0",
         "icon": "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/deltarune_save_manager/icon.png",
         "homepage": "https://github.com/y114git/G3M/tree/stable/catalog/plugins/deltarune_save_manager",
         "download_link": "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/deltarune_save_manager.zip",
@@ -20,8 +20,8 @@
         "name": "Custom Saves Folders",
         "description": "Create per-game custom saves folders names and apply them only for the current launch session. (May not work with some games that use complicated saving methods)",
         "author": "Y114",
-        "version": "1.0.0",
-        "api_version": ">=1.0.0",
+        "version": "1.1.0",
+        "api_version": ">=1.1.0",
         "icon": "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/custom_saves_folders/icon.png",
         "homepage": "https://github.com/y114git/G3M/tree/stable/catalog/plugins/custom_saves_folders",
         "download_link": "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/custom_saves_folders.zip",
@@ -32,4 +32,3 @@
         }
     ]
 }
-

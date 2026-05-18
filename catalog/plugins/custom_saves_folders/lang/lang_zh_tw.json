@@ -24,7 +24,8 @@
     "applying_status": "正在套用自訂存檔資料夾...",
     "applying_progress": "正在套用自訂存檔資料夾 {current}/{total}...",
     "applied_status": "已為 {game} 套用自訂存檔資料夾「{name}」。",
-    "restored_status": "自訂存檔階段結束後，原始 data 檔案已還原。"
+    "restored_status": "自訂存檔階段結束後，原始 data 檔案已還原。",
+    "shortcut_summary_label": "存檔資料夾"
   },
   "dialogs": {
     "delete_title": "刪除這個自訂資料夾？",

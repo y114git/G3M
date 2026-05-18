@@ -824,6 +824,33 @@ class CustomSavesFoldersPlugin:
         if self._ui_widget is not None:
             self._ui_widget.refresh_language()
 
+    def on_shortcut_dialog(self, context, shortcut_context, *_args):
+        game_mode = getattr(context.app_state, "game_mode", None)
+        if game_mode is None or self._state is None:
+            return []
+        selected_folder = self._state.get_selected(game_mode.game_id)
+        if not selected_folder:
+            return []
+        shortcut_context.set_plugin_state(
+            "custom_saves_folders",
+            {
+                "game_id": game_mode.game_id,
+                "folder_name": selected_folder,
+            },
+        )
+        shortcut_context.add_summary_line(
+            self._tr()("ui.shortcut_summary_label"),
+            selected_folder,
+        )
+        return [
+            {
+                "plugin_id": "custom_saves_folders",
+                "type": "text",
+                "label": self._tr()("ui.shortcut_summary_label"),
+                "value": selected_folder,
+            }
+        ]
+
     def _script_path(self) -> str:
         return str(Path(__file__).with_name("scripts") / "set_general_info_name.csx")
 
@@ -952,6 +979,24 @@ class CustomSavesFoldersPlugin:
         context.feedback_service.show_message("error", "errors.error", message)
         return False
 
+    def on_after_mod_apply_before_launch_shortcut(self, context, shortcut_context, *_args):
+        payload = shortcut_context.get_plugin_state("custom_saves_folders")
+        if not payload or not isinstance(payload, dict):
+            return True
+        folder_name = str(payload.get("folder_name", "")).strip()
+        game_id = str(payload.get("game_id", "")).strip()
+        if not folder_name or not game_id:
+            return True
+        task_runtime = getattr(context, "task_runtime", None)
+        ok, error = self._apply_name_to_targets(game_id, folder_name, task_runtime)
+        if ok:
+            return True
+        if error == "cancelled":
+            return False
+        message = self._tr()("errors.apply_failed", error=error)
+        context.feedback_service.show_message("error", "errors.error", message)
+        return False
+
     def on_mod_apply_cancelled(self, context, *_args):
         self._restore_session()
         return True
@@ -987,6 +1032,9 @@ class CustomSavesFoldersPlugin:
                 self._tr()("errors.restore_failed", error=error),
             )
         return ok
+
+    def on_before_restore_after_exit_shortcut(self, context, shortcut_context, *_args):
+        return self.on_before_restore_after_exit(context)
 
 
 def create_plugin():

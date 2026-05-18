@@ -50,7 +50,7 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
                 "description": f"plugins.{plugin_id}.description",
                 "author": "Tester",
                 "version": "1.0.0",
-                "api_version": "1.0.0",
+                "api_version": ">=1.0.0",
                 "entry": "plugin.py",
                 "tags": ["tool"],
                 "relations": {},
@@ -105,7 +105,7 @@ def _write_dataclass_plugin(plugins_dir, plugin_id="dataclass_plugin"):
                 "description": f"plugins.{plugin_id}.description",
                 "author": "Tester",
                 "version": "1.0.0",
-                "api_version": "1.0.0",
+                "api_version": ">=1.0.0",
                 "entry": "plugin.py",
                 "tags": ["tool"],
                 "relations": {},
@@ -275,6 +275,80 @@ def test_plugin_runtime_reports_enabled_hook_and_passes_task_runtime(temp_dir):
 
     assert results == [True]
     assert runtime._instances["hook_plugin"].hook_context.task_runtime is task_runtime
+
+
+def test_plugin_runtime_reports_enabled_shortcut_hook_and_passes_shortcut_context(
+    temp_dir,
+):
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_plugin(temp_dir, "shortcut_hook_plugin")
+    plugin_dir = os.path.join(temp_dir, "shortcut_hook_plugin")
+    with open(os.path.join(plugin_dir, "plugin_config.json"), encoding="utf-8") as handle:
+        plugin_config = json.load(handle)
+    plugin_config["hooks"] = [
+        "before_mod_apply_shortcut",
+        "after_mod_apply_before_launch_shortcut",
+    ]
+    with open(
+        os.path.join(plugin_dir, "plugin_config.json"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(plugin_config, handle, ensure_ascii=False, indent=2)
+    with open(os.path.join(plugin_dir, "plugin.py"), "w", encoding="utf-8") as handle:
+        handle.write(
+            "class _Plugin:\n"
+            "    def on_before_mod_apply_shortcut(self, context, shortcut_context, *args):\n"
+            "        shortcut_context.set_plugin_state('shortcut_hook_plugin', {'selected': 'alpha'})\n"
+            "        shortcut_context.add_summary_line('Collection', 'alpha')\n"
+            "        self.capture_context = context\n"
+            "        return True\n"
+            "    def on_after_mod_apply_before_launch_shortcut(self, context, shortcut_context, *args):\n"
+            "        self.launch_context = context\n"
+            "        self.shortcut_context = shortcut_context\n"
+            "        return shortcut_context.get_plugin_state('shortcut_hook_plugin')\n"
+            "\n"
+            "def create_plugin():\n"
+            "    return _Plugin()\n"
+        )
+    state_service.set_enabled("shortcut_hook_plugin", True)
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+
+    runtime.scan_installed_plugins()
+
+    from services.shortcut_plugin_service import ShortcutPluginContext
+
+    shortcut_context = ShortcutPluginContext({"game_id": "deltarune"})
+    capture_results = runtime.execute_hook(
+        "before_mod_apply_shortcut",
+        shortcut_context,
+    )
+    launch_results = runtime.execute_hook(
+        "after_mod_apply_before_launch_shortcut",
+        shortcut_context,
+    )
+
+    assert runtime.has_enabled_hook("before_mod_apply_shortcut") is True
+    assert capture_results == [True]
+    assert launch_results == [{"selected": "alpha"}]
+    assert shortcut_context.plugin_states == {
+        "shortcut_hook_plugin": {"selected": "alpha"}
+    }
+    assert shortcut_context.summary_lines == [("Collection", "alpha")]
 
 
 def test_plugin_runtime_context_uses_plugin_scoped_feedback(temp_dir, monkeypatch, qapp):

@@ -963,6 +963,7 @@
     "dialog_mod": "Мод",
     "dialog_launch": "Способ запуска",
     "dialog_direct_launch": "Прямой запуск",
+    "disable_plugin_actions": "Отключить действия плагинов",
     "vanilla": "Ванила (без модов)",
     "direct": "Напрямую",
     "select_folder": "Выберите папку для сохранения ярлыка",

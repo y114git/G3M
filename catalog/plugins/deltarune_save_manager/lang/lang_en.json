@@ -96,7 +96,8 @@
     "value_label": "Value",
     "cancel_button": "Cancel",
     "save": "Save",
-    "close_button": "Close"
+    "close_button": "Close",
+    "shortcut_summary_label": "Save Collection"
   },
   "buttons": {
     "additional_slots": "Additional slots",

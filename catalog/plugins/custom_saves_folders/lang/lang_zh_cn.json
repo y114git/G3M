@@ -24,7 +24,8 @@
     "applying_status": "正在应用自定义存档文件夹...",
     "applying_progress": "正在应用自定义存档文件夹 {current}/{total}...",
     "applied_status": "已为 {game} 应用自定义存档文件夹 \"{name}\"。",
-    "restored_status": "自定义存档会话结束后，原始 data 文件已恢复。"
+    "restored_status": "自定义存档会话结束后，原始 data 文件已恢复。",
+    "shortcut_summary_label": "存档文件夹"
   },
   "dialogs": {
     "delete_title": "删除这个自定义文件夹？",

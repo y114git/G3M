@@ -96,7 +96,8 @@
     "value_label": "值",
     "cancel_button": "取消",
     "save": "保存",
-    "close_button": "关闭"
+    "close_button": "关闭",
+    "shortcut_summary_label": "存档集合"
   },
   "buttons": {
     "additional_slots": "额外存档位",

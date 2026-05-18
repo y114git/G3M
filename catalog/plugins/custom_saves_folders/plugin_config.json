@@ -4,8 +4,8 @@
   "name": "plugins.custom_saves_folders.name",
   "description": "plugins.custom_saves_folders.description",
   "author": "Y114",
-  "version": "1.0.0",
-  "api_version": ">=1.0.0",
+  "version": "1.1.0",
+  "api_version": ">=1.1.0",
   "entry": "plugin.py",
   "icon": "icon.png",
   "homepage": "https://github.com/y114git/G3M/tree/stable/catalog/plugins/custom_saves_folders",
@@ -16,8 +16,11 @@
   "relations": {},
   "hooks": [
     "main_view",
+    "shortcut_dialog",
     "after_mod_apply_before_launch",
+    "after_mod_apply_before_launch_shortcut",
     "before_restore_after_exit",
+    "before_restore_after_exit_shortcut",
     "language_changed",
     "theme_changed",
     "profile_changed"

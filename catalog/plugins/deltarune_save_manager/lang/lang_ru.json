@@ -96,7 +96,8 @@
     "value_label": "Значение",
     "cancel_button": "Отмена",
     "save": "Сохранить",
-    "close_button": "Закрыть"
+    "close_button": "Закрыть",
+    "shortcut_summary_label": "Коллекция сохранений"
   },
   "buttons": {
     "additional_slots": "Дополнительные слоты",

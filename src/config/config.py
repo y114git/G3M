@@ -58,7 +58,7 @@ STEAM_APP_ID_UNDERTALE = "391540"
 STEAM_APP_ID_PIZZA_TOWER = "2231450"
 
 """Plugin and profile runtime configuration."""
-PLUGIN_API_VERSION = "1.0.0"
+PLUGIN_API_VERSION = "1.1.0"
 PLUGIN_CATALOG_URL = (
     "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/plugins.json"
 )
@@ -71,6 +71,11 @@ PLUGIN_HOOKS = {
     "after_game_started",
     "before_restore_after_exit",
     "after_restore_after_exit",
+    "shortcut_dialog",
+    "before_mod_apply_shortcut",
+    "after_mod_apply_before_launch_shortcut",
+    "before_restore_after_exit_shortcut",
+    "after_restore_after_exit_shortcut",
     "language_changed",
     "theme_changed",
     "profile_changed",

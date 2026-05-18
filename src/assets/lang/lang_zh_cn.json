@@ -963,6 +963,7 @@
     "dialog_mod": "模组",
     "dialog_launch": "启动方式",
     "dialog_direct_launch": "直接启动",
+    "disable_plugin_actions": "禁用插件操作",
     "vanilla": "原版（无模组）",
     "direct": "直接",
     "select_folder": "选择保存快捷方式的文件夹",

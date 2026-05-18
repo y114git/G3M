@@ -125,7 +125,7 @@ class FeedbackManager(QObject):
             clicked = msg_box.clickedButton()
             if clicked == continue_btn:
                 return True
-            if clicked == cancel_btn:
+            if clicked == cancel_btn or clicked is None:
                 return False
             if clicked == open_report_btn and report_path:
                 from ui.dialogs.conflicts_dialog import ConflictsDialog

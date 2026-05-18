@@ -21,6 +21,11 @@ from services.game_detection_service import (
     get_executable_name_for_game,
     is_game_running,
 )
+from services.shortcut_plugin_service import (
+    ShortcutPluginContext,
+    build_headless_plugin_runtime,
+    execute_shortcut_plugin_hook,
+)
 from utils.path_utils import (
     find_chapter_resource_dir,
     get_profile_mods_root,
@@ -581,6 +586,25 @@ def run_shortcut(shortcut_arg: str):
     if not game_path or not os.path.isdir(game_path):
         logger.error(f"Game path not found: {game_path}")
         sys.exit(1)
+    shortcut_plugin_context = ShortcutPluginContext.from_shortcut_config(shortcut_config)
+    runtime_service = (
+        build_headless_plugin_runtime(
+            local_config,
+            game_mode=game_mode,
+            current_mode="chapter" if is_chapter_mode else "full",
+        )
+        if shortcut_plugin_context.enabled
+        else None
+    )
+
+    if not execute_shortcut_plugin_hook(
+        runtime_service,
+        "before_mod_apply_shortcut",
+        shortcut_plugin_context,
+        shortcut_config,
+    ):
+        logger.warning("Shortcut launch blocked by a plugin before mod apply")
+        sys.exit(1)
 
     backup_mgr = None
     if chapter_mods:
@@ -591,11 +615,29 @@ def run_shortcut(shortcut_arg: str):
             sys.exit(1)
         logger.info("All chapters patched successfully")
 
+    if not execute_shortcut_plugin_hook(
+        runtime_service,
+        "after_mod_apply_before_launch_shortcut",
+        shortcut_plugin_context,
+        shortcut_config,
+    ):
+        logger.warning("Shortcut launch blocked by a plugin after mod apply")
+        if backup_mgr:
+            backup_mgr.restore_all_backups()
+            backup_mgr.clear_backup_dir()
+        sys.exit(1)
+
     logger.info("Launching game...")
     _launch_game(shortcut_config, game_mode, local_config, game_path)
 
     logger.info("Game exited")
 
+    execute_shortcut_plugin_hook(
+        runtime_service,
+        "before_restore_after_exit_shortcut",
+        shortcut_plugin_context,
+        shortcut_config,
+    )
     if backup_mgr:
         logger.info("Restoring backups...")
         try:
@@ -604,5 +646,12 @@ def run_shortcut(shortcut_arg: str):
             logger.info("Backups restored successfully")
         except Exception as e:
             logger.error(f"Failed to restore backups: {e}", exc_info=True)
+
+    execute_shortcut_plugin_hook(
+        runtime_service,
+        "after_restore_after_exit_shortcut",
+        shortcut_plugin_context,
+        shortcut_config,
+    )
 
     logger.info("=== Shortcut Runner finished ===")

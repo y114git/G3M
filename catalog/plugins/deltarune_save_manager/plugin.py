@@ -290,11 +290,66 @@ class DRSaveManagerPlugin:
         widget.setVisible(True)
         return widget
 
+    def on_shortcut_dialog(self, context, shortcut_context, *_args):
+        if not shortcut_context.matches_game(allowed={"deltarune"}):
+            return []
+        manager = self._save_manager_instance()
+        if not manager.find_and_validate_save_path():
+            return []
+        choices = [{"label": self._tr()("dialogs.main_slots"), "value": -1}]
+        for idx, col_folder in enumerate(manager.list_collections()):
+            choices.append(
+                {"label": col_folder.rsplit("_", 1)[0], "value": idx}
+            )
+        if len(choices) <= 1:
+            return []
+        collection_idx = -1
+        shortcut_context.set_plugin_state(
+            "deltarune_save_manager",
+            {
+                "collection_idx": collection_idx,
+            },
+        )
+        return [
+            {
+                "plugin_id": "deltarune_save_manager",
+                "type": "select",
+                "label": self._tr()("ui.shortcut_summary_label"),
+                "key": "collection_idx",
+                "options": choices,
+                "value": collection_idx,
+            }
+        ]
+
+    def _collection_label(self, manager, collection_idx: int) -> str:
+        if collection_idx == -1:
+            return self._tr()("dialogs.main_slots")
+        collections = manager.list_collections()
+        if 0 <= collection_idx < len(collections):
+            return collections[collection_idx].rsplit("_", 1)[0]
+        return self._tr()("dialogs.main_slots")
+
     def on_before_mod_apply(self, context, *_args):
         manager = self._save_manager_instance()
         collection_idx = manager.prompt_for_save_collection_on_launch()
         if collection_idx is None:
             return False
+        if collection_idx != -1:
+            backup_info = manager.apply_collection_saves_for_launch(collection_idx)
+            if not backup_info:
+                return False
+            self._backup_info = backup_info
+        return True
+
+    def on_before_mod_apply_shortcut(self, context, shortcut_context, *_args):
+        if not shortcut_context.matches_game(allowed={"deltarune"}):
+            return True
+        manager = self._save_manager_instance()
+        payload = shortcut_context.get_plugin_state("deltarune_save_manager")
+        try:
+            collection_idx = int(payload.get("collection_idx", -1) if payload else -1)
+        except (TypeError, ValueError, AttributeError):
+            collection_idx = -1
         if collection_idx != -1:
             backup_info = manager.apply_collection_saves_for_launch(collection_idx)
             if not backup_info:
@@ -308,6 +363,10 @@ class DRSaveManagerPlugin:
                 self._backup_info
             )
             self._backup_info = {}
+
+    def on_after_restore_after_exit_shortcut(self, context, shortcut_context, *_args):
+        self.on_after_restore_after_exit(context)
+        return True
 
 
 def create_plugin():

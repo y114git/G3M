@@ -24,7 +24,8 @@
     "applying_status": "Applying custom save folder...",
     "applying_progress": "Applying custom save folder {current}/{total}...",
     "applied_status": "Applied custom save folder \"{name}\" for {game}.",
-    "restored_status": "Restored original data files after the custom save folder session."
+    "restored_status": "Restored original data files after the custom save folder session.",
+    "shortcut_summary_label": "Custom Save Folder"
   },
   "dialogs": {
     "delete_title": "Remove this custom save folder?",

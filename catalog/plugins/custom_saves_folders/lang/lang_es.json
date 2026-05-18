@@ -24,7 +24,8 @@
     "applying_status": "Aplicando carpeta de guardado personalizada...",
     "applying_progress": "Aplicando carpeta de guardado personalizada {current}/{total}...",
     "applied_status": "Se aplico la carpeta de guardado personalizada \"{name}\" para {game}.",
-    "restored_status": "Se restauraron los data files originales despues de la sesion de carpeta de guardado personalizada."
+    "restored_status": "Se restauraron los data files originales despues de la sesion de carpeta de guardado personalizada.",
+    "shortcut_summary_label": "Carpeta guardado"
   },
   "dialogs": {
     "delete_title": "Eliminar esta carpeta personalizada?",

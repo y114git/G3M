@@ -4,8 +4,8 @@
   "name": "plugins.deltarune_save_manager.name",
   "description": "plugins.deltarune_save_manager.description",
   "author": "Y114",
-  "version": "1.0.0",
-  "api_version": ">=1.0.0",
+  "version": "1.1.0",
+  "api_version": ">=1.1.0",
   "entry": "plugin.py",
   "icon": "icon.png",
   "homepage": "https://github.com/y114git/G3M/tree/stable/catalog/plugins/deltarune_save_manager",
@@ -17,8 +17,11 @@
   "hooks": [
     "settings_view",
     "main_view",
+    "shortcut_dialog",
     "before_mod_apply",
-    "after_restore_after_exit"
+    "before_mod_apply_shortcut",
+    "after_restore_after_exit",
+    "after_restore_after_exit_shortcut"
   ],
   "settings_schema": {
     "fields": [

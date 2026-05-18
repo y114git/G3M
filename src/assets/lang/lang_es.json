@@ -963,6 +963,7 @@
     "dialog_mod": "Mod",
     "dialog_launch": "Método de inicio",
     "dialog_direct_launch": "Inicio directo",
+    "disable_plugin_actions": "Desactivar acciones plugin",
     "vanilla": "Vanilla (sin mods)",
     "direct": "Directo",
     "select_folder": "Seleccionar carpeta para guardar el acceso directo",

@@ -963,6 +963,7 @@
     "dialog_mod": "Mod",
     "dialog_launch": "Launch method",
     "dialog_direct_launch": "Direct launch",
+    "disable_plugin_actions": "Disable plugins actions",
     "vanilla": "Vanilla (no mods)",
     "direct": "Direct",
     "select_folder": "Select folder to save shortcut",

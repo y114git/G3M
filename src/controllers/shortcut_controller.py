@@ -9,9 +9,13 @@ import stat
 import sys
 
 from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
+    QHBoxLayout,
     QLabel,
     QVBoxLayout,
     QWidget,
@@ -19,6 +23,9 @@ from PyQt6.QtWidgets import (
 
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
+from services.shortcut_plugin_service import (
+    ShortcutPluginContext,
+)
 from ui.common.styling import get_border_radius
 from utils.mod_utils import get_mod_id, get_mod_name
 
@@ -67,10 +74,14 @@ def _collect_chapter_data(
     return chapter_mods, chapter_objs
 
 
-def _build_shortcut_config(app_state, chapter_mods: dict[str, str | None]) -> dict:
+def _build_shortcut_config(
+    app_state,
+    chapter_mods: dict[str, str | None],
+    plugin_context: ShortcutPluginContext | None = None,
+) -> dict:
     """Build the JSON config dict from current app state."""
     is_chapter_mode = app_state.current_mode == "chapter"
-    return {
+    config = {
         "game_id": app_state.game_mode.game_id,
         "chapter_mode": is_chapter_mode,
         "launch_via_steam": app_state.local_config.get("launch_via_steam", False),
@@ -80,6 +91,33 @@ def _build_shortcut_config(app_state, chapter_mods: dict[str, str | None]) -> di
         else "",
         "chapter_mods": chapter_mods,
     }
+    if plugin_context and plugin_context.enabled:
+        config["plugins_enabled"] = True
+        config["plugin_states"] = plugin_context.export_states()
+        config["plugin_summary"] = plugin_context.export_summary()
+    else:
+        config["plugins_enabled"] = False
+        config["plugin_states"] = {}
+        config["plugin_summary"] = []
+    return config
+
+
+def _collect_shortcut_plugin_blocks(
+    plugin_runtime_service,
+    plugin_context: ShortcutPluginContext,
+) -> list[dict]:
+    if not plugin_runtime_service:
+        return []
+    results = plugin_runtime_service.execute_hook("shortcut_dialog", plugin_context)
+    blocks: list[dict] = []
+    for result in results:
+        if isinstance(result, list):
+            for item in result:
+                if isinstance(item, dict):
+                    blocks.append(dict(item))
+        elif isinstance(result, dict):
+            blocks.append(dict(result))
+    return blocks
 
 
 def _generate_shortcut_filename(game_mode, chapter_mod_objects: dict) -> str:
@@ -133,40 +171,76 @@ class ShortcutDialog(QDialog):
     """Confirmation dialog for shortcut creation."""
 
     def __init__(
-        self, game_mode, chapter_mod_objects: dict, shortcut_config: dict, parent=None
+        self,
+        game_mode,
+        chapter_mod_objects: dict,
+        shortcut_config: dict,
+        plugin_context: ShortcutPluginContext | None = None,
+        plugin_blocks: list[dict] | None = None,
+        parent=None,
     ) -> None:
         super().__init__(parent)
+        self._game_mode = game_mode
+        self._chapter_mod_objects = chapter_mod_objects
+        self._shortcut_config = shortcut_config
+        self._plugin_context = plugin_context
+        self._plugin_blocks = list(plugin_blocks or [])
+        self._plugin_input_widgets: dict[tuple[str, str], QWidget] = {}
         self.setWindowTitle(tr("shortcut.dialog_title"))
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(540)
+        self.setMinimumHeight(220)
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        header = QLabel(tr("shortcut.dialog_header"))
-        header.setWordWrap(True)
-        layout.addWidget(header)
+        self.header_label = QLabel(tr("shortcut.dialog_header"))
+        self.header_label.setWordWrap(True)
+        layout.addWidget(self.header_label)
 
-        summary = QLabel(
+        self.plugin_actions_checkbox = QCheckBox(self)
+        self.plugin_actions_checkbox.setChecked(
+            (not bool(plugin_context.enabled)) if plugin_context else False
+        )
+
+        self.summary_label = QLabel(
             self._build_summary(game_mode, chapter_mod_objects, shortcut_config)
         )
-        summary.setWordWrap(True)
+        self.summary_label.setWordWrap(True)
         cfg = (
             getattr(getattr(parent, "app_state", None), "local_config", None)
             if parent
             else None
         )
         br = get_border_radius(cfg)
-        summary.setStyleSheet(
+        self.summary_label.setStyleSheet(
             f"padding: 8px; background: rgba(0,0,0,0.1); border-radius: {br}px;"
         )
-        layout.addWidget(summary)
+        layout.addWidget(self.summary_label)
 
+        self.plugin_section_widget = QWidget(self)
+        self.plugin_section_layout = QVBoxLayout(self.plugin_section_widget)
+        self.plugin_section_layout.setContentsMargins(0, 0, 0, 0)
+        self.plugin_section_layout.setSpacing(8)
+        self._build_plugin_section()
+        layout.addWidget(self.plugin_section_widget)
+        self.plugin_actions_checkbox.toggled.connect(
+            lambda _checked: self._update_plugin_visibility()
+        )
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(12)
+        footer_layout.addWidget(self.plugin_actions_checkbox)
+        footer_layout.addStretch(1)
+        footer_layout.addWidget(buttons)
+        layout.addLayout(footer_layout)
+        self.relocalize_ui()
+        self.apply_theme()
+        self.scale_ui()
 
     def _build_summary(self, gm, chapter_objs, cfg) -> str:
         lines = [f"{tr('shortcut.dialog_game')}: {gm.display_name}"]
@@ -205,11 +279,122 @@ class ShortcutDialog(QDialog):
             else tr("shortcut.direct")
         )
         lines.append(f"{tr('shortcut.dialog_launch')}: {launch}")
+        if (
+            self._plugin_context
+            and self.plugin_actions_enabled()
+            and self._plugin_context.summary_lines
+        ):
+            for label, value in self._plugin_context.summary_lines:
+                lines.append(f"{label}: {value}")
 
         return "\n".join(lines)
 
+    def _build_plugin_section(self) -> None:
+        while self.plugin_section_layout.count():
+            item = self.plugin_section_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._plugin_input_widgets.clear()
+        for block in self._plugin_blocks:
+            widget = self._create_plugin_block_widget(block)
+            if widget is not None:
+                self.plugin_section_layout.addWidget(widget)
+        self.plugin_section_layout.addStretch(1)
+
+    def _create_plugin_block_widget(self, block: dict) -> QWidget | None:
+        block_type = str(block.get("type", "")).strip()
+        plugin_id = str(block.get("plugin_id", "")).strip()
+        label_text = str(block.get("label", "")).strip()
+        key = str(block.get("key", "")).strip()
+        if block_type == "text":
+            label = QLabel(f"{label_text}: {block.get('value', '')}", self.plugin_section_widget)
+            label.setWordWrap(True)
+            return label
+        if block_type == "select" and plugin_id and key:
+            wrapper = QFrame(self.plugin_section_widget)
+            row = QHBoxLayout(wrapper)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(12)
+            label = QLabel(label_text, wrapper)
+            combo = QComboBox(wrapper)
+            for option in block.get("options", []) or []:
+                if not isinstance(option, dict):
+                    continue
+                combo.addItem(str(option.get("label", "")), option.get("value"))
+            current_value = block.get("value")
+            for index in range(combo.count()):
+                if combo.itemData(index) == current_value:
+                    combo.setCurrentIndex(index)
+                    break
+            self._plugin_input_widgets[plugin_id, key] = combo
+            row.addWidget(label)
+            row.addWidget(combo, 1)
+            return wrapper
+        if block_type == "checkbox" and plugin_id and key:
+            checkbox = QCheckBox(label_text, self.plugin_section_widget)
+            checkbox.setChecked(bool(block.get("value")))
+            self._plugin_input_widgets[plugin_id, key] = checkbox
+            return checkbox
+        return None
+
+    def _update_plugin_visibility(self) -> None:
+        enabled = self.plugin_actions_enabled()
+        self.plugin_section_widget.setVisible(enabled and bool(self._plugin_blocks))
+        self.summary_label.setText(
+            self._build_summary(
+                self._game_mode,
+                self._chapter_mod_objects,
+                self._shortcut_config,
+            )
+        )
+        self.scale_ui()
+
     def relocalize_ui(self):
-        pass
+        self.setWindowTitle(tr("shortcut.dialog_title"))
+        self.header_label.setText(tr("shortcut.dialog_header"))
+        self.plugin_actions_checkbox.setText(tr("shortcut.disable_plugin_actions"))
+        self.summary_label.setText(
+            self._build_summary(
+                self._game_mode,
+                self._chapter_mod_objects,
+                self._shortcut_config,
+            )
+        )
+
+    def apply_theme(self) -> None:
+        cfg = getattr(getattr(self.parent(), "app_state", None), "local_config", None)
+        br = get_border_radius(cfg)
+        self.setStyleSheet(
+            f"""
+            QDialog {{
+                border-radius: {br}px;
+            }}
+            QCheckBox {{
+                padding-top: 4px;
+            }}
+            """
+        )
+
+    def scale_ui(self) -> None:
+        self.layout().activate()
+        self.adjustSize()
+        self.resize(self.sizeHint())
+
+    def plugin_actions_enabled(self) -> bool:
+        return not self.plugin_actions_checkbox.isChecked()
+
+    def collect_plugin_values(self) -> dict[str, dict]:
+        if not self.plugin_actions_enabled():
+            return {}
+        result: dict[str, dict] = {}
+        for (plugin_id, key), widget in self._plugin_input_widgets.items():
+            result.setdefault(plugin_id, {})
+            if isinstance(widget, QComboBox):
+                result[plugin_id][key] = widget.currentData()
+            elif isinstance(widget, QCheckBox):
+                result[plugin_id][key] = bool(widget.isChecked())
+        return result
 
 
 def _validate_shortcut_prerequisites(app_state, has_any_mod: bool) -> str | None:
@@ -248,14 +433,33 @@ def on_shortcut_button_click(
         feedback_service.show_message("warning", "common.warning", error)
         return
 
-    shortcut_config = _build_shortcut_config(app_state, chapter_mods)
+    plugin_runtime_service = getattr(parent_widget, "plugin_runtime_service", None)
+    plugin_context = ShortcutPluginContext(
+        {"game_id": app_state.game_mode.game_id},
+        enabled=True,
+        phase="capture",
+    )
+    plugin_blocks = _collect_shortcut_plugin_blocks(plugin_runtime_service, plugin_context)
+    shortcut_config = _build_shortcut_config(app_state, chapter_mods, None)
+    dialog = ShortcutDialog(
+        app_state.game_mode,
+        chapter_mod_objects,
+        shortcut_config,
+        plugin_context,
+        plugin_blocks,
+        parent_widget,
+    )
     if (
-        ShortcutDialog(
-            app_state.game_mode, chapter_mod_objects, shortcut_config, parent_widget
-        ).exec()
+        dialog.exec()
         != QDialog.DialogCode.Accepted
     ):
         return
+    if dialog.plugin_actions_enabled():
+        for plugin_id, payload in dialog.collect_plugin_values().items():
+            plugin_context.set_plugin_state(plugin_id, payload)
+        shortcut_config = _build_shortcut_config(app_state, chapter_mods, plugin_context)
+    else:
+        shortcut_config = _build_shortcut_config(app_state, chapter_mods, None)
 
     ext = _get_platform_extension()
     default_name = (

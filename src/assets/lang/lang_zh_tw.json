@@ -963,6 +963,7 @@
     "dialog_mod": "模組",
     "dialog_launch": "啟動方式",
     "dialog_direct_launch": "直接啟動",
+    "disable_plugin_actions": "停用外掛操作",
     "vanilla": "原版（無模組）",
     "direct": "直接",
     "select_folder": "選擇儲存捷徑的資料夾",

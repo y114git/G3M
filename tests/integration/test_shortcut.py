@@ -9,8 +9,11 @@ import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt6.QtWidgets import QDialog
 
 from controllers.shortcut_controller import (
+    ShortcutDialog,
+    _collect_shortcut_plugin_blocks,
     _build_shortcut_config,
     _collect_chapter_data,
     _generate_shortcut_filename,
@@ -23,6 +26,10 @@ from services.game_runner import (
     _launch_game,
     _parse_shortcut_arg,
     _resolve_chapter_source_dir,
+)
+from services.shortcut_plugin_service import (
+    ShortcutPluginContext,
+    execute_shortcut_plugin_hook,
 )
 
 
@@ -324,6 +331,16 @@ class TestBuildShortcutConfig:
         cfg = _build_shortcut_config(mock_app_state, {"deltarune": None})
         assert cfg["chapter_mode"] is False
 
+    def test_includes_plugin_state_when_present(self, mock_app_state):
+        chapter_mods = {"deltarune_2": "test_mod"}
+        plugin_context = ShortcutPluginContext({"game_id": "deltarune"})
+        plugin_context.set_plugin_state("custom_saves_folders", {"folder": "SOJ"})
+        plugin_context.add_summary_line("Save Folder", "SOJ")
+        cfg = _build_shortcut_config(mock_app_state, chapter_mods, plugin_context)
+
+        assert cfg["plugin_states"] == {"custom_saves_folders": {"folder": "SOJ"}}
+        assert cfg["plugin_summary"] == [{"label": "Save Folder", "value": "SOJ"}]
+
 
 class TestValidatePrerequisites:
     """Tests for shortcut."""
@@ -467,3 +484,243 @@ class TestWriteShortcutFile:
         ).decode("ascii")
         assert b64 in content
         assert json.loads(base64.b64decode(b64).decode("utf-8")) == cfg
+
+
+class TestShortcutDialog:
+    def test_summary_includes_plugin_toggle_and_summary_lines(self, qapp, mock_app_state):
+        plugin_context = MagicMock()
+        plugin_context.enabled = True
+        plugin_context.summary_lines = [("Save Folder", "SOJ")]
+        dialog = ShortcutDialog(
+            mock_app_state.game_mode,
+            {"deltarune_2": None},
+            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            plugin_context,
+        )
+        try:
+            assert dialog.plugin_actions_checkbox.isChecked() is False
+            assert "Save Folder: SOJ" in dialog.summary_label.text()
+        finally:
+            dialog.close()
+
+    def test_relocalize_updates_header_text(self, qapp, mock_app_state):
+        dialog = ShortcutDialog(
+            mock_app_state.game_mode,
+            {"deltarune_2": None},
+            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            None,
+        )
+        try:
+            original = dialog.header_label.text()
+            dialog.header_label.setText("stale")
+            dialog.relocalize_ui()
+            assert dialog.header_label.text() == original
+        finally:
+            dialog.close()
+
+    def test_dialog_uses_larger_size_and_checkbox_starts_unchecked(self, qapp, mock_app_state):
+        dialog = ShortcutDialog(
+            mock_app_state.game_mode,
+            {"deltarune_2": None},
+            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            ShortcutPluginContext({"game_id": "deltarune"}),
+            [],
+        )
+        try:
+            assert dialog.minimumWidth() >= 540
+            assert dialog.minimumHeight() >= 220
+            assert dialog.plugin_actions_checkbox.isChecked() is False
+        finally:
+            dialog.close()
+
+    def test_disable_plugin_actions_hides_plugin_section(self, qapp, mock_app_state):
+        plugin_context = ShortcutPluginContext({"game_id": "deltarune"})
+        plugin_context.add_summary_line("Save Folder", "SOJ")
+        plugin_blocks = [
+            {
+                "plugin_id": "deltarune_save_manager",
+                "type": "select",
+                "label": "Collection",
+                "key": "collection_idx",
+                "options": [
+                    {"label": "Main slots", "value": -1},
+                    {"label": "Test", "value": 0},
+                ],
+                "value": 0,
+            }
+        ]
+        dialog = ShortcutDialog(
+            mock_app_state.game_mode,
+            {"deltarune_2": None},
+            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            plugin_context,
+            plugin_blocks,
+        )
+        try:
+            dialog.show()
+            qapp.processEvents()
+            height_before = dialog.height()
+            assert dialog.plugin_section_widget.isHidden() is False
+            assert "Save Folder: SOJ" in dialog.summary_label.text()
+            dialog.plugin_actions_checkbox.setChecked(True)
+            qapp.processEvents()
+            assert dialog.plugin_section_widget.isHidden() is True
+            assert "Save Folder: SOJ" not in dialog.summary_label.text()
+            assert dialog.height() < height_before
+        finally:
+            dialog.close()
+
+    def test_collect_plugin_values_serializes_select_blocks(self, qapp, mock_app_state):
+        plugin_context = ShortcutPluginContext({"game_id": "deltarune"})
+        plugin_blocks = [
+            {
+                "plugin_id": "deltarune_save_manager",
+                "type": "select",
+                "label": "Collection",
+                "key": "collection_idx",
+                "options": [
+                    {"label": "Main slots", "value": -1},
+                    {"label": "Test", "value": 0},
+                ],
+                "value": 0,
+            }
+        ]
+        dialog = ShortcutDialog(
+            mock_app_state.game_mode,
+            {"deltarune_2": None},
+            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            plugin_context,
+            plugin_blocks,
+        )
+        try:
+            payload = dialog.collect_plugin_values()
+            assert payload == {"deltarune_save_manager": {"collection_idx": 0}}
+        finally:
+            dialog.close()
+
+
+class TestShortcutPluginHooks:
+    def test_execute_shortcut_plugin_hook_returns_false_when_plugin_blocks(self):
+        runtime = MagicMock()
+        runtime.execute_hook.return_value = [True, False]
+
+        result = execute_shortcut_plugin_hook(
+            runtime,
+            "before_mod_apply_shortcut",
+            MagicMock(),
+        )
+
+        assert result is False
+
+    def test_execute_shortcut_plugin_hook_defaults_true_without_runtime(self):
+        assert execute_shortcut_plugin_hook(None, "before_mod_apply_shortcut", MagicMock()) is True
+
+
+class TestShortcutPluginContext:
+    def test_matches_game_supports_allow_and_block_lists(self):
+        context = ShortcutPluginContext({"game_id": "deltarune"})
+
+        assert context.matches_game(allowed={"deltarune"}) is True
+        assert context.matches_game(allowed={"undertale"}) is False
+        assert context.matches_game(blocked={"undertale"}) is True
+        assert context.matches_game(blocked={"deltarune"}) is False
+
+
+class TestShortcutPluginBlocks:
+    def test_collect_shortcut_plugin_blocks_uses_hook_results(self, mock_app_state):
+        runtime = MagicMock()
+        runtime.execute_hook.return_value = [
+            [
+                {
+                    "plugin_id": "custom_saves_folders",
+                    "type": "text",
+                    "label": "Custom Save Folder",
+                    "value": "SOJ",
+                }
+            ]
+        ]
+        plugin_context = ShortcutPluginContext({"game_id": "deltarune"})
+
+        blocks = _collect_shortcut_plugin_blocks(runtime, plugin_context)
+
+        assert blocks == [
+            {
+                "plugin_id": "custom_saves_folders",
+                "type": "text",
+                "label": "Custom Save Folder",
+                "value": "SOJ",
+            }
+        ]
+
+
+class TestShortcutButtonFlow:
+    def test_shortcut_flow_collects_dialog_plugin_values(self, mock_app_state):
+        feedback_service = MagicMock()
+        used_mods_service = MagicMock()
+        used_mods_service.get_used_mods_list.return_value = []
+        parent_widget = MagicMock()
+        parent_widget.plugin_runtime_service = MagicMock()
+        dialogs = []
+
+        class _FakeDialog:
+            def __init__(
+                self,
+                game_mode,
+                chapter_mod_objects,
+                shortcut_config,
+                plugin_context=None,
+                plugin_blocks=None,
+                parent=None,
+            ) -> None:
+                self.shortcut_config = shortcut_config
+                self.plugin_context = plugin_context
+                self.plugin_blocks = plugin_blocks or []
+                self.plugin_actions_checkbox = MagicMock()
+                dialogs.append(self)
+
+            def exec(self):
+                return QDialog.DialogCode.Accepted
+
+            def plugin_actions_enabled(self):
+                return True
+
+            def collect_plugin_values(self):
+                return {"deltarune_save_manager": {"collection_idx": 0}}
+
+        with (
+            patch("controllers.shortcut_controller.ShortcutDialog", _FakeDialog),
+            patch(
+                "controllers.shortcut_controller._collect_shortcut_plugin_blocks",
+                return_value=[
+                    {
+                        "plugin_id": "deltarune_save_manager",
+                        "type": "select",
+                        "label": "Collection",
+                        "key": "collection_idx",
+                        "options": [{"label": "Test", "value": 0}],
+                        "value": 0,
+                    }
+                ],
+            ),
+            patch(
+                "controllers.shortcut_controller.QFileDialog.getSaveFileName",
+                return_value=("C:/tmp/test.vbs", "VBScript (*.vbs)"),
+            ),
+            patch("controllers.shortcut_controller._write_shortcut_file") as write_shortcut,
+        ):
+            from controllers.shortcut_controller import on_shortcut_button_click
+
+            on_shortcut_button_click(
+                mock_app_state,
+                feedback_service,
+                used_mods_service,
+                parent_widget,
+            )
+
+        assert len(dialogs) == 1
+        assert dialogs[0].plugin_context is not None
+        assert dialogs[0].plugin_blocks[0]["plugin_id"] == "deltarune_save_manager"
+        written_cfg = write_shortcut.call_args.args[1]
+        assert written_cfg["plugin_states"] == {
+            "deltarune_save_manager": {"collection_idx": 0}
+        }

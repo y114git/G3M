@@ -96,7 +96,8 @@
     "value_label": "Valor",
     "cancel_button": "Cancelar",
     "save": "Guardar",
-    "close_button": "Cerrar"
+    "close_button": "Cerrar",
+    "shortcut_summary_label": "Colección guardados"
   },
   "buttons": {
     "additional_slots": "Ranuras adicionales",
