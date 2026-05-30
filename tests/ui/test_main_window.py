@@ -350,6 +350,27 @@ class TestTabBuilders:
         assert "border: 1px solid" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
         widget.deleteLater()
 
+    def test_library_actions_keep_expected_order_in_filters(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.builders.library_tab_builder import LibraryTabBuilder
+
+        builder = LibraryTabBuilder(app_state, None)
+        widget = builder.build()
+        widget.show()
+        actions_widget = builder._library_actions_widget
+        actions_layout = actions_widget.layout()
+        modding_btn = builder.widgets["library_modding_tools_button"]
+        downloads_btn = builder.widgets["library_downloads_button"]
+        search_btn = builder.widgets["library_search_button"]
+
+        assert builder._library_filters_layout.indexOf(actions_widget) >= 0
+        assert actions_layout.indexOf(modding_btn) < actions_layout.indexOf(downloads_btn)
+        assert actions_layout.indexOf(downloads_btn) < actions_layout.indexOf(search_btn)
+        assert search_btn.isVisible()
+        widget.close()
+        widget.deleteLater()
+
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
         """Checks that modsing browser tab builder creation."""
         from PyQt6.QtWidgets import QGridLayout

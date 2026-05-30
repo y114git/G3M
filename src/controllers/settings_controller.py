@@ -274,8 +274,8 @@ class SettingsUiController:
 
     def on_toggle_hide_library_filters(self, state):
         self.settings_service.on_toggle_hide_library_filters(bool(state))
-        if hasattr(self.app, "library_filters_widget"):
-            self.app.library_filters_widget.setVisible(not state)
+        if hasattr(self.app, "library_tab_builder"):
+            self.app.library_tab_builder.set_filters_collapsed(bool(state))
 
     def on_toggle_show_reset_buttons(self, state):
         self.settings_service.on_toggle_show_reset_buttons(bool(state))

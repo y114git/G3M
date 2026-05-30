@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QWIDGETSIZE_MAX,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -99,6 +100,12 @@ class LibraryTabBuilder(QObject):
     def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
         self.app_state, self.parent, self.widgets = app_state, parent, {}
+        self._library_actions_widget = None
+        self._library_filters_layout = None
+        self._library_controls_layout = None
+        self._library_controls_aux_insert_index = None
+        self._filters_scroll = None
+        self._root_layout = None
 
     def _get_colors(self):
         return get_theme_colors(self.app_state.local_config)
@@ -118,9 +125,12 @@ class LibraryTabBuilder(QObject):
     def build(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        self._root_layout = layout
         layout.setSpacing(5)
         layout.setContentsMargins(10, 10, 10, 10)
+        self._library_actions_widget = self._create_library_actions_widget()
         f_scroll = QScrollArea(widget)
+        self._filters_scroll = f_scroll
         f_scroll.setWidgetResizable(True)
         f_scroll.setFrameShape(QFrame.Shape.NoFrame)
         f_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -140,8 +150,6 @@ class LibraryTabBuilder(QObject):
             ),
             "library_filters_scroll",
         )
-        if self.app_state.local_config.get("hide_library_filters", False):
-            f_scroll.setVisible(False)
         layout.addWidget(f_scroll)
         self.widgets["filters_scroll"] = f_scroll
         colors = self._get_colors()
@@ -193,7 +201,12 @@ class LibraryTabBuilder(QObject):
         ctrl.addWidget(ch_cb)
         ctrl.addWidget(f_cb)
         ctrl.addStretch()
+        self._library_controls_layout = ctrl
+        self._library_controls_aux_insert_index = ctrl.count()
         layout.addLayout(ctrl)
+        self.set_filters_collapsed(
+            self.app_state.local_config.get("hide_library_filters", False)
+        )
 
         self._update_profile_settings_button_style(
             profile_settings_btn, game_combo, colors
@@ -440,6 +453,7 @@ class LibraryTabBuilder(QObject):
 
     def _create_library_filters_widget(self) -> QFrame:
         w, layout = create_filters_frame()
+        self._library_filters_layout = layout
         apply_filters_frame_style(w, self.app_state)
         w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         align_vcenter = Qt.AlignmentFlag.AlignVCenter
@@ -466,27 +480,87 @@ class LibraryTabBuilder(QObject):
             (self.app_state.game_mode.game_id or "deltarune") == "pizzatower",
         )
         layout.addStretch()
-        modding_tools_btn = create_modding_tools_button(self.app_state)
-        layout.addWidget(modding_tools_btn, 0, align_vcenter)
-        layout.addSpacing(4)
-        downloads_btn = create_downloads_button(self.app_state)
-        layout.addWidget(downloads_btn, 0, align_vcenter)
-        layout.addSpacing(4)
-        search_btn = create_search_button(self.app_state)
-        layout.addWidget(search_btn, 0, align_vcenter)
+        self._attach_actions_widget(layout, show_search=True)
         self.widgets.update(
             {
                 "library_sort_combo": sort_combo,
                 "library_sort_order_btn": sort_btn,
                 "library_tags_label": tags_lbl,
-                "library_search_button": search_btn,
-                "library_downloads_button": downloads_btn,
-                "library_modding_tools_button": modding_tools_btn,
                 "library_tag_widgets": list(tags.values()),
             }
         )
         self.widgets.update({f"library_tag_{k}": v for k, v in tags.items()})
         return w
+
+    def _create_library_actions_widget(self) -> QWidget:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        modding_tools_btn = create_modding_tools_button(self.app_state)
+        downloads_btn = create_downloads_button(self.app_state)
+        search_btn = create_search_button(self.app_state)
+        layout.addWidget(modding_tools_btn)
+        layout.addWidget(downloads_btn)
+        layout.addWidget(search_btn)
+        self.widgets.update(
+            {
+                "library_downloads_button": downloads_btn,
+                "library_modding_tools_button": modding_tools_btn,
+                "library_search_button": search_btn,
+            }
+        )
+        return container
+
+    def _attach_actions_widget(self, target_layout, *, show_search: bool) -> None:
+        actions = self._library_actions_widget
+        if actions is None or target_layout is None:
+            return
+        search_btn = self.widgets.get("library_search_button")
+        if search_btn is not None:
+            search_btn.setVisible(show_search)
+        current_parent = actions.parentWidget()
+        if current_parent and current_parent.layout():
+            current_parent.layout().removeWidget(actions)
+        insert_index = (
+            self._library_controls_aux_insert_index
+            if target_layout is self._library_controls_layout
+            else None
+        )
+        if insert_index is None:
+            target_layout.addWidget(actions, 0, Qt.AlignmentFlag.AlignVCenter)
+        else:
+            target_layout.insertWidget(
+                insert_index, actions, 0, Qt.AlignmentFlag.AlignVCenter
+            )
+
+    def set_aux_buttons_collapsed_mode(self, collapsed: bool) -> None:
+        self._attach_actions_widget(
+            self._library_controls_layout if collapsed else self._library_filters_layout,
+            show_search=not collapsed,
+        )
+
+    def set_filters_collapsed(self, collapsed: bool) -> None:
+        self.set_aux_buttons_collapsed_mode(collapsed)
+        filters_scroll = self._filters_scroll
+        if filters_scroll is None:
+            return
+        if collapsed:
+            filters_scroll.hide()
+            filters_scroll.setMinimumHeight(0)
+            filters_scroll.setMaximumHeight(0)
+        else:
+            filters_scroll.setMinimumHeight(0)
+            filters_scroll.setMaximumHeight(QWIDGETSIZE_MAX)
+            filters_scroll.show()
+            filters_scroll.updateGeometry()
+        if self._root_layout is not None:
+            self._root_layout.invalidate()
+            self._root_layout.activate()
+        parent = filters_scroll.parentWidget()
+        if parent is not None:
+            parent.updateGeometry()
+            parent.adjustSize()
 
     def _square_btn_qss(self, obj_name, combo_height, colors):
         """Return QSS for a square icon button matching the combo height."""
