@@ -504,7 +504,7 @@ class ModOperationsController:
                 mod_id = get_mod_id(installed_mod_info)
                 if not mod_id:
                     return
-                for _idx, mod in enumerate(self.app_state.filtered_mods):
+                for mod in self.app_state.filtered_mods:
                     if get_mod_id(mod) == mod_id:
                         self._safe_execute(
                             lambda: self.app.search_display.update_display(),
@@ -621,8 +621,7 @@ class ModOperationsController:
             install_tasks = getattr(self.app_state.current_task, "install_tasks", [])
             if not install_tasks:
                 return
-            mod_data_tuple = install_tasks[0]
-            mod_to_update = mod_data_tuple[0]
+            mod_to_update = install_tasks[0][0]
         mod_id_to_find = get_mod_id(mod_to_update)
         if not mod_id_to_find:
             return

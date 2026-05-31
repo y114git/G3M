@@ -1319,7 +1319,7 @@ class ModEditorDialog(QDialog):
 
     def _collect_managed_file_paths(self, mod_dir, files_data, game):
         managed_paths = set()
-        for _file_key, file_info in (files_data or {}).items():
+        for file_info in (files_data or {}).values():
             data_file = file_info.get("data_file_path") or file_info.get("data_file_url")
             if isinstance(data_file, str):
                 managed_path = self._resolve_managed_mod_path(mod_dir, data_file)
@@ -1836,7 +1836,6 @@ class ModEditorDialog(QDialog):
             return file_path
         if not mod_folder:
             return file_path
-        _game = game or self.game_combo.currentData()
         resolved = resolve_mod_file_path(mod_folder, file_path)
         return resolved if os.path.exists(resolved) else file_path
 

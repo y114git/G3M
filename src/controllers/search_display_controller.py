@@ -6,7 +6,11 @@ import logging
 from PyQt6.QtCore import QEvent, QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog, QMessageBox
 
-from config.config import QSS_LOADING_LABEL, SEARCH_EXHAUSTED_PAGE_SENTINEL
+from config.config import (
+    GAMEBANANA_PER_PAGE,
+    QSS_LOADING_LABEL,
+    SEARCH_EXHAUSTED_PAGE_SENTINEL,
+)
 from models.game_modes import (
     get_gamebanana_game_ids,
     get_search_game_entries,
@@ -37,6 +41,10 @@ def _bound_checkbox_is_checked(owner, attr_name: str) -> bool:
 
 class SearchDisplayController(QObject):
     """Manages search display, filtering, and mod interaction in search results."""
+
+    LOAD_MORE_PAGES = 2
+    LOAD_MORE_PREFETCH_ROWS = 2
+    PREFETCH_MIN_VIEWPORTS = 2.5
 
     ui_button_text_update = pyqtSignal(str, str)
     ui_button_tooltip_update = pyqtSignal(str, str)
@@ -71,15 +79,39 @@ class SearchDisplayController(QObject):
         self._virtual_scroll_debounce = DebounceTimer(delay_ms=80)
         self._initial_mods_display_done = False
         self._layout_refresh_tries = 0
+        self._last_virtual_card_range: tuple[int, int] | None = None
 
     def _iter_layout_cards(self):
         """Yield all ModCardWidget instances currently in mod_list_layout."""
         if not hasattr(self.app, "mod_list_layout"):
             return
-        for i in range(self.app.mod_list_layout.count()):
-            item = self.app.mod_list_layout.itemAt(i)
+        layout = self.app.mod_list_layout
+        try:
+            count = int(layout.count())
+        except (TypeError, ValueError):
+            return
+        for i in range(count):
+            item = layout.itemAt(i)
             if item and item.widget() and isinstance(item.widget(), ModCardWidget):
                 yield item.widget()
+
+    def _iter_layout_widgets(self):
+        layout = getattr(self.app, "mod_list_layout", None)
+        if not layout:
+            return
+        try:
+            count = int(layout.count())
+        except (TypeError, ValueError):
+            return
+        for i in range(count):
+            item = layout.itemAt(i)
+            if item and item.widget():
+                yield item.widget()
+
+    def _iter_loading_indicators(self):
+        for widget in self._iter_layout_widgets():
+            if getattr(widget, "objectName", lambda: "")() == "loading_indicator":
+                yield widget
 
     def _mod_list_column_count(self) -> int:
         try:
@@ -132,6 +164,7 @@ class SearchDisplayController(QObject):
             int(spacing),
             int(side_padding),
             int(columns),
+            int(card_width),
             int(grid_alignment),
         )
         if getattr(self, "_last_grid_metrics_key", None) == metrics_key:
@@ -154,6 +187,13 @@ class SearchDisplayController(QObject):
         widget = getattr(self.app, "mod_list_widget", None)
         if widget:
             with contextlib.suppress(Exception):
+                content_width = (
+                    int(columns) * int(card_width)
+                    + max(0, int(columns) - 1) * int(spacing)
+                    + int(side_padding) * 2
+                )
+                widget.setMinimumWidth(content_width)
+                widget.setMaximumWidth(content_width)
                 widget.updateGeometry()
         if isinstance(layout, QGridLayout):
             try:
@@ -193,6 +233,34 @@ class SearchDisplayController(QObject):
         else:
             layout.insertWidget(position, widget)
 
+    def _layout_card_at_position(self, position: int):
+        layout = getattr(self.app, "mod_list_layout", None)
+        if not layout:
+            return None
+        try:
+            if isinstance(layout, QGridLayout):
+                row, column = divmod(max(0, position), self._mod_list_column_count())
+                item = layout.itemAtPosition(row, column)
+            else:
+                item = layout.itemAt(position)
+            widget = item.widget() if item else None
+            return widget if isinstance(widget, ModCardWidget) else None
+        except (AttributeError, RuntimeError, ValueError):
+            return None
+
+    def _place_loading_indicator(self, widget, position: int) -> None:
+        self._place_layout_widget(
+            widget,
+            self._next_full_grid_row_position(position),
+            alignment=Qt.AlignmentFlag.AlignCenter,
+        )
+
+    def _next_full_grid_row_position(self, position: int) -> int:
+        columns = self._mod_list_column_count()
+        if columns <= 1:
+            return max(0, position)
+        return ((max(0, position) + columns - 1) // columns) * columns
+
     def _remove_layout_widget(self, widget):
         if not hasattr(self.app, "mod_list_layout"):
             return
@@ -203,8 +271,7 @@ class SearchDisplayController(QObject):
         layout = getattr(self.app, "mod_list_layout", None)
         if not layout:
             return
-        metrics_changed = self._sync_mod_grid_metrics()
-        if not metrics_changed:
+        if not self._sync_mod_grid_metrics():
             return
         visible_cards = [
             widget for widget in self._iter_layout_cards() if widget.isVisible()
@@ -215,14 +282,23 @@ class SearchDisplayController(QObject):
         self.ui_widget_updates_enabled.emit("mod_list_widget", False)
         try:
             for position, widget in enumerate(visible_cards):
+                if not widget.updatesEnabled():
+                    widget.setUpdatesEnabled(True)
+                widget.show()
+                widget._mods_browser_position = position
                 self._place_layout_widget(widget, position)
             layout.invalidate()
+            with contextlib.suppress(Exception):
+                layout.activate()
             widget_container = getattr(self.app, "mod_list_widget", None)
             if widget_container:
-                widget_container.updateGeometry()
+                with contextlib.suppress(Exception):
+                    widget_container.updateGeometry()
+                    widget_container.update()
         finally:
             self.ui_widget_updates_enabled.emit("mod_list_widget", True)
             self._maybe_load_more_for_short_viewport()
+            self._update_virtual_visibility()
 
     def _queue_layout_refresh(self, force: bool = False) -> None:
         if force:
@@ -242,8 +318,6 @@ class SearchDisplayController(QObject):
             with contextlib.suppress(Exception):
                 widget_container.updateGeometry()
             with contextlib.suppress(Exception):
-                widget_container.adjustSize()
-            with contextlib.suppress(Exception):
                 widget_container.update()
         scroll = getattr(self.app, "mods_browser_scroll", None)
         if scroll:
@@ -255,7 +329,9 @@ class SearchDisplayController(QObject):
     def eventFilter(self, obj, event):
         try:
             scroll = getattr(self.app, "mods_browser_scroll", None)
-            viewport = scroll.viewport() if scroll and hasattr(scroll, "viewport") else None
+            viewport = (
+                scroll.viewport() if scroll and hasattr(scroll, "viewport") else None
+            )
             if obj in (scroll, viewport):
                 event_type = event.type()
                 if event_type in (
@@ -402,9 +478,14 @@ class SearchDisplayController(QObject):
         self._show_bottom_loading_indicator()
         sort_param = self._get_selected_sort()
         start_page = max(1, last_page + 1)
+        requested_pages = max(1, int(self.LOAD_MORE_PAGES))
         identity = (game_id, start_page, sort_param, "")
         load_thread = LoadMoreGameBananaModsThread(
-            game_id, start_page, num_pages=1, sort=sort_param, parent=self.app
+            game_id,
+            start_page,
+            num_pages=requested_pages,
+            sort=sort_param,
+            parent=self.app,
         )
 
         def on_result(mods_list, request_id=identity, thread=load_thread):
@@ -429,7 +510,15 @@ class SearchDisplayController(QObject):
                     return
                 self.app_state.gamebanana_loading = False
                 if mods_list:
-                    self.app_state.gamebanana_loaded_pages[game_id] = start_page
+                    loaded_pages = max(
+                        1,
+                        (len(mods_list) + GAMEBANANA_PER_PAGE - 1)
+                        // GAMEBANANA_PER_PAGE,
+                    )
+                    page_advance = min(requested_pages, loaded_pages)
+                    self.app_state.gamebanana_loaded_pages[game_id] = (
+                        start_page + page_advance - 1
+                    )
                     self._append_unique_gamebanana_mods(mods_list)
                 else:
                     self.app_state.gamebanana_loaded_pages[game_id] = (
@@ -484,7 +573,7 @@ class SearchDisplayController(QObject):
             game_id=game_id,
             search_string=search_text,
             start_page=start_page,
-            num_pages=1,
+            num_pages=max(1, int(self.LOAD_MORE_PAGES)),
             sort=search_sort,
             parent=self.app,
         )
@@ -501,7 +590,9 @@ class SearchDisplayController(QObject):
                 )
                 current_page = max(
                     1,
-                    current_s_pages.get(current_search.lower(), {}).get(request_id[0], 0)
+                    current_s_pages.get(current_search.lower(), {}).get(
+                        request_id[0], 0
+                    )
                     + 1,
                 )
                 if (
@@ -515,7 +606,13 @@ class SearchDisplayController(QObject):
                     return
                 self.app_state.gamebanana_loading = False
                 if mods_list:
-                    search_pages[game_id] = start_page
+                    loaded_pages = max(
+                        1,
+                        (len(mods_list) + GAMEBANANA_PER_PAGE - 1)
+                        // GAMEBANANA_PER_PAGE,
+                    )
+                    page_advance = min(self.LOAD_MORE_PAGES, loaded_pages)
+                    search_pages[game_id] = start_page + page_advance - 1
                     self._append_unique_gamebanana_mods(mods_list)
                     self.update_filtered_mods(preserve_page=True)
                     return
@@ -700,16 +797,9 @@ class SearchDisplayController(QObject):
                 return
 
             def _remove_loading_indicators():
-                for i in reversed(range(self.app.mod_list_layout.count())):
-                    item = self.app.mod_list_layout.itemAt(i)
-                    if item and item.widget():
-                        widget = item.widget()
-                        if (
-                            hasattr(widget, "objectName")
-                            and widget.objectName() == "loading_indicator"
-                        ):
-                            self._remove_layout_widget(widget)
-                            widget.deleteLater()
+                for widget in list(self._iter_loading_indicators()):
+                    self._remove_layout_widget(widget)
+                    widget.deleteLater()
 
             def _add_loading_indicator(position: int):
                 from PyQt6.QtCore import Qt
@@ -719,12 +809,7 @@ class SearchDisplayController(QObject):
                 loading_label.setObjectName("loading_indicator")
                 loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 loading_label.setStyleSheet(QSS_LOADING_LABEL)
-                self._place_layout_widget(
-                    loading_label,
-                    position,
-                    column_span=self._mod_list_column_count(),
-                    alignment=Qt.AlignmentFlag.AlignCenter,
-                )
+                self._place_loading_indicator(loading_label, position)
 
             if not self.app_state.mods_loaded or (
                 self.app_state.gamebanana_loading and len(current_page_mods) == 0
@@ -752,6 +837,7 @@ class SearchDisplayController(QObject):
             current_page_cache_keys = {
                 get_mod_cache_key(mod) for mod in current_page_mods if mod is not None
             }
+            self._last_virtual_card_range = None
             existing_widgets_in_layout = {}
             for i in range(self.app.mod_list_layout.count()):
                 item = self.app.mod_list_layout.itemAt(i)
@@ -765,9 +851,6 @@ class SearchDisplayController(QObject):
                                 widget.hide()
                         else:
                             widget.hide()
-            self.ui_widget_updates_enabled.emit("mod_list_widget", False)
-            widgets_shown = 0
-            widgets_created = 0
             batch_size = 15
             target_position = 0
             mods_to_process = [
@@ -775,46 +858,30 @@ class SearchDisplayController(QObject):
                 for idx, mod in enumerate(current_page_mods)
                 if mod is not None
             ]
+            self.ui_widget_updates_enabled.emit("mod_list_widget", False)
             try:
 
                 def finish_widget_processing():
-                    widgets_to_hide = []
-                    for i in range(self.app.mod_list_layout.count()):
-                        item = self.app.mod_list_layout.itemAt(i)
-                        if item and item.widget():
-                            widget = item.widget()
-                            if isinstance(widget, ModCardWidget):
-                                widget_cache_key = (
-                                    get_mod_cache_key(widget.mod_data)
-                                    if hasattr(widget, "mod_data") and widget.mod_data
-                                    else None
-                                )
-                                if (
-                                    widget_cache_key
-                                    and widget_cache_key not in current_page_cache_keys
-                                ):
-                                    widgets_to_hide.append(widget)
-                    for widget in widgets_to_hide:
+                    for widget in list(self._iter_layout_cards()):
+                        widget_cache_key = (
+                            get_mod_cache_key(widget.mod_data)
+                            if hasattr(widget, "mod_data") and widget.mod_data
+                            else None
+                        )
                         try:
+                            if (
+                                widget_cache_key
+                                and widget_cache_key not in current_page_cache_keys
+                            ):
+                                self._remove_layout_widget(widget)
+                                widget.hide()
+                            elif not widget.isVisible():
+                                widget.show()
+                        except Exception as e:
+                            if widget_cache_key:
+                                logger.debug(f"Error refreshing widget layout: {e}")
                             self._remove_layout_widget(widget)
                             widget.hide()
-                        except Exception as e:
-                            logger.debug(f"Error removing widget from layout: {e}")
-                    for i in range(self.app.mod_list_layout.count()):
-                        item = self.app.mod_list_layout.itemAt(i)
-                        if item and item.widget():
-                            widget = item.widget()
-                            if isinstance(widget, ModCardWidget):
-                                widget_cache_key = (
-                                    get_mod_cache_key(widget.mod_data)
-                                    if hasattr(widget, "mod_data") and widget.mod_data
-                                    else None
-                                )
-                                if (
-                                    widget_cache_key
-                                    and widget_cache_key in current_page_cache_keys
-                                ) or not widget_cache_key:
-                                    widget.show()
                     self._finalize_mod_list_layout_refresh()
                     _remove_loading_indicators()
                     if self.app_state.gamebanana_loading and current_page_mods:
@@ -831,7 +898,7 @@ class SearchDisplayController(QObject):
                     self._update_virtual_visibility()
 
                 def process_batch(batch_start: int):
-                    nonlocal target_position, widgets_shown, widgets_created
+                    nonlocal target_position
                     batch_end = min(batch_start + batch_size, len(mods_to_process))
                     for batch_idx in range(batch_start, batch_end):
                         idx, mod = mods_to_process[batch_idx]
@@ -841,23 +908,26 @@ class SearchDisplayController(QObject):
                             cache_key = get_mod_cache_key(mod)
                             if cache_key in self.card_widget_cache:
                                 card = self.card_widget_cache[cache_key]
+                                card_already_placed = (
+                                    self._layout_card_at_position(target_position)
+                                    is card
+                                )
                                 if hasattr(card, "mod_data"):
                                     previous_mod = card.mod_data
-                                    card.mod_data = mod
-                                    if (
-                                        previous_mod is not mod
-                                        and hasattr(card, "update_mod_data")
-                                    ):
-                                        card.update_mod_data()
-                                    if (
-                                        previous_mod is not mod
-                                        and hasattr(card, "update_installation_status")
-                                    ):
-                                        card.update_installation_status()
-                                self._place_layout_widget(card, target_position)
-                                if hasattr(card, "update_action_button_state"):
+                                    if previous_mod is not mod:
+                                        card.mod_data = mod
+                                        if hasattr(card, "update_mod_data"):
+                                            card.update_mod_data()
+                                        if hasattr(card, "update_installation_status"):
+                                            card.update_installation_status()
+                                if not card_already_placed:
+                                    self._place_layout_widget(card, target_position)
+                                card._mods_browser_position = target_position
+                                if (
+                                    not card_already_placed
+                                    and hasattr(card, "update_action_button_state")
+                                ):
                                     card.update_action_button_state()
-                                widgets_shown += 1
                                 target_position += 1
                             else:
                                 parent_widget = (
@@ -879,9 +949,8 @@ class SearchDisplayController(QObject):
                                 if hasattr(card, "update_action_button_state"):
                                     card.update_action_button_state()
                                 self._place_layout_widget(card, target_position)
+                                card._mods_browser_position = target_position
                                 self.card_widget_cache[cache_key] = card
-                                widgets_created += 1
-                                widgets_shown += 1
                                 target_position += 1
                         except Exception as e:
                             logger.error(
@@ -918,27 +987,52 @@ class SearchDisplayController(QObject):
         if not hasattr(self.app, "mod_list_layout"):
             return
         layout = self.app.mod_list_layout
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if (
-                item
-                and item.widget()
-                and getattr(item.widget(), "objectName", lambda: "")()
-                == "loading_indicator"
-            ):
-                return
+        for _indicator in self._iter_loading_indicators():
+            return
         from PyQt6.QtWidgets import QLabel
 
         loading_label = QLabel(tr("ui.loading_placeholder"))
         loading_label.setObjectName("loading_indicator")
         loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         loading_label.setStyleSheet(QSS_LOADING_LABEL)
-        self._place_layout_widget(
-            loading_label,
-            layout.count(),
-            column_span=self._mod_list_column_count(),
-            alignment=Qt.AlignmentFlag.AlignCenter,
+        self._place_loading_indicator(loading_label, layout.count())
+
+    def _first_visible_card_height(self) -> int:
+        for card in self._iter_layout_cards():
+            with contextlib.suppress(Exception):
+                height = card.sizeHint().height() or card.height() or 0
+                if height > 0:
+                    return int(height)
+        return 0
+
+    def _mod_list_spacing(self) -> int:
+        layout = getattr(self.app, "mod_list_layout", None)
+        if not layout:
+            return 0
+        with contextlib.suppress(Exception):
+            return max(
+                int(getattr(layout, "verticalSpacing", lambda: 0)() or 0),
+                int(getattr(layout, "horizontalSpacing", lambda: 0)() or 0),
+            )
+        return 0
+
+    def _load_more_prefetch_threshold(self) -> int:
+        scroll = getattr(self.app, "mods_browser_scroll", None)
+        if not scroll:
+            return 120
+        try:
+            viewport = scroll.viewport()
+            viewport_height = viewport.height() if viewport else 0
+        except Exception:
+            viewport_height = 0
+        if viewport_height <= 0:
+            return 120
+        row_height = self._first_visible_card_height() or max(220, viewport_height // 3)
+        rows_threshold = self.LOAD_MORE_PREFETCH_ROWS * (
+            row_height + self._mod_list_spacing()
         )
+        viewport_threshold = int(viewport_height * self.PREFETCH_MIN_VIEWPORTS)
+        return max(120, rows_threshold, viewport_threshold)
 
     def _maybe_load_more_for_short_viewport(self):
         if self.app_state.gamebanana_loading:
@@ -953,16 +1047,11 @@ class SearchDisplayController(QObject):
         except Exception:
             viewport_height = 0
             content_height = 0
-        if content_height <= viewport_height + 60:
+        if content_height <= viewport_height + self._load_more_prefetch_threshold():
             self._load_more_gamebanana_mods_if_needed()
 
     def _update_virtual_visibility(self):
-        """Suppress repaints for cards far outside the viewport.
-
-        Uses setUpdatesEnabled() instead of setVisible() so the grid layout
-        keeps its geometry (no size jumps). Cards are never hidden - only
-        their painting is suspended when they are outside the buffer zone.
-        """
+        """Suppress repaints for cards outside the active row window."""
         scroll = getattr(self.app, "mods_browser_scroll", None)
         if not scroll:
             return
@@ -977,27 +1066,52 @@ class SearchDisplayController(QObject):
             scroll_y = scroll.verticalScrollBar().value()
         except Exception:
             return
-        buffer = vp_height * 2
-        top = scroll_y - buffer
-        bottom = scroll_y + vp_height + buffer
-        container = getattr(self.app, "mod_list_widget", None)
-        if not container:
+        row_height = self._first_visible_card_height() + self._mod_list_spacing()
+        if row_height <= 0:
             return
-        for card in self._iter_layout_cards():
-            try:
-                pos = card.mapTo(container, card.rect().topLeft())
-                card_h = card.sizeHint().height() or card.height() or 200
-                y = pos.y()
-                in_range = (y + card_h) >= top and y <= bottom
-                if card.updatesEnabled() != in_range:
-                    card.setUpdatesEnabled(in_range)
-                    if in_range:
-                        card.update()
-            except Exception as e:
-                logger.debug(
-                    f"_update_virtual_visibility: failed to update card visibility state: {e}",
-                    exc_info=True,
-                )
+        columns = self._mod_list_column_count()
+        buffer_rows = max(3, int((vp_height * 1.5) // row_height) + 1)
+        first_row = max(0, int(scroll_y // row_height) - buffer_rows)
+        last_row = int((scroll_y + vp_height) // row_height) + buffer_rows
+        wanted = (
+            first_row * columns,
+            max(first_row * columns, ((last_row + 1) * columns) - 1),
+        )
+        previous = self._last_virtual_card_range
+        self._last_virtual_card_range = wanted
+        ranges = [wanted]
+        if previous and previous != wanted:
+            ranges.append(previous)
+        total = len(self.app_state.filtered_mods or [])
+        visited = set()
+        for start, end in ranges:
+            for position in range(max(0, start), min(total, end + 1)):
+                if position in visited:
+                    continue
+                visited.add(position)
+                card = self._layout_card_at_position(position)
+                if card is None:
+                    continue
+                in_range = wanted[0] <= position <= wanted[1]
+                try:
+                    if card.updatesEnabled() != in_range:
+                        card.setUpdatesEnabled(in_range)
+                        if in_range:
+                            card.update()
+                except Exception as e:
+                    logger.debug(
+                        f"_update_virtual_visibility: failed to update card visibility state: {e}",
+                        exc_info=True,
+                    )
+        if previous is None:
+            disable_before = max(0, wanted[0] - columns * 2)
+            disable_after = min(total, wanted[1] + 1 + columns * 2)
+            for card in self._iter_layout_cards():
+                position = getattr(card, "_mods_browser_position", None)
+                if position is None or disable_before <= position < disable_after:
+                    continue
+                with contextlib.suppress(Exception):
+                    card.setUpdatesEnabled(False)
 
     def on_scroll_value_changed(self, value: int):
         scroll = getattr(self.app, "mods_browser_scroll", None)
@@ -1010,7 +1124,7 @@ class SearchDisplayController(QObject):
         if not bar:
             return
         self._virtual_scroll_debounce.call(self._update_virtual_visibility)
-        if value >= max(0, bar.maximum() - 120):
+        if value >= max(0, bar.maximum() - self._load_more_prefetch_threshold()):
             self._load_more_gamebanana_mods_if_needed()
 
     def _append_unique_gamebanana_mods(self, mods_list):

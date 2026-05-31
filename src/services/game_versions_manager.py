@@ -86,7 +86,7 @@ class GameVersionsManager(QObject):
         ctx = self._get_game_context(game_id)
         if not ctx:
             return
-        _game_def, game_path, base_folder, protected, _config = ctx
+        game_path, base_folder, protected = ctx[1], ctx[2], ctx[3]
         archive_path = unique_archive_path(self._store.versions_dir, version_name)
         record = GameVersionRecord(
             archive_path=archive_path,
@@ -154,7 +154,7 @@ class GameVersionsManager(QObject):
         ctx = self._get_game_context(record.game)
         if not ctx:
             return
-        _game_def, _game_path, base_folder, protected, config = ctx
+        base_folder, protected, config = ctx[2], ctx[3], ctx[4]
         full_replace = config.get("versions_full_replace_files", False)
 
         from workers.game_version_archive_worker import ApplyVersionWorker
@@ -214,12 +214,13 @@ class GameVersionsManager(QObject):
             return
         from services.localization_service import tr
 
-        dest, _ = QFileDialog.getSaveFileName(
+        dest, selected_filter = QFileDialog.getSaveFileName(
             parent_widget,
             tr("game_versions.export_title"),
             record.display_name + ".zip",
             "ZIP (*.zip)",
         )
+        del selected_filter
         if not dest:
             return
         manifest = {

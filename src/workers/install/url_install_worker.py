@@ -265,7 +265,7 @@ class UrlInstallThread(BaseInstallWorker):
 
                 extract_any_archive(archive_path, unpack_dir)
                 content_path = unwrap_single_directory_chain(unpack_dir)
-                for _root, _, files in os.walk(content_path):
+                for _root, _dirs, files in os.walk(content_path):
                     for f in files:
                         if f in THEME_CONFIG_FILENAMES:
                             return "theme"

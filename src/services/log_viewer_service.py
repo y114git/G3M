@@ -184,7 +184,7 @@ class LogViewerService:
         if not path:
             return ""
         filename = os.path.basename(path)
-        stem, _ext = os.path.splitext(filename)
+        stem = os.path.splitext(filename)[0]
         match = _ARCHIVE_TIMESTAMP_RE.search(stem)
         if not match:
             return filename

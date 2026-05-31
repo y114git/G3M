@@ -38,6 +38,7 @@ from utils.path_utils import get_launcher_dir, resource_path
 if platform.system() == "Windows":
     import winreg
 _translator = QTranslator()
+SINGLE_INSTANCE_ACTIVATE = "__g3m_activate__"
 
 
 def check_game_processes():
@@ -168,14 +169,16 @@ class SingleInstanceServer(QLocalServer):
             data = socket.readAll().data()
             if data:
                 try:
-                    url = data.decode("utf-8")
+                    payload = data.decode("utf-8")
                 except UnicodeDecodeError as e:
                     logging.warning(
                         f"SingleInstanceServer: failed to decode incoming data: {e}"
                     )
                     return
-                if url.startswith(URL_PROTOCOL_PREFIXES):
-                    self.app_instance.url_received_signal.emit(url)
+                if payload == SINGLE_INSTANCE_ACTIVATE:
+                    self.app_instance.activate_requested_signal.emit()
+                elif payload.startswith(URL_PROTOCOL_PREFIXES):
+                    self.app_instance.url_received_signal.emit(payload)
         finally:
             socket.close()
 
@@ -266,11 +269,16 @@ def run_app(argv: list[str] | None = None) -> int:
     socket = QLocalSocket()
     socket.connectToServer(SINGLE_INSTANCE_KEY)
     if socket.waitForConnected(500):
-        if url_arg:
-            socket.writeData(url_arg.encode("utf-8"))
+        payload = url_arg or SINGLE_INSTANCE_ACTIVATE
+        if payload:
+            socket.writeData(payload.encode("utf-8"))
             socket.flush()
             socket.waitForBytesWritten(1000)
         socket.disconnectFromServer()
+        if not url_arg:
+            QMessageBox.warning(
+                None, tr("errors.error"), tr("errors.single_instance_error")
+            )
         return 0
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     if not args.force_start:

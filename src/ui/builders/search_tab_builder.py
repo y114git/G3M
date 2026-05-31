@@ -49,7 +49,9 @@ class ModsBrowserTabBuilder(QObject):
         show_nsfw_checkbox = self.widgets.get("show_nsfw_checkbox")
         filters_scroll = self.widgets.get("filters_scroll")
         if filters_scroll:
-            style_filter_scroll_area(filters_scroll, getattr(self.app_state, "local_config", None))
+            style_filter_scroll_area(
+                filters_scroll, getattr(self.app_state, "local_config", None)
+            )
         if not show_nsfw_checkbox:
             return
         config = getattr(self.app_state, "local_config", None)
@@ -107,10 +109,11 @@ class ModsBrowserTabBuilder(QObject):
         scroll = QScrollArea(container)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet(QSS_TRANSPARENT_SCROLL)
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         mod_list = QWidget(scroll)
-        mod_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        mod_list.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         mod_list_layout = QGridLayout(mod_list)
         mod_list_layout.setContentsMargins(0, 0, 0, 0)
         mod_list_layout.setHorizontalSpacing(18)

@@ -145,7 +145,9 @@ def test_run_app_startup_path_imports(monkeypatch):
 
     monkeypatch.setattr(startup_module, "setup_app", lambda: _App())
     monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
-    monkeypatch.setattr(startup_module.QLocalServer, "removeServer", lambda *_args: None)
+    monkeypatch.setattr(
+        startup_module.QLocalServer, "removeServer", lambda *_args: None
+    )
     monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
     monkeypatch.setattr(startup_module, "register_url_protocol", lambda: None)
     monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
@@ -155,9 +157,53 @@ def test_run_app_startup_path_imports(monkeypatch):
     monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "")
     monkeypatch.setattr(startup_module, "install_excepthook", lambda: None)
     monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", lambda: None)
-    monkeypatch.setitem(sys.modules, "app.window", types.SimpleNamespace(AppWindow=object))
+    monkeypatch.setitem(
+        sys.modules, "app.window", types.SimpleNamespace(AppWindow=object)
+    )
 
     assert startup_module.run_app([]) == 0
+
+
+def _connected_socket_factory():
+    writes = []
+
+    class _Socket:
+        def __getattr__(self, name) -> object:
+            if name in {"waitForConnected", "waitForBytesWritten"}:
+                return lambda *_args, **_kwargs: True
+            if name == "writeData":
+                return lambda data: writes.append(data.decode("utf-8"))
+            return lambda *_args, **_kwargs: None
+
+    return _Socket, writes
+
+
+def test_run_app_second_instance_shows_localized_error_and_sends_activate(monkeypatch):
+    from app import startup as startup_module
+
+    socket_factory, writes = _connected_socket_factory()
+    monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
+    monkeypatch.setattr(startup_module, "QLocalSocket", socket_factory)
+
+    with patch("app.startup.QMessageBox.warning") as warning:
+        assert startup_module.run_app([]) == 0
+
+    assert writes == [startup_module.SINGLE_INSTANCE_ACTIVATE]
+    warning.assert_called_once()
+
+
+def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeypatch):
+    from app import startup as startup_module
+
+    socket_factory, writes = _connected_socket_factory()
+    monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
+    monkeypatch.setattr(startup_module, "QLocalSocket", socket_factory)
+
+    with patch("app.startup.QMessageBox.warning") as warning:
+        assert startup_module.run_app(["g3m://https://example.com/mod.zip"]) == 0
+
+    assert writes == ["g3m://https://example.com/mod.zip"]
+    warning.assert_not_called()
 
 
 def test_main_routes_shortcut_without_startup(monkeypatch):
@@ -166,7 +212,9 @@ def test_main_routes_shortcut_without_startup(monkeypatch):
 
     run_shortcut = Mock()
     monkeypatch.setitem(
-        sys.modules, "services.game_runner", types.SimpleNamespace(run_shortcut=run_shortcut)
+        sys.modules,
+        "services.game_runner",
+        types.SimpleNamespace(run_shortcut=run_shortcut),
     )
 
     assert main_module.main(["main.py", "--shortcut", "cfg"]) == 0
@@ -192,7 +240,9 @@ def test_main_runs_startup_with_cleaned_argv(monkeypatch):
         "utils.path_utils",
         types.SimpleNamespace(cleanup_old_updater_files=cleanup_old_updater_files),
     )
-    monkeypatch.setitem(sys.modules, "app.startup", types.SimpleNamespace(run_app=run_app))
+    monkeypatch.setitem(
+        sys.modules, "app.startup", types.SimpleNamespace(run_app=run_app)
+    )
 
     assert main_module.main(["main.py", "--force-start"]) == 7
     cleanup_old_updater_files.assert_called_once_with()
@@ -213,7 +263,9 @@ def test_main_prepares_process_runtime_before_startup(monkeypatch):
         "utils.path_utils",
         types.SimpleNamespace(cleanup_old_updater_files=cleanup_old_updater_files),
     )
-    monkeypatch.setitem(sys.modules, "app.startup", types.SimpleNamespace(run_app=run_app))
+    monkeypatch.setitem(
+        sys.modules, "app.startup", types.SimpleNamespace(run_app=run_app)
+    )
 
     assert main_module.main(["main.py"]) == 0
     freeze_support.assert_called_once_with()
@@ -270,6 +322,114 @@ def test_finalize_window_reveal_closes_splash_after_front_refresh():
     bring_to_front.assert_called_once_with()
 
 
+def test_finalize_window_reveal_restores_hidden_window_before_closing_splash():
+    """Checks that finalize window reveal restores hidden window before closing splash."""
+    from PyQt6.QtCore import Qt
+
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    instance = Mock()
+    instance.isVisible.return_value = False
+    instance.windowState.return_value = Qt.WindowState.WindowNoState
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = instance
+
+    with (
+        patch.object(coordinator, "_close_splash") as close_splash,
+        patch.object(coordinator, "_bring_launcher_to_front") as bring_to_front,
+    ):
+        coordinator._finalize_window_reveal()
+
+    instance.show.assert_called()
+    close_splash.assert_called_once_with()
+    bring_to_front.assert_called_once_with()
+
+
+def test_finalize_window_reveal_restores_hidden_maximized_window_as_maximized():
+    """Checks that saved maximized startup state is not downgraded to normal."""
+    from PyQt6.QtCore import Qt
+
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    instance = Mock()
+    instance.isVisible.return_value = False
+    instance.windowState.return_value = Qt.WindowState.WindowMaximized
+    instance.settings_service.was_window_maximized.return_value = True
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = instance
+
+    with (
+        patch.object(coordinator, "_close_splash"),
+        patch.object(coordinator, "_bring_launcher_to_front"),
+    ):
+        coordinator._finalize_window_reveal()
+
+    instance.showMaximized.assert_called_once_with()
+    instance.showNormal.assert_not_called()
+
+
+def test_verify_window_visible_after_reveal_closes_splash_once_window_is_visible():
+    """Checks that reveal verification closes splash when main window is visible."""
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    splash = Mock()
+    splash.isVisible.return_value = True
+    instance = Mock()
+    instance.isVisible.return_value = True
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = instance
+    coordinator.splash = splash
+
+    with patch.object(coordinator, "_close_splash") as close_splash:
+        coordinator._verify_window_visible_after_reveal()
+
+    close_splash.assert_called_once_with()
+
+
+def test_abort_stuck_startup_shows_error_and_quits_when_window_never_appears():
+    """Checks that stuck startup aborts instead of lingering invisibly."""
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    app = Mock()
+    splash = Mock()
+    instance = Mock()
+    instance.isVisible.return_value = False
+    coordinator = BootstrapCoordinator(
+        app=app,
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = instance
+    coordinator.splash = splash
+
+    with patch("bootstrap.bootstrap_coordinator.QMessageBox.critical") as critical:
+        coordinator._abort_stuck_startup()
+
+    splash.close.assert_called_once_with()
+    critical.assert_called_once()
+    app.quit.assert_called_once_with()
+
+
 def test_play_startup_sound_skips_when_disabled():
     """Checks that playing startup sound skips when disabled."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
@@ -284,7 +444,9 @@ def test_play_startup_sound_skips_when_disabled():
     coordinator.instance = Mock()
     coordinator.instance.app_state.local_config = {"disable_startup_sound": True}
 
-    with patch("bootstrap.bootstrap_coordinator._audio_service.play_g3m_sound") as play_sound:
+    with patch(
+        "bootstrap.bootstrap_coordinator._audio_service.play_g3m_sound"
+    ) as play_sound:
         coordinator._play_startup_sound()
 
     play_sound.assert_not_called()
@@ -304,7 +466,9 @@ def test_play_startup_sound_uses_enabled_flag():
     coordinator.instance = Mock()
     coordinator.instance.app_state.local_config = {"disable_startup_sound": False}
 
-    with patch("bootstrap.bootstrap_coordinator._audio_service.play_g3m_sound") as play_sound:
+    with patch(
+        "bootstrap.bootstrap_coordinator._audio_service.play_g3m_sound"
+    ) as play_sound:
         coordinator._play_startup_sound()
 
     play_sound.assert_called_once_with()
@@ -318,7 +482,9 @@ def test_show_launcher_window_schedules_post_show_after_reveal_delay():
 
     app = Mock()
     instance = Mock()
-    instance.app_state = types.SimpleNamespace(game_is_running=False, is_shown_to_user=False)
+    instance.app_state = types.SimpleNamespace(
+        game_is_running=False, is_shown_to_user=False
+    )
     instance.windowState.return_value = Qt.WindowState.WindowNoState
     coordinator = BootstrapCoordinator(
         app=app,
@@ -332,13 +498,19 @@ def test_show_launcher_window_schedules_post_show_after_reveal_delay():
 
     with (
         patch.object(coordinator, "restore_ui_state_from_config"),
-        patch.object(coordinator, "_play_startup_sound", side_effect=lambda: order.append("sound")) as play_sound,
+        patch.object(
+            coordinator,
+            "_play_startup_sound",
+            side_effect=lambda: order.append("sound"),
+        ) as play_sound,
         patch.object(
             coordinator,
             "_bring_launcher_to_front",
             side_effect=lambda: order.append("front"),
         ) as bring_to_front,
-        patch("bootstrap.bootstrap_coordinator.QApplication.instance", return_value=app),
+        patch(
+            "bootstrap.bootstrap_coordinator.QApplication.instance", return_value=app
+        ),
         patch("bootstrap.bootstrap_coordinator.QTimer.singleShot") as single_shot,
     ):
         coordinator._show_launcher_window()
@@ -350,6 +522,12 @@ def test_show_launcher_window_schedules_post_show_after_reveal_delay():
     assert single_shot.call_args_list == [
         ((coordinator._WINDOW_REVEAL_DELAY_MS, instance._post_show_initialization),),
         ((coordinator._WINDOW_REVEAL_DELAY_MS, bring_to_front),),
+        (
+            (
+                coordinator._WINDOW_VISIBILITY_GRACE_MS,
+                coordinator._verify_window_visible_after_reveal,
+            ),
+        ),
     ]
 
 

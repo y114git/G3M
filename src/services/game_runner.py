@@ -185,15 +185,23 @@ def _apply_file_overrides(
 
         def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:
             temp_out = target_file + ".tmp"
-            rc, _, _ = g3mtool.xpatch_apply(target_file, patch_path, temp_out)
-            if rc == 0 and os.path.exists(temp_out):
+            returncode, _stdout, _stderr = g3mtool.xpatch_apply(
+                target_file, patch_path, temp_out
+            )
+            if returncode == 0 and os.path.exists(temp_out):
                 shutil.move(temp_out, target_file)
                 return True
             if os.path.exists(temp_out):
                 os.remove(temp_out)
             return False
 
-        def _request_warning(self, _message: str, _details: str = "", _report_path=None):
+        def _request_warning(
+            self,
+            message_text: str,
+            details_text: str = "",
+            report_path: str | None = None,
+        ):
+            del message_text, details_text, report_path
             return True
 
     chapter_info = _load_chapter_config_entry(mod_root_dir, chapter_id)
@@ -261,20 +269,20 @@ def _patch_chapter(
     success = False
     if mod_type == "g3mpatch":
         logger.info(f"Applying g3mpatch: {patch_file}")
-        rc, _stdout, stderr = g3mtool.apply_patch(
+        returncode, stdout, stderr = g3mtool.apply_patch(
             data_win_path, patch_file, temp_output, log_path=log_path
         )
-        if rc != 0:
-            logger.error(f"G3MTool patch apply failed: {stderr[:500]}")
+        if returncode != 0:
+            logger.error(f"G3MTool patch apply failed: {(stderr or stdout)[:500]}")
             return False
         success = True
     elif mod_type == "xdelta":
         logger.info(f"Applying xdelta patch: {patch_file}")
-        rc, _stdout, stderr = g3mtool.xpatch_apply(
+        returncode, stdout, stderr = g3mtool.xpatch_apply(
             data_win_path, patch_file, temp_output
         )
-        if rc != 0:
-            logger.error(f"xpatch apply failed: {stderr[:500]}")
+        if returncode != 0:
+            logger.error(f"xpatch apply failed: {(stderr or stdout)[:500]}")
             return False
         success = True
     elif mod_type == "datafile":
@@ -287,13 +295,13 @@ def _patch_chapter(
             return False
     elif mod_type == "csx":
         logger.info(f"Executing csx script: {patch_file}")
-        rc, _stdout, stderr = g3mtool.execute(
+        returncode, stdout, stderr = g3mtool.execute(
             patch_file,
             data_file=data_win_path,
             output_path=temp_output,
         )
-        if rc != 0:
-            logger.error(f"g3mtool execute failed: {stderr[:500]}")
+        if returncode != 0:
+            logger.error(f"g3mtool execute failed: {(stderr or stdout)[:500]}")
             return False
         success = os.path.exists(temp_output)
         if not success:
@@ -586,7 +594,9 @@ def run_shortcut(shortcut_arg: str):
     if not game_path or not os.path.isdir(game_path):
         logger.error(f"Game path not found: {game_path}")
         sys.exit(1)
-    shortcut_plugin_context = ShortcutPluginContext.from_shortcut_config(shortcut_config)
+    shortcut_plugin_context = ShortcutPluginContext.from_shortcut_config(
+        shortcut_config
+    )
     runtime_service = (
         build_headless_plugin_runtime(
             local_config,

@@ -30,7 +30,9 @@ class FeedbackManager(QObject):
 
     @staticmethod
     def _format_html(text: str) -> str:
-        return html.escape(text).replace("\\n", "<br>").replace("\n", "<br>")
+        return html.escape(text, quote=False).replace("\\n", "<br>").replace(
+            "\n", "<br>"
+        )
 
     def show_message(
         self, message_type: str, message_key: str, details: str = "", **kwargs
@@ -51,11 +53,12 @@ class FeedbackManager(QObject):
         msg_box = QMessageBox(self.parent_widget)
         msg_box.setIcon(icon)
         msg_box.setWindowTitle(title)
+        message_html = self._format_html(message)
         if details:
             details_html = self._format_html(details)
-            full_message = f"{message}<br><br>{details_html}"
+            full_message = f"{message_html}<br><br>{details_html}"
         else:
-            full_message = self._format_html(message)
+            full_message = message_html
         msg_box.setText(full_message)
         msg_box.exec()
 
@@ -146,7 +149,7 @@ class _ScopedFeedbackManager:
         self._base_manager = base_manager
         self._tr = tr_func
 
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> object:
         return getattr(self._base_manager, name)
 
     def show_message(

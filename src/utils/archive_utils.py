@@ -249,7 +249,8 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
     except Exception as e:
         logging.warning(f"Failed to handle nested folder: {e}")
     pattern = re.compile(r"^chapter\d+_(windows|mac)$", re.I)
-    for root, dirs, _ in os.walk(target_dir, topdown=False):
+    for root, dirs, files in os.walk(target_dir, topdown=False):
+        del files
         for d in dirs[:]:
             if pattern.match(d) and safe_rmtree(os.path.join(root, d)):
                 dirs.remove(d)
@@ -289,7 +290,8 @@ class ArchiveExtractor:
             with tempfile.TemporaryDirectory(prefix="g3m-extract-") as temp_out:
                 ArchiveExtractor.extract(archive_path, temp_out)
                 total = 0
-                for root, _, files in os.walk(temp_out):
+                for root, ignored_dirs, files in os.walk(temp_out):
+                    del ignored_dirs
                     for f in files:
                         with contextlib.suppress(OSError):
                             total += os.path.getsize(os.path.join(root, f))

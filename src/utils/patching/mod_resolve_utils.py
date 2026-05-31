@@ -163,9 +163,9 @@ def get_mod_configured_data_file(
 def get_mod_configured_extra_files(
     mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
 ) -> list[str]:
-    _mod_id, source_dir = _resolve_mod_root_dir(
+    source_dir = _resolve_mod_root_dir(
         mod_data, mod_service, app_state, caller_logger
-    )
+    )[1]
     if not source_dir:
         return []
 
@@ -200,9 +200,9 @@ def get_mod_configured_extra_files(
 def has_mod_configured_chapter_entry(
     mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
 ) -> bool:
-    _mod_id, source_dir = _resolve_mod_root_dir(
+    source_dir = _resolve_mod_root_dir(
         mod_data, mod_service, app_state, caller_logger
-    )
+    )[1]
     if not source_dir:
         return False
     return bool(_load_chapter_config_entry(source_dir, mod_data, chapter_id))
@@ -212,9 +212,9 @@ def get_mod_source_dir(
     mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
 ) -> str | None:
     """Resolve the source directory for a mod's chapter content."""
-    _mod_id, source_dir = _resolve_mod_root_dir(
+    source_dir = _resolve_mod_root_dir(
         mod_data, mod_service, app_state, caller_logger
-    )
+    )[1]
     if not source_dir:
         return None
     game = resolve_mod_game(mod_data, source_dir)

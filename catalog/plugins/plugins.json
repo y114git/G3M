@@ -3,7 +3,7 @@
         {
         "id": "deltarune_save_manager",
         "name": "DR Save Manager",
-        "description": "Manage DELTARUNE saves, save collections and switch them before launch.",
+        "description": "Manage DELTARUNE save collections and switch them before launch.",
         "author": "Y114",
         "version": "1.1.0",
         "api_version": ">=1.1.0",
@@ -18,7 +18,7 @@
         {
         "id": "custom_saves_folders",
         "name": "Custom Saves Folders",
-        "description": "Create per-game custom saves folders names and apply them only for the current launch session. (May not work with some games that use complicated saving methods)",
+        "description": "Create per-game custom save folders and apply them only for the current launch session. May not work with games that use complex save systems.",
         "author": "Y114",
         "version": "1.1.0",
         "api_version": ">=1.1.0",

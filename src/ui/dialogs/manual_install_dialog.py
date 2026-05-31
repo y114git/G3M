@@ -768,12 +768,12 @@ class ManualModInstallDialog(QDialog):
         self.extra_files_list_layout.addStretch()
 
     def _guess_chapter_for_file(self, rel_path: str) -> str | None:
-        chapter_id, _normalized = self._extract_chapter_prefixed_path(rel_path)
-        return chapter_id
+        return self._extract_chapter_prefixed_path(rel_path)[0]
 
     def _chapter_alias_map(self) -> dict[str, str]:
         folder_to_chapter = {}
-        for chapter_id, _name in self._chapter_entries():
+        for chapter_entry in self._chapter_entries():
+            chapter_id = chapter_entry[0]
             for alias in self._chapter_path_aliases(chapter_id):
                 folder_to_chapter[alias] = chapter_id
         return folder_to_chapter
@@ -913,7 +913,7 @@ class ManualModInstallDialog(QDialog):
             if path_input:
                 path_input.setText(normalized)
         if file_path not in self.unused_files:
-            chapter_id, _stripped = self._extract_chapter_prefixed_path(normalized)
+            chapter_id = self._extract_chapter_prefixed_path(normalized)[0]
             if chapter_id:
                 self.extra_files_chapters[file_path] = chapter_id
             self.extra_files_mappings[file_path] = normalized
@@ -940,9 +940,9 @@ class ManualModInstallDialog(QDialog):
                     path_input = widget.findChild(QLineEdit, "path_input")
                     if path_input:
                         path_input.setText(rel_folder)
-                        chapter_id, _stripped = self._extract_chapter_prefixed_path(
+                        chapter_id = self._extract_chapter_prefixed_path(
                             rel_folder, trailing_slash=True
-                        )
+                        )[0]
                         if chapter_id:
                             self.extra_files_chapters[file_path] = chapter_id
                         self.extra_files_mappings[file_path] = rel_folder

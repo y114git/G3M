@@ -664,6 +664,36 @@ class TestCommonWidgets:
         host.deleteLater()
         _drain_events(qapp)
 
+    def test_search_mod_card_widget_shows_wip_marker_after_updated_date(self, qapp):
+        """Checks that search mod card widget shows WIP marker after updated date."""
+        from unittest.mock import patch
+
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
+
+        host = QWidget()
+        host.app_state = SimpleNamespace(local_config={"ui_scale": 1.0})
+        mod_data = ModInfo(
+            id="gb_wip_123",
+            name="WIP Search Mod",
+            version="1.0.0",
+            author="Test Author",
+            description="Test description",
+            game_version="",
+            description_url="",
+            downloads=42,
+            game="deltarune",
+            last_updated="2024-05-01",
+            is_wip=True,
+        )
+        mod_data.is_gamebanana_mod = True
+        with patch("ui.widgets.mod.search_mod_card_widget.load_mod_icon_universal"):
+            widget = SearchModCardWidget(mod_data, parent=host)
+            assert widget.updated_label.text() == "2024-05-01 | WIP"
+        widget.deleteLater()
+        host.deleteLater()
+        _drain_events(qapp)
+
     def test_rich_html_reserves_safe_width_for_inline_media(self):
         """Checks that riching html reserves safe width for inline media."""
         from ui.common.rich_html import (

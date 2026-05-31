@@ -181,13 +181,15 @@ def download_file(
 
 
 def check_internet_connection(max_attempts=2):
-    for _attempt in range(max_attempts):
+    attempts_remaining = max_attempts
+    while attempts_remaining > 0:
         try:
             get_session().get(
                 "http://connectivitycheck.gstatic.com", timeout=NETWORK_TIMEOUT_SHORT
             )
             return True
         except requests.RequestException:
+            attempts_remaining -= 1
             continue
     return False
 

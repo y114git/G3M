@@ -36,6 +36,7 @@ from services.localization_service import (
 from ui.common.styling import (
     get_border_radius,
     get_theme_color,
+    get_ui_scale_factor,
     install_widget_update_handler,
 )
 from ui.utils.ui_utils import UIAnimator
@@ -51,18 +52,24 @@ class _FilesDropWidget(QWidget):
         self.setAcceptDrops(True)
 
     def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls() and any(u.isLocalFile() for u in event.mimeData().urls()):
+        if event.mimeData().hasUrls() and any(
+            u.isLocalFile() for u in event.mimeData().urls()
+        ):
             event.acceptProposedAction()
 
     def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls() and any(u.isLocalFile() for u in event.mimeData().urls()):
+        if event.mimeData().hasUrls() and any(
+            u.isLocalFile() for u in event.mimeData().urls()
+        ):
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dropEvent(self, event):
         if event.mimeData().hasUrls():
-            paths = [u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()]
+            paths = [
+                u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()
+            ]
             if paths:
                 event.acceptProposedAction()
                 self.files_dropped.emit(paths)
@@ -98,9 +105,7 @@ class SettingsViewBuilder:
             get_settings_library_tab_title(self.app_state),
         )
         plugins_tab = self._build_plugins_tab(tab_widget)
-        tab_widget.addTab(
-            plugins_tab, tr("ui.settings_tab_plugins")
-        )
+        tab_widget.addTab(plugins_tab, tr("ui.settings_tab_plugins"))
         self.widgets["plugins_tab"] = plugins_tab
         settings_layout.addWidget(tab_widget, stretch=1)
 
@@ -116,23 +121,33 @@ class SettingsViewBuilder:
 
     def refresh_dynamic_styles(self) -> None:
         tc = get_theme_color(self.app_state.local_config, "main_text")
+        icon_size = self._scaled_icon_size()
+        button_size = self._scaled_icon_button_size()
         seen = set()
-        for btn in self.widgets.values():
+        section_reset_buttons = [
+            btn for btn, *_ in self.widgets.get("_section_reset_buttons", [])
+        ]
+        for btn in [*self.widgets.values(), *section_reset_buttons]:
             icon_name = getattr(btn, "_themed_icon_name", None) if btn else None
-            if btn and icon_name and id(btn) not in seen:
-                seen.add(id(btn))
-                btn.setIcon(colored_icon(icon_name, tc))
-                btn.setIconSize(QSize(20, 20))
+            if not btn or not icon_name or id(btn) in seen:
+                continue
+            seen.add(id(btn))
+            btn.setIcon(colored_icon(icon_name, tc))
+            btn.setIconSize(QSize(icon_size, icon_size))
+            if getattr(btn, "_scaled_icon_button", False):
+                btn.setFixedSize(button_size, button_size)
         if self.parent and getattr(self.parent, "games_manager_button", None):
             from app.game_ui import update_games_manager_button_style
 
             update_games_manager_button_style(self.parent)
-        for btn, *_ in self.widgets.get("_section_reset_buttons", []):
-            icon_name = getattr(btn, "_themed_icon_name", None) if btn else None
-            if btn and icon_name and id(btn) not in seen:
-                seen.add(id(btn))
-                btn.setIcon(colored_icon(icon_name, tc))
-                btn.setIconSize(QSize(20, 20))
+
+    def _scaled_icon_button_size(self) -> int:
+        scale = get_ui_scale_factor(self.app_state.local_config)
+        return max(32, round(35 * scale))
+
+    def _scaled_icon_size(self) -> int:
+        scale = get_ui_scale_factor(self.app_state.local_config)
+        return max(16, round(20 * scale))
 
     def _connect_dynamic_style_refresh(self) -> None:
         if self._dynamic_style_signal_connected:
@@ -302,16 +317,22 @@ class SettingsViewBuilder:
     ) -> QPushButton:
         btn = QPushButton()
         btn.setObjectName(obj_name)
-        btn.setFixedSize(35, 35)
+        btn._scaled_icon_button = True
+        button_size = self._scaled_icon_button_size()
+        btn.setFixedSize(button_size, button_size)
         icon_name = self._EMOJI_TO_ICON.get(icon_text)
         if icon_name and app_state:
             btn._themed_icon_name = icon_name
 
-            def _apply_icon(b=btn, i=icon_name, s=app_state):
-                b.setIcon(
-                    colored_icon(i, get_theme_color(s.local_config, "main_text"))
+            def _apply_icon(b=btn, i=icon_name, s=app_state, builder=self):
+                b.setIcon(colored_icon(i, get_theme_color(s.local_config, "main_text")))
+                b.setIconSize(
+                    QSize(builder._scaled_icon_size(), builder._scaled_icon_size())
                 )
-                b.setIconSize(QSize(20, 20))
+                b.setFixedSize(
+                    builder._scaled_icon_button_size(),
+                    builder._scaled_icon_button_size(),
+                )
 
             install_widget_update_handler(
                 btn, _apply_icon, attr_name="_themed_icon_update_filter"
@@ -602,9 +623,7 @@ class SettingsViewBuilder:
 
         self.widgets["disable_animations_checkbox"] = disable_animations_checkbox
         self.widgets["disable_background_checkbox"] = disable_background_checkbox
-        self.widgets["disable_startup_sound_checkbox"] = (
-            disable_startup_sound_checkbox
-        )
+        self.widgets["disable_startup_sound_checkbox"] = disable_startup_sound_checkbox
         self.widgets["pause_background_music_unfocused_checkbox"] = (
             pause_background_music_unfocused_checkbox
         )
@@ -762,8 +781,14 @@ class SettingsViewBuilder:
         games_manager_button.setObjectName("games_manager_button")
         games_manager_button._themed_icon_name = "settings"
         games_manager_button._themed_icon_app_state = self.app_state
-        games_manager_button._themed_icon_size = QSize(20, 20)
-        games_manager_button.setIconSize(QSize(20, 20))
+        games_manager_button._scaled_icon_button = True
+        games_manager_button._themed_icon_size = QSize(
+            self._scaled_icon_size(), self._scaled_icon_size()
+        )
+        games_manager_button.setIconSize(games_manager_button._themed_icon_size)
+        games_manager_button.setFixedSize(
+            self._scaled_icon_button_size(), self._scaled_icon_button_size()
+        )
         games_manager_button.setToolTip(tr("games.manager_title"))
         games_manager_button.setContentsMargins(0, 0, 0, 0)
         games_manager_button.setSizePolicy(
@@ -937,7 +962,9 @@ class SettingsViewBuilder:
         plugins_scroll = QScrollArea(plugins_container)
         plugins_scroll.setWidgetResizable(True)
         plugins_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        plugins_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        plugins_scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         plugins_widget = _FilesDropWidget(plugins_scroll)
         plugins_layout = QVBoxLayout(plugins_widget)
         plugins_layout.setContentsMargins(8, 8, 8, 8)

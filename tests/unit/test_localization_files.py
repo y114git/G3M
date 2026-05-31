@@ -1,5 +1,6 @@
 import json
 import re
+import zipfile
 from pathlib import Path
 
 LANG_DIR = Path(__file__).resolve().parents[2] / "src" / "assets" / "lang"
@@ -31,6 +32,26 @@ def test_all_language_files_have_same_translation_keys():
         )
 
 
+def test_all_language_files_keep_the_english_top_level_order():
+    """Checks that top-level localization sections stay aligned across languages."""
+    english_order = list(json.loads((LANG_DIR / "lang_en.json").read_text("utf-8")))
+
+    for lang_path in LANG_DIR.glob("lang_*.json"):
+        order = list(json.loads(lang_path.read_text("utf-8")))
+        assert order == english_order, (
+            f"{lang_path.name} top-level order differs from English. "
+            f"Expected: {english_order}. Got: {order}"
+        )
+
+
+def test_shipped_default_font_name_is_explicit():
+    """Checks that bundled language metadata uses the explicit default font name."""
+    for lang_path in LANG_DIR.glob("lang_*.json"):
+        metadata = json.loads(lang_path.read_text("utf-8"))["metadata"]
+        font_name = metadata.get("font", "")
+        assert font_name != "main.ttf", f"{lang_path.name} still references main.ttf"
+
+
 def test_language_files_do_not_ship_raw_localization_keys_as_text():
     """Checks that visible translations are not placeholder localization keys."""
     raw_key_pattern = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$")
@@ -60,6 +81,22 @@ def test_plugin_language_files_match_their_english_keys():
                 f"{lang_path.relative_to(PLUGIN_DIR.parent)} localization keys differ from English. "
                 f"Missing: {sorted(english_keys - keys)}. Extra: {sorted(keys - english_keys)}"
             )
+
+
+def test_plugin_archives_include_korean_localizations():
+    """Checks that shipped plugin archives include the Korean localization files."""
+    for plugin_dir in PLUGIN_DIR.iterdir():
+        if not plugin_dir.is_dir():
+            continue
+        archive_path = PLUGIN_DIR / f"{plugin_dir.name}.zip"
+        if not archive_path.is_file():
+            continue
+        expected_entry = "lang/lang_ko.json"
+        with zipfile.ZipFile(archive_path) as archive:
+            entries = {info.filename for info in archive.infolist()}
+        assert expected_entry in entries, (
+            f"{archive_path.name} is missing {expected_entry}"
+        )
 
 
 def test_plugin_language_files_do_not_ship_raw_localization_keys_as_text():

@@ -29,7 +29,18 @@ _MODJSON_SKIP_NAMES = {
     ".disable_gb1click_pizzaoven",
     ".disable_gb1click_pizzaovenplus",
 }
-_GML_FOLDERS = {"audio", "code", "lib", "config", "csx", "room", "shader", "texture", "textures", "xdelta"}
+_GML_FOLDERS = {
+    "audio",
+    "code",
+    "lib",
+    "config",
+    "csx",
+    "room",
+    "shader",
+    "texture",
+    "textures",
+    "xdelta",
+}
 _PASS1_EXTENSIONS = {
     ".xdelta",
     ".vcdiff",
@@ -105,9 +116,7 @@ class PizzaOvenConversionService:
         metadata = self._extract_source_metadata(source_dir)
         mod_type = self._detect_mod_type(source_dir)
         relevant_files = [
-            rel_path
-            for rel_path in rel_files
-            if self._is_relevant_mod_file(rel_path)
+            rel_path for rel_path in rel_files if self._is_relevant_mod_file(rel_path)
         ]
         if disable_all or (disable_pizzaoven and disable_pizzaovenplus):
             return self._build_inspection(
@@ -187,7 +196,9 @@ class PizzaOvenConversionService:
     ) -> PizzaOvenConversionResult:
         inspection = self.inspect_source(source_dir)
         if not inspection.eligible:
-            raise PizzaOvenConversionError(inspection.reason or "Conversion is not available")
+            raise PizzaOvenConversionError(
+                inspection.reason or "Conversion is not available"
+            )
         if not game_path or not os.path.isdir(game_path):
             raise PizzaOvenConversionError("Pizza Tower game path is invalid")
         self._validate_game_path(game_path)
@@ -261,7 +272,9 @@ class PizzaOvenConversionService:
                 data = json.load(handle)
             return data if isinstance(data, dict) else {}
         except Exception as e:
-            logger.debug("Failed to read PizzaOven mod.json from %s: %s", mod_json_path, e)
+            logger.debug(
+                "Failed to read PizzaOven mod.json from %s: %s", mod_json_path, e
+            )
             return {}
 
     def _extract_source_metadata(self, source_dir: str) -> dict[str, Any]:
@@ -300,7 +313,9 @@ class PizzaOvenConversionService:
             metadata["id"] = f"gb_{item_type}_{gamebanana_metadata['mod_id']}"
         if not metadata.get("name"):
             base = source_file_path or source_dir
-            metadata["name"] = remove_archive_extension(os.path.basename(base)) or "PizzaOven Mod"
+            metadata["name"] = (
+                remove_archive_extension(os.path.basename(base)) or "PizzaOven Mod"
+            )
         metadata.setdefault("author", "Unknown")
         metadata.setdefault("version", "1.0.0")
         return metadata
@@ -402,7 +417,9 @@ class PizzaOvenConversionService:
                     self._copy_file(source_path, target_path)
                     used_source_files.append(rel_path)
                     touched_files.add(
-                        os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                        os.path.relpath(target_path, working_game_dir).replace(
+                            "\\", "/"
+                        )
                     )
                 elif "credits" in basename.lower():
                     target_path = os.path.join(
@@ -411,7 +428,9 @@ class PizzaOvenConversionService:
                     self._copy_file(source_path, target_path)
                     used_source_files.append(rel_path)
                     touched_files.add(
-                        os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                        os.path.relpath(target_path, working_game_dir).replace(
+                            "\\", "/"
+                        )
                     )
                 continue
             if ext == ".win":
@@ -421,14 +440,18 @@ class PizzaOvenConversionService:
                 touched_files.add("data.win")
                 continue
             if ext == ".bank":
-                target_path = self._copy_bank_file(source_dir, source_path, working_game_dir)
+                target_path = self._copy_bank_file(
+                    source_dir, source_path, working_game_dir
+                )
                 used_source_files.append(rel_path)
                 touched_files.add(
                     os.path.relpath(target_path, working_game_dir).replace("\\", "/")
                 )
                 continue
             if ext in {".dll", ".mp4"}:
-                target_path = os.path.join(working_game_dir, os.path.basename(source_path))
+                target_path = os.path.join(
+                    working_game_dir, os.path.basename(source_path)
+                )
                 self._copy_file(
                     source_path,
                     target_path,
@@ -473,7 +496,10 @@ class PizzaOvenConversionService:
                 )
                 if target_dir:
                     target_path = os.path.join(
-                        working_game_dir, "lang", target_dir, os.path.basename(source_path)
+                        working_game_dir,
+                        "lang",
+                        target_dir,
+                        os.path.basename(source_path),
                     )
                     self._copy_file(
                         source_path,
@@ -481,7 +507,9 @@ class PizzaOvenConversionService:
                     )
                     used_source_files.append(rel_path)
                     touched_files.add(
-                        os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                        os.path.relpath(target_path, working_game_dir).replace(
+                            "\\", "/"
+                        )
                     )
                 continue
             if ext == ".json" and basename in (set(lang_names) | set(lang_files)):
@@ -497,7 +525,9 @@ class PizzaOvenConversionService:
                     os.path.relpath(target_path, working_game_dir).replace("\\", "/")
                 )
         if not used_source_files:
-            raise PizzaOvenConversionError("PizzaOven conversion found no usable mod files")
+            raise PizzaOvenConversionError(
+                "PizzaOven conversion found no usable mod files"
+            )
         return PizzaOvenSimulationResult(
             used_source_files=used_source_files,
             touched_files=touched_files,
@@ -543,7 +573,9 @@ class PizzaOvenConversionService:
             file_path = os.path.join(lang_dir, file_name)
             if not os.path.isfile(file_path):
                 continue
-            match = _LANG_RE.search(PizzaOvenConversionService._read_text_safe(file_path))
+            match = _LANG_RE.search(
+                PizzaOvenConversionService._read_text_safe(file_path)
+            )
             if match:
                 lang_names.append(match.group(1))
                 lang_files.append(os.path.splitext(file_name)[0])
@@ -581,7 +613,8 @@ class PizzaOvenConversionService:
             or any(name.lower().startswith(normalized.lower()) for name in lang_names)
         )
         if graphics_match and not any(
-            font_name.lower().startswith(normalized.lower()) for font_name in _FONT_NAMES
+            font_name.lower().startswith(normalized.lower())
+            for font_name in _FONT_NAMES
         ):
             return "graphics"
         for lang_name, lang_file in zip(lang_names, lang_files, strict=False):
@@ -610,18 +643,22 @@ class PizzaOvenConversionService:
             targets.extend(sound_files)
         return targets
 
-    def _apply_xdelta_file(self, patch_path: str, target_files: list[str]) -> str | None:
+    def _apply_xdelta_file(
+        self, patch_path: str, target_files: list[str]
+    ) -> str | None:
         if not self._g3mtool.is_available():
-            raise PizzaOvenConversionError("G3MTool is required for PizzaOven xdelta conversion")
+            raise PizzaOvenConversionError(
+                "G3MTool is required for PizzaOven xdelta conversion"
+            )
         for target_file in target_files:
             if not os.path.isfile(target_file):
                 continue
             temp_dir = tempfile.mkdtemp(prefix="g3m_po_patch_")
             try:
                 temp_output = os.path.join(temp_dir, os.path.basename(target_file))
-                returncode, _stdout, _stderr = self._g3mtool.xpatch_apply(
+                returncode = self._g3mtool.xpatch_apply(
                     target_file, patch_path, temp_output
-                )
+                )[0]
                 if returncode == 0 and os.path.isfile(temp_output):
                     shutil.move(temp_output, target_file)
                     return target_file
@@ -630,7 +667,9 @@ class PizzaOvenConversionService:
         return None
 
     @staticmethod
-    def _copy_bank_file(source_dir: str, source_path: str, working_game_dir: str) -> str:
+    def _copy_bank_file(
+        source_dir: str, source_path: str, working_game_dir: str
+    ) -> str:
         target_path = os.path.join(
             working_game_dir, "sound", "Desktop", os.path.basename(source_path)
         )
@@ -769,7 +808,9 @@ class PizzaOvenConversionService:
                     try:
                         os.remove(item_path)
                     except OSError:
-                        logger.debug("Failed to remove %s during PO reconvert", item_path)
+                        logger.debug(
+                            "Failed to remove %s during PO reconvert", item_path
+                        )
             return existing
         folder_name = get_unique_mod_dir(mods_dir, mod_name)
         target_mod_dir = os.path.join(mods_dir, folder_name)
@@ -827,22 +868,30 @@ class PizzaOvenConversionService:
             raise PizzaOvenConversionError("Converted Pizza Tower data.win is missing")
         if self._g3mtool.is_available():
             g3m_path = os.path.join(target_mod_dir, "data.g3mpatch")
-            returncode, _stdout, _stderr = self._g3mtool.patch_create(
+            returncode = self._g3mtool.patch_create(
                 original_data, modified_data, g3m_path
-            )
-            if returncode == 0 and os.path.isfile(g3m_path) and self._verify_patch_output(
-                original_data, modified_data, g3m_path, patch_type="g3mpatch"
+            )[0]
+            if (
+                returncode == 0
+                and os.path.isfile(g3m_path)
+                and self._verify_patch_output(
+                    original_data, modified_data, g3m_path, patch_type="g3mpatch"
+                )
             ):
                 changed_remaining.remove("data.win")
                 return "data.g3mpatch"
             if os.path.exists(g3m_path):
                 os.remove(g3m_path)
             xdelta_path = os.path.join(target_mod_dir, "data.win.xdelta")
-            returncode, _stdout, _stderr = self._g3mtool.xpatch_create(
+            returncode = self._g3mtool.xpatch_create(
                 original_data, modified_data, xdelta_path
-            )
-            if returncode == 0 and os.path.isfile(xdelta_path) and self._verify_patch_output(
-                original_data, modified_data, xdelta_path, patch_type="xdelta"
+            )[0]
+            if (
+                returncode == 0
+                and os.path.isfile(xdelta_path)
+                and self._verify_patch_output(
+                    original_data, modified_data, xdelta_path, patch_type="xdelta"
+                )
             ):
                 changed_remaining.remove("data.win")
                 return "data.win.xdelta"
@@ -861,13 +910,13 @@ class PizzaOvenConversionService:
         *,
         patch_type: str,
     ) -> bool:
-        verified, _message = verify_generated_patch(
+        verified = verify_generated_patch(
             self._g3mtool,
             original_data,
             modified_data,
             patch_path,
             patch_type=patch_type,
-        )
+        )[0]
         return verified
 
     @staticmethod
@@ -893,7 +942,9 @@ class PizzaOvenConversionService:
         metadata["icon"] = icon_name
 
     @staticmethod
-    def _copy_root_docs(source_dir: str, target_mod_dir: str, used_source_files: set[str]) -> None:
+    def _copy_root_docs(
+        source_dir: str, target_mod_dir: str, used_source_files: set[str]
+    ) -> None:
         for file_name in os.listdir(source_dir):
             source_path = os.path.join(source_dir, file_name)
             rel_path = file_name.replace("\\", "/")
@@ -901,6 +952,9 @@ class PizzaOvenConversionService:
                 continue
             if rel_path in used_source_files:
                 continue
-            if os.path.splitext(file_name)[1].lower() not in MOD_DOCUMENTATION_EXTENSIONS:
+            if (
+                os.path.splitext(file_name)[1].lower()
+                not in MOD_DOCUMENTATION_EXTENSIONS
+            ):
                 continue
             shutil.copy2(source_path, os.path.join(target_mod_dir, file_name))

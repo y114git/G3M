@@ -55,8 +55,10 @@ class G3MToolManager:
         """Return the bundled G3MTool version string."""
         if not self.g3mtool_path:
             return None
-        returncode, stdout, _stderr = self._run([self.g3mtool_path, "--version"])
+        returncode, stdout, stderr = self._run([self.g3mtool_path, "--version"])
         if returncode != 0:
+            if stderr:
+                logging.debug("G3MTool version command failed: %s", stderr.strip())
             return None
         version = (stdout or "").strip().splitlines()
         return version[0].strip() if version else None

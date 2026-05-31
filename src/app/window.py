@@ -46,6 +46,7 @@ from config.config import (
     INITIALIZATION_TIMEOUT,
     QSS_PADDING_LEFT_8,
     SOCIAL_LINKS,
+    THREAD_WAIT_TIMEOUT,
     UI_COLORS,
 )
 from presentation.update_presenter import (
@@ -86,6 +87,7 @@ class AppWindow(QWidget):
     restore_window_signal = pyqtSignal()
     mods_loaded_signal = pyqtSignal()
     url_received_signal = pyqtSignal(str)
+    activate_requested_signal = pyqtSignal()
     mods_display_ready = pyqtSignal()
     install_from_gb_signal = pyqtSignal(object)
 
@@ -172,6 +174,7 @@ class AppWindow(QWidget):
         self.show_update_prompt.connect(lambda info: prompt_for_update(self, info))
         self.mods_loaded_signal.connect(self._on_mods_loaded)
         self.url_received_signal.connect(self.handle_one_click_install)
+        self.activate_requested_signal.connect(self.activate_from_single_instance)
         self.install_from_gb_signal.connect(
             lambda mod: self.mod_ops.install_mod(mod, force=True)
         )
@@ -251,6 +254,15 @@ class AppWindow(QWidget):
         from app.protocol_handler import handle_one_click_install
 
         handle_one_click_install(self, url)
+
+    def activate_from_single_instance(self) -> None:
+        if self.isMinimized() or not self.isVisible():
+            self._on_window_restore_requested()
+            return
+        self.show()
+        self.activateWindow()
+        self.raise_()
+        self._schedule_window_layout_refresh(160)
 
     def _handle_url_install_prompt(self, title, message):
         reply = self.feedback_service.ask_question(title, message)
@@ -716,6 +728,9 @@ class AppWindow(QWidget):
         after_change=None,
     ):
         timer = self._get_or_create_theme_timer(timer_attr)
+        if after_change and not getattr(spinbox, "_theme_after_change_connected", False):
+            timer.timeout.connect(after_change)
+            spinbox._theme_after_change_connected = True
 
         def _on_changed(value):
             self.app_state.local_config[config_key] = (
@@ -723,8 +738,6 @@ class AppWindow(QWidget):
             )
             self.settings_service.write_local_config()
             timer.start()
-            if after_change:
-                after_change()
 
         spinbox.valueChanged.connect(_on_changed)
 
@@ -733,10 +746,32 @@ class AppWindow(QWidget):
             self.search_tab_builder, "refresh_dynamic_styles"
         ):
             self.search_tab_builder.refresh_dynamic_styles()
+        if hasattr(self, "settings_builder") and hasattr(
+            self.settings_builder, "refresh_dynamic_styles"
+        ):
+            self.settings_builder.refresh_dynamic_styles()
+        if hasattr(self, "theme") and hasattr(self.theme, "update_dynamic_elements"):
+            self.theme.update_dynamic_elements()
         if hasattr(self, "search_display"):
             self.search_display.update_display()
         if hasattr(self, "library_display"):
             self.library_display.update_display()
+        for dialog_attr in (
+            "_game_versions_dialog",
+            "_mod_versions_dialog",
+            "_downloads_dialog",
+            "_log_viewer_dialog",
+            "_modding_tools_dialog",
+        ):
+            dialog = getattr(self, dialog_attr, None)
+            if not dialog:
+                continue
+            if hasattr(dialog, "refresh_theme"):
+                dialog.refresh_theme()
+            elif hasattr(dialog, "apply_theme"):
+                dialog.apply_theme()
+            if hasattr(dialog, "scale_ui"):
+                dialog.scale_ui()
 
     @staticmethod
     def _localized_value(data, ru_key, en_key, fallback_key=None) -> str:
@@ -1159,6 +1194,9 @@ class AppWindow(QWidget):
                 self._mark_close_task_complete("analytics")
         else:
             self._mark_close_task_complete("analytics")
+        QTimer.singleShot(
+            max(2000, int(THREAD_WAIT_TIMEOUT) * 2), self._force_finish_close_tasks
+        )
         QTimer.singleShot(0, self._run_deferred_close_cleanup)
 
     def _run_deferred_close_cleanup(self) -> None:
@@ -1183,11 +1221,28 @@ class AppWindow(QWidget):
             with contextlib.suppress(Exception):
                 app.quit()
 
+    def _force_finish_close_tasks(self) -> None:
+        pending = getattr(self, "_pending_close_tasks", None)
+        if not pending or all(pending.values()):
+            return
+        for task_name, completed in list(pending.items()):
+            if not completed:
+                pending[task_name] = True
+        app = QApplication.instance()
+        if app:
+            with contextlib.suppress(Exception):
+                app.quit()
+
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
             self._sync_title_bar_window_state()
             self._sync_background_audio_focus()
+            if (
+                not self.isMinimized()
+                and not getattr(self, "_restoring_window_geometry", False)
+            ):
+                self.settings_service.schedule_geometry_save(self, timeout_ms=0)
             if not self.isMinimized():
                 self._schedule_window_layout_refresh(220)
 

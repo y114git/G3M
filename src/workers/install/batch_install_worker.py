@@ -406,13 +406,14 @@ class InstallModsThread(QThread):
                     else:
                         from utils.file_utils import download_and_extract_archive
 
-                        before_files = {
-                            os.path.relpath(os.path.join(root, file), mod_dir).replace(
-                                "\\", "/"
-                            )
-                            for root, _dirs, files in os.walk(mod_dir)
-                            for file in files
-                        }
+                        before_files = set()
+                        for root, dir_names, files in os.walk(mod_dir):
+                            for file in files:
+                                before_files.add(
+                                    os.path.relpath(os.path.join(root, file), mod_dir).replace(
+                                        "\\", "/"
+                                    )
+                                )
                         progress_callback = self._make_progress_callback(
                             mod.name,
                             current_index,
@@ -429,13 +430,15 @@ class InstallModsThread(QThread):
                             session,
                             cancel_check=lambda: self._cancelled,
                         )
-                        extracted_files = {
-                            os.path.relpath(os.path.join(root, file), mod_dir).replace(
-                                "\\", "/"
-                            )
-                            for root, _dirs, files in os.walk(mod_dir)
-                            for file in files
-                        } - before_files
+                        extracted_files = set()
+                        for root, dir_names, files in os.walk(mod_dir):
+                            for file in files:
+                                extracted_files.add(
+                                    os.path.relpath(os.path.join(root, file), mod_dir).replace(
+                                        "\\", "/"
+                                    )
+                                )
+                        extracted_files -= before_files
                         extracted_data_files = sorted(
                             rel_path
                             for rel_path in extracted_files
@@ -541,7 +544,7 @@ class InstallModsThread(QThread):
                 )
                 self.finished.emit(False)
                 return
-            for _key, info in mod_configs.items():
+            for info in mod_configs.values():
                 folder_name = info["folder_name"]
                 config_data = info["config"]
                 mod_dir = os.path.join(self.main_window.app_state.mods_dir, folder_name)

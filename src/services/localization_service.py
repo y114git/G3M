@@ -64,9 +64,7 @@ class LocalizationManager:
         try:
             os.makedirs(self.external_lang_dir, exist_ok=True)
         except FileExistsError:
-            self.external_lang_dir = os.path.join(
-                tempfile.gettempdir(), "g3m-lang"
-            )
+            self.external_lang_dir = os.path.join(tempfile.gettempdir(), "g3m-lang")
             os.makedirs(self.external_lang_dir, exist_ok=True)
 
     def _load_fallback_strings(self):
@@ -228,7 +226,7 @@ class LocalizationManager:
             system_locale = None
             for getter in (lambda: locale.getlocale(locale.LC_CTYPE), locale.getlocale):
                 try:
-                    system_locale, _ = getter()
+                    system_locale = (getter() or (None,))[0]
                     if system_locale:
                         break
                 except (AttributeError, TypeError, ValueError):
@@ -380,7 +378,9 @@ class LocalizationManager:
                 else:
                     logging.warning(f"No font families found for {font_path}")
             else:
-                logging.warning(f"Failed to load font {font_path}, addApplicationFont returned -1")
+                logging.warning(
+                    f"Failed to load font {font_path}, addApplicationFont returned -1"
+                )
         else:
             logging.debug(f"Font path not found or doesn't exist: {font_path}")
         return None

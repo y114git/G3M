@@ -427,9 +427,10 @@ class SearchModCardWidget(ModCardWidget):
 
     def _update_updated_label(self):
         if hasattr(self, "updated_label"):
-            self.updated_label.setText(
-                str(getattr(self.mod_data, "last_updated", None) or "N/A")
-            )
+            updated_text = str(getattr(self.mod_data, "last_updated", None) or "N/A")
+            if getattr(self.mod_data, "is_wip", False):
+                updated_text = f"{updated_text} | WIP"
+            self.updated_label.setText(updated_text)
 
     def _update_metadata_icons(self, color: str, size: int):
         icon_size = max(12, size)

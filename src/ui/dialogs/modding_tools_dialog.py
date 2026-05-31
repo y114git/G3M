@@ -515,7 +515,7 @@ class _PatchTab(QWidget):
 
     @staticmethod
     def _replace_extension(path: str, suffix: str) -> str:
-        base, _ext = os.path.splitext(path)
+        base = os.path.splitext(path)[0]
         return base + suffix
 
     def _suggest_output_path(self) -> str:

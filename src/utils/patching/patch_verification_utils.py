@@ -34,17 +34,17 @@ def verify_generated_patch(
     try:
         temp_output = os.path.join(temp_dir, os.path.basename(modified_data))
         if patch_type == "g3mpatch":
-            returncode, _stdout, stderr = g3mtool.apply_patch(
+            returncode, stdout, stderr = g3mtool.apply_patch(
                 original_data, patch_path, temp_output
             )
         elif patch_type == "xdelta":
-            returncode, _stdout, stderr = g3mtool.xpatch_apply(
+            returncode, stdout, stderr = g3mtool.xpatch_apply(
                 original_data, patch_path, temp_output
             )
         else:
             return False, f"Unsupported patch type for verification: {patch_type}"
         if returncode != 0:
-            details = (stderr or "").strip()[:300]
+            details = (stderr or stdout or "").strip()[:300]
             suffix = f": {details}" if details else ""
             return (
                 False,

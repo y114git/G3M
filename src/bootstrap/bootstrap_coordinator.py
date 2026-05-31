@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import sys
@@ -59,6 +60,7 @@ class _NetworkInitThread(QThread):
 
 class BootstrapCoordinator:
     _WINDOW_REVEAL_DELAY_MS = 50
+    _WINDOW_VISIBILITY_GRACE_MS = 300
 
     def __init__(
         self,
@@ -148,10 +150,7 @@ class BootstrapCoordinator:
             return
         try:
             self.restore_ui_state_from_config(self.instance)
-            self.instance.setWindowState(
-                self.instance.windowState() & ~Qt.WindowState.WindowMinimized
-            )
-            self.instance.show()
+            self._ensure_window_presented()
             self._play_startup_sound()
             self._bring_launcher_to_front()
             self.instance.is_shown_to_user = True
@@ -164,6 +163,10 @@ class BootstrapCoordinator:
             QTimer.singleShot(
                 self._WINDOW_REVEAL_DELAY_MS, self._bring_launcher_to_front
             )
+            QTimer.singleShot(
+                self._WINDOW_VISIBILITY_GRACE_MS,
+                self._verify_window_visible_after_reveal,
+            )
         except Exception as error:
             logging.error(f"Error showing launcher window: {error}", exc_info=True)
 
@@ -171,6 +174,13 @@ class BootstrapCoordinator:
         if not self.instance:
             return
         try:
+            if self.instance.isMinimized():
+                self.instance.setWindowState(
+                    self.instance.windowState() & ~Qt.WindowState.WindowMinimized
+                )
+                self.instance.showNormal()
+            elif not self.instance.isVisible():
+                self.instance.show()
             self.instance.raise_()
             self.instance.activateWindow()
         except Exception as error:
@@ -184,11 +194,82 @@ class BootstrapCoordinator:
         QTimer.singleShot(self._WINDOW_REVEAL_DELAY_MS, self._finalize_window_reveal)
 
     def _finalize_window_reveal(self) -> None:
+        self._ensure_window_presented()
         self._close_splash()
         self._bring_launcher_to_front()
 
+    def _ensure_window_presented(self) -> None:
+        if not self.instance:
+            return
+        was_maximized = False
+        with contextlib.suppress(RuntimeError, AttributeError):
+            was_maximized = (
+                self.instance.settings_service.was_window_maximized() is True
+            )
+        with contextlib.suppress(RuntimeError, AttributeError):
+            self.instance.setWindowState(
+                self.instance.windowState() & ~Qt.WindowState.WindowMinimized
+            )
+        if not self.instance.isVisible():
+            with contextlib.suppress(RuntimeError, AttributeError):
+                if was_maximized:
+                    self.instance.showMaximized()
+                else:
+                    self.instance.showNormal()
+                    self.instance.show()
+        elif was_maximized and not self.instance.isMaximized():
+            with contextlib.suppress(RuntimeError, AttributeError):
+                self.instance.showMaximized()
+        else:
+            self.instance.show()
+        if qapp := QApplication.instance():
+            qapp.processEvents()
+
+    def _verify_window_visible_after_reveal(self) -> None:
+        if not self.instance:
+            return
+        try:
+            if self.instance.isVisible():
+                if self.splash and self.splash.isVisible():
+                    self._close_splash()
+                return
+            logging.warning(
+                "Main window still hidden after reveal, forcing another restore"
+            )
+            self._ensure_window_presented()
+            self._bring_launcher_to_front()
+            QTimer.singleShot(
+                self._WINDOW_VISIBILITY_GRACE_MS, self._abort_stuck_startup
+            )
+        except Exception as error:
+            logging.error(
+                f"Window visibility verification failed: {error}", exc_info=True
+            )
+            self._abort_stuck_startup()
+
+    def _abort_stuck_startup(self) -> None:
+        if self.instance and self.instance.isVisible():
+            if self.splash and self.splash.isVisible():
+                self._close_splash()
+            return
+        logging.critical("Startup failed: main window never became visible")
+        if self.splash:
+            self.splash.close()
+        QMessageBox.critical(
+            None,
+            tr("errors.startup_error_title"),
+            tr(
+                "errors.startup_error_message",
+                details=tr("errors.startup_error_detail_main_window_hidden"),
+            ),
+        )
+        with contextlib.suppress(RuntimeError, AttributeError):
+            self.app.quit()
+
     def _play_startup_sound(self) -> None:
-        if getattr(self.instance, "app_state", None) and not self.instance.app_state.local_config.get(
+        if getattr(
+            self.instance, "app_state", None
+        ) and not self.instance.app_state.local_config.get(
             "disable_startup_sound", False
         ):
             _audio_service.play_g3m_sound()

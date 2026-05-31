@@ -1,0 +1,49 @@
+{
+  "name": "커스텀 세이브 폴더",
+  "description": "게임별로 사용자 지정 세이브 폴더를 생성하고 현재 실행에만 적용합니다.",
+  "ui": {
+    "title": "커스텀 세이브 폴더",
+    "games_title": "게임",
+    "folders_title": "커스텀 세이브 폴더",
+    "empty_games": "사용 가능한 게임이 없습니다.",
+    "empty_folders": "아직 커스텀 세이브 폴더가 없습니다.",
+    "empty_selection": "게임을 선택해 커스텀 세이브 폴더를 관리하세요.",
+    "use_button": "폴더 사용",
+    "folder_item_hint": "이 폴더는 패치 후 적용되며 게임 종료 시 원래 상태로 복원됩니다.",
+    "current_game_hint": "선택된 폴더는 모드 패치 후 적용되며 게임 종료 후 복원됩니다.",
+    "add_folder": "커스텀 세이브 폴더 추가",
+    "name_label": "세이브 폴더 이름",
+    "name_placeholder": "폴더 이름 입력",
+    "name_hint": "이 게임에서 사용할 별도의 세이브 폴더 이름을 지정하세요.",
+    "create_button": "생성",
+    "cancel_button": "취소",
+    "delete_tooltip": "플러그인에서 이 폴더를 제거합니다",
+    "add_tooltip": "새 커스텀 세이브 폴더 생성",
+    "applying_status": "커스텀 세이브 폴더 적용 중...",
+    "applying_progress": "커스텀 세이브 폴더 적용 중 {current}/{total}...",
+    "applied_status": "{game}에 커스텀 세이브 폴더 \"{name}\"이(가) 적용되었습니다.",
+    "restored_status": "커스텀 세이브 폴더 세션 종료 후 원본 데이터 파일을 복원했습니다.",
+    "open_appdata_button": "AppData 열기",
+    "open_appdata_tooltip": "사용자 AppData 폴더 열기",
+    "shortcut_summary_label": "커스텀 세이브 폴더"
+  },
+  "dialogs": {
+    "delete_title": "이 커스텀 세이브 폴더를 제거하시겠습니까?",
+    "delete_body": "\"{name}\"은(는) 이 플러그인에서만 제거됩니다. 디스크에 있는 기존 세이브 폴더는 그대로 유지됩니다."
+  },
+  "errors": {
+    "name_required": "세이브 폴더 이름을 입력하세요.",
+    "name_too_long": "세이브 폴더 이름이 너무 깁니다.",
+    "name_invalid_chars": "세이브 폴더 이름에 세이브 폴더로 사용하기에 안전하지 않은 문자가 포함되어 있습니다.",
+    "name_invalid_suffix": "세이브 폴더 이름은 공백이나 마침표로 끝날 수 없습니다.",
+    "name_reserved": "이 세이브 폴더 이름은 Windows 예약어입니다.",
+    "folder_exists": "선택한 게임에 이미 같은 세이브 폴더가 존재합니다.",
+    "selection_missing": "먼저 게임을 선택하세요.",
+    "game_path_missing": "선택한 게임의 폴더가 설정되지 않았습니다.",
+    "data_file_missing": "{game}에 사용할 수 있는 지원 데이터 파일을 찾을 수 없습니다.",
+    "script_missing": "커스텀 세이브 폴더 스크립트가 없습니다.",
+    "g3mtool_missing": "G3MTool을 사용할 수 없습니다.",
+    "apply_failed": "커스텀 세이브 폴더 적용 실패: {error}",
+    "restore_failed": "원본 데이터 파일 복원 실패: {error}"
+  }
+}

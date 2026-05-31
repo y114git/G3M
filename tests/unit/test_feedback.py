@@ -56,7 +56,31 @@ def test_ask_question_escapes_plain_details(monkeypatch, qapp):
     )
 
     assert result is True
-    assert html.escape("<b>New launcher version</b><br>Line 2") in box.text
+    assert html.escape("<b>New launcher version</b><br>Line 2", quote=False) in box.text
+
+
+def test_show_message_does_not_escape_plain_apostrophes_to_entities(monkeypatch, qapp):
+    from ui.common import feedback as feedback_module
+    from ui.common.feedback import FeedbackManager
+
+    factory, box = _make_message_box_stub()
+    factory.Icon.Critical = object()
+    factory.Icon.Warning = object()
+    factory.Icon.Information = object()
+    monkeypatch.setattr(feedback_module, "QMessageBox", factory)
+    manager = FeedbackManager(
+        tr_func=lambda key, **kwargs: {
+            "dialogs.warning": "Warning",
+            "errors.mod_no_files": "Mod '{mod_name}' has no files to install.",
+        }.get(key, key).format(**kwargs)
+    )
+
+    manager.show_message(
+        "warning", "errors.mod_no_files", mod_name="CoolMod"
+    )
+
+    assert "&#x27;" not in box.text
+    assert box.text == "Mod 'CoolMod' has no files to install."
 
 
 def test_feedback_manager_scoped_translator_localizes_titles_and_messages(

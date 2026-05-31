@@ -24,7 +24,9 @@ def _normalize_override_path(path: str) -> str:
     return normalized.rstrip("/")
 
 
-def _chapter_path_prefixes(chapter_id: str, game_id: str | None = None) -> tuple[str, ...]:
+def _chapter_path_prefixes(
+    chapter_id: str, game_id: str | None = None
+) -> tuple[str, ...]:
     prefixes: list[str] = []
     chapter_name = str(chapter_id or "")
     if chapter_name.startswith("deltarune_"):
@@ -73,8 +75,12 @@ def _iter_configured_override_entries(
         normalized = _normalize_override_path(stored_path)
         if not normalized:
             continue
-        source_path = os.path.normpath(os.path.join(mod_root_dir, normalized.rstrip("/")))
-        target_relative = _target_relative_override_path(normalized, chapter_id, game_id)
+        source_path = os.path.normpath(
+            os.path.join(mod_root_dir, normalized.rstrip("/"))
+        )
+        target_relative = _target_relative_override_path(
+            normalized, chapter_id, game_id
+        )
         if not target_relative:
             continue
         yield {
@@ -92,12 +98,8 @@ def _count_entry_files(entries) -> int:
         if entry["is_directory"]:
             if not os.path.isdir(source_path):
                 continue
-            total += sum(
-                1
-                for root, _dirs, files in os.walk(source_path)
-                for file in files
-                if file.lower() not in SKIP_FILES
-            )
+            for _root, _dirs, files in os.walk(source_path):
+                total += sum(1 for file in files if file.lower() not in SKIP_FILES)
         elif os.path.isfile(source_path):
             total += 1
     return total
@@ -235,11 +237,7 @@ def _apply_configured_override_entries(
                     if file.lower() in SKIP_FILES:
                         continue
                     file_source = os.path.join(root, file)
-                    rel_file = (
-                        file
-                        if rel_root == "."
-                        else os.path.join(rel_root, file)
-                    )
+                    rel_file = file if rel_root == "." else os.path.join(rel_root, file)
                     target_path = os.path.join(
                         target_dir,
                         target_relative.rstrip("/"),
@@ -468,17 +466,20 @@ def apply_file_overrides(
             progress_callback=progress_callback,
             mod_name=mod_name,
         )
-    total_files = sum(
-        1
-        for root, _dirs, files in os.walk(mod_source_dir)
-        for file in files
-        if file.lower() not in skip_files
-        and not os.path.join(root, file).lower().endswith(xdelta_extensions)
-        and not is_towers_subpath(os.path.relpath(os.path.join(root, file), mod_source_dir))
-        and not is_top_level_towers_archive(
-            os.path.relpath(os.path.join(root, file), mod_source_dir)
-        )
-    )
+    total_files = 0
+    for root, _dirs, files in os.walk(mod_source_dir):
+        for file in files:
+            if file.lower() in skip_files:
+                continue
+            source_file = os.path.join(root, file)
+            source_rel_path = os.path.relpath(source_file, mod_source_dir)
+            if source_file.lower().endswith(xdelta_extensions):
+                continue
+            if is_towers_subpath(source_rel_path):
+                continue
+            if is_top_level_towers_archive(source_rel_path):
+                continue
+            total_files += 1
     processed_files = 0
     for root, _dirs, files in os.walk(mod_source_dir):
         rel_path = os.path.relpath(root, mod_source_dir)
@@ -561,7 +562,7 @@ def apply_file_overrides(
                         elif archive_name_lower.endswith(".tar.lzma"):
                             ext = ".tar.lzma"
                         else:
-                            _, ext = os.path.splitext(archive_name)
+                            ext = os.path.splitext(archive_name)[1]
                         mod_index = 1
                         while os.path.exists(target_archive_path):
                             target_archive_name = f"{base_name}_mod{mod_index}{ext}"

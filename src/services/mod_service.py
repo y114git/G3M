@@ -565,7 +565,7 @@ class ModManager(QObject):
             )
             if config_data.get("id") == mod_id and folder_path and os.path.isdir(folder_path):
                 return folder_path
-        for folder_name, folder_path, _config_path, config_data in self._iter_mod_configs():
+        for folder_name, folder_path, _, config_data in self._iter_mod_configs():
             if config_data.get("id") != mod_id:
                 continue
             if folder_path and os.path.isdir(folder_path):
@@ -1166,12 +1166,7 @@ class ModManager(QObject):
                         exc_info=True,
                     )
         else:
-            for (
-                folder_name,
-                _folder_path,
-                _config_path,
-                config_data,
-            ) in self._iter_mod_configs():
+            for folder_name, _, _, config_data in self._iter_mod_configs():
                 try:
                     _append_from_config(config_data, folder_name)
                 except Exception as e:
@@ -1198,9 +1193,9 @@ class ModManager(QObject):
     def migrate_metadata_from_local_configs(self) -> bool:
         mods_metadata = self._read_metadata()
         updated = False
-        for folder_name, _folder_path, config_path, config_data in self._iter_mod_configs():
+        for folder_name, _, config_path, config_data in self._iter_mod_configs():
             try:
-                _mod_id, changed = migrate_mod_metadata(config_data, mods_metadata)
+                changed = migrate_mod_metadata(config_data, mods_metadata)[1]
                 if changed:
                     save_json(config_path, build_mod_config_data(config_data), indent=4)
                     updated = True

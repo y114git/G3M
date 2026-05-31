@@ -82,7 +82,7 @@ class ProfileManagerDialog(QDialog):
         btn_row.setSpacing(8)
         btn_row.addStretch()
         self._action_btns = []
-        for attr, _icon_name, tip_key, slot in (
+        for action_def in (
             ("add_btn", "add", "profiles.create", self._on_create),
             ("dup_btn", "duplicate", "profiles.duplicate", self._on_duplicate),
             ("edit_btn", "edit", "profiles.rename", self._on_rename),
@@ -90,6 +90,7 @@ class ProfileManagerDialog(QDialog):
             ("export_btn", "export", "buttons.export", self._on_export),
             ("import_btn", "import", "buttons.import", self._on_import),
         ):
+            attr, tip_key, slot = action_def[0], action_def[2], action_def[3]
             btn = QPushButton()
             btn.setObjectName(f"profile_{attr}")
             btn.setToolTip(tr(tip_key))

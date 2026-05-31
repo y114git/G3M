@@ -1,6 +1,7 @@
 import os
 from unittest.mock import Mock, patch
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
 
 from services.localization_service import tr
@@ -54,7 +55,10 @@ def _window_test_patches(temp_dir):
                 "app_context.application_context.get_user_data_root",
                 return_value=user_root,
             ),
-            patch("app_context.application_context.get_launcher_dir", return_value=temp_dir),
+            patch(
+                "app_context.application_context.get_launcher_dir",
+                return_value=temp_dir,
+            ),
             patch(
                 "services.g3mtool_patching_service.get_user_data_root",
                 return_value=user_root,
@@ -78,12 +82,24 @@ def _window_test_patches(temp_dir):
 
 class TestAppWindow:
     """Tests for main window."""
+
     def test_app_window_creation(self, qapp, temp_dir):
         """Checks that apping window creation."""
         from app.window import AppWindow
 
         _, _, _, _, _, patches = _window_test_patches(temp_dir)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
             window = AppWindow()
             try:
                 assert window is not None
@@ -115,7 +131,9 @@ class TestAppWindow:
             patches[7],
             patches[8],
             patches[9],
-            patch("bootstrap.bootstrap_coordinator.BootstrapCoordinator.post_show_initialization") as post_init,
+            patch(
+                "bootstrap.bootstrap_coordinator.BootstrapCoordinator.post_show_initialization"
+            ) as post_init,
         ):
             window = AppWindow()
             try:
@@ -133,7 +151,18 @@ class TestAppWindow:
         from models.mod_models import BrowserModInfo
 
         _, _, _, _, _, patches = _window_test_patches(temp_dir)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
             window = AppWindow()
             try:
                 window.search_display._load_more_gamebanana_mods_if_needed = (
@@ -169,6 +198,119 @@ class TestAppWindow:
 
                 assert window.app_state.filtered_mods == []
                 assert window.mod_list_layout.count() == 0
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_mods_browser_layout_refresh_restores_all_visible_cards(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+        from models.mod_models import BrowserModInfo
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.search_display._load_more_gamebanana_mods_if_needed = (
+                    lambda *args, **kwargs: None
+                )
+                window.app_state.mods_loaded = True
+                window.app_state.gamebanana_loading = False
+                window.show()
+                _drain_events(qapp, cycles=12, delay_ms=40)
+                window.app_state.all_mods = [
+                    BrowserModInfo(
+                        id=f"gb_mod_{idx}",
+                        name=f"Mod {idx}",
+                        version="1",
+                        author="x",
+                        description="x",
+                        game="deltarune",
+                    )
+                    for idx in range(3)
+                ]
+                window.search_display.update_filtered_mods()
+                _drain_events(qapp, cycles=12, delay_ms=40)
+
+                cards = list(window.search_display._iter_layout_cards())
+                assert len(cards) == 3
+                for card in cards[1:]:
+                    card.setUpdatesEnabled(False)
+
+                window.search_display.refresh_visible_layout()
+                _drain_events(qapp, cycles=6, delay_ms=20)
+
+                cards = list(window.search_display._iter_layout_cards())
+                assert len(cards) == 3
+                assert all(card.isVisible() for card in cards)
+                assert all(card.updatesEnabled() for card in cards)
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_mods_browser_scroll_area_never_shows_horizontal_scrollbar(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                assert (
+                    window.mods_browser_scroll.horizontalScrollBarPolicy()
+                    == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+                )
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_window_maximized_state_is_saved_on_state_change(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp, cycles=4, delay_ms=20)
+
+                window.showMaximized()
+                _drain_events(qapp, cycles=6, delay_ms=20)
+
+                saved = window.app_state.local_config.get("window_geometry_state")
+                assert saved["maximized"] is True
             finally:
                 _close_app_window(qapp, window)
 
@@ -211,7 +353,18 @@ class TestAppWindow:
         from app.window import AppWindow
 
         _, _, _, _, _, patches = _window_test_patches(temp_dir)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
             window = AppWindow()
             dialog = QDialog(window)
             file_dialog = QFileDialog(window)
@@ -259,7 +412,10 @@ class TestAppWindow:
             patches[8],
             patches[9],
             patch("app.window.QApplication.instance", return_value=app_mock),
-            patch("app.window.QTimer.singleShot", side_effect=lambda _ms, cb: scheduled.append(cb)),
+            patch(
+                "app.window.QTimer.singleShot",
+                side_effect=lambda _ms, cb: scheduled.append(cb),
+            ),
         ):
             window = AppWindow()
             try:
@@ -281,6 +437,40 @@ class TestAppWindow:
                 window.deleteLater()
                 _drain_events(qapp, cycles=6, delay_ms=10)
 
+    def test_force_finish_close_tasks_quits_when_cleanup_flags_stall(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        app_mock = Mock()
+
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+            patch("app.window.QApplication.instance", return_value=app_mock),
+        ):
+            window = AppWindow()
+            try:
+                window._pending_close_tasks = {"analytics": False, "cleanup": True}
+                window._force_finish_close_tasks()
+
+                assert window._pending_close_tasks == {
+                    "analytics": True,
+                    "cleanup": True,
+                }
+                app_mock.quit.assert_called_once_with()
+            finally:
+                _close_app_window(qapp, window)
+
     def test_title_bar_windows_menu_opens_log_viewer(self, qapp, temp_dir):
         from app.window import AppWindow
 
@@ -300,9 +490,7 @@ class TestAppWindow:
             window = AppWindow()
             try:
                 assert window.title_bar.windows_button.text() == tr("ui.windows_menu")
-                assert window.title_bar.log_viewer_action.text() == tr(
-                    "ui.log_viewer"
-                )
+                assert window.title_bar.log_viewer_action.text() == tr("ui.log_viewer")
                 assert window._log_viewer_dialog is None
 
                 window.title_bar.log_viewer_action.trigger()
@@ -325,6 +513,7 @@ class TestAppWindow:
 
 class TestTabBuilders:
     """Tests for main window."""
+
     def test_library_tab_builder_creation(self, qapp, app_state, feedback_service):
         """Checks that librarying tab builder creation."""
         from services.localization_service import tr
@@ -344,10 +533,18 @@ class TestTabBuilders:
         assert widgets["installed_mods_label"].text() == tr("ui.installed_mods_label")
         assert widgets["profile_combo"].toolTip() == tr("tooltips.profile_combo")
         assert widgets["chapter_mode_checkbox"].toolTip() == tr("tooltips.chapter_mode")
-        assert widgets["full_install_checkbox"].toolTip() == tr("tooltips.full_install_toggle")
+        assert widgets["full_install_checkbox"].toolTip() == tr(
+            "tooltips.full_install_toggle"
+        )
         assert widgets["priority_button"].toolTip() == tr("tooltips.mod_priority")
-        assert "QScrollBar::handle:horizontal" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
-        assert "border: 1px solid" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        assert (
+            "QScrollBar::handle:horizontal"
+            in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        )
+        assert (
+            "border: 1px solid"
+            in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        )
         widget.deleteLater()
 
     def test_library_actions_keep_expected_order_in_filters(
@@ -365,8 +562,12 @@ class TestTabBuilders:
         search_btn = builder.widgets["library_search_button"]
 
         assert builder._library_filters_layout.indexOf(actions_widget) >= 0
-        assert actions_layout.indexOf(modding_btn) < actions_layout.indexOf(downloads_btn)
-        assert actions_layout.indexOf(downloads_btn) < actions_layout.indexOf(search_btn)
+        assert actions_layout.indexOf(modding_btn) < actions_layout.indexOf(
+            downloads_btn
+        )
+        assert actions_layout.indexOf(downloads_btn) < actions_layout.indexOf(
+            search_btn
+        )
         assert search_btn.isVisible()
         widget.close()
         widget.deleteLater()
@@ -390,8 +591,14 @@ class TestTabBuilders:
         assert "show_nsfw_checkbox" in widgets
         assert widgets["show_nsfw_checkbox"].isChecked() is False
         assert widgets["show_nsfw_checkbox"].toolTip() == tr("tooltips.show_nsfw")
-        assert "QScrollBar::handle:horizontal" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
-        assert "border: 1px solid" in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        assert (
+            "QScrollBar::handle:horizontal"
+            in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        )
+        assert (
+            "border: 1px solid"
+            in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
+        )
         widget.deleteLater()
 
     def test_mods_browser_show_nsfw_checkbox_scales_with_ui_scale(
@@ -424,5 +631,28 @@ class TestTabBuilders:
         assert "plugins_layout" in builder.get_widgets()
         assert "plugins_widget" in builder.get_widgets()
         assert "pause_background_music_unfocused_checkbox" in builder.get_widgets()
-        assert builder.get_widgets()["language_combo"].toolTip() == tr("tooltips.language")
-        assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr("tooltips.ui_scale")
+        assert builder.get_widgets()["language_combo"].toolTip() == tr(
+            "tooltips.language"
+        )
+        assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr(
+            "tooltips.ui_scale"
+        )
+
+    def test_settings_view_builder_icon_buttons_scale_with_ui_scale(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.builders.settings_view_builder import SettingsViewBuilder
+
+        app_state.local_config["ui_scale"] = 1.0
+        builder = SettingsViewBuilder(app_state, None)
+        widget = builder.build()
+        games_manager_button = builder.get_widgets()["games_manager_button"]
+        base_icon_size = games_manager_button.iconSize().width()
+        base_button_width = games_manager_button.width()
+
+        app_state.local_config["ui_scale"] = 1.5
+        builder.refresh_dynamic_styles()
+
+        assert games_manager_button.iconSize().width() > base_icon_size
+        assert games_manager_button.width() > base_button_width
+        widget.deleteLater()

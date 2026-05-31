@@ -109,7 +109,7 @@ class LoadModDetailsThread(QThread):
     def _get_mod_id(self):
         from utils.mod_utils import parse_gamebanana_mod_id
 
-        _gb_type, gb_id = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")
+        gb_id = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")[1]
         if not gb_id:
             return None
         try:
@@ -120,7 +120,7 @@ class LoadModDetailsThread(QThread):
     def _is_wip(self):
         from utils.mod_utils import parse_gamebanana_mod_id
 
-        gb_type, _ = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")
+        gb_type = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")[0]
         return gb_type == "wip"
 
     def _coerce_text(self, text_field):

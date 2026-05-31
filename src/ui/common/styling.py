@@ -708,12 +708,10 @@ def build_scrollbar_qss(
     min_handle: int = 25,
     include_corner: bool = False,
 ) -> str:
-    _vertical_top, vertical_right, _vertical_bottom, vertical_left = (
-        _normalize_box_values(vertical_margin)
-    )
-    horizontal_top, _horizontal_right, horizontal_bottom, _horizontal_left = (
-        _normalize_box_values(horizontal_margin)
-    )
+    vertical_values = _normalize_box_values(vertical_margin)
+    vertical_right, vertical_left = vertical_values[1], vertical_values[3]
+    horizontal_values = _normalize_box_values(horizontal_margin)
+    horizontal_top, horizontal_bottom = horizontal_values[0], horizontal_values[2]
 
     handle_margin = 1
     vertical_radius, vertical_handle_radius = _scrollbar_radii(

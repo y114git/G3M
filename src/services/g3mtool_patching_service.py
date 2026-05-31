@@ -535,9 +535,12 @@ class G3MToolPatchingService(QObject):
             )
             return False
 
-        for patch_file, mod_type, _mod_source_dir in data_mod_infos:
-            if mod_type == MOD_TYPE_G3MPATCH and not self._check_g3mpatch_validate_warning(
-                patch_file or "", data_win_path
+        for patch_file, mod_type, *_ in data_mod_infos:
+            if (
+                mod_type == MOD_TYPE_G3MPATCH
+                and not self._check_g3mpatch_validate_warning(
+                    patch_file or "", data_win_path
+                )
             ):
                 return False
 
@@ -658,7 +661,7 @@ class G3MToolPatchingService(QObject):
         chapter_end: int,
         display_name: str,
     ) -> bool:
-        patch_file, mod_type, _mod_source_dir = mod_info
+        patch_file, mod_type, *_ = mod_info
 
         if mod_type == MOD_TYPE_CSX:
             self.patching_logger.info(f"Executing csx script: {patch_file}")
@@ -668,13 +671,13 @@ class G3MToolPatchingService(QObject):
                 0.35,
                 tr("status.patching_chapter", chapter=display_name, current=1, total=1),
             )
-            returncode, _stdout, stderr = self.g3mtool.execute(
+            returncode, stdout, stderr = self.g3mtool.execute(
                 patch_file,
                 data_file=data_win_path,
                 output_path=output_path,
             )
             if returncode != 0:
-                error_text = stderr[:200] or "Unknown error"
+                error_text = (stderr or stdout)[:200] or "Unknown error"
                 return self._continue_without_data_patch(
                     tr(
                         "dialogs.patching_warning.data_patch_failed",
@@ -722,7 +725,7 @@ class G3MToolPatchingService(QObject):
                     total=1,
                 ),
             )
-            returncode, _stdout, stderr = self.g3mtool.xpatch_apply(
+            returncode, stdout, stderr = self.g3mtool.xpatch_apply(
                 data_win_path,
                 patch_file,
                 output_path,
@@ -739,7 +742,7 @@ class G3MToolPatchingService(QObject):
                 ),
             )
             if returncode != 0:
-                error_text = stderr[:200] or "Unknown error"
+                error_text = (stderr or stdout)[:200] or "Unknown error"
                 return self._continue_without_data_patch(
                     tr(
                         "dialogs.patching_warning.xdelta_patch_failed",
@@ -805,7 +808,7 @@ class G3MToolPatchingService(QObject):
                 0.30,
                 tr("status.applying_g3mpatch", display=display_name),
             )
-            returncode, _stdout, stderr = self.g3mtool.apply_patch(
+            returncode, stdout, stderr = self.g3mtool.apply_patch(
                 data_win_path,
                 patch_file,
                 output_path,
@@ -818,7 +821,7 @@ class G3MToolPatchingService(QObject):
                 ),
             )
             if returncode != 0:
-                error_text = stderr[:200] or "Unknown error"
+                error_text = (stderr or stdout)[:200] or "Unknown error"
                 return self._continue_without_data_patch(
                     tr(
                         "dialogs.patching_warning.data_patch_failed",
@@ -867,7 +870,7 @@ class G3MToolPatchingService(QObject):
         chapter_end: int,
         display_name: str,
     ) -> bool:
-        if any(mod_type == MOD_TYPE_CSX for _patch_file, mod_type, _source_dir in mod_infos):
+        if any(mod_type == MOD_TYPE_CSX for _patch_file, mod_type, *_ in mod_infos):
             current_input = data_win_path
             temp_inputs_to_cleanup: list[str] = []
             total_mods = len(mod_infos)
@@ -899,10 +902,7 @@ class G3MToolPatchingService(QObject):
                         os.remove(temp_input)
             return True
 
-        patch_files: list[str] = []
-        for patch_file, _mod_type, _source_dir in mod_infos:
-            if patch_file:
-                patch_files.append(patch_file)
+        patch_files = [patch_file for patch_file, *_ in mod_infos if patch_file]
         if not patch_files:
             return True
         report_path = (
@@ -921,7 +921,7 @@ class G3MToolPatchingService(QObject):
         merge_code = self.app_state.local_config.get("merge_code", False)
         merge_properties = self.app_state.local_config.get("merge_properties", False)
 
-        returncode, _stdout, stderr = self.g3mtool.merge_patches(
+        returncode, stdout, stderr = self.g3mtool.merge_patches(
             data_win_path,
             patch_files,
             output_path,
@@ -947,9 +947,8 @@ class G3MToolPatchingService(QObject):
                 ),
             ),
         )
-
         if returncode != 0:
-            error_text = stderr[:200] or "Unknown error"
+            error_text = (stderr or stdout)[:200] or "Unknown error"
             return self._continue_without_data_patch(
                 tr(
                     "dialogs.patching_warning.data_patch_failed",
@@ -984,7 +983,7 @@ class G3MToolPatchingService(QObject):
                 report_path, chapter_id
             )
             if self.report_has_conflicts():
-                total_conflicts, _auto_resolved = self.get_report_stats()
+                total_conflicts = self.get_report_stats()[0]
                 if not self._request_warning(
                     tr(
                         "dialogs.patching_warning.conflicts_detected",
@@ -1011,7 +1010,7 @@ class G3MToolPatchingService(QObject):
         chapter_end: int,
         display_name: str,
     ) -> str | None:
-        patch_file, mod_type, _mod_source_dir = mod_info
+        patch_file, mod_type, *_ = mod_info
         materialize_window_start = 0.20
         materialize_window_end = 0.44
         per_mod_span = (materialize_window_end - materialize_window_start) / max(
@@ -1049,7 +1048,7 @@ class G3MToolPatchingService(QObject):
         )
 
         if mod_type == MOD_TYPE_XDELTA:
-            returncode, _stdout, stderr = self.g3mtool.xpatch_apply(
+            returncode, stdout, stderr = self.g3mtool.xpatch_apply(
                 data_win_path,
                 patch_file,
                 modified_output,
@@ -1058,7 +1057,7 @@ class G3MToolPatchingService(QObject):
                 ),
             )
             if returncode != 0 or not os.path.exists(modified_output):
-                error_text = stderr[:200] or "Unknown error"
+                error_text = (stderr or stdout)[:200] or "Unknown error"
                 self.patching_logger.error(
                     "Failed to materialize xdelta merge patch %s: %s",
                     patch_file,
@@ -1086,7 +1085,7 @@ class G3MToolPatchingService(QObject):
         else:
             return patch_file
 
-        returncode, _stdout, stderr = self.g3mtool.patch_create(
+        returncode, stdout, stderr = self.g3mtool.patch_create(
             data_win_path,
             modified_output,
             generated_patch,
@@ -1103,7 +1102,7 @@ class G3MToolPatchingService(QObject):
             ),
         )
         if returncode != 0 or not os.path.exists(generated_patch):
-            error_text = stderr[:200] or "Unknown error"
+            error_text = (stderr or stdout)[:200] or "Unknown error"
             self.patching_logger.error(
                 "Failed to create mergeable g3mpatch from %s: %s",
                 patch_file,
@@ -1116,7 +1115,9 @@ class G3MToolPatchingService(QObject):
         emit_materialize_progress(1.0)
         return generated_patch
 
-    def _persist_conflict_artifacts(self, report_path: str, chapter_id: str) -> str | None:
+    def _persist_conflict_artifacts(
+        self, report_path: str, chapter_id: str
+    ) -> str | None:
         """Persist temp merge report and write conflict logs without archiving markdown into logs."""
         try:
             archive_dir = _get_patching_logs_dir()
@@ -1133,7 +1134,9 @@ class G3MToolPatchingService(QObject):
             shutil.copy2(report_path, conflicts_dest)
             shutil.copy2(report_path, current_conflicts_log)
             _enforce_archive_limit(archive_dir)
-            self.patching_logger.info("Conflict artifacts saved for chapter %s", chapter_id)
+            self.patching_logger.info(
+                "Conflict artifacts saved for chapter %s", chapter_id
+            )
             self._enforce_temp_report_limit(temp_reports_dir)
             return report_dest
         except Exception as e:
@@ -1322,9 +1325,7 @@ class G3MToolPatchingService(QObject):
         if not self.g3mtool.is_available():
             return False
         temp_output = target_file + ".tmp"
-        returncode, _, _ = self.g3mtool.xpatch_apply(
-            target_file, patch_path, temp_output
-        )
+        returncode = self.g3mtool.xpatch_apply(target_file, patch_path, temp_output)[0]
         if returncode == 0 and os.path.exists(temp_output):
             try:
                 shutil.move(temp_output, target_file)
@@ -1368,7 +1369,7 @@ class G3MToolPatchingService(QObject):
         content = self._read_report_content()
         if not content:
             return False
-        total, _ = self._parse_conflict_counts(content)
+        total = self._parse_conflict_counts(content)[0]
         return total > 0
 
     def get_report_stats(self) -> tuple[int, int]:

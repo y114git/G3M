@@ -320,7 +320,7 @@ def parse_extra_files_raw(
             elif isinstance(ef_data, str):
                 _append_entry(ef_data)
     elif isinstance(extra_files_raw, dict):
-        for _group_key, filenames in extra_files_raw.items():
+        for filenames in extra_files_raw.values():
             if isinstance(filenames, list):
                 for filename in filenames:
                     _append_entry(filename)

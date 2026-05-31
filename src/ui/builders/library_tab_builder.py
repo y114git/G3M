@@ -3,6 +3,7 @@ from typing import Any
 
 from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QWIDGETSIZE_MAX,
     QCheckBox,
     QComboBox,
     QFrame,
@@ -10,7 +11,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
-    QWIDGETSIZE_MAX,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -496,7 +496,7 @@ class LibraryTabBuilder(QObject):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(14)
         modding_tools_btn = create_modding_tools_button(self.app_state)
         downloads_btn = create_downloads_button(self.app_state)
         search_btn = create_search_button(self.app_state)

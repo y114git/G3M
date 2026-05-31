@@ -9,6 +9,7 @@ from utils.file_utils import save_json
 
 class TestModOperationsController:
     """Tests for controllers."""
+
     def test_mod_operations_controller_initialization(
         self, app_state, feedback_service
     ):
@@ -98,12 +99,18 @@ class TestGameLaunchControllerRefresh:
         controller.refresh_mods_in_use()
 
         assert used_mods_service.used_mods["deltarune_0"] == [refreshed_mod]
-        assert used_mods_service.used_mods["deltarune_0"][0].get_chapter_data(
-            "deltarune_4"
-        ) is None
-        assert used_mods_service.used_mods["deltarune_0"][0].get_chapter_data(
-            "deltarune_0"
-        ) is not None
+        assert (
+            used_mods_service.used_mods["deltarune_0"][0].get_chapter_data(
+                "deltarune_4"
+            )
+            is None
+        )
+        assert (
+            used_mods_service.used_mods["deltarune_0"][0].get_chapter_data(
+                "deltarune_0"
+            )
+            is not None
+        )
 
 
 class TestTabHandler:
@@ -123,6 +130,7 @@ class TestTabHandler:
 
 class TestLibraryDisplayController:
     """Tests for controllers."""
+
     def test_library_display_controller_initialization(
         self, app_state, feedback_service
     ):
@@ -226,7 +234,9 @@ class TestLibraryDisplayController:
         controller.update_display()
         controller.refresh_async.assert_called_once()
 
-    def test_library_display_refresh_async_clears_render_signature(self, app_state, feedback_service):
+    def test_library_display_refresh_async_clears_render_signature(
+        self, app_state, feedback_service
+    ):
         """Checks that librarying refresh async clears cached render signature."""
         from controllers.library_display_controller import LibraryDisplayController
 
@@ -356,6 +366,7 @@ class TestLibraryDisplayController:
 
 class TestModImportExportController:
     """Tests for controllers."""
+
     def test_materialize_local_import_keeps_plain_files(self, temp_dir):
         """Checks that materializeing local import keeps plain files."""
         from controllers.mod_import_export_controller import ModImportExportController
@@ -364,10 +375,14 @@ class TestModImportExportController:
         with open(source_file, "wb") as handle:
             handle.write(b"png")
 
-        controller = ModImportExportController(Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock())
+        controller = ModImportExportController(
+            Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock()
+        )
 
         with tempfile.TemporaryDirectory() as extract_dir:
-            content_path = controller._materialize_local_import(source_file, extract_dir)
+            content_path = controller._materialize_local_import(
+                source_file, extract_dir
+            )
             assert content_path == extract_dir
             assert os.path.isfile(os.path.join(extract_dir, "sample.png"))
 
@@ -392,7 +407,9 @@ class TestModImportExportController:
             },
             indent=2,
         )
-        with open(os.path.join(content_path, "patch.xdelta"), "w", encoding="utf-8") as handle:
+        with open(
+            os.path.join(content_path, "patch.xdelta"), "w", encoding="utf-8"
+        ) as handle:
             handle.write("patch")
 
         controller._materialize_local_import = Mock(return_value=content_path)
@@ -400,9 +417,14 @@ class TestModImportExportController:
 
         with (
             patch("controllers.mod_import_export_controller.QMessageBox.information"),
-            patch("controllers.mod_import_export_controller.find_deltamod_info_file", return_value=False),
+            patch(
+                "controllers.mod_import_export_controller.find_deltamod_info_file",
+                return_value=False,
+            ),
         ):
-            controller._install_mod_from_file(os.path.join(temp_dir, "archive-name.zip"))
+            controller._install_mod_from_file(
+                os.path.join(temp_dir, "archive-name.zip")
+            )
 
         assert os.path.isdir(os.path.join(temp_dir, "Real Mod Name"))
         assert not os.path.exists(os.path.join(temp_dir, "archive-name"))
@@ -518,6 +540,7 @@ class TestModImportExportController:
 
 class TestSettingsController:
     """Tests for controllers."""
+
     def test_update_tab_visibility_shows_placeholder_when_no_main_tabs_remain(
         self, app_state
     ):
@@ -552,6 +575,7 @@ class TestSettingsController:
 
 class TestSearchDisplayController:
     """Tests for controllers."""
+
     def test_search_display_controller_initialization(
         self, app_state, feedback_service
     ):
@@ -709,6 +733,86 @@ class TestSearchDisplayController:
 
         controller._load_more_gamebanana_mods_if_needed.assert_called_once_with()
 
+    def test_show_bottom_loading_indicator_places_label_on_next_full_row(
+        self, app_state, feedback_service, monkeypatch
+    ):
+        """Checks that bottom loading indicator starts on a new row without extra columns."""
+        from controllers.search_display_controller import SearchDisplayController
+
+        layout = Mock()
+        layout.count.return_value = 5
+        layout.itemAt.return_value = None
+        app_window = Mock(mod_list_layout=layout)
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        controller._mod_list_column_count = Mock(return_value=4)
+        placed = []
+
+        def _capture(widget, position, column_span=1, alignment=None):
+            placed.append((position, column_span))
+
+        controller._place_layout_widget = _capture
+
+        controller._show_bottom_loading_indicator()
+
+        assert placed == [(8, 1)]
+
+    def test_on_scroll_value_changed_prefetches_before_reaching_bottom(
+        self, app_state, feedback_service
+    ):
+        """Checks that scrolling prefetches before reaching the exact bottom."""
+        from controllers.search_display_controller import SearchDisplayController
+
+        scroll = Mock()
+        bar = Mock()
+        bar.maximum.return_value = 2000
+        scroll.verticalScrollBar.return_value = bar
+        viewport = Mock()
+        viewport.height.return_value = 900
+        scroll.viewport.return_value = viewport
+        app_window = Mock(mods_browser_scroll=scroll, mod_list_widget=Mock())
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        controller._virtual_scroll_debounce = Mock()
+        controller._virtual_scroll_debounce.call = Mock()
+        controller._load_more_gamebanana_mods_if_needed = Mock()
+
+        controller.on_scroll_value_changed(1450)
+
+        controller._load_more_gamebanana_mods_if_needed.assert_called_once_with()
+
+    def test_load_more_prefetch_threshold_covers_viewport(
+        self, app_state, feedback_service
+    ):
+        """Checks that prefetch starts early enough to avoid reaching an empty bottom."""
+        from controllers.search_display_controller import SearchDisplayController
+
+        scroll = Mock()
+        viewport = Mock()
+        viewport.height.return_value = 900
+        scroll.viewport.return_value = viewport
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=Mock(mods_browser_scroll=scroll, mod_list_layout=Mock()),
+        )
+        controller._first_visible_card_height = Mock(return_value=260)
+        controller._mod_list_spacing = Mock(return_value=18)
+
+        assert controller._load_more_prefetch_threshold() >= 2250
+
     def test_search_filters_include_cyop_afom_only_for_pizzatower(
         self, app_state, feedback_service
     ):
@@ -831,6 +935,7 @@ class TestLibraryCyopAfomFilter:
 
 class TestSettingsUiController:
     """Tests for controllers."""
+
     def test_settings_ui_controller_initialization(
         self, app_state, feedback_service, qapp
     ):
@@ -869,6 +974,7 @@ class TestSettingsUiController:
 
 class TestThemeController:
     """Tests for controllers."""
+
     def test_theme_controller_initialization(self, app_state, feedback_service, qapp):
         """Checks that themeing controller initialization."""
         from controllers.theme_controller import ThemeController
@@ -1096,7 +1202,9 @@ class TestThemeController:
             ),
             patch("controllers.theme_controller.BgLoader"),
             patch("controllers.theme_controller.build_stylesheet", return_value=""),
-            patch("PyQt6.QtCore.QTimer.singleShot", side_effect=lambda _delay, cb: cb()),
+            patch(
+                "PyQt6.QtCore.QTimer.singleShot", side_effect=lambda _delay, cb: cb()
+            ),
             patch.object(RealQApplication, "instance", return_value=None),
             patch("controllers.theme_controller.QApplication", RealQApplication),
         ):
@@ -1205,7 +1313,9 @@ class TestThemeController:
         ]
 
         for widget in expected_widgets:
-            assert widget in called_widgets, f"Expected widget {widget} not found in refresh calls"
+            assert widget in called_widgets, (
+                f"Expected widget {widget} not found in refresh calls"
+            )
 
         assert refresh_icon_mock.call_count >= len(expected_widgets)
         app_window.mod_summary_panel.refresh_theme.assert_called_once()
@@ -1289,6 +1399,7 @@ class TestThemeController:
 
 class TestGameLaunchController:
     """Tests for controllers."""
+
     def test_game_launch_controller_initialization(
         self, app_state, feedback_service, qapp
     ):
@@ -1378,6 +1489,7 @@ class TestGameLaunchController:
 
 class TestAppWindowRestore:
     """Tests for controllers."""
+
     def test_on_window_restore_requested_uses_show_maximized_for_saved_maximized_state(
         self,
     ):
