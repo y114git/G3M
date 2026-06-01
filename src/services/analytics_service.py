@@ -17,6 +17,7 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
+import requests
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 class _AnalyticsUploadWorker(QObject):
     finished = pyqtSignal(bool, int)
+    _REQUEST_TIMEOUT_SECONDS = min(2, NETWORK_TIMEOUT_SHORT)
 
     def __init__(self, batch: list[dict[str, Any]]) -> None:
         super().__init__()
@@ -37,7 +39,9 @@ class _AnalyticsUploadWorker(QObject):
 
     def run(self) -> None:
         success = False
+        session = None
         try:
+            session = requests.Session()
             success = True
             for payload in self._merge_batch(self._batch):
                 encoded = base64.b64encode(
@@ -53,13 +57,18 @@ class _AnalyticsUploadWorker(QObject):
                 response = cloud_function_request(
                     "post",
                     f"{CLOUD_FUNCTIONS_BASE_URL}/ingestAnalytics",
+                    session=session,
                     json={"encoding": "gzip+base64", "payload": encoded},
-                    timeout=NETWORK_TIMEOUT_SHORT,
+                    timeout=self._REQUEST_TIMEOUT_SECONDS,
                 )
                 if not response or getattr(response, "status_code", 500) >= 300:
                     success = False
         except Exception as e:
             logger.debug("Analytics flush failed: %s", e, exc_info=True)
+        finally:
+            with contextlib.suppress(Exception):
+                if session is not None:
+                    session.close()
         with contextlib.suppress(RuntimeError):
             self.finished.emit(success, len(self._batch))
 
@@ -488,10 +497,17 @@ class AnalyticsService(QObject):
         worker = _AnalyticsUploadWorker(batch)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(self._on_upload_finished)
+        worker.finished.connect(
+            lambda success, size, upload_thread=thread: self._on_upload_finished(
+                success, size, upload_thread
+            )
+        )
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(
+            lambda upload_thread=thread: self._on_upload_thread_finished(upload_thread)
+        )
         self._upload_in_flight = list(batch)
         self._upload_batch_size = len(batch)
         self._upload_thread = thread
@@ -499,7 +515,9 @@ class AnalyticsService(QObject):
         self._save_state()
         thread.start()
 
-    def _on_upload_finished(self, success: bool, batch_size: int) -> None:
+    def _on_upload_finished(
+        self, success: bool, batch_size: int, upload_thread: QThread
+    ) -> None:
         in_flight = list(self._upload_in_flight)
         if success and in_flight:
             remaining_pending = list(self._pending)
@@ -508,9 +526,16 @@ class AnalyticsService(QObject):
                     remaining_pending.remove(payload)
             self._pending = remaining_pending
         self._upload_worker = None
-        self._upload_thread = None
         self._upload_batch_size = 0
         self._upload_in_flight = []
+        self._save_state()
+        if self._upload_thread is not upload_thread:
+            return
+
+    def _on_upload_thread_finished(self, upload_thread: QThread) -> None:
+        if self._upload_thread is not upload_thread:
+            return
+        self._upload_thread = None
         self._save_state()
         if self._pending and not self._session_closed:
             self._schedule_flush(250)
@@ -578,12 +603,17 @@ class AnalyticsService(QObject):
                 with contextlib.suppress(Exception):
                     app.processEvents()
             if thread.wait(25):
+                if app is not None:
+                    with contextlib.suppress(Exception):
+                        app.processEvents()
                 break
         if self._upload_thread is thread and thread.isRunning():
             safe_stop_thread(thread, timeout=750, blocking=True)
             if app is not None:
                 with contextlib.suppress(Exception):
                     app.processEvents()
+        elif self._upload_thread is thread and not thread.isRunning():
+            self._on_upload_thread_finished(thread)
 
     def _enqueue_session_payload(self, transient: bool = False) -> None:
         if not self._always_on and not self._opt_in:

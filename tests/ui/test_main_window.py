@@ -1,7 +1,7 @@
 import os
 from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, QRect, Qt
 from PyQt6.QtTest import QTest
 
 from services.localization_service import tr
@@ -1119,4 +1119,50 @@ class TestTabBuilders:
                 scheduled[-1]()
                 assert calls == ["builder", "builder"]
             finally:
+                _close_app_window(qapp, window)
+
+    def test_custom_tooltip_uses_target_screen_geometry(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                anchor = QPoint(1900, 110)
+                screen_geometry = QRect(1600, 0, 320, 220)
+                target = Mock()
+                target.screen.return_value = Mock(
+                    availableGeometry=Mock(return_value=screen_geometry)
+                )
+                target.rect.return_value.bottomLeft.return_value = QPoint(0, 0)
+                target.mapToGlobal.return_value = anchor
+
+                window._last_tooltip_text = "Close"
+                window._last_tooltip_target = target
+                window._last_tooltip_global_pos = anchor
+
+                with patch("app.window.QApplication.primaryScreen") as primary_screen:
+                    primary_screen.return_value = Mock(
+                        availableGeometry=Mock(return_value=QRect(0, 0, 300, 120))
+                    )
+                    window._show_custom_tooltip()
+
+                tooltip = window._tooltip_widget
+                assert tooltip is not None
+                assert tooltip.isVisible()
+                assert tooltip.x() >= screen_geometry.left()
+                assert tooltip.x() + tooltip.width() <= screen_geometry.right() + 1
+            finally:
+                _close_widget(qapp, getattr(window, "_tooltip_widget", None))
                 _close_app_window(qapp, window)

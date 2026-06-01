@@ -44,4 +44,8 @@ class SessionManager(QObject):
 
     def stop(self) -> None:
         self.timer.stop()
-        safe_stop_thread(self.thread, timeout=2000, blocking=True)
+        timeout_ms = max(
+            2000,
+            int((getattr(self.worker, "_REQUEST_TIMEOUT_SECONDS", 2) + 0.5) * 1000),
+        )
+        safe_stop_thread(self.thread, timeout=timeout_ms, blocking=True)

@@ -401,6 +401,10 @@ class TestSettingsManager:
         invalid_dir = tmp_path / "invalid_game"
         invalid_dir.mkdir()
         monkeypatch.setattr(
+            "services.settings_service.QFileDialog.getOpenFileName",
+            lambda *args, **kwargs: ("", ""),
+        )
+        monkeypatch.setattr(
             "services.settings_service.QFileDialog.getExistingDirectory",
             lambda *args, **kwargs: str(invalid_dir),
         )

@@ -13,7 +13,6 @@ from ui.utils.ui_utils import safe_stop_thread
 
 _THREAD_ATTRS = (
     "_compatibility_thread",
-    "_network_init_thread",
     "_mod_scan_thread",
     "_bg_loader",
     "_catalog_worker",
@@ -35,13 +34,34 @@ _THREAD_ATTRS = (
 _THREAD_CONTAINER_ATTRS = ("_workers", "_load_more_threads")
 
 
+def _is_managed_shutdown_thread(w, thread, owner) -> bool:
+    managed_owners = []
+    for attr in ("analytics_service", "session_manager"):
+        candidate = getattr(w, attr, None)
+        if candidate is not None:
+            managed_owners.append(candidate)
+    if owner in managed_owners:
+        return True
+    with contextlib.suppress(Exception):
+        parent = thread.parent()
+        if parent in managed_owners:
+            return True
+    return False
+
+
+def _thread_running_state(thread):
+    with contextlib.suppress(RuntimeError, AttributeError, TypeError):
+        return thread.isRunning()
+    return None
+
+
 def _iter_shutdown_threads(w):
     seen = set()
 
-    def emit(thread):
+    def emit(thread, owner=None, source=None):
         if isinstance(thread, QThread) and id(thread) not in seen:
             seen.add(id(thread))
-            return thread
+            return thread, owner, source
         return None
 
     owners = [w]
@@ -50,19 +70,19 @@ def _iter_shutdown_threads(w):
     for owner in owners:
         if owner is None:
             continue
-        if thread := emit(owner):
-            yield thread
+        if payload := emit(owner, owner=owner, source="<owner>"):
+            yield payload
         for attr in _THREAD_ATTRS:
-            if thread := emit(getattr(owner, attr, None)):
-                yield thread
+            if payload := emit(getattr(owner, attr, None), owner=owner, source=attr):
+                yield payload
         for attr in _THREAD_CONTAINER_ATTRS:
             container = getattr(owner, attr, None)
             values = container.values() if isinstance(container, Mapping) else container
             if not values:
                 continue
             for candidate in values:
-                if thread := emit(candidate):
-                    yield thread
+                if payload := emit(candidate, owner=owner, source=attr):
+                    yield payload
 
 
 def perform_close_cleanup(w):
@@ -76,9 +96,31 @@ def perform_close_cleanup(w):
         if getattr(w, "search_display", None) and w.search_display:
             with contextlib.suppress(Exception):
                 w.search_display.cleanup()
-        for thread in _iter_shutdown_threads(w):
+        for thread, owner, source in _iter_shutdown_threads(w):
+            if _is_managed_shutdown_thread(w, thread, owner):
+                logging.debug(
+                    "Cleanup skipping managed thread source=%s owner=%s object=%r",
+                    source,
+                    type(owner).__name__ if owner is not None else None,
+                    thread,
+                )
+                continue
+            logging.debug(
+                "Cleanup stopping thread source=%s owner=%s running=%s object=%r",
+                source,
+                type(owner).__name__ if owner is not None else None,
+                _thread_running_state(thread),
+                thread,
+            )
             w._safe_set_parent_none(thread)
             safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT, blocking=True)
+            logging.debug(
+                "Cleanup stopped thread source=%s owner=%s running=%s object=%r",
+                source,
+                type(owner).__name__ if owner is not None else None,
+                _thread_running_state(thread),
+                thread,
+            )
         pool = QThreadPool.globalInstance()
         if pool is not None:
             pool.clear()

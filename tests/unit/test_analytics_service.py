@@ -3,7 +3,7 @@ import gzip
 import json
 import time
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from services.analytics_service import AnalyticsService, _AnalyticsUploadWorker
 
@@ -299,7 +299,7 @@ def test_analytics_service_shutdown_uses_less_aggressive_fallback_timeout(
         def wait(self, _timeout):
             return False
 
-        def isRunning(self): # noqa: N802
+        def isRunning(self):  # noqa: N802
             return True
 
     service._upload_thread = _StuckThread()
@@ -354,3 +354,57 @@ def test_analytics_service_shutdown_async_defers_callback_until_upload_finishes(
             time.sleep(0.01)
 
     assert callbacks == ["done"]
+
+
+def test_analytics_service_keeps_upload_thread_until_thread_finished(qapp, tmp_path):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+    service.count("always_event")
+    callbacks = []
+
+    with patch(
+        "services.analytics_service.cloud_function_request", return_value=_Response()
+    ):
+        service.shutdown_async(lambda: callbacks.append("done"))
+        deadline = time.time() + 2
+        while service._upload_worker is not None and time.time() < deadline:
+            qapp.processEvents()
+            time.sleep(0.01)
+
+        assert service._upload_thread is not None
+        assert callbacks == []
+
+        while not callbacks and time.time() < deadline:
+            qapp.processEvents()
+            time.sleep(0.01)
+
+    assert callbacks == ["done"]
+    assert service._upload_thread is None
+
+
+def test_analytics_upload_worker_uses_dedicated_session_and_bounded_timeout(qapp):
+    payload = {
+        "schema": 1,
+        "batch_id": "batch-a",
+        "client": {"app_version": "1", "os_family": "windows"},
+        "session": {"id": "session-a", "opt_in": True},
+        "always": [{"name": "event_a", "ts": 1, "dims": {}, "value": 1}],
+        "opt_in": [],
+    }
+    session = Mock()
+
+    with (
+        patch("services.analytics_service.requests.Session", return_value=session),
+        patch(
+            "services.analytics_service.cloud_function_request", return_value=_Response()
+        ) as request_call,
+    ):
+        _AnalyticsUploadWorker([payload]).run()
+
+    request_call.assert_called_once()
+    assert request_call.call_args.kwargs["session"] is session
+    assert (
+        request_call.call_args.kwargs["timeout"]
+        == _AnalyticsUploadWorker._REQUEST_TIMEOUT_SECONDS
+    )
+    session.close.assert_called_once_with()

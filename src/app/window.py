@@ -883,6 +883,10 @@ class AppWindow(QWidget):
                     return True
                 self._last_tooltip_text = text
                 self._last_tooltip_target = obj
+                global_pos = None
+                with contextlib.suppress(AttributeError, RuntimeError, TypeError):
+                    global_pos = ev.globalPos()
+                self._last_tooltip_global_pos = global_pos
                 if tooltip_timer:
                     tooltip_timer.start(50)
                 return True
@@ -960,8 +964,6 @@ class AppWindow(QWidget):
         if not last_tooltip_target or not last_tooltip_text:
             return
 
-        from PyQt6.QtGui import QCursor
-
         tooltip_widget = getattr(self, "_tooltip_widget", None)
         if tooltip_widget is None:
             tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
@@ -976,10 +978,33 @@ class AppWindow(QWidget):
             tooltip_widget.adjustSize()
             self._last_tooltip_size_key = last_tooltip_text
 
-        pos = QCursor.pos()
+        pos = getattr(self, "_last_tooltip_global_pos", None)
+        if pos is None:
+            with contextlib.suppress(RuntimeError, TypeError, AttributeError):
+                local_anchor = last_tooltip_target.rect().bottomLeft()
+                pos = last_tooltip_target.mapToGlobal(local_anchor)
+        if pos is None:
+            return
         pos += QPoint(10, 10)
 
-        screen = QApplication.primaryScreen().availableGeometry()
+        screen = None
+        with contextlib.suppress(RuntimeError, TypeError, AttributeError):
+            target_screen = last_tooltip_target.screen()
+            if target_screen is not None:
+                screen = target_screen.availableGeometry()
+        if screen is None:
+            app = QApplication.instance()
+            with contextlib.suppress(RuntimeError, TypeError, AttributeError):
+                target_screen = app.screenAt(pos) if app else None
+                if target_screen is not None:
+                    screen = target_screen.availableGeometry()
+        if screen is None:
+            with contextlib.suppress(RuntimeError, TypeError, AttributeError):
+                primary_screen = QApplication.primaryScreen()
+                if primary_screen is not None:
+                    screen = primary_screen.availableGeometry()
+        if screen is None:
+            return
         if pos.x() + tooltip_widget.width() > screen.right():
             pos.setX(screen.right() - tooltip_widget.width() - 5)
         if pos.y() + tooltip_widget.height() > screen.bottom():
@@ -1017,6 +1042,7 @@ class AppWindow(QWidget):
                 tooltip_widget._is_fading_out = False
         self._last_tooltip_target = None
         self._last_tooltip_text = ""
+        self._last_tooltip_global_pos = None
 
     def paintEvent(self, event):
         painter = QPainter(self)

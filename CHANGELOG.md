@@ -1,3 +1,89 @@
+### Version 3.1.0 — 01.06.26
+
+- **FRICKBEARS3 support**
+
+  - G3M now fully supports **FRICKBEARS3**.
+  - Game path setup, launch detection, full install, mod usage, patching, tabs, and game-specific settings now work for FRICKBEARS3 like they do for the other supported games.
+
+- **Japanese and Korean localization**
+
+  - Japanese and Korean were added as bundled languages.
+  - The Simplified Chinese font was also updated, so the interface should look cleaner and more consistent on different systems.
+
+- **INFO files**
+
+  - Mods can now include **INFO files** for readmes, instructions, descriptions, licenses, and other important bundled information.
+  - The mod editor now lets you configure INFO file order and visibility.
+  - Players can open those files directly from G3M instead of searching through the mod folder manually.
+  - Supported formats: `.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.pdf`.
+
+- **Patching and merge warnings**
+
+  - Patching and merge warnings were reworked.
+  - Instead of one broad skip option, warnings can now be managed more precisely.
+  - You can enable, disable, and hide specific warning types without turning off every important safety message.
+
+- **Windows menu and Log Viewer**
+
+  - A new **Windows** category was added to the top bar next to Help.
+  - A new **Log Viewer** was added there, so logs can be viewed directly inside the app.
+
+- **G3MTool cache**
+
+  - G3M now integrates with the G3MTool cache.
+  - This should speed up repeated patching, merging, and other G3MTool-based operations.
+  - The cache can be cleared from `Settings > Game > Patching / Merging`.
+
+- **Plugin API 1.1.0**
+
+  - Plugin API was updated to `1.1.0`.
+  - New hooks were added for shortcuts, patching, restore steps, main views, and settings views.
+  - Plugins can now integrate more deeply with mod launch flows, shortcut flows, and the G3M interface.
+
+- **Custom Saves Folders 1.1.0**
+
+  - Custom Saves Folders was updated to `1.1.0` and heavily reworked.
+  - The plugin now supports per-mod rules, profiles, more flexible save folder bindings, a better interface, and migration from older settings.
+  - Thanks to @jevil_deltarune1 for the ideas. Without him, this plugin would not exist in the first place.
+
+- **DR Save Manager 1.1.0**
+
+  - DR Save Manager was updated to `1.1.0`.
+  - It now supports the new Plugin API, shortcut integration, improved shortcut-flow behavior, and updated translations.
+
+- **Settings improvements**
+
+  - Settings were reworked in several places.
+  - In `Settings > Game`, path selection is no longer just a row of buttons. Paths are now shown in proper fields, making them easier to review and change.
+  - In `Settings > Plugins`, several bugs were fixed.
+  - Plugin Details now opens a compact details dialog first instead of immediately opening the plugin homepage.
+
+- **Mods Browser improvements**
+
+  - Mods Browser scrolling should now feel noticeably smoother.
+  - Card refreshing and list behavior were cleaned up.
+  - WIP mods now have their own label, making them easier to distinguish from regular releases.
+
+- **Modding Tools and archive handling**
+
+  - Deltamod and G3M archive handling was improved across import, Downloads auto-use, one-click install, and mod versions.
+  - Pizza Oven, CYOP/AFOM, extra files, and modpack archive flows were cleaned up so the same mod behaves more consistently across different parts of the app.
+
+- **Small quality-of-life and bug fixes**
+
+  - Removed the Report Issue button from the About dialog because it was no longer needed.
+  - Fixed cases where DATA files could fail to copy when selected as extra files.
+  - Fixed cross-game file leakage while creating modpacks.
+  - Improved extra file preservation during import, export, and modpack workflows.
+  - Game folder selection is now stricter and clearer: G3M checks that the selected folder contains a supported executable.
+  - Fixed a game path picker issue that could break the file dialog in tests and on some systems.
+  - Patching errors now more often show the real G3MTool/xdelta reason instead of a vague `unknown failure`.
+  - Merge conflict handling and conflict report saving were improved.
+  - Startup recovery was improved for cases where the main window stayed hidden after the splash screen.
+  - Fixed cases where a second app instance could show an unnecessary duplicate-instance error during protocol link handoff.
+  - App shutdown, temporary cleanup, and background task completion were made more reliable.
+  - Dependencies were updated and test coverage was expanded across patching, shortcuts, plugins, settings, dialogs, startup, and UI.
+
 ### Version 3.0.3 — 06.04.26
 
 - Added the ability to convert your mods into data.win or game.ios format (You can perform the conversion once and in the future applying the desired mod will be instant, however the mod will take up as much space as the original game plus the patch)
@@ -70,7 +156,7 @@
   - If the PizzaOven mod changes other files, those changes are also collected and saved into the final G3M mod as normal extra files.
   - After conversion, the result is much easier to manage inside G3M as a regular Pizza Tower mod.
   - Mods whose authors explicitly disabled PizzaOven one-click integration are not force-converted by this workflow.
-  - **GMLoader mods are detected separately and are not supported** 
+  - **GMLoader mods are detected separately and are not supported**
   - G3M now also supports **CYOP/AFOM-style Pizza Tower mods**, but this support works differently from PizzaOven conversion.
   - CYOP/AFOM archives are recognized from their own folder layout and level `.ini` data.
   - When such an archive is imported, G3M converts it into a Pizza Tower mod that keeps the required `towers` content in the right structure.
@@ -531,7 +617,7 @@
 
 ### Version 1.6.0 - 12.07.25
 
-* New feature: Save Manager! Now you can manage your saves directly in the launcher.
+- New feature: Save Manager! Now you can manage your saves directly in the launcher.
 
 - How to open: Go to "Settings" and click the new "Saves✨" button.
 

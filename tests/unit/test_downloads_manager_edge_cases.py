@@ -335,7 +335,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return None
 
-            def parentWidget(self): # noqa: N802
+            def parentWidget(self):  # noqa: N802
                 return None
 
         class FakeDialog:
@@ -345,7 +345,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self): # noqa: N802
+            def parentWidget(self):  # noqa: N802
                 return self._parent
 
         host = FakeWindow()
@@ -371,7 +371,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return None
 
-            def parentWidget(self): # noqa: N802
+            def parentWidget(self):  # noqa: N802
                 return None
 
         class FakeDialog:
@@ -381,7 +381,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self): # noqa: N802
+            def parentWidget(self):  # noqa: N802
                 return self._parent
 
         host = FakeWindow()
@@ -405,7 +405,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self): # noqa: N802
+            def parentWidget(self):  # noqa: N802
                 return self._parent
 
         class FakeB:
@@ -415,7 +415,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self): # noqa: N802
+            def parentWidget(self):  # noqa: N802
                 return self._parent
 
         a = FakeA()

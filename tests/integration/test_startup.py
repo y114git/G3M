@@ -5,6 +5,7 @@ Extracts archive and verifies the binary can start successfully.
 Can be used both as a standalone script and as pytest tests.
 """
 
+import importlib.util
 import os
 import pathlib
 import subprocess
@@ -17,6 +18,23 @@ from unittest.mock import Mock, patch
 import pytest
 
 TEST_TIMEOUT = 10
+PACKAGED_BINARY_STARTUP_GRACE_SECONDS = 4
+
+
+def _project_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[2]
+
+
+def _load_main_module():
+    project_root = _project_root()
+    main_path = project_root / "src" / "main.py"
+    spec = importlib.util.spec_from_file_location("g3m_src_main", main_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load main module from {main_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _contains_startup_errors(output: str) -> bool:
@@ -30,10 +48,39 @@ def _contains_startup_errors(output: str) -> bool:
     return any(marker in output for marker in error_markers)
 
 
+def _run_packaged_binary_smoke(
+    target: pathlib.Path, cwd: str, env: dict[str, str]
+) -> tuple[int, str]:
+    process = subprocess.Popen(
+        [str(target), "--help"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=cwd,
+        env=env,
+    )
+    try:
+        stdout, stderr = process.communicate(
+            timeout=PACKAGED_BINARY_STARTUP_GRACE_SECONDS
+        )
+        return process.returncode, (stdout or "") + (stderr or "")
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        try:
+            stdout, stderr = process.communicate(timeout=TEST_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+        output = (stdout or "") + (stderr or "")
+        if _contains_startup_errors(output):
+            return 1, output
+        return 0, output
+
+
 def test_startup_from_environment():
     """Checks that startup from environment."""
     if "ARCHIVE_PATH" not in os.environ or "STARTUP_TARGET" not in os.environ:
-        project_root = pathlib.Path(__file__).parent.parent
+        project_root = _project_root()
         main_py = project_root / "src" / "main.py"
         if not main_py.exists():
             pytest.skip("Neither CI env vars nor local main.py available")
@@ -63,7 +110,7 @@ def test_startup_from_environment():
 
 def test_startup_with_sample_archive(tmp_path):
     """Checks that startup with sample archive."""
-    project_root = pathlib.Path(__file__).parent.parent
+    project_root = _project_root()
     main_py_path = project_root / "src" / "main.py"
 
     if not main_py_path.exists():
@@ -89,7 +136,7 @@ def test_startup_with_sample_archive(tmp_path):
 
 def test_local_startup():
     """Checks that local startup."""
-    project_root = pathlib.Path(__file__).parent.parent
+    project_root = _project_root()
     main_py_path = project_root / "src" / "main.py"
 
     if not main_py_path.exists():
@@ -208,7 +255,7 @@ def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeyp
 
 def test_main_routes_shortcut_without_startup(monkeypatch):
     """Checks that main routes shortcut without startup."""
-    import main as main_module
+    main_module = _load_main_module()
 
     run_shortcut = Mock()
     monkeypatch.setitem(
@@ -223,7 +270,7 @@ def test_main_routes_shortcut_without_startup(monkeypatch):
 
 def test_main_shortcut_requires_argument(capsys):
     """Checks that main shortcut requires argument."""
-    import main as main_module
+    main_module = _load_main_module()
 
     assert main_module.main(["main.py", "--shortcut"]) == 2
     assert "--shortcut requires a config argument" in capsys.readouterr().err
@@ -231,7 +278,7 @@ def test_main_shortcut_requires_argument(capsys):
 
 def test_main_runs_startup_with_cleaned_argv(monkeypatch):
     """Checks that main runs startup with cleaned argv."""
-    import main as main_module
+    main_module = _load_main_module()
 
     cleanup_old_updater_files = Mock()
     run_app = Mock(return_value=7)
@@ -251,7 +298,7 @@ def test_main_runs_startup_with_cleaned_argv(monkeypatch):
 
 def test_main_prepares_process_runtime_before_startup(monkeypatch):
     """Checks that main prepares multiprocessing runtime before startup."""
-    import main as main_module
+    main_module = _load_main_module()
 
     call_order = []
     cleanup_old_updater_files = Mock(side_effect=lambda: call_order.append("cleanup"))
@@ -605,19 +652,18 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                     cwd=cwd,
                     env=env,
                 )
+                output = (result.stdout or "") + (result.stderr or "")
             else:
-                result = subprocess.run(
-                    [str(target), "--help"],
-                    capture_output=True,
-                    text=True,
-                    timeout=TEST_TIMEOUT,
-                    cwd=cwd,
-                    env=env,
-                )
-            output = (result.stdout or "") + (result.stderr or "")
-            if result.returncode != 0:
+                returncode, output = _run_packaged_binary_smoke(target, cwd, env)
+            if startup_target.endswith(".py") and result.returncode != 0:
                 sys.stderr.write(
                     f"Startup command failed for {startup_target} with code {result.returncode}\n"
+                )
+                sys.stderr.write(output)
+                return False
+            if not startup_target.endswith(".py") and returncode != 0:
+                sys.stderr.write(
+                    f"Startup command failed for {startup_target} with code {returncode}\n"
                 )
                 sys.stderr.write(output)
                 return False

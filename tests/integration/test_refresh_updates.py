@@ -135,10 +135,10 @@ class TestRefreshMetadataLoading:
             def start(self):
                 self.done._callback(True)
 
-            def isFinished(self): # noqa: N802
+            def isFinished(self):  # noqa: N802
                 return True
 
-            def deleteLater(self): # noqa: N802
+            def deleteLater(self):  # noqa: N802
                 return None
 
         with patch("controllers.refresh_controller._PostFetchWorker", _FakePostFetchWorker):

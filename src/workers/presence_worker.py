@@ -7,13 +7,18 @@ import time
 import requests
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from config.config import CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_SHORT
+from config.config import (
+    BROWSER_HEADERS,
+    CLOUD_FUNCTIONS_BASE_URL,
+    NETWORK_TIMEOUT_SHORT,
+)
 from utils.network_utils import cloud_function_request
 
 
 class PresenceWorker(QObject):
     finished, update_online_count = pyqtSignal(), pyqtSignal(int)
     _MIN_HEARTBEAT_INTERVAL_SECONDS = 120
+    _REQUEST_TIMEOUT_SECONDS = min(2, NETWORK_TIMEOUT_SHORT)
 
     def __init__(self, session_id, app_state=None) -> None:
         super().__init__()
@@ -42,12 +47,18 @@ class PresenceWorker(QObject):
             if now - self._last_heartbeat_at < self._MIN_HEARTBEAT_INTERVAL_SECONDS:
                 return
             self._busy = True
-            resp = cloud_function_request(
-                "post",
-                f"{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat",
-                json={"sessionId": self.session_id},
-                timeout=NETWORK_TIMEOUT_SHORT,
-            )
+            session = requests.Session()
+            try:
+                session.headers.update(BROWSER_HEADERS or {})
+                resp = cloud_function_request(
+                    "post",
+                    f"{CLOUD_FUNCTIONS_BASE_URL}/presenceHeartbeat",
+                    session=session,
+                    json={"sessionId": self.session_id},
+                    timeout=self._REQUEST_TIMEOUT_SECONDS,
+                )
+            finally:
+                session.close()
             self._last_heartbeat_at = now
             if resp is not None and resp.status_code == 200:
                 try:

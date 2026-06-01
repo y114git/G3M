@@ -25,14 +25,19 @@ try:
 except NameError:
     spec_dir = os.path.join(os.getcwd(), 'builds')
 project_root = os.path.dirname(spec_dir)
-env_path = os.path.join(project_root, '.env')
-print(f"Looking for .env at: {env_path}")
-print(f".env exists: {os.path.exists(env_path)}")
-if os.path.exists(env_path):
-    print(f"Adding .env to datas: {env_path} -> .")
-    datas_extra.append((env_path, '.'))
+env_candidates = [
+    os.path.join(project_root, 'src', '.env'),
+    os.path.join(project_root, '.env'),
+]
+for env_path in env_candidates:
+    print(f"Looking for .env at: {env_path}")
+    print(f".env exists: {os.path.exists(env_path)}")
+    if os.path.exists(env_path):
+        print(f"Adding .env to datas: {env_path} -> src")
+        datas_extra.append((env_path, 'src'))
+        break
 else:
-    print(f"WARNING: .env file not found at: {env_path}")
+    print(f"WARNING: .env file not found at any expected path: {env_candidates}")
 
 a = Analysis(
     ['../src/main.py'],

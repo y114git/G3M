@@ -1,6 +1,8 @@
 import sys
 import types
+from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv as real_load_dotenv
 
 
@@ -96,3 +98,13 @@ class TestConstants:
 
         expected = 30 * 60 * 1000
         assert expected == ONLINE_UPDATE_INTERVAL
+
+    def test_pyinstaller_spec_packages_dotenv_into_src(self):
+        """Checks that frozen builds package .env where config expects it."""
+        spec_path = Path(__file__).resolve().parents[2] / "builds" / "G3MExecutable.spec"
+        if not spec_path.exists():
+            pytest.skip("PyInstaller spec file is not available in this checkout")
+        spec_text = spec_path.read_text(encoding="utf-8")
+
+        assert "os.path.join(project_root, 'src', '.env')" in spec_text
+        assert "datas_extra.append((env_path, 'src'))" in spec_text

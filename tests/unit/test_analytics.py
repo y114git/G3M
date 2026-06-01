@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 FUNCTIONS_DIR = Path(__file__).resolve().parents[2] / "functions"
 ANALYTICS_MODULE = FUNCTIONS_DIR / "analytics.py"
 
@@ -33,7 +32,7 @@ def test_ingest_deduplicates_batches_and_sanitizes_local_files():
         "schema": 1,
         "batch_id": "batch-1",
         "client": {
-            "app_version": "3.0.3stable",
+            "app_version": "3.1.0",
             "os_family": "Windows",
             "os_version": "11.0.22631",
             "arch": "AMD64",
@@ -85,7 +84,7 @@ def test_query_filters_by_session_and_event():
         {
             "schema": 1,
             "batch_id": "batch-2",
-            "client": {"app_version": "3.0.3stable", "os_family": "Linux"},
+            "client": {"app_version": "3.1.0", "os_family": "Linux"},
             "session": {"id": "session-a", "opt_in": True},
             "always": [
                 {"name": "download_completed", "ts": 1_700_000_000, "dims": {"source": "gamebanana"}},

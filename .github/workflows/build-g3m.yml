@@ -9,31 +9,31 @@ on:
         type: boolean
         default: true
       version_and_tag:
-        description: "Release Version and Tag (e.g., v2.0.0 or v2.0.0-beta) - Required if publishing release"
+        description: "Release version and tag exactly as it should appear (e.g., 3.1.0) - Required if publishing release"
         required: false
         type: string
       release_name:
-        description: "Release Name (e.g., v2.0.0 Beta) - Required if publishing release"
+        description: "Release name (e.g., G3M 3.1.0) - Required if publishing release"
         required: false
         type: string
       archive_name_linux:
-        description: "Archive name for Linux (e.g., G3M-Linux-v2.0.0)"
+        description: "Archive name for Linux (e.g., G3M-Linux-3.1.0)"
         required: false
         type: string
       archive_name_macos_x64:
-        description: "Archive name for macOS x64 (e.g., G3M-macOS-x64-v2.0.0)"
+        description: "Archive name for macOS x64 (e.g., G3M-macOS-x64-3.1.0)"
         required: false
         type: string
       archive_name_macos_arm64:
-        description: "Archive name for macOS arm64 (e.g., G3M-macOS-arm64-v2.0.0)"
+        description: "Archive name for macOS arm64 (e.g., G3M-macOS-arm64-3.1.0)"
         required: false
         type: string
       archive_name_windows:
-        description: "Archive name for Windows Portable (e.g., G3M-Windows-v2.0.0)"
+        description: "Archive name for Windows Portable (e.g., G3M-Windows-3.1.0)"
         required: false
         type: string
       archive_name_windows_setup:
-        description: "Archive name for Windows Setup (e.g., G3M-Windows-Setup-v2.0.0)"
+        description: "Archive name for Windows Setup (e.g., G3M-Windows-Setup-3.1.0)"
         required: false
         type: string
 
@@ -236,7 +236,7 @@ jobs:
         env:
           ARCHIVE_PATH: ${{ steps.set_names.outputs.archive_path }}
           STARTUP_TARGET: ${{ matrix.startup_target }}
-        run: python tests/test_startup.py
+        run: python tests/integration/test_startup.py
 
       - name: Test startup (Windows)
         if: runner.os == 'Windows'
@@ -244,7 +244,7 @@ jobs:
         env:
           ARCHIVE_PATH: ${{ steps.set_names.outputs.archive_path }}
           STARTUP_TARGET: ${{ matrix.startup_target }}
-        run: python tests/test_startup.py
+        run: python tests/integration/test_startup.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -259,7 +259,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $ver = $env:RELEASE_VERSION.TrimStart('v')
+          $ver = $env:RELEASE_VERSION.Trim()
           $content = Get-Content -Path builds/G3MWindowsInstaller.iss -Raw
           $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
           $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -275,7 +275,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path Output -Filter "G3M_setup_v*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem -Path Output -Filter "G3M_setup_*.exe" | Select-Object -First 1
           if (-not $exe) { Write-Error 'Installer not found'; exit 1 }
           Compress-Archive -Path $exe.FullName -DestinationPath "${{ steps.set_names.outputs.setup_archive_path }}" -Force
 

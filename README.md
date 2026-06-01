@@ -52,7 +52,7 @@
 
 G3M *(Formerly DELTAHUB)* is a desktop manager for GameMaker mod workflows. It combines GameBanana browsing, local library management, profile switching, mod and game versioning, patch utilities, custom game support, and optional plugins in one PyQt6 application.
 
-The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTALE Yellow, Pizza Tower, and Sugary Spire, while also allowing custom games to be added through the in-app Game Manager.
+The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTALE Yellow, Pizza Tower, Sugary Spire, and FRICKBEARS3, while also allowing custom games to be added through the in-app Game Manager.
 
 ## Highlights
 
@@ -107,9 +107,9 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 
 ### Plugins and extra tools
 
-- Load plugins from an online catalog or from local archives and folders. Installed plugins are scanned, validated against the plugin API version, and marked as enabled, incompatible, broken, or local-only.
+- Load plugins from an online catalog or from local archives and folders. Installed plugins are scanned, validated for manifest shape, hooks, tags, relations, and file safety, then marked as installed, enabled, broken, local-only, or update-available.
 - Toggle plugins on and off, open plugin settings, and surface plugin-provided main views and hooks through the runtime service.
-- The bundled catalog currently exposes the `DR Save Manager` plugin, which adds DELTARUNE save collection management, import and export tools, pre-launch collection switching, and a save editor with Simple and Advanced modes.
+- The bundled catalog currently exposes `DR Save Manager` for DELTARUNE save collection management and `Custom Saves Folders` for per-game, per-profile, or per-mod save folder switching.
 - G3M still includes an anonymous in-app chat dialog with language channels. It is part of the current UI and uses the app's network-backed chat service when that backend is configured and reachable.
 
 ### Interface, help, and privacy
@@ -119,7 +119,7 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 - Change UI scale, border radius, theme colors, background media, startup sound behavior, and related appearance options from settings.
 - Hide the Library tab if you want a slimmer layout for browsing and tool-focused use.
 - Use bundled language packs or add external language files. G3M currently ships with English, Russian, Spanish, Korean, Japanese, Chinese Simplified, and Chinese Traditional.
-- Anonymous analytics are opt-in. The analytics service checks the local opt-in flag before recording or flushing batches.
+- Anonymous analytics use two tiers. A small aggregate tier is always recorded; the extra-detail tier is disabled unless the local opt-in flag is enabled.
 
 ## Supported Games
 
@@ -131,6 +131,7 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 | UNDERTALE Yellow | Yes | Yes | Includes a built-in full-install. |
 | Pizza Tower | Yes | Yes | Includes PizzaOven conversion and CYOP/AFOM handling. |
 | Sugary Spire | Yes | Yes | Included in the built-in registry and marked for full-install support. |
+| FRICKBEARS3 | Yes | Yes | Included in the built-in registry and marked for full-install support. |
 
 Custom games can be added in the Game Manager. A custom game can define its executable, DATA filename, optional Steam App ID, and optional GameBanana ID, and visible custom games can participate in search when a valid GameBanana ID is provided.
 
@@ -140,9 +141,10 @@ G3M has a plugin catalog service, install service, runtime loader, persistent pl
 
 Plugin manifests can also declare required or conflicting plugins, and the runtime enforces those relations when enabling plugins.
 
-The catalog committed in this repository currently contains one published plugin:
+The catalog committed in this repository currently contains two published plugins:
 
 - `DR Save Manager` for DELTARUNE save collections and save editing.
+- `Custom Saves Folders` for switching save folders by game, profile, or selected mods.
 
 Local plugins are also supported. Manual installs are marked separately from catalog-backed installs so the UI can distinguish local-only plugins from catalog entries.
 

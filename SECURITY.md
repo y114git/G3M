@@ -2,13 +2,13 @@
 
 ## Supported Versions
 
-Security fixes are provided on a best-effort basis for the latest `stable`
-branch and the latest published release.
+Security fixes are provided on a best-effort basis for the `main` branch and
+the latest published release.
 
 | Version | Supported |
 | --- | --- |
 | latest release | yes |
-| `stable` | yes |
+| `main` | yes |
 | older releases | no |
 
 ## Reporting a Vulnerability
@@ -36,4 +36,3 @@ Please report security issues privately.
 - G3M includes bundled tools and local file operations.
 - Treat untrusted archives, mods, scripts, and external downloads as
   untrusted input.
-

@@ -21,7 +21,7 @@ if _dotenv_path.is_file():
     load_dotenv(dotenv_path=_dotenv_path)
 
 """Application identity and external service configuration."""
-APP_VERSION = "3.0.3stable"
+APP_VERSION = "3.1.0"
 APP_DISPLAY_NAME = "G3M"
 APP_ORGANIZATION_NAME = "g3m"
 APP_DATA_DIR_NAME = "G3M"
@@ -60,7 +60,7 @@ STEAM_APP_ID_PIZZA_TOWER = "2231450"
 """Plugin and profile runtime configuration."""
 PLUGIN_API_VERSION = "1.1.0"
 PLUGIN_CATALOG_URL = (
-    "https://raw.githubusercontent.com/y114git/G3M/stable/catalog/plugins/plugins.json"
+    "https://raw.githubusercontent.com/y114git/G3M/main/catalog/plugins/plugins.json"
 )
 PLUGIN_HOOKS = {
     "app_ready",

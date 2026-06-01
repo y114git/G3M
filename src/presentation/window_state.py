@@ -12,6 +12,7 @@ def initialize_window_runtime(window) -> None:
     window._tooltip_timer.timeout.connect(window._show_custom_tooltip)
     window._last_tooltip_text = ""
     window._last_tooltip_target = None
+    window._last_tooltip_global_pos = None
     window._last_tooltip_size_key = None
     window.resize(875, 750)
     window._initial_size = window.size()
