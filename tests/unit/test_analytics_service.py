@@ -1,8 +1,11 @@
+import base64
+import gzip
+import json
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from services.analytics_service import AnalyticsService
+from services.analytics_service import AnalyticsService, _AnalyticsUploadWorker
 
 
 class _Response:
@@ -90,10 +93,74 @@ def test_analytics_service_keeps_stable_pending_payload_ids_in_memory(qapp, tmp_
 
     service.count("always_event")
     service._enqueue_session_payload()
-    first_payload_id = service._pending[0]["id"]
+    first_payload_id = service._pending[0]["batch_id"]
 
     recomputed_id = service._payload_id(service._pending[0])
     assert recomputed_id == first_payload_id
+
+
+def test_analytics_service_uploads_analytics_payload(qapp, tmp_path):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+    service.count("always_event", area="test")
+
+    captured = {}
+
+    def fake_request(method, url, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        encoded = kwargs["json"]["payload"]
+        captured["payload"] = json.loads(gzip.decompress(base64.b64decode(encoded)).decode("utf-8"))
+        return _Response()
+
+    with patch("services.analytics_service.cloud_function_request", side_effect=fake_request):
+        service.flush(force=True)
+        deadline = time.time() + 2
+        while service._upload_thread is not None and time.time() < deadline:
+            qapp.processEvents()
+            time.sleep(0.01)
+
+    assert captured["method"] == "post"
+    assert captured["url"].endswith("/ingestAnalytics")
+    assert captured["payload"]["schema"] == 1
+    assert captured["payload"]["batch_id"]
+    assert any(event["name"] == "always_event" for event in captured["payload"]["always"])
+
+
+def test_analytics_upload_worker_preserves_session_context_when_merging(qapp):
+    payloads = [
+        {
+            "schema": 1,
+            "batch_id": "batch-a",
+            "client": {"app_version": "1", "os_family": "windows"},
+            "session": {"id": "session-a", "opt_in": True},
+            "always": [{"name": "event_a", "ts": 1, "dims": {}, "value": 1}],
+            "opt_in": [],
+        },
+        {
+            "schema": 1,
+            "batch_id": "batch-b",
+            "client": {"app_version": "2", "os_family": "linux"},
+            "session": {"id": "session-b", "opt_in": True},
+            "always": [{"name": "event_b", "ts": 2, "dims": {}, "value": 1}],
+            "opt_in": [],
+        },
+    ]
+    captured = []
+
+    def fake_request(_method, _url, **kwargs):
+        encoded = kwargs["json"]["payload"]
+        captured.append(
+            json.loads(gzip.decompress(base64.b64decode(encoded)).decode("utf-8"))
+        )
+        return _Response()
+
+    with patch("services.analytics_service.cloud_function_request", side_effect=fake_request):
+        _AnalyticsUploadWorker(payloads).run()
+
+    assert [item["session"]["id"] for item in captured] == ["session-a", "session-b"]
+    assert [item["client"]["os_family"] for item in captured] == ["windows", "linux"]
+    assert [item["always"][0]["name"] for item in captured] == ["event_a", "event_b"]
 
 
 def test_analytics_service_never_creates_analytics_dir(qapp, tmp_path):
@@ -104,6 +171,61 @@ def test_analytics_service_never_creates_analytics_dir(qapp, tmp_path):
     service._save_state()
 
     assert not (tmp_path / "analytics").exists()
+
+
+def test_analytics_service_restores_pending_payloads(qapp, tmp_path):
+    app_state = SimpleNamespace(
+        local_config={"language": "en", "ui_scale": 1.0},
+        config_dir=str(tmp_path),
+    )
+    service = AnalyticsService(app_state)
+    service.count("always_event")
+    service._enqueue_session_payload()
+
+    restored = AnalyticsService(app_state)
+
+    assert restored._pending
+    assert restored._pending[0]["schema"] == 1
+    assert restored._pending[0]["batch_id"] == service._pending[0]["batch_id"]
+
+
+def test_analytics_service_filters_saved_pending_before_trimming(qapp, tmp_path, monkeypatch):
+    app_state = SimpleNamespace(
+        local_config={"language": "en", "ui_scale": 1.0},
+        config_dir=str(tmp_path),
+    )
+    state_path = tmp_path / "analytics_pending.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "pending": [
+                    {"schema": 1, "batch_id": "old-valid", "always": [{"name": "a"}]},
+                    {"schema": 0, "batch_id": "invalid-a"},
+                    {"schema": 0, "batch_id": "invalid-b"},
+                    {"schema": 1, "batch_id": "new-valid", "always": [{"name": "b"}]},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(AnalyticsService, "_MAX_PENDING_PAYLOADS", 2)
+
+    restored = AnalyticsService(app_state)
+
+    assert [payload["batch_id"] for payload in restored._pending] == [
+        "old-valid",
+        "new-valid",
+    ]
+
+
+def test_analytics_service_timezone_bucket_preserves_fractional_offsets(qapp, monkeypatch):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+    monkeypatch.setattr("services.analytics_service.time.timezone", -(5 * 3600 + 30 * 60))
+    monkeypatch.setattr("services.analytics_service.time.daylight", 0)
+
+    assert service._timezone_bucket() == "utc_plus_5_30"
 
 
 def test_analytics_service_records_download_use_completion_details(qapp, tmp_path):

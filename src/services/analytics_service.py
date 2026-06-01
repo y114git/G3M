@@ -12,6 +12,7 @@ import os
 import platform
 import sys
 import time
+import uuid
 from collections import Counter
 from collections.abc import Callable
 from typing import Any
@@ -37,27 +38,70 @@ class _AnalyticsUploadWorker(QObject):
     def run(self) -> None:
         success = False
         try:
-            encoded = base64.b64encode(
-                gzip.compress(
-                    json.dumps(
-                        {"v": 1, "b": self._batch},
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    ).encode("utf-8"),
-                    compresslevel=9,
+            success = True
+            for payload in self._merge_batch(self._batch):
+                encoded = base64.b64encode(
+                    gzip.compress(
+                        json.dumps(
+                            payload,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8"),
+                        compresslevel=9,
+                    )
+                ).decode("ascii")
+                response = cloud_function_request(
+                    "post",
+                    f"{CLOUD_FUNCTIONS_BASE_URL}/ingestAnalytics",
+                    json={"encoding": "gzip+base64", "payload": encoded},
+                    timeout=NETWORK_TIMEOUT_SHORT,
                 )
-            ).decode("ascii")
-            response = cloud_function_request(
-                "post",
-                f"{CLOUD_FUNCTIONS_BASE_URL}/ingestAnalytics",
-                json={"encoding": "gzip+base64", "payload": encoded},
-                timeout=NETWORK_TIMEOUT_SHORT,
-            )
-            success = bool(response) and getattr(response, "status_code", 500) < 300
+                if not response or getattr(response, "status_code", 500) >= 300:
+                    success = False
         except Exception as e:
             logger.debug("Analytics flush failed: %s", e, exc_info=True)
         with contextlib.suppress(RuntimeError):
             self.finished.emit(success, len(self._batch))
+
+    @staticmethod
+    def _merge_batch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if len(batch) == 1:
+            return [batch[0]]
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for payload in batch:
+            if not isinstance(payload, dict):
+                continue
+            session = payload.get("session") if isinstance(payload.get("session"), dict) else {}
+            group_key = str(session.get("id") or payload.get("batch_id") or "")
+            groups.setdefault(group_key, []).append(payload)
+        merged: list[dict[str, Any]] = []
+        for group in groups.values():
+            always: list[dict[str, Any]] = []
+            opt_in: list[dict[str, Any]] = []
+            ids: list[str] = []
+            client: dict[str, Any] = {}
+            session: dict[str, Any] = {}
+            for payload in group:
+                ids.append(str(payload.get("batch_id") or ""))
+                if not client and isinstance(payload.get("client"), dict):
+                    client = payload["client"]
+                if not session and isinstance(payload.get("session"), dict):
+                    session = payload["session"]
+                always.extend(payload.get("always") or [])
+                opt_in.extend(payload.get("opt_in") or [])
+            batch_id = hashlib.sha256("|".join(ids).encode("utf-8")).hexdigest()[:32]
+            merged.append(
+                {
+                    "schema": 1,
+                    "batch_id": batch_id,
+                    "sent_at": int(time.time()),
+                    "client": client,
+                    "session": session,
+                    "always": always,
+                    "opt_in": opt_in,
+                }
+            )
+        return merged
 
 
 class AnalyticsService(QObject):
@@ -76,6 +120,7 @@ class AnalyticsService(QObject):
     def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
         self.app_state = app_state
+        self._session_id = uuid.uuid4().hex
         self._always_on = Counter()
         self._opt_in = Counter()
         self._always_total = 0
@@ -128,15 +173,15 @@ class AnalyticsService(QObject):
                 for payload in self._upload_in_flight:
                     if not isinstance(payload, dict):
                         continue
-                    if payload.get("ao"):
-                        stripped.append({**payload, "oi": {}})
+                    if payload.get("always"):
+                        stripped.append({**payload, "opt_in": []})
                 self._upload_in_flight = stripped
             retained = []
             for payload in self._pending:
                 if not isinstance(payload, dict):
                     continue
-                if payload.get("ao"):
-                    retained.append({**payload, "oi": {}})
+                if payload.get("always"):
+                    retained.append({**payload, "opt_in": []})
             self._pending = retained[-self._MAX_PENDING_PAYLOADS :]
             self._schedule_state_save()
 
@@ -562,12 +607,18 @@ class AnalyticsService(QObject):
         opt_in: dict[str, int],
     ) -> dict[str, Any]:
         payload = {
-            "a": APP_VERSION,
-            "d": time.strftime("%Y-%m-%d", time.gmtime()),
-            "ao": always_on,
-            "oi": opt_in,
+            "schema": 1,
+            "sent_at": int(time.time()),
+            "client": self._client_payload(),
+            "session": {
+                "id": self._session_id,
+                "opt_in": self.opt_in_enabled,
+                "started_at": int(time.time() - (time.monotonic() - self._session_started_at)),
+            },
+            "always": self._counter_events(always_on),
+            "opt_in": self._counter_events(opt_in),
         }
-        payload["id"] = self._payload_id(payload)
+        payload["batch_id"] = self._payload_id(payload)
         return payload
 
     def _load_state(self) -> None:
@@ -576,9 +627,47 @@ class AnalyticsService(QObject):
         self._opt_in = Counter()
         self._always_total = 0
         self._opt_total = 0
+        path = self._state_path()
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            pending = payload.get("pending") if isinstance(payload, dict) else []
+            if isinstance(pending, list):
+                valid_pending = [
+                    item
+                    for item in pending
+                    if isinstance(item, dict) and item.get("schema") == 1
+                ]
+                self._pending = valid_pending[-self._MAX_PENDING_PAYLOADS :]
+        except (OSError, json.JSONDecodeError, TypeError):
+            self._pending = []
 
     def _save_state(self) -> None:
         self._state_timer.stop()
+        path = self._state_path(create_parent=True)
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {"schema": 1, "pending": self._pending[-self._MAX_PENDING_PAYLOADS :]},
+                    handle,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+        except OSError as e:
+            logger.debug("Analytics state save failed: %s", e, exc_info=True)
+
+    def _state_path(self, *, create_parent: bool = False) -> str:
+        config_dir = getattr(self.app_state, "config_dir", None)
+        if not config_dir:
+            return ""
+        if create_parent:
+            with contextlib.suppress(OSError):
+                os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, "analytics_pending.json")
 
     def _event_key(self, event: str, dims: dict[str, Any]) -> str:
         parts = [self._clean_value(event)]
@@ -591,10 +680,11 @@ class AnalyticsService(QObject):
     @staticmethod
     def _payload_id(payload: dict[str, Any]) -> str:
         normalized = {
-            "a": str(payload.get("a") or ""),
-            "d": str(payload.get("d") or ""),
-            "ao": payload.get("ao") if isinstance(payload.get("ao"), dict) else {},
-            "oi": payload.get("oi") if isinstance(payload.get("oi"), dict) else {},
+            "schema": int(payload.get("schema") or 0),
+            "client": payload.get("client") if isinstance(payload.get("client"), dict) else {},
+            "session": payload.get("session") if isinstance(payload.get("session"), dict) else {},
+            "always": payload.get("always") if isinstance(payload.get("always"), list) else [],
+            "opt_in": payload.get("opt_in") if isinstance(payload.get("opt_in"), list) else [],
         }
         raw = json.dumps(
             normalized,
@@ -603,6 +693,60 @@ class AnalyticsService(QObject):
             separators=(",", ":"),
         ).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()[:32]
+
+    def _client_payload(self) -> dict[str, Any]:
+        return {
+            "app_version": APP_VERSION,
+            "os_family": self._os_key(),
+            "os_version": self._clean_value(platform.release()),
+            "arch": self._clean_value(platform.machine()),
+            "locale": self._clean_value(self.app_state.local_config.get("language", "en")),
+            "timezone": self._timezone_bucket(),
+            "python": self._clean_value(f"{sys.version_info.major}.{sys.version_info.minor}"),
+        }
+
+    def _timezone_bucket(self) -> str:
+        offset_seconds = -time.timezone
+        if time.daylight and time.localtime().tm_isdst:
+            offset_seconds = -time.altzone
+        abs_offset = abs(int(offset_seconds))
+        offset_hours, remaining_seconds = divmod(abs_offset, 3600)
+        offset_minutes = remaining_seconds // 60
+        if offset_hours == 0 and offset_minutes == 0:
+            return "utc"
+        sign = "plus" if offset_seconds > 0 else "minus"
+        if offset_minutes:
+            return f"utc_{sign}_{offset_hours}_{offset_minutes}"
+        return f"utc_{sign}_{offset_hours}"
+
+    def _counter_events(self, counters: dict[str, int]) -> list[dict[str, Any]]:
+        now = int(time.time())
+        events = []
+        for key, value in sorted(counters.items()):
+            event, dims = self._parse_counter_key(key)
+            if not event:
+                continue
+            events.append(
+                {
+                    "name": event,
+                    "ts": now,
+                    "dims": dims,
+                    "value": int(value),
+                }
+            )
+        return events
+
+    def _parse_counter_key(self, key: str) -> tuple[str, dict[str, str]]:
+        parts = [part for part in str(key or "").split("|") if part]
+        if not parts:
+            return "", {}
+        event = parts[0]
+        dims: dict[str, str] = {}
+        for part in parts[1:]:
+            name, _, value = part.partition("=")
+            if name and value:
+                dims[name] = value
+        return event, dims
 
     def _clean_value(self, value: Any) -> str:
         text = str(value or "").strip().lower().replace(" ", "_").replace(".", "_")

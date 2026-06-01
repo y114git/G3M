@@ -99,6 +99,12 @@ class SettingsManager(QObject):
         self.lang_service = localization_service
         self.parent_widget = parent
 
+    def _dialog_parent(self) -> QWidget | None:
+        parent = self.parent_widget
+        if isinstance(parent, QWidget) and not sip.isdeleted(parent):
+            return parent
+        return None
+
     def read_json(self, path: str):
         from utils.file_utils import load_json
 
@@ -276,7 +282,7 @@ class SettingsManager(QObject):
 
     def select_portproton_path(self) -> str | None:
         filepath, _ = QFileDialog.getOpenFileName(
-            self.parent_widget, tr("ui.select_portproton_path")
+            self._dialog_parent(), tr("ui.select_portproton_path")
         )
         if filepath:
             self._toggle_setting("portproton_path", filepath)
@@ -285,7 +291,7 @@ class SettingsManager(QObject):
 
     def select_executable_path(self, title: str) -> str | None:
         filepath, _ = QFileDialog.getOpenFileName(
-            self.parent_widget,
+            self._dialog_parent(),
             title,
             os.path.expanduser("~"),
             f"{tr('file_descriptions.all_files')} (*)",
@@ -397,7 +403,7 @@ class SettingsManager(QObject):
 
     def pick_directory(self, title: str, start_dir: str = "") -> str:
         return QFileDialog.getExistingDirectory(
-            self.parent_widget,
+            self._dialog_parent(),
             title,
             start_dir or os.path.expanduser("~"),
         )
@@ -416,18 +422,18 @@ class SettingsManager(QObject):
             )
         if platform.system() == "Darwin":
             path, _ = QFileDialog.getOpenFileName(
-                self.parent_widget,
+                self._dialog_parent(),
                 title,
                 os.path.expanduser("~"),
                 "Application bundle (*.app);;All files (*)",
             )
             if not path:
                 path = QFileDialog.getExistingDirectory(
-                    self.parent_widget, title, os.path.expanduser("~")
+                    self._dialog_parent(), title, os.path.expanduser("~")
                 )
         else:
             path = QFileDialog.getExistingDirectory(
-                self.parent_widget, title, os.path.expanduser("~")
+                self._dialog_parent(), title, os.path.expanduser("~")
             )
         if path:
             corrected_path = path
@@ -459,7 +465,7 @@ class SettingsManager(QObject):
             self.app_state.local_config["custom_background_path"] = ""
         else:
             filepath, _ = QFileDialog.getOpenFileName(
-                self.parent_widget,
+                self._dialog_parent(),
                 tr("ui.select_background_image"),
                 "",
                 get_file_filter("background_images"),
@@ -550,7 +556,7 @@ class SettingsManager(QObject):
                 "Audio Files (*.mp3 *.wav *.ogg *.flac *.m4a *.aac);;All Files (*)"
             )
             file_path, _ = QFileDialog.getOpenFileName(
-                self.parent_widget, tr(select_dialog_key), "", audio_filter
+                self._dialog_parent(), tr(select_dialog_key), "", audio_filter
             )
             if file_path:
                 lower = file_path.lower()
@@ -623,7 +629,7 @@ class SettingsManager(QObject):
                 )
         else:
             file_path, _ = QFileDialog.getOpenFileName(
-                self.parent_widget,
+                self._dialog_parent(),
                 tr("dialogs.select_logo"),
                 "",
                 get_file_filter("background_images"),
@@ -671,7 +677,7 @@ class SettingsManager(QObject):
                 )
         else:
             file_path, _ = QFileDialog.getOpenFileName(
-                self.parent_widget,
+                self._dialog_parent(),
                 tr("dialogs.select_font_file"),
                 "",
                 f"{tr('file_descriptions.font_files')} (*.ttf *.otf)",
@@ -808,7 +814,7 @@ class SettingsManager(QObject):
 
     def export_theme(self):
         theme_file_path, _ = QFileDialog.getSaveFileName(
-            self.parent_widget,
+            self._dialog_parent(),
             tr("dialogs.export_theme_title"),
             "",
             f"{tr('file_descriptions.theme_files')} (*.zip)",

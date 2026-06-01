@@ -411,6 +411,42 @@ class TestSettingsManager:
         manager.write_local_config.assert_not_called()
         manager.feedback_service.show_message.assert_called_once()
 
+    def test_prompt_for_game_path_does_not_pass_application_as_dialog_parent_on_macos(
+        self, app_state, feedback_service, qapp, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        captured = {}
+
+        def fake_get_open_file_name(parent, *_args, **_kwargs):
+            captured["open_parent"] = parent
+            return "", ""
+
+        def fake_get_existing_directory(parent, *_args, **_kwargs):
+            captured["directory_parent"] = parent
+            return ""
+
+        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "services.settings_service.QFileDialog.getOpenFileName",
+            fake_get_open_file_name,
+        )
+        monkeypatch.setattr(
+            "services.settings_service.QFileDialog.getExistingDirectory",
+            fake_get_existing_directory,
+        )
+
+        assert manager.prompt_for_game_path(is_initial=False) is False
+        assert captured["open_parent"] is None
+        assert captured["directory_parent"] is None
+
 
 class TestLocalizationManager:
     """Tests for managers."""
