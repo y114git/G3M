@@ -3,8 +3,17 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 
 FUNCTIONS_DIR = Path(__file__).resolve().parents[2] / "functions"
+ANALYTICS_MODULE = FUNCTIONS_DIR / "analytics.py"
+
+pytestmark = pytest.mark.skipif(
+    not ANALYTICS_MODULE.is_file(),
+    reason="private functions analytics module is not present in this checkout",
+)
+
 if str(FUNCTIONS_DIR) not in sys.path:
     sys.path.insert(0, str(FUNCTIONS_DIR))
 
