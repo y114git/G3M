@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 MD033 MD041 -->
+
 <a id="readme-top"></a>
 
 <p align="center">
@@ -116,7 +118,7 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 - Switch between bundled themes or import and export theme archives. Theme packages can include color settings, media assets, and custom fonts.
 - Change UI scale, border radius, theme colors, background media, startup sound behavior, and related appearance options from settings.
 - Hide the Library tab if you want a slimmer layout for browsing and tool-focused use.
-- Use bundled language packs or add external language files. G3M currently ships with English, Russian, Spanish, Chinese Simplified, and Chinese Traditional.
+- Use bundled language packs or add external language files. G3M currently ships with English, Russian, Spanish, Korean, Japanese, Chinese Simplified, and Chinese Traditional.
 - Anonymous analytics are opt-in. The analytics service checks the local opt-in flag before recording or flushing batches.
 
 ## Supported Games

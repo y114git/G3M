@@ -7,7 +7,7 @@ from services.chat_service import ChatManager
 
 
 def test_chat_manager_caches_messages_per_channel():
-    """Checks that chating manager caches messages per channel."""
+    """Checks that chat manager caches messages per channel."""
     manager = ChatManager()
     manager.base_url = "https://example.test"
     response = Mock()

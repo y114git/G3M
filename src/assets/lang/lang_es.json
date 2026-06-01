@@ -9,7 +9,7 @@
   "blocklist": {
     "title": "Gestor de Blocklist",
     "select_game": "Seleccionar Juego:",
-    "global": "Global",
+    "global": "Globales",
     "add_entry": "Agregar Entrada",
     "current_entries": "Entradas Actuales",
     "prefix": "Prefijo:",
@@ -48,7 +48,6 @@
     "clear_search_tooltip": "Limpiar búsqueda: '{text}'",
     "create_mod": "Crear Mod",
     "created_label": "Creado:",
-    "currently_selected": "Seleccionado: {filename}",
     "use_portproton": "Usar PortProton en lugar de Wine",
     "select_portproton_path": "Seleccionar ejecutable PortProton",
     "delete_mod": "Eliminar Mod",
@@ -65,8 +64,8 @@
     "enable_direct_launch": "¿Activar inicio directo para el Capítulo {chapter}?\\n\\nEl inicio directo abre el juego directamente en el capítulo seleccionado, sin pasar por el menú principal.\\n\\nMientras esté activado, 'Iniciar vía Steam' no estará disponible.\\n\\nEsta función todavía puede fallar en algunas configuraciones. ¿Continuar?",
     "enter_author_name": "Ingresa el nombre del autor",
     "enter_mod_name": "Ingresa el nombre del mod",
-    "file_not_selected": "Archivo no seleccionado",
     "file_path_placeholder": "Ingresa la ruta o examina...",
+    "path_field_placeholder": "Indica la ruta...",
     "finish_creation": "Finalizar creación",
     "full_install": "Instalación completa",
     "full_description_label": "Descripción completa:",
@@ -91,7 +90,7 @@
     "about_title": "Acerca de",
     "about_dialog_text": "El gestor de mods definitivo para DELTARUNE, UNDERTALE, Pizza Tower y mucho más.",
     "about_version_label": "Versión: {version}",
-    "about_plugin_api_label": "Plugin API: {version}",
+    "about_plugin_api_label": "API de plugins: {version}",
     "about_language_label": "Idioma: {language}",
     "about_os_label": "Sistema:",
     "about_python_label": "Python:",
@@ -112,12 +111,12 @@
     "no_description": "Sin descripción.",
     "no_mods_for_chapter": "No hay mods para {chapter_name}",
     "overall_mod_version": "Versión general del mod:",
-    "blocklist": "Blocklist",
+    "blocklist": "Lista de bloqueos",
     "blocklist_tooltip": "Gestionar blocklist para ocultar mods específicos",
     "remove_button": "No usar",
     "save_changes": "Guardar cambios",
     "save_file": "Guardar archivo",
-    "chat_button": "Chat",
+    "chat_button": "Conversación",
     "search_in_name_description": "Buscar por nombre, descripción, autor y más:",
     "secondary_text_color": "Color del texto secundario:",
     "select_archive": "Seleccionar archivo",
@@ -156,7 +155,6 @@
     "copy_image": "Copiar imagen",
     "copy_image_url": "Copiar URL de la imagen",
     "beta_updates": "Actualizaciones beta",
-    "skip_patching_warnings": "Omitir advertencias de parcheo",
     "fullscreen": "Pantalla completa",
     "scale_label": "Escala de la interfaz",
     "sort_by_name": "Por nombre",
@@ -203,32 +201,36 @@
     "export_mod": "Exportar Mod",
     "select_export_location": "Seleccionar ubicación de exportación",
     "select_mod": "Seleccionar mod",
-    "settings_tab_general": "General",
+    "settings_tab_general": "Ajustes generales",
     "settings_tab_appearance": "Apariencia",
     "settings_tab_mods_browser": "Navegador de Mods",
     "settings_tab_library": "Biblioteca",
     "settings_tab_library_easter_egg": "Biblioetca",
     "settings_tab_game": "Juego",
-    "settings_tab_plugins": "Plugins",
+    "settings_tab_plugins": "Complementos",
     "hide_mods_browser_tab": "Ocultar pestaña Navegador de Mods",
     "hide_library_tab": "Ocultar pestaña Biblioteca",
     "settings_section_filters": "Filtros",
     "settings_section_app": "Aplicación",
     "settings_section_advanced": "Avanzado",
-    "settings_section_general": "General",
+    "settings_section_general": "Datos generales",
     "settings_section_colors": "Colores",
     "settings_section_paths": "Rutas",
-    "settings_section_patching": "Parcheo",
+    "settings_game_path_label": "Ruta de {GAME}:",
+    "settings_custom_executable_path_label": "EXE personalizado:",
+    "settings_custom_g3mtool_path_label": "G3MTool personalizado:",
+    "settings_custom_xdelta_path_label": "XDELTA personalizado:",
+    "settings_portproton_path_label": "PortProton:",
+    "settings_section_patching": "Parcheo / Fusión",
     "settings_section_launch": "Lanzamiento",
     "close_button": "Cerrar",
     "loading_placeholder": "Cargando...",
     "no_screenshots": "No hay capturas",
     "no_search_results": "No se encontraron mods.",
     "no_tabs_placeholder": "Pero nadie vino...",
-    "settings_section_merging": "Fusión de mods",
     "settings_section_themes": "Temas",
     "settings_section_media": "Gráficos",
-    "settings_section_audio": "Audio",
+    "settings_section_audio": "Sonido",
     "settings_section_styling": "Estilo",
     "border_radius_label": "Radio de borde",
     "do_not_save_theme_after_import": "No guardar tema en la lista después de importar",
@@ -236,14 +238,14 @@
     "apply_theme": "Aplicar Tema",
     "close_game": "Cerrar",
     "open_mod_folder": "Abrir Carpeta del Mod",
-    "homepage": "Homepage",
+    "homepage": "Página web",
     "show_reset_buttons": "Mostrar botones de restablecimiento",
     "analytics_opt_in": "Ayudar al proyecto con analíticas anónimas",
     "no_data_files": "Sin archivos DATA",
     "extra_files_label": "Archivos extra:",
     "changed_data_files_label": "Archivos DATA modificados:",
     "size_label": "Tamaño:",
-    "visible": "Visible",
+    "visible": "Se muestra",
     "hidden": "Oculto",
     "error": "Error",
     "select": "Seleccionar"
@@ -258,7 +260,7 @@
     "menu": "Menú"
   },
   "tabs": {
-    "demo": "Demo",
+    "demo": "Demostración",
     "main_menu": "Menú Principal",
     "menu_root": "Menú/Raíz",
     "undertale": "Undertale",
@@ -291,14 +293,6 @@
   },
   "buttons": {
     "change_background": "Cambiar Fondo",
-    "change_path": "Cambiar ruta de carpeta DR",
-    "change_demo_path": "Cambiar ruta de carpeta DRdemo",
-    "change_undertale_path": "Cambiar ruta de carpeta UT",
-    "change_undertaleyellow_path": "Cambiar ruta de carpeta UTY",
-    "change_sugaryspire_path": "Cambiar ruta de carpeta SS",
-    "change_pizzatower_path": "Cambiar ruta de carpeta PT",
-    "change_frickbears3_path": "Cambiar ruta de carpeta FRICKBEARS3",
-    "change_custom_game_path": "Cambiar ruta de carpeta del juego",
     "open_g3m_folder": "Abrir carpeta G3M",
     "changelog": "Registro de cambios",
     "discord": "DISCORD",
@@ -306,7 +300,8 @@
     "import": "Importar",
     "remove_background": "Quitar Fondo",
     "select_portproton_path": "Seleccionar Ruta de PortProton",
-    "custom_executable": "Ejecutable personalizado",
+    "select_g3mtool_binary": "Seleccionar binario de G3MTool",
+    "select_xdelta_binary": "Seleccionar binario de xdelta",
     "telegram": "TELEGRAM",
     "reset_settings": "Restablecer",
     "select_background_music": "Seleccionar Música de Fondo",
@@ -327,10 +322,15 @@
     "shortcut": "Acceso directo",
     "import_export_themes": "Im/Exportar Tema",
     "delete_theme": "Eliminar Tema",
-    "save_theme": "Guardar Tema"
+    "save_theme": "Guardar Tema",
+    "clear_g3mtool_cache": "Limpiar caché de G3MTool",
+    "manage_warnings": "Gestionar advertencias"
   },
   "tooltips": {
     "custom_executable_library": "Elige un ejecutable personalizado para este juego. Esta configuración se guarda por separado para cada juego.",
+    "custom_g3mtool_binary": "Elige un ejecutable personalizado de G3MTool. G3M lo usará para todas las operaciones de G3MTool en lugar del binario incluido.",
+    "custom_xdelta_binary": "Elige un ejecutable personalizado de xdelta. G3M lo pasará a G3MTool para crear y aplicar parches xdelta.",
+    "clear_g3mtool_cache": "Elimina los archivos de análisis de G3MTool. Úsalo solo para liberar espacio o si el parcheo/fusión empeoró de forma notable.",
     "full_install_game_instructions": "Instala {game_name} desde cero:\n  • Elige la carpeta que quieres usar.\n  • Dentro de ella se creará una nueva carpeta del juego.\n  • Todos los archivos necesarios del juego se descargarán allí.\n  • Esa carpeta se seleccionará automáticamente como la carpeta activa del juego.\n\nLa casilla se desactivará al terminar la instalación.",
     "macos_install_unavailable": "La instalación de archivos del juego no está disponible en macOS.\nSe recomienda instalar la DEMO vía Steam.",
     "online_counter": "Este contador muestra el número de jugadores jugando el juego a través del launcher.",
@@ -341,7 +341,6 @@
     "portproton": "Usa PortProton en lugar de Wine para ejecutar ejecutables de Windows en Linux. PortProton es una capa de compatibilidad que envuelve Wine/Proton para facilitar la compatibilidad de juegos. Si PortProton no está en tu PATH, puedes especificar una ruta personalizada al ejecutable de PortProton.",
     "portproton_disabled_steam": "PortProton no se usa al iniciar a través de Steam. Steam gestiona su propia capa de compatibilidad Wine/Proton.",
     "beta_updates": "Recibe actualizaciones y funciones experimentales antes de su lanzamiento oficial.",
-    "skip_patching_warnings": "Continúa el parcheo automáticamente cuando solo aparezcan advertencias no críticas. Las advertencias seguirán registrándose.",
     "fullscreen_tooltip": "Alternar modo de pantalla completa.",
     "language": "Elige el idioma usado por la interfaz de G3M.",
     "ui_scale": "Escala toda la interfaz. Los valores más altos hacen el texto y los controles más grandes.",
@@ -412,11 +411,12 @@
     "merge_code": "Combina la lógica del juego para que varios mods puedan cambiar el mismo comportamiento sin sobrescribirse entre sí.",
     "dont_hide_window_on_launch": "Mantener la ventana del lanzador visible mientras el juego está abierto.",
     "open_homepage": "Abrir la página del mod.",
-    "open_mod_folder": "Abrir la carpeta de este mod."
+    "open_mod_folder": "Abrir la carpeta de este mod.",
+    "manage_warnings": "Elige qué advertencias de parcheo y fusión pueden interrumpir la operación."
   },
   "dropdowns": {},
   "dialogs": {
-    "info": "INFO",
+    "info": "Información",
     "warning": "Advertencia",
     "success": "Éxito",
     "failed_submit_poll": "Error al enviar voto de encuesta.",
@@ -443,6 +443,8 @@
     "data_tab_info": "Seleccione el archivo DATA principal para cada sección.\nSolo se puede asignar un archivo DATA por pestaña.",
     "select_data_file_info": "Seleccione un archivo DATA para {chapter}",
     "no_file_selected": "No se seleccionó archivo",
+    "clear_g3mtool_cache_confirm_title": "Limpiar caché de G3MTool",
+    "clear_g3mtool_cache_confirm_text": "¿Limpiar la caché de G3MTool? El parcheo y la fusión pueden ser un poco más lentos hasta que la caché se reconstruya. Hazlo solo para liberar espacio o si el parcheo/fusión empeoró de forma notable.",
     "select_target_folder": "Seleccionar Carpeta de Destino",
     "finish_creating_mod": "Finalizar Creación de Mod",
     "no_data_file_selected": "Por favor, seleccione al menos un archivo DATA",
@@ -480,7 +482,11 @@
       "g3mpatch_validate_title": "Advertencia: el archivo DATA no coincide con G3MPatch",
       "g3mpatch_validate_body": "Este G3MPatch fue creado para otro archivo DATA.\n\nParche: {patch_name}\n\nArchivo esperado: {expected_file}\nMD5 esperado: {expected_md5}\n\nArchivo actual: {actual_file}\nMD5 actual: {actual_md5}\n\nSi la diferencia es pequeña, por ejemplo por una versión distinta del juego o de la plataforma, el parche aún podría funcionar.\n\n¿Continuar de todos modos?",
       "g3mpatch_newer_tool_title": "Advertencia: G3MPatch creado con un G3MTool más nuevo",
-      "g3mpatch_newer_tool_body": "Este G3MPatch fue creado con una versión de G3MTool más nueva que la incluida en su G3M actual.\n\nParche: {patch_name}\nVersión de G3MTool del parche: {patch_tool_version}\nVersión de G3MTool incluida: {current_tool_version}\n\nEs posible que el parche use comportamientos o detalles de formato que esta versión antigua de G3MTool no admita por completo.\n\n¿Continuar de todos modos?"
+      "g3mpatch_newer_tool_body": "Este G3MPatch fue creado con una versión de G3MTool más nueva que la incluida en su G3M actual.\n\nParche: {patch_name}\nVersión de G3MTool del parche: {patch_tool_version}\nVersión de G3MTool incluida: {current_tool_version}\n\nEs posible que el parche use comportamientos o detalles de formato que esta versión antigua de G3MTool no admita por completo.\n\n¿Continuar de todos modos?",
+      "extra_file_missing": "No se encontró el archivo extra referenciado por este mod:\n{path}\n\nEse archivo se omitirá. El juego puede iniciar, pero el mod puede quedar incompleto.\n\n¿Continuar?",
+      "extra_directory_missing": "No se encontró la carpeta extra referenciada por este mod:\n{path}\n\nLos archivos de esa carpeta se omitirán. El juego puede iniciar, pero el mod puede quedar incompleto.\n\n¿Continuar?",
+      "extra_file_copy_failed": "No se pudo copiar el archivo extra \"{file}\" en:\n{target}\n\nRevisa permisos, bloqueo del antivirus o espacio libre.\n\n¿Continuar?",
+      "xdelta_override_no_target": "El parche XDELTA extra \"{patch}\" no encontró un destino compatible en:\n{target}\n\nEse parche extra se omitirá.\n\n¿Continuar?"
     },
     "app_will_restart": "La aplicación se reiniciará.",
     "are_you_sure": "¿Estás seguro?",
@@ -503,7 +509,7 @@
     "plugin_deletion_confirmation": "El plugin y sus archivos serán eliminados. Esto es irreversible.",
     "local_mod_updated_message": "Se actualizó '{mod_name}'.",
     "local_mod_updated_title": "Mod local actualizado",
-    "readme_viewer_title": "README - {mod_name}",
+    "readme_viewer_title": "README de {mod_name}",
     "no_readme_files": "No se encontró un README para {mod_name}.",
     "macos_install_unavailable": "La instalación de archivos del juego no está disponible en macOS.\nIntenta instalar la DEMO vía Steam.",
     "mod_name_empty": "El nombre del mod no puede estar vacío.",
@@ -578,11 +584,13 @@
     "exe_not_found_in_archive": "Archivo .exe no encontrado en el archivo descargado.",
     "executable_not_found": "No se encontró el ejecutable del juego.",
     "invalid_executable_file": "El archivo seleccionado no es un ejecutable válido: {file}",
+    "invalid_game_path_missing_executable": "La carpeta seleccionada no es una ruta válida para {game}. No contiene un archivo de inicio compatible ({executables}). Si quieres usar otro archivo de inicio, configura primero un EXE personalizado.",
     "remove_font_failed": "Error al eliminar fuente.",
     "invalid_font_file": "Archivo de fuente no válido. Extensiones compatibles: .ttf y .otf.",
     "executable_not_found_after_unpack": "Ejecutable G3M no encontrado después de descomprimir.",
     "file_not_available": "(❌ no disponible)",
     "file_write_error": "Error al escribir archivo: {error}",
+    "g3mtool_cache_clear_failed": "No se pudo limpiar la caché de G3MTool: {error}",
     "files_not_found": "No se pudieron encontrar archivos.",
     "files_restore_error": "Error al restaurar archivos: {error}",
     "folder_creation_failed": "No se pudo crear carpeta:\n{error}",
@@ -681,6 +689,7 @@
     "downloading_version": "Descargando v{version}...",
     "files_restored": "Archivos restaurados exitosamente.",
     "game_closed_restoring_files": "Juego cerrado. Restaurando archivos...",
+    "g3mtool_cache_cleared": "Caché de G3MTool limpiada.",
     "game_files_install_complete": "Archivos del juego instalados.",
     "game_files_install_failed": "Error en instalación de archivos del juego. Verifica el registro.",
     "game_folder_found": "Carpeta del juego encontrada: {path}",
@@ -871,7 +880,7 @@
     "archive_files": "Archivos de tema (*.zip);;Todos los archivos (*)"
   },
   "chat": {
-    "window_title": "Chat",
+    "window_title": "Conversación",
     "channel_english": "Inglés",
     "channel_russian": "Ruso",
     "channel_chinese": "Chino",
@@ -961,7 +970,7 @@
     "dialog_title": "Crear acceso directo",
     "dialog_header": "Se creará un acceso directo con la siguiente configuración:",
     "dialog_game": "Juego",
-    "dialog_mod": "Mod",
+    "dialog_mod": "Modificación",
     "dialog_launch": "Método de inicio",
     "dialog_direct_launch": "Inicio directo",
     "disable_plugin_actions": "Desactivar acciones plugin",
@@ -978,13 +987,13 @@
     "title": "Herramientas de Modding",
     "tab_patch": "Parche",
     "tab_merge": "Fusión",
-    "tab_info": "Info",
+    "tab_info": "Información",
     "tab_diff": "Comparar",
     "patch_mode": "Modo:",
     "patch_action": "Acción:",
     "action_create": "Crear",
     "action_apply": "Aplicar",
-    "original_file": "Original:",
+    "original_file": "Archivo original:",
     "modified_file": "Modificado:",
     "patch_file": "Parche:",
     "output_file": "Salida:",
@@ -1054,7 +1063,7 @@
     "builtin_badge": "Integrado",
     "custom_badge": "Personalizado",
     "hidden_badge": "Oculto",
-    "visible_label": "Visible",
+    "visible_label": "Se muestra",
     "display_name_label": "Nombre para mostrar",
     "display_name_placeholder": "Ejemplo: My Fangame",
     "primary_executable_label": "Nombre del ejecutable o app",
@@ -1063,7 +1072,7 @@
     "data_file_name_label": "Nombre del archivo DATA objetivo",
     "data_file_name_placeholder": "Ejemplo: data.win o game.ios",
     "data_file_name_help": "Introduzca el nombre exacto del archivo DATA que se debe parchear para este juego. Ejemplos típicos: data.win, game.ios, game.unx o game.droid.",
-    "steam_app_id_label": "Steam App ID",
+    "steam_app_id_label": "ID de app de Steam",
     "steam_app_id_placeholder": "Opcional",
     "gamebanana_id_label": "ID de juego en GameBanana",
     "gamebanana_id_placeholder": "Opcional",
@@ -1093,24 +1102,163 @@
     "action_enable": "Usar",
     "action_disable": "No usar",
     "badge_enabled": "Activado",
-    "badge_incompatible": "Incompatible",
-    "badge_local": "Local",
+    "badge_incompatible": "No compatible",
+    "badge_local": "Solo local",
     "badge_local_tooltip": "Este plugin existe solo en la carpeta local de plugins y no está presente en el catálogo en línea.",
     "launch_blocked": "El lanzamiento del juego fue bloqueado por un plugin.",
     "meta_author": "Autor",
     "meta_version": "Versión",
     "meta_api_version": "Plugin API",
     "meta_status": "Estado",
-    "details_homepage": "Abrir Homepage",
+    "details_homepage": "Abrir página web",
     "details_update": "Actualizar",
     "details_settings": "Configuración del plugin",
     "details_delete": "Eliminar plugin",
     "no_settings": "El plugin no tiene configuración.",
     "status_enabled": "Activado",
     "status_installed": "Instalado",
-    "status_incompatible": "Incompatible",
+    "status_incompatible": "No compatible",
     "status_broken": "Roto",
     "enable_failed": "No se pudo activar el plugin.",
-    "incompatible_api_warning": "Requiere Plugin API {required_version}. Versión actual: {current_version}."
+    "incompatible_api_warning": "Requiere Plugin API {required_version}. Versión actual: {current_version}.",
+    "incompatible_api_download_title": "Se recomienda actualizar G3M",
+    "incompatible_api_download_message": "\"{name}\" requiere Plugin API {required_version}, pero esta versión de G3M tiene {current_version}.\n\nPara que el plugin funcione correctamente, actualiza G3M a la última versión. Aun así puedes descargarlo y probarlo, pero la compatibilidad no está garantizada.",
+    "download_anyway": "Descargar igualmente"
+  },
+  "warnings": {
+    "manage_title": "Gestionar advertencias",
+    "skip_all": "Omitir todas las advertencias",
+    "skip_all_tooltip": "Peligroso: G3M continuará sin preguntar aunque el parche, la fusión, la ruta del juego o la salida de la herramienta parezcan inseguros. Esto puede ocultar archivos dañados.",
+    "sections": {
+      "critical": "Críticas",
+      "major": "Importantes",
+      "minor": "Menores"
+    },
+    "items": {
+      "g3mtool_unavailable": "G3MTool no se puede iniciar",
+      "xdelta_apply_failed": "Falló el parche XDELTA",
+      "g3mpatch_apply_failed": "Falló la aplicación de G3MPatch",
+      "merge_failed": "Falló la fusión",
+      "patched_output_missing": "No se creó el archivo parcheado",
+      "data_file_missing": "No se encontró el archivo DATA del juego",
+      "g3mpatch_original_hash_mismatch": "El parche fue creado para otro archivo original",
+      "g3mpatch_newer_tool": "El parche fue creado con una versión más nueva de G3MTool",
+      "merge_conflicts_detected": "Se detectaron conflictos de fusión",
+      "steam_launch_with_mods": "Steam puede iniciar otra carpeta del juego",
+      "custom_binary_invalid": "El ejecutable personalizado no es válido",
+      "minor_file_overrides_only": "Solo se copiarán archivos sueltos",
+      "cache_rebuild_needed": "Se reconstruirá la caché de G3MTool",
+      "legacy_patching_warning": "Otra advertencia de parcheo",
+      "extra_file_missing": "Falta un archivo extra",
+      "extra_directory_missing": "Falta una carpeta extra",
+      "extra_file_copy_failed": "No se pudo copiar un archivo extra",
+      "extra_archive_extract_failed": "No se pudo extraer un archivo extra",
+      "extra_xdelta_no_target": "No se encontró el destino XDELTA extra",
+      "extra_xdelta_apply_failed": "Falló el parche XDELTA extra"
+    },
+    "messages": {
+      "g3mtool_unavailable": {
+        "title": "G3MTool no se puede iniciar",
+        "body": "G3M no pudo iniciar G3MTool. Revisa la ruta configurada de G3MTool, restaura la herramienta incluida o elige un ejecutable personalizado válido."
+      },
+      "xdelta_apply_failed": {
+        "title": "Falló el parche XDELTA",
+        "body": "El parche XDELTA no se pudo aplicar. Normalmente significa que la versión del juego o el archivo DATA no coincide con el que usó el autor del mod. Verifica los archivos del juego o usa la versión requerida."
+      },
+      "g3mpatch_apply_failed": {
+        "title": "Falló la aplicación de G3MPatch",
+        "body": "El parche no se pudo aplicar correctamente. Comprueba que el parche corresponde al juego seleccionado e inténtalo de nuevo con una carpeta limpia del juego."
+      },
+      "merge_failed": {
+        "title": "Falló la fusión",
+        "body": "G3MTool no pudo fusionar los mods seleccionados. Revisa el informe o los logs y prueba con menos mods para encontrar el conflicto."
+      },
+      "patched_output_missing": {
+        "title": "No se creó el archivo parcheado",
+        "body": "La herramienta terminó sin crear el archivo de salida esperado. Puede deberse a permisos, antivirus o un fallo de la herramienta."
+      },
+      "data_file_missing": {
+        "title": "No se encontró el archivo DATA del juego",
+        "body": "G3M no encontró un archivo DATA del juego en la carpeta seleccionada. Revisa la ruta del juego o instala/restaura los archivos del juego."
+      },
+      "g3mpatch_original_hash_mismatch": {
+        "title": "El parche fue creado para otro archivo original",
+        "body": "Este parche se creó para otro archivo original. Puede funcionar, pero el resultado puede ser incorrecto si la versión del juego es distinta."
+      },
+      "g3mpatch_newer_tool": {
+        "title": "El parche fue creado con una versión más nueva de G3MTool",
+        "body": "Este parche fue creado con una versión más nueva de G3MTool. Actualiza G3M o elige un ejecutable personalizado de G3MTool más reciente si el resultado parece incorrecto."
+      },
+      "merge_conflicts_detected": {
+        "title": "Se detectaron conflictos de fusión",
+        "body": "Varios mods cambiaron los mismos recursos. Revisa el informe de conflictos; si continúas, una modificación puede sustituir a otra."
+      },
+      "steam_launch_with_mods": {
+        "title": "Steam puede iniciar otra carpeta del juego",
+        "body": "Steam puede iniciar una carpeta del juego distinta a la que G3M parcheó. Asegúrate de que la ruta configurada coincide con Steam o inicia el juego directamente."
+      },
+      "custom_binary_invalid": {
+        "title": "El ejecutable personalizado no es válido",
+        "body": "El archivo seleccionado no se pudo iniciar como ejecutable. Elige el binario correcto para este sistema operativo."
+      },
+      "minor_file_overrides_only": {
+        "title": "Solo se copiarán archivos sueltos",
+        "body": "No se encontró ningún archivo DATA, así que G3M solo copiará archivos sueltos. Esto es normal para mods que solo contienen archivos."
+      },
+      "cache_rebuild_needed": {
+        "title": "Se reconstruirá la caché de G3MTool",
+        "body": "G3MTool reconstruirá la caché para este archivo. La primera ejecución puede ser más lenta; las siguientes deberían ser más rápidas."
+      },
+      "legacy_patching_warning": {
+        "title": "Otra advertencia de parcheo",
+        "body": "G3M detectó un riesgo al parchear o fusionar. Lee los detalles antes de continuar."
+      },
+      "extra_file_missing": {
+        "title": "Falta un archivo extra",
+        "body": "El mod hace referencia a un archivo extra que no existe: {path}. El juego puede ejecutarse, pero ese archivo no se instalará. Reinstala o vuelve a importar el mod si no era intencional."
+      },
+      "extra_directory_missing": {
+        "title": "Falta una carpeta extra",
+        "body": "El mod hace referencia a una carpeta extra que no existe: {path}. Los archivos de esa carpeta no se instalarán. Reinstala o vuelve a importar el mod si no era intencional."
+      },
+      "extra_file_copy_failed": {
+        "title": "No se pudo copiar un archivo extra",
+        "body": "G3M no pudo copiar un archivo extra en la carpeta del juego. Revisa permisos, bloqueo del antivirus y espacio libre."
+      },
+      "extra_archive_extract_failed": {
+        "title": "No se pudo extraer un archivo extra",
+        "body": "No se pudo extraer un archivo de los extras del mod. Es posible que falten algunos archivos del mod dentro del juego."
+      },
+      "extra_xdelta_no_target": {
+        "title": "No se encontró el destino XDELTA extra",
+        "body": "Un parche XDELTA extra no encontró un archivo de destino compatible. Suele ser normal si el mod admite varias estructuras del juego, pero ese parche extra se omitirá."
+      },
+      "extra_xdelta_apply_failed": {
+        "title": "Falló el parche XDELTA extra",
+        "body": "No se pudo aplicar un parche XDELTA de los archivos extra del mod. El parche DATA principal puede funcionar, pero este cambio extra se omitirá."
+      }
+    },
+    "tooltips": {
+      "g3mtool_unavailable": "Se muestra cuando G3M no puede iniciar el G3MTool configurado o incluido.",
+      "xdelta_apply_failed": "Se muestra cuando un parche principal .xdelta o .vcdiff no puede aplicarse al archivo DATA seleccionado.",
+      "g3mpatch_apply_failed": "Se muestra cuando un .g3mpatch no puede aplicarse correctamente al archivo DATA seleccionado.",
+      "merge_failed": "Se muestra cuando G3MTool no puede fusionar los mods o parches seleccionados.",
+      "patched_output_missing": "Se muestra cuando el comando termina, pero falta el archivo de salida esperado.",
+      "data_file_missing": "Se muestra cuando G3M no encuentra el archivo DATA que debe parchearse para el juego o capítulo seleccionado.",
+      "g3mpatch_original_hash_mismatch": "Se muestra cuando el parche fue creado para un archivo DATA original diferente.",
+      "g3mpatch_newer_tool": "Se muestra cuando el parche fue creado con un G3MTool más nuevo que el actual.",
+      "merge_conflicts_detected": "Se muestra cuando el informe de fusión contiene conflictos de recursos.",
+      "steam_launch_with_mods": "Se muestra cuando Steam puede abrir una carpeta de juego distinta de la que G3M parcheó.",
+      "custom_binary_invalid": "Se muestra cuando el sistema operativo no puede iniciar un ejecutable personalizado configurado.",
+      "extra_file_missing": "Se muestra cuando un mod referencia un archivo extra que ya no existe en la carpeta del mod.",
+      "extra_directory_missing": "Se muestra cuando un mod referencia una carpeta extra que ya no existe en la carpeta del mod.",
+      "extra_file_copy_failed": "Se muestra cuando G3M no puede copiar un archivo extra en la carpeta del juego.",
+      "extra_archive_extract_failed": "Se muestra cuando no se puede extraer un archivo extra en la carpeta del juego.",
+      "extra_xdelta_no_target": "Se muestra cuando un parche XDELTA extra no encuentra un archivo de destino compatible.",
+      "extra_xdelta_apply_failed": "Se muestra cuando un parche XDELTA extra encuentra destino, pero no puede aplicarse.",
+      "minor_file_overrides_only": "Se muestra para mods solo de archivos donde no se aplica parche DATA.",
+      "cache_rebuild_needed": "Se muestra cuando G3MTool necesita reconstruir datos de caché para un archivo de entrada.",
+      "legacy_patching_warning": "Se muestra para riesgos antiguos o aún no clasificados de parcheo y fusión."
+    }
   }
 }

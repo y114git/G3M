@@ -15,7 +15,7 @@ class ModPatchingThread(QThread):
 
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
-    warning_confirmation_needed = pyqtSignal(str, str, object)
+    warning_confirmation_needed = pyqtSignal(object, str, object)
     finished = pyqtSignal(bool)
 
     def __init__(
@@ -50,7 +50,7 @@ class ModPatchingThread(QThread):
         self._warning_event.set()
 
     def _request_warning_confirmation(
-        self, message: str, details: str = "", report_path: str | None = None
+        self, message: object, details: str = "", report_path: str | None = None
     ) -> bool:
         self._warning_result = True
         self._warning_event.clear()

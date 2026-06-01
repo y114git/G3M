@@ -9,7 +9,6 @@ import tempfile
 
 from services.plugin_support import (
     PluginValidationError,
-    is_plugin_manifest_compatible,
     load_manifest,
     safe_extract_zip,
 )
@@ -66,8 +65,6 @@ class PluginInstallService:
         source_dir = unwrap_single_directory_chain(source_dir)
         manifest_path = os.path.join(source_dir, "plugin_config.json")
         manifest = load_manifest(manifest_path)
-        if not is_plugin_manifest_compatible(manifest):
-            raise PluginValidationError("incompatible_api_version")
         target_dir = os.path.join(self.plugins_dir, manifest.id)
         temp_target = f"{target_dir}.tmp"
         shutil.rmtree(temp_target, ignore_errors=True)
@@ -100,11 +97,9 @@ class PluginInstallService:
             local=source == "manual",
         )
         self.plugin_state_service.set_enabled(manifest.id, False)
-        self.plugin_runtime_service.scan_installed_plugins()
         return manifest.id
 
     def delete_plugin(self, plugin_id: str) -> None:
         self.plugin_runtime_service.disable_plugin(plugin_id)
         shutil.rmtree(os.path.join(self.plugins_dir, plugin_id), ignore_errors=True)
         self.plugin_state_service.clear_plugin(plugin_id)
-        self.plugin_runtime_service.scan_installed_plugins()

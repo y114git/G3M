@@ -124,6 +124,10 @@ def get_user_themes_dir():
     return os.path.join(get_user_data_root(), "themes")
 
 
+def get_g3mtool_cache_dir():
+    return os.path.join(get_user_data_root(), "cache", "G3MTool")
+
+
 def find_theme_config_path(root_path: str) -> str | None:
     direct_path = os.path.join(root_path, THEME_CONFIG_FILENAME)
     if os.path.exists(direct_path):

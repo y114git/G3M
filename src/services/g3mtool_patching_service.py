@@ -27,6 +27,11 @@ from config.config import (
 )
 from services.backup_service import BackupManager
 from services.localization_service import tr
+from services.warning_service import (
+    WarningEvent,
+    create_warning_event,
+    is_warning_enabled,
+)
 from utils.file_utils import ensure_writable, get_chapter_folder_name, safe_rmtree
 from utils.patching import mod_content_utils as mod_content
 from utils.patching.mod_resolve_utils import (
@@ -126,7 +131,7 @@ class G3MToolPatchingService(QObject):
         super().__init__(parent)
         self.app_state = app_state
         self.mod_service = mod_service
-        self.g3mtool = G3MToolManager()
+        self.g3mtool = G3MToolManager(app_state)
         self.backup_service: BackupManager | None = None
         self._cancelled = False
         self._temp_dir: str | None = None
@@ -135,7 +140,7 @@ class G3MToolPatchingService(QObject):
         self._xdelta_modpack: bool = False
         self._session_manifest_path: str | None = None
         self._override_game_path: str | None = None
-        self.warning_handler: Callable[[str, str, str | None], bool] | None = None
+        self.warning_handler: Callable[[WarningEvent, str, str | None], bool] | None = None
 
         _rotate_patching_files()
         self.patching_logger = _get_patching_logger()
@@ -151,16 +156,28 @@ class G3MToolPatchingService(QObject):
         self._emit_progress(progress, message)
 
     def _request_warning(
-        self, message: str, details: str = "", report_path: str | None = None
+        self,
+        message: str,
+        details: str = "",
+        report_path: str | None = None,
+        warning_id: str = "legacy_patching_warning",
+        context: dict[str, Any] | None = None,
     ) -> bool:
         self.patching_logger.warning(message)
         if details:
             self.patching_logger.warning(details)
         local_config = getattr(self.app_state, "local_config", {}) or {}
-        if local_config.get("skip_patching_warnings", False):
+        if not is_warning_enabled(warning_id, local_config):
             return True
+        event = create_warning_event(
+            warning_id,
+            context=context,
+            details=details,
+            report_path=report_path,
+            fallback_message=message,
+        )
         if self.warning_handler:
-            return bool(self.warning_handler(message, details, report_path))
+            return bool(self.warning_handler(event, details, report_path))
         return True
 
     def _continue_without_data_patch(
@@ -169,9 +186,15 @@ class G3MToolPatchingService(QObject):
         data_win_path: str,
         output_path: str,
         log_error: str,
+        warning_id: str = "g3mpatch_apply_failed",
+        warning_context: dict[str, Any] | None = None,
     ) -> bool:
         self.patching_logger.error(log_error)
-        if not self._request_warning(warning_message):
+        if not self._request_warning(
+            warning_message,
+            warning_id=warning_id,
+            context=warning_context,
+        ):
             return False
         try:
             shutil.copy2(data_win_path, output_path)
@@ -235,6 +258,12 @@ class G3MToolPatchingService(QObject):
                 patch_tool_version=patch_tool_version,
                 current_tool_version=current_tool_version,
             ),
+            warning_id="g3mpatch_newer_tool",
+            context={
+                "patch_name": os.path.basename(patch_path),
+                "patch_tool_version": patch_tool_version,
+                "current_tool_version": current_tool_version,
+            },
         )
         if not should_continue:
             return False
@@ -291,6 +320,14 @@ class G3MToolPatchingService(QObject):
                 expected_md5=expected_md5,
                 actual_md5=actual_md5,
             ),
+            warning_id="g3mpatch_original_hash_mismatch",
+            context={
+                "patch_name": os.path.basename(patch_path),
+                "expected_file": expected_name,
+                "actual_file": actual_name,
+                "expected_md5": expected_md5,
+                "actual_md5": actual_md5,
+            },
         )
         if not should_continue:
             return False
@@ -468,7 +505,9 @@ class G3MToolPatchingService(QObject):
                 tr(
                     "dialogs.patching_warning.data_win_not_found",
                     search_path=target_dir,
-                )
+                ),
+                warning_id="data_file_missing",
+                context={"search_path": target_dir},
             ):
                 return False
             self._emit_chapter_progress(
@@ -689,6 +728,11 @@ class G3MToolPatchingService(QObject):
                     data_win_path,
                     output_path,
                     f"csx execute failed: {stderr[:500]}",
+                    warning_id="g3mpatch_apply_failed",
+                    warning_context={
+                        "patch_name": os.path.basename(patch_file),
+                        "reason": error_text,
+                    },
                 )
             if not os.path.exists(output_path):
                 error_text = self._missing_output_error(output_path)
@@ -703,6 +747,8 @@ class G3MToolPatchingService(QObject):
                     data_win_path,
                     output_path,
                     error_text,
+                    warning_id="patched_output_missing",
+                    warning_context={"output_path": output_path},
                 )
             self._emit_chapter_progress(
                 chapter_start,
@@ -754,6 +800,11 @@ class G3MToolPatchingService(QObject):
                     data_win_path,
                     output_path,
                     f"xpatch apply failed: {stderr[:500]}",
+                    warning_id="xdelta_apply_failed",
+                    warning_context={
+                        "patch_name": os.path.basename(patch_file),
+                        "reason": error_text,
+                    },
                 )
             if not os.path.exists(output_path):
                 error_text = self._missing_output_error(output_path)
@@ -768,6 +819,8 @@ class G3MToolPatchingService(QObject):
                     data_win_path,
                     output_path,
                     error_text,
+                    warning_id="patched_output_missing",
+                    warning_context={"output_path": output_path},
                 )
             self._emit_chapter_progress(
                 chapter_start,
@@ -833,6 +886,11 @@ class G3MToolPatchingService(QObject):
                     data_win_path,
                     output_path,
                     f"patch apply failed: {stderr[:500]}",
+                    warning_id="g3mpatch_apply_failed",
+                    warning_context={
+                        "patch_name": os.path.basename(patch_file),
+                        "reason": error_text,
+                    },
                 )
             if not os.path.exists(output_path):
                 error_text = self._missing_output_error(output_path)
@@ -847,6 +905,8 @@ class G3MToolPatchingService(QObject):
                     data_win_path,
                     output_path,
                     error_text,
+                    warning_id="patched_output_missing",
+                    warning_context={"output_path": output_path},
                 )
             self._emit_chapter_progress(
                 chapter_start,
@@ -960,6 +1020,11 @@ class G3MToolPatchingService(QObject):
                 data_win_path,
                 output_path,
                 f"G3MTool merge failed for chapter {chapter_id}: {stderr[:500]}",
+                warning_id="merge_failed",
+                warning_context={
+                    "patch_name": f"{len(patch_files)} patches",
+                    "reason": error_text,
+                },
             )
         if not os.path.exists(output_path):
             error_text = self._missing_output_error(output_path)
@@ -974,6 +1039,8 @@ class G3MToolPatchingService(QObject):
                 data_win_path,
                 output_path,
                 error_text,
+                warning_id="patched_output_missing",
+                warning_context={"output_path": output_path},
             )
 
         if report_path and os.path.exists(report_path):
@@ -994,6 +1061,11 @@ class G3MToolPatchingService(QObject):
                         "dialogs.conflicts.total_conflicts", count=total_conflicts
                     ),
                     report_path=self._saved_report_path or report_path,
+                    warning_id="merge_conflicts_detected",
+                    context={
+                        "chapter": display_name,
+                        "count": total_conflicts,
+                    },
                 ):
                     return False
 

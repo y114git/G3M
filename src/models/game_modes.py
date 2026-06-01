@@ -103,7 +103,6 @@ class GameDefinition:
     steam_app_id: str = ""
     path_config_key: str = ""
     custom_exec_config_key: str = ""
-    path_button_key: str = ""
     gamebanana_id: int = 0
     tabs: list[GameTab] = []
     executables: dict[str, tuple[str, ...]] = {}
@@ -139,10 +138,6 @@ class GameDefinition:
             if translated in ("", self.display_name_key, f"[{self.display_name_key}]")
             else translated
         )
-
-    @property
-    def path_change_button_text(self) -> str:
-        return tr(self.path_button_key)
 
     @property
     def tab_names(self) -> list[str]:
@@ -226,7 +221,6 @@ class DeltaruneGame(GameDefinition):
     steam_app_id = STEAM_APP_ID_FULL
     path_config_key = "game_path"
     custom_exec_config_key = "custom_executable_path"
-    path_button_key = "buttons.change_path"
     gamebanana_id = 6755
     block_steam_with_direct_launch = True
     tabs = [
@@ -257,7 +251,6 @@ class DeltaruneDemoGame(GameDefinition):
     steam_app_id = STEAM_APP_ID_DEMO
     path_config_key = "demo_game_path"
     custom_exec_config_key = "demo_custom_executable_path"
-    path_button_key = "buttons.change_demo_path"
     gamebanana_id = 0
     supports_full_install = True
     tabs = [GameTab("deltarunedemo", "demo", "tabs.demo", "demo", False)]
@@ -282,7 +275,6 @@ class UndertaleGame(GameDefinition):
     steam_app_id = STEAM_APP_ID_UNDERTALE
     path_config_key = "undertale_game_path"
     custom_exec_config_key = "undertale_custom_executable_path"
-    path_button_key = "buttons.change_undertale_path"
     gamebanana_id = 5506
     tabs = [GameTab("undertale", "undertale", "tabs.undertale", "undertale")]
     executables = {
@@ -303,7 +295,6 @@ class UndertaleYellowGame(GameDefinition):
     display_name_key = "ui.undertaleyellow"
     path_config_key = "undertaleyellow_game_path"
     custom_exec_config_key = "undertaleyellow_custom_executable_path"
-    path_button_key = "buttons.change_undertaleyellow_path"
     gamebanana_id = 19606
     supports_full_install = True
     tabs = [
@@ -349,7 +340,6 @@ class PizzaTowerGame(GameDefinition):
     steam_app_id = STEAM_APP_ID_PIZZA_TOWER
     path_config_key = "pizzatower_game_path"
     custom_exec_config_key = "pizzatower_custom_executable_path"
-    path_button_key = "buttons.change_pizzatower_path"
     gamebanana_id = 7692
     tabs = [GameTab("pizzatower", "pizzatower", "tabs.pizzatower", "pizzatower")]
     executables = {
@@ -375,7 +365,6 @@ class SugarySpireGame(GameDefinition):
     display_name_key = "ui.sugaryspire"
     path_config_key = "sugaryspire_game_path"
     custom_exec_config_key = "sugaryspire_custom_executable_path"
-    path_button_key = "buttons.change_sugaryspire_path"
     gamebanana_id = 18218
     supports_full_install = True
     tabs = [
@@ -401,7 +390,6 @@ class Frickbears3Game(GameDefinition):
     display_name_key = "ui.frickbears3"
     path_config_key = "frickbears3_game_path"
     custom_exec_config_key = "frickbears3_custom_executable_path"
-    path_button_key = "buttons.change_frickbears3_path"
     gamebanana_id = 24426
     supports_full_install = True
     tabs = [
@@ -422,7 +410,6 @@ class CustomSingleTabGame(GameDefinition):
 
     display_name_key = ""
     supports_full_install = False
-    path_button_key = "buttons.change_custom_game_path"
     path_select_dialog_key = "dialogs.select_custom_game_folder"
     path_not_found_dialog_key = "dialogs.custom_game_not_found"
 

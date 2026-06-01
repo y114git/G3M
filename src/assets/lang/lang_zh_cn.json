@@ -2,7 +2,7 @@
   "metadata": {
     "language": "chinese_simplified",
     "language_name": "简体中文",
-    "font": "NotoSans-Bold.ttf",
+    "font": "NotoSansSC-Bold.ttf",
     "qt_translation": "qtbase_zh_cn",
     "version": "3.1.0"
   },
@@ -48,7 +48,6 @@
     "clear_search_tooltip": "清除搜索：'{text}'",
     "create_mod": "创建模组",
     "created_label": "创建时间：",
-    "currently_selected": "已选择：{filename}",
     "use_portproton": "使用PortProton代替Wine",
     "select_portproton_path": "选择PortProton可执行文件",
     "delete_mod": "删除模组",
@@ -65,8 +64,8 @@
     "enable_direct_launch": "要为第 {chapter} 章启用直接启动吗？\\n\\n直接启动会让游戏直接进入所选章节，而不是先打开主菜单。\\n\\n启用后，“通过 Steam 启动”将不可用。\\n\\n此功能在某些环境下仍可能不稳定。要继续吗？",
     "enter_author_name": "输入作者名称",
     "enter_mod_name": "输入模组名称",
-    "file_not_selected": "未选择文件",
     "file_path_placeholder": "输入路径或浏览...",
+    "path_field_placeholder": "请填写路径...",
     "finish_creation": "完成创建",
     "full_install": "完整安装",
     "full_description_label": "完整描述：",
@@ -157,7 +156,6 @@
     "copy_image": "复制图片",
     "copy_image_url": "复制图片链接",
     "beta_updates": "测试版更新",
-    "skip_patching_warnings": "跳过补丁警告",
     "fullscreen": "全屏",
     "scale_label": "界面缩放",
     "sort_by_name": "按名称",
@@ -217,15 +215,19 @@
     "settings_section_colors": "颜色",
     "settings_section_filters": "筛选",
     "settings_section_paths": "路径",
+    "settings_game_path_label": "{GAME} 路径：",
+    "settings_custom_executable_path_label": "自定义 EXE：",
+    "settings_custom_g3mtool_path_label": "自定义 G3MTool：",
+    "settings_custom_xdelta_path_label": "自定义 XDELTA：",
+    "settings_portproton_path_label": "PortProton：",
     "settings_section_launch": "启动",
-    "settings_section_patching": "补丁",
+    "settings_section_patching": "补丁 / 合并",
     "select_mod": "选择模组",
     "close_button": "关闭",
     "loading_placeholder": "加载中...",
     "no_screenshots": "没有截图",
     "no_search_results": "没有找到模组。",
     "no_tabs_placeholder": "但是没有人来...",
-    "settings_section_merging": "合并",
     "settings_section_themes": "主题",
     "settings_section_media": "外观和声音",
     "settings_section_audio": "音频",
@@ -291,14 +293,6 @@
   },
   "buttons": {
     "change_background": "更改背景",
-    "change_path": "更改DR文件夹路径",
-    "change_demo_path": "更改DRdemo文件夹路径",
-    "change_undertale_path": "更改UT文件夹路径",
-    "change_undertaleyellow_path": "更改UTY文件夹路径",
-    "change_sugaryspire_path": "更改SS文件夹路径",
-    "change_pizzatower_path": "更改PT文件夹路径",
-    "change_frickbears3_path": "更改FRICKBEARS3文件夹路径",
-    "change_custom_game_path": "更改游戏文件夹路径",
     "open_g3m_folder": "打开G3M文件夹",
     "changelog": "更新日志",
     "discord": "DISCORD",
@@ -306,7 +300,8 @@
     "import": "导入",
     "remove_background": "移除背景",
     "select_portproton_path": "选择PortProton路径",
-    "custom_executable": "自定义可执行文件",
+    "select_g3mtool_binary": "选择 G3MTool 二进制文件",
+    "select_xdelta_binary": "选择 xdelta 二进制文件",
     "telegram": "TELEGRAM",
     "reset_settings": "重置",
     "select_background_music": "选择背景音乐",
@@ -327,10 +322,15 @@
     "shortcut": "快捷方式",
     "import_export_themes": "导入/导出主题",
     "save_theme": "保存主题",
-    "delete_theme": "删除主题"
+    "delete_theme": "删除主题",
+    "clear_g3mtool_cache": "清除 G3MTool 缓存",
+    "manage_warnings": "管理警告"
   },
   "tooltips": {
     "custom_executable_library": "为此游戏选择单独的可执行文件。这个设置会按游戏分别保存。",
+    "custom_g3mtool_binary": "选择自定义 G3MTool 可执行文件。G3M 会在所有 G3MTool 操作中使用它，而不是内置二进制文件。",
+    "custom_xdelta_binary": "选择自定义 xdelta 可执行文件。G3M 会在创建和应用 xdelta 补丁时把它传给 G3MTool。",
+    "clear_g3mtool_cache": "删除 G3MTool 分析缓存文件。仅在需要释放空间，或补丁/合并明显变差时使用。",
     "full_install_game_instructions": "从零安装{game_name}：\\n  • 选择你要使用的文件夹。\\n  • 其中会创建一个新的游戏文件夹。\\n  • 所有所需的游戏文件都会下载到那里。\\n  • 该文件夹会自动选为当前活动游戏文件夹。\\n\\n安装完成后，此复选框会自动关闭。",
     "macos_install_unavailable": "在macOS上无法安装游戏文件。\\n建议通过Steam安装Demo版。",
     "online_counter": "此计数器显示通过启动器玩游戏的玩家数量。",
@@ -341,7 +341,6 @@
     "portproton": "使用PortProton代替Wine在Linux上运行Windows可执行文件。PortProton是一个兼容层，它包装了Wine/Proton以便更容易的游戏兼容性。如果PortProton不在您的PATH中，您可以指定PortProton可执行文件的自定义路径。",
     "portproton_disabled_steam": "通过Steam启动时不使用PortProton。Steam自行管理Wine/Proton兼容层。",
     "beta_updates": "抢先体验实验性更新和新功能。",
-    "skip_patching_warnings": "如果只出现非关键警告，就自动继续打补丁。警告仍然会写入日志。",
     "fullscreen_tooltip": "切换全屏模式。",
     "language": "选择 G3M 界面使用的语言。",
     "ui_scale": "缩放整个界面。数值越大，文字和控件就越大。",
@@ -412,7 +411,8 @@
     "merge_code": "合并游戏逻辑，让多个模组可以同时修改同一种行为而不互相覆盖。",
     "dont_hide_window_on_launch": "游戏运行时保持启动器窗口可见。",
     "open_homepage": "打开模组页面。",
-    "open_mod_folder": "打开这个模组的文件夹。"
+    "open_mod_folder": "打开这个模组的文件夹。",
+    "manage_warnings": "选择哪些补丁和合并警告可以中断操作。"
   },
   "dropdowns": {},
   "dialogs": {
@@ -445,6 +445,8 @@
     "extra_files_path_instructions_deltarune": "输入每个文件应放置的文件夹路径，相对于游戏文件夹。\n示例：'sprites/bgs' 会将文件放置在游戏文件夹的 sprites/bgs/ 目录中。\n对于 DELTARUNE，你也可以让路径以章节文件夹开头，例如 'chapter_1/' 或 'chapter1_windows/'，这样文件会被绑定到对应章节。\n使用正斜杠 (/) 分隔文件夹。",
     "select_data_file_info": "为 {chapter} 选择 DATA 文件",
     "no_file_selected": "未选择文件",
+    "clear_g3mtool_cache_confirm_title": "清除 G3MTool 缓存",
+    "clear_g3mtool_cache_confirm_text": "要清除 G3MTool 缓存吗？在缓存重新生成之前，补丁和合并可能会稍慢。仅在需要释放空间，或补丁/合并明显变差时这样做。",
     "select_target_folder": "选择目标文件夹",
     "finish_creating_mod": "完成创建模组",
     "no_data_file_selected": "请至少选择一个 DATA 文件",
@@ -480,7 +482,11 @@
       "g3mpatch_validate_title": "警告：G3MPatch 的 DATA 文件不匹配",
       "g3mpatch_validate_body": "这个 G3MPatch 是为另一个 DATA 文件构建的。\n\n补丁：{patch_name}\n\n预期文件：{expected_file}\n预期 MD5：{expected_md5}\n\n当前文件：{actual_file}\n当前 MD5：{actual_md5}\n\n如果差异很小，例如只是游戏版本或平台不同，补丁仍然可能可用。\n\n是否仍要继续？",
       "g3mpatch_newer_tool_title": "警告：G3MPatch 由较新的 G3MTool 创建",
-      "g3mpatch_newer_tool_body": "这个 G3MPatch 是由比当前 G3M 内置版本更新的 G3MTool 创建的。\n\n补丁：{patch_name}\n补丁 G3MTool 版本：{patch_tool_version}\n内置 G3MTool 版本：{current_tool_version}\n\n这个补丁可能使用当前旧版 G3MTool 还不能完全支持的行为或格式细节。\n\n是否仍要继续？"
+      "g3mpatch_newer_tool_body": "这个 G3MPatch 是由比当前 G3M 内置版本更新的 G3MTool 创建的。\n\n补丁：{patch_name}\n补丁 G3MTool 版本：{patch_tool_version}\n内置 G3MTool 版本：{current_tool_version}\n\n这个补丁可能使用当前旧版 G3MTool 还不能完全支持的行为或格式细节。\n\n是否仍要继续？",
+      "extra_file_missing": "找不到此模组引用的附加文件：\n{path}\n\n该文件会被跳过。游戏可能仍可启动，但模组可能不完整。\n\n继续？",
+      "extra_directory_missing": "找不到此模组引用的附加文件夹：\n{path}\n\n其中的文件会被跳过。游戏可能仍可启动，但模组可能不完整。\n\n继续？",
+      "extra_file_copy_failed": "无法将附加文件“{file}”复制到：\n{target}\n\n请检查权限、杀毒软件拦截或磁盘空间。\n\n继续？",
+      "xdelta_override_no_target": "附加 XDELTA 补丁“{patch}”在以下位置没有找到匹配目标：\n{target}\n\n该附加补丁会被跳过。\n\n继续？"
     },
     "app_will_restart": "应用程序将重新启动。",
     "are_you_sure": "您确定吗？",
@@ -577,11 +583,13 @@
     "exe_not_found_in_archive": "下载的压缩文件中未找到.exe文件。",
     "executable_not_found": "未找到游戏可执行文件。",
     "invalid_executable_file": "所选文件不是有效的可执行文件: {file}",
+    "invalid_game_path_missing_executable": "所选文件夹不是有效的 {game} 路径。里面没有受支持的启动文件（{executables}）。如果你想使用其他启动文件，请先设置自定义 EXE。",
     "remove_font_failed": "无法移除字体。",
     "invalid_font_file": "无效的字体文件。支持的扩展名为 .ttf 和 .otf。",
     "executable_not_found_after_unpack": "解压后未找到G3M可执行文件。",
     "file_not_available": "(❌ 不可用)",
     "file_write_error": "写入文件时出错：{error}",
+    "g3mtool_cache_clear_failed": "无法清除 G3MTool 缓存：{error}",
     "files_not_found": "找不到文件。",
     "files_restore_error": "恢复文件时出错：{error}",
     "folder_creation_failed": "无法创建文件夹：\\n{error}",
@@ -681,6 +689,7 @@
     "downloading_version": "正在下载v{version}...",
     "files_restored": "文件已成功恢复。",
     "game_closed_restoring_files": "游戏已关闭。正在恢复文件...",
+    "g3mtool_cache_cleared": "G3MTool 缓存已清除。",
     "game_files_install_complete": "游戏文件已安装。",
     "game_files_install_failed": "游戏文件安装失败。请检查日志。",
     "game_folder_found": "找到游戏文件夹：{path}",
@@ -1111,6 +1120,145 @@
     "status_incompatible": "不兼容",
     "status_broken": "已损坏",
     "enable_failed": "启用插件失败。",
-    "incompatible_api_warning": "需要 Plugin API {required_version}。当前版本：{current_version}。"
+    "incompatible_api_warning": "需要 Plugin API {required_version}。当前版本：{current_version}。",
+    "incompatible_api_download_title": "建议更新 G3M",
+    "incompatible_api_download_message": "“{name}”需要 Plugin API {required_version}，但当前 G3M 是 {current_version}。\n\n为了让插件正常工作，建议先将 G3M 更新到最新版本。你仍然可以下载并尝试该插件，但不保证兼容性。",
+    "download_anyway": "仍然下载"
+  },
+  "warnings": {
+    "manage_title": "管理警告",
+    "skip_all": "跳过所有警告",
+    "skip_all_tooltip": "危险：即使补丁、合并、游戏路径或工具输出看起来不安全，G3M 也会不再询问并继续。这可能隐藏文件损坏。",
+    "sections": {
+      "critical": "严重",
+      "major": "重要",
+      "minor": "轻微"
+    },
+    "items": {
+      "g3mtool_unavailable": "无法启动 G3MTool",
+      "xdelta_apply_failed": "XDELTA 补丁失败",
+      "g3mpatch_apply_failed": "G3MPatch 应用失败",
+      "merge_failed": "合并失败",
+      "patched_output_missing": "未创建补丁输出文件",
+      "data_file_missing": "未找到游戏 DATA 文件",
+      "g3mpatch_original_hash_mismatch": "补丁是为其他原始文件创建的",
+      "g3mpatch_newer_tool": "补丁由更新版本的 G3MTool 创建",
+      "merge_conflicts_detected": "检测到合并冲突",
+      "steam_launch_with_mods": "Steam 可能会启动其他游戏文件夹",
+      "custom_binary_invalid": "自定义可执行文件无效",
+      "minor_file_overrides_only": "只会复制零散文件",
+      "cache_rebuild_needed": "将重建 G3MTool 缓存",
+      "legacy_patching_warning": "其他补丁警告",
+      "extra_file_missing": "缺少附加文件",
+      "extra_directory_missing": "缺少附加文件夹",
+      "extra_file_copy_failed": "无法复制附加文件",
+      "extra_archive_extract_failed": "无法解压附加压缩文件",
+      "extra_xdelta_no_target": "找不到附加 XDELTA 目标",
+      "extra_xdelta_apply_failed": "附加 XDELTA 补丁失败"
+    },
+    "messages": {
+      "g3mtool_unavailable": {
+        "title": "无法启动 G3MTool",
+        "body": "G3M 无法启动 G3MTool。请检查配置的 G3MTool 路径，恢复内置工具，或选择有效的自定义可执行文件。"
+      },
+      "xdelta_apply_failed": {
+        "title": "XDELTA 补丁失败",
+        "body": "XDELTA 补丁未能应用。这通常表示游戏版本或 DATA 文件与模组作者使用的不一致。请验证游戏文件或使用要求的版本。"
+      },
+      "g3mpatch_apply_failed": {
+        "title": "G3MPatch 应用失败",
+        "body": "补丁无法干净地应用。请确认补丁与所选游戏匹配，然后用干净的游戏文件夹重试。"
+      },
+      "merge_failed": {
+        "title": "合并失败",
+        "body": "G3MTool 无法合并所选模组。请查看报告或日志，并尝试减少模组数量来定位冲突。"
+      },
+      "patched_output_missing": {
+        "title": "未创建补丁输出文件",
+        "body": "工具已结束，但没有创建预期的输出文件。这可能由权限、防病毒软件或工具崩溃导致。"
+      },
+      "data_file_missing": {
+        "title": "未找到游戏 DATA 文件",
+        "body": "G3M 在所选文件夹中找不到游戏 DATA 文件。请检查游戏路径，或安装/还原游戏文件。"
+      },
+      "g3mpatch_original_hash_mismatch": {
+        "title": "补丁是为其他原始文件创建的",
+        "body": "此补丁是为另一个原始文件创建的。它可能仍能工作，但如果游戏版本不同，结果可能不正确。"
+      },
+      "g3mpatch_newer_tool": {
+        "title": "补丁由更新版本的 G3MTool 创建",
+        "body": "此补丁由较新版本的 G3MTool 创建。如果结果看起来不正确，请更新 G3M 或选择较新的自定义 G3MTool 可执行文件。"
+      },
+      "merge_conflicts_detected": {
+        "title": "检测到合并冲突",
+        "body": "多个模组修改了相同资源。请查看冲突报告；继续操作可能会让其中一个修改覆盖另一个。"
+      },
+      "steam_launch_with_mods": {
+        "title": "Steam 可能会启动其他游戏文件夹",
+        "body": "Steam 可能会启动与 G3M 已修补位置不同的游戏文件夹。请确认配置路径与 Steam 一致，或直接启动。"
+      },
+      "custom_binary_invalid": {
+        "title": "自定义可执行文件无效",
+        "body": "所选文件无法作为可执行文件启动。请选择适用于此操作系统的正确二进制文件。"
+      },
+      "minor_file_overrides_only": {
+        "title": "只会复制零散文件",
+        "body": "未找到 DATA 文件，因此 G3M 只会复制散装文件。对于只包含文件的模组，这是正常的。"
+      },
+      "cache_rebuild_needed": {
+        "title": "将重建 G3MTool 缓存",
+        "body": "G3MTool 将为此文件重建缓存数据。首次运行可能较慢，之后应会更快。"
+      },
+      "legacy_patching_warning": {
+        "title": "其他补丁警告",
+        "body": "G3M 检测到修补或合并风险。继续之前请阅读详细信息。"
+      },
+      "extra_file_missing": {
+        "title": "缺少附加文件",
+        "body": "该模组引用的附加文件不存在：{path}。游戏可能仍可运行，但该文件不会被安装。如果这不是预期情况，请重新安装或重新导入模组。"
+      },
+      "extra_directory_missing": {
+        "title": "缺少附加文件夹",
+        "body": "该模组引用的附加文件夹不存在：{path}。该文件夹中的文件不会被安装。如果这不是预期情况，请重新安装或重新导入模组。"
+      },
+      "extra_file_copy_failed": {
+        "title": "无法复制附加文件",
+        "body": "G3M 无法将附加文件复制到游戏文件夹。请检查权限、杀毒软件拦截以及可用磁盘空间。"
+      },
+      "extra_archive_extract_failed": {
+        "title": "无法解压附加压缩文件",
+        "body": "无法解压模组附加文件中的压缩文件。游戏内可能会缺少部分模组文件。"
+      },
+      "extra_xdelta_no_target": {
+        "title": "找不到附加 XDELTA 目标",
+        "body": "附加文件中的 XDELTA 补丁没有找到匹配的目标文件。对于支持多种游戏结构的模组，这通常可以忽略，但该附加补丁会被跳过。"
+      },
+      "extra_xdelta_apply_failed": {
+        "title": "附加 XDELTA 补丁失败",
+        "body": "无法将模组附加文件中的 XDELTA 补丁应用到目标文件。主 DATA 补丁可能仍然有效，但这个附加文件改动会被跳过。"
+      }
+    },
+    "tooltips": {
+      "g3mtool_unavailable": "当 G3M 无法启动已配置或内置的 G3MTool 时显示。",
+      "xdelta_apply_failed": "当主 .xdelta 或 .vcdiff 补丁无法应用到所选 DATA 文件时显示。",
+      "g3mpatch_apply_failed": "当 .g3mpatch 无法正确应用到所选 DATA 文件时显示。",
+      "merge_failed": "当 G3MTool 无法合并所选模组或补丁时显示。",
+      "patched_output_missing": "当命令结束但缺少预期输出文件时显示。",
+      "data_file_missing": "当 G3M 找不到所选游戏或章节需要修补的 DATA 文件时显示。",
+      "g3mpatch_original_hash_mismatch": "当补丁是为不同的原始 DATA 文件创建时显示。",
+      "g3mpatch_newer_tool": "当补丁由比当前版本更新的 G3MTool 创建时显示。",
+      "merge_conflicts_detected": "当合并报告包含资源冲突时显示。",
+      "steam_launch_with_mods": "当 Steam 可能打开的游戏文件夹不是 G3M 刚修补的文件夹时显示。",
+      "custom_binary_invalid": "当操作系统无法启动配置的自定义可执行文件时显示。",
+      "extra_file_missing": "当模组引用的附加文件已不在模组文件夹中时显示。",
+      "extra_directory_missing": "当模组引用的附加文件夹已不在模组文件夹中时显示。",
+      "extra_file_copy_failed": "当 G3M 无法将附加文件复制到游戏文件夹时显示。",
+      "extra_archive_extract_failed": "当附加文件中的压缩文件无法解压到游戏文件夹时显示。",
+      "extra_xdelta_no_target": "当附加 XDELTA 补丁找不到匹配的目标文件时显示。",
+      "extra_xdelta_apply_failed": "当附加 XDELTA 补丁找到目标但无法应用时显示。",
+      "minor_file_overrides_only": "当模组只复制文件而不应用 DATA 补丁时显示。",
+      "cache_rebuild_needed": "当 G3MTool 需要为输入文件重建可复用缓存数据时显示。",
+      "legacy_patching_warning": "用于旧版或尚未分类的修补/合并风险。"
+    }
   }
 }

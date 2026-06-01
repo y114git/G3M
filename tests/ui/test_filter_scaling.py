@@ -13,7 +13,7 @@ class TestFilterScaling:
     """
 
     def test_library_maximum_height_reset_allows_shrink(self, qapp, app_state, feedback_service):
-        """Checks that librarying maximum height reset allows shrink."""
+        """Checks that library maximum height reset allows shrink."""
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
         builder = LibraryTabBuilder(app_state, None)
@@ -61,7 +61,7 @@ class TestFilterScaling:
         QApplication.processEvents()
 
     def test_library_eventfilter_sets_maxheight(self, qapp, app_state, feedback_service):
-        """Checks that librarying eventfilter sets maxheight."""
+        """Checks that library eventfilter sets maxheight."""
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
         builder = LibraryTabBuilder(app_state, None)

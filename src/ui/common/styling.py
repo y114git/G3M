@@ -852,7 +852,7 @@ def rgba_from_color(
 def build_tag_checkbox_style(
     text_color: str, font_size: int = 14, indicator_size: int = 18, spacing: int = 5
 ) -> str:
-    return f"\n            QCheckBox {{\n                color: {text_color};\n                font-size: {font_size}px;\n                spacing: {spacing}px;\n            }}\n            QCheckBox::indicator {{\n                width: {indicator_size}px;\n                height: {indicator_size}px;\n            }}\n        "
+    return f"\n      QCheckBox {{\n        color: {text_color};\n        font-size: {font_size}px;\n        spacing: {spacing}px;\n      }}\n      QCheckBox::indicator {{\n        width: {indicator_size}px;\n        height: {indicator_size}px;\n      }}\n    "
 
 
 def build_button_style(
@@ -1283,14 +1283,6 @@ def load_mod_icon_universal(
                         logging.debug(
                             f"load_mod_icon_universal: Error cleaning up icon loader attributes: {e}"
                         )
-                    try:
-                        if pool is not None and pool.activeThreadCount() > 0:
-                            pool.waitForDone(1000)
-                    except Exception as e:
-                        logging.debug(
-                            f"load_mod_icon_universal: Error waiting for pool in cleanup: {e}"
-                        )
-
                 try:
                     icon_label.destroyed.connect(_cleanup_refs)
                 except Exception as e:

@@ -82,7 +82,7 @@ class TestPathUtilsEdgeCases:
         assert get_user_themes_dir() == os.path.join(root, 'themes')
 
     def test_resource_path_edge_cases(self):
-        """Checks that resourceing path edge cases."""
+        """Checks that resource path edge cases."""
         with patch.object(sys, 'frozen', False, create=True):
             result = resource_path('')
             assert result.endswith('src') or 'src' in result
@@ -156,7 +156,7 @@ class TestPathUtilsEdgeCases:
             assert isinstance(result, str)
 
     def test_path_normalization_consistency(self):
-        """Checks that pathing normalization consistency."""
+        """Checks that path normalization consistency."""
         test_paths = [
             'path\\to\\file',
             'path/to/file',
@@ -168,7 +168,7 @@ class TestPathUtilsEdgeCases:
         assert len(set(normalized)) == 1
 
     def test_unicode_path_handling(self):
-        """Checks that unicodeing path handling."""
+        """Checks that Unicode path handling."""
         unicode_paths = [
             'тест/путь',
             'テスト/パス',
@@ -184,7 +184,7 @@ class TestPathUtilsEdgeCases:
                 pytest.skip(f"Unicode handling not supported on this platform: {e}")
 
     def test_path_security_validation(self):
-        """Checks that pathing security validation."""
+        """Checks that path security validation."""
         dangerous_paths = [
             '../../../etc/passwd',
             '/etc/shadow',
@@ -207,7 +207,7 @@ class TestPathUtilsEdgeCases:
             assert _is_safe_path(path), f"Path '{path}' should be detected as safe"
 
     def test_resource_path_pyinstaller_edge_cases(self):
-        """Checks that resourceing path pyinstaller edge cases."""
+        """Checks that resource path pyinstaller edge cases."""
         bundle_root = '/bundle-root/meipass'
         with patch.object(sys, 'frozen', False, create=True), \
                 patch.object(sys, '_MEIPASS', bundle_root, create=True):
@@ -285,7 +285,7 @@ class TestPathUtilsEdgeCases:
             assert autodetect_path('SUGARY SPIRE') is None
 
     def test_path_utils_performance_considerations(self):
-        """Checks that pathing utils performance considerations."""
+        """Checks that path utils performance considerations."""
         start = time.time()
         for _ in range(100):
             get_user_data_root()

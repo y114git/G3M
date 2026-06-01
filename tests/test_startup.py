@@ -31,7 +31,7 @@ def _contains_startup_errors(output: str) -> bool:
 
 
 def test_startup_from_environment():
-    """Checks that startuping  from environment."""
+    """Checks that startup from environment."""
     if "ARCHIVE_PATH" not in os.environ or "STARTUP_TARGET" not in os.environ:
         project_root = pathlib.Path(__file__).parent.parent
         main_py = project_root / "src" / "main.py"
@@ -62,7 +62,7 @@ def test_startup_from_environment():
 
 
 def test_startup_with_sample_archive(tmp_path):
-    """Checks that startuping  with sample archive."""
+    """Checks that startup with sample archive."""
     project_root = pathlib.Path(__file__).parent.parent
     main_py_path = project_root / "src" / "main.py"
 
@@ -88,7 +88,7 @@ def test_startup_with_sample_archive(tmp_path):
 
 
 def test_local_startup():
-    """Checks that localing startup."""
+    """Checks that local startup."""
     project_root = pathlib.Path(__file__).parent.parent
     main_py_path = project_root / "src" / "main.py"
 
@@ -120,7 +120,7 @@ def test_local_startup():
 
 
 def test_run_app_startup_path_imports(monkeypatch):
-    """Checks that runing app startup path imports."""
+    """Checks that running app startup path imports."""
     from app import startup as startup_module
 
     class _Socket:
@@ -301,7 +301,7 @@ def test_close_splash_and_show_launcher_delays_splash_close():
 
 
 def test_finalize_window_reveal_closes_splash_after_front_refresh():
-    """Checks that finalizeing window reveal closes splash after front refresh."""
+    """Checks that finalizing window reveal closes splash after front refresh."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
 
     coordinator = BootstrapCoordinator(
@@ -532,7 +532,7 @@ def test_show_launcher_window_schedules_post_show_after_reveal_delay():
 
 
 def test_startup_window_creation_smoke(qapp, tmp_path):
-    """Checks that startuping window creation smoke."""
+    """Checks that startup window creation smoke."""
     from app.window import AppWindow
 
     user_root = tmp_path / "user"

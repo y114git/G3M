@@ -167,8 +167,8 @@ class TestConditionalImports:
         This catches bugs like:
             if condition:
                 from module import func
-                func(...)  # OK
-            func(...)  # UnboundLocalError if condition was False
+                func(...) # OK
+            func(...) # UnboundLocalError if condition was False
         """
         tracker = _ScopeTracker()
         py_files = _collect_all_python_files()
@@ -180,13 +180,13 @@ class TestConditionalImports:
         if tracker.unparseable_files:
             pytest.fail(
                 "Failed to parse source files:\n\n"
-                + "\n".join(f"  {f}" for f in tracker.unparseable_files)
+                + "\n".join(f" {f}" for f in tracker.unparseable_files)
             )
 
         if tracker.issues:
             msg = (
                 "Conditional import leak(s) detected - these will cause "
                 "'cannot access local variable' errors at runtime:\n\n"
-                + "\n".join(f"  {issue}" for issue in tracker.issues)
+                + "\n".join(f" {issue}" for issue in tracker.issues)
             )
             pytest.fail(msg)

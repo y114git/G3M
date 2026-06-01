@@ -13,9 +13,9 @@ from PyQt6.QtWidgets import QDialog
 
 from controllers.shortcut_controller import (
     ShortcutDialog,
-    _collect_shortcut_plugin_blocks,
     _build_shortcut_config,
     _collect_chapter_data,
+    _collect_shortcut_plugin_blocks,
     _generate_shortcut_filename,
     _get_platform_extension,
     _validate_shortcut_prerequisites,
@@ -365,14 +365,14 @@ class TestValidatePrerequisites:
         assert error is not None
 
     def test_mod_with_g3mtool_available(self, mock_app_state):
-        """Checks that moding  with g3mtool available."""
+        """Checks that mod with g3mtool available."""
         with patch("adapters.g3mtool_adapter.G3MToolManager") as mock_g3m:
             mock_g3m.return_value.is_available.return_value = True
             error = _validate_shortcut_prerequisites(mock_app_state, True)
             assert error is None
 
     def test_mod_with_g3mtool_unavailable(self, mock_app_state):
-        """Checks that moding  with g3mtool unavailable."""
+        """Checks that mod with g3mtool unavailable."""
         with patch("adapters.g3mtool_adapter.G3MToolManager") as mock_g3m:
             mock_g3m.return_value.is_available.return_value = False
             error = _validate_shortcut_prerequisites(mock_app_state, True)
@@ -388,7 +388,7 @@ class TestValidatePrerequisites:
 class TestGenerateShortcutFilename:
     """Tests for shortcut."""
     def test_with_mod(self, game_mode, mock_mod_data):
-        """Checks that withing  with mod."""
+        """Checks that withing with mod."""
         name = _generate_shortcut_filename(game_mode, {"deltarune_2": mock_mod_data})
         assert "G3M" in name
         assert "Test_Mod" in name
@@ -400,7 +400,7 @@ class TestGenerateShortcutFilename:
         assert "Vanilla" in name
 
     def test_safe_characters(self, game_mode, mock_mod_data):
-        """Checks that safeing characters."""
+        """Checks that sanitizing characters."""
         mock_mod_data.name = "Mod With Spaces & Symbols!"
         name = _generate_shortcut_filename(game_mode, {"deltarune_2": mock_mod_data})
         assert all(c.isalnum() or c in ("_", "-") for c in name)

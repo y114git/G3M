@@ -407,7 +407,7 @@ class InstallModsThread(QThread):
                         from utils.file_utils import download_and_extract_archive
 
                         before_files = set()
-                        for root, dir_names, files in os.walk(mod_dir):
+                        for root, _dir_names, files in os.walk(mod_dir):
                             for file in files:
                                 before_files.add(
                                     os.path.relpath(os.path.join(root, file), mod_dir).replace(
@@ -431,7 +431,7 @@ class InstallModsThread(QThread):
                             cancel_check=lambda: self._cancelled,
                         )
                         extracted_files = set()
-                        for root, dir_names, files in os.walk(mod_dir):
+                        for root, _dir_names, files in os.walk(mod_dir):
                             for file in files:
                                 extracted_files.add(
                                     os.path.relpath(os.path.join(root, file), mod_dir).replace(

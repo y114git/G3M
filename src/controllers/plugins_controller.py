@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QPixmap
+from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -351,7 +352,7 @@ QPushButton#cardButtonUninstall:disabled {{
         name_label = QLabel(title)
         name_label.setObjectName("primaryText")
         name_label.setStyleSheet("font-size: 15px; font-weight: bold;")
-        meta = QLabel(f"{author}  |  {version}".strip(" |"))
+        meta = QLabel(f"{author} | {version}".strip(" |"))
         meta.setObjectName("secondaryText")
         meta_color = get_theme_color(self.app_state.local_config, "secondary_text")
         meta.setStyleSheet(f"font-size: 13px; color: {meta_color};")
@@ -423,19 +424,18 @@ QPushButton#cardButtonUninstall:disabled {{
             tr("plugins.action_download"),
             "cardButtonDownload",
             lambda: self.download_plugin(entry),
-            enabled=bool(entry.download_link and is_compatible),
+            enabled=bool(entry.download_link),
         )
         self._download_buttons[entry.id] = download_button
         self._apply_download_button_state(download_button, entry, is_compatible)
         actions.addWidget(download_button)
-        if entry.homepage:
-            actions.addWidget(
-                self._action_button(
-                    tr("plugins.action_details"),
-                    "cardButton",
-                    lambda: QDesktopServices.openUrl(QUrl(entry.homepage)),
-                )
+        actions.addWidget(
+            self._action_button(
+                tr("plugins.action_details"),
+                "cardButton",
+                lambda: self.show_plugin_details(entry.id),
             )
+        )
         return card
 
     def _build_installed_card(self, plugin):
@@ -506,6 +506,8 @@ QPushButton#cardButtonUninstall:disabled {{
     def download_plugin(self, entry) -> None:
         if not entry.download_link:
             return
+        if not self._entry_api_compatible(entry) and not self._confirm_incompatible_api_download(entry):
+            return
         if analytics := getattr(self.app, "analytics_service", None):
             analytics.record_plugin_download_requested(entry)
         self.downloads_manager.enqueue_with_feedback(
@@ -525,6 +527,27 @@ QPushButton#cardButtonUninstall:disabled {{
         )
         self._refresh_download_button_state(entry.id)
 
+    def _confirm_incompatible_api_download(self, entry) -> bool:
+        box = QMessageBox(self.app)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(tr("plugins.incompatible_api_download_title"))
+        box.setText(
+            tr(
+                "plugins.incompatible_api_download_message",
+                name=entry.name,
+                required_version=entry.api_version,
+                current_version=PLUGIN_API_VERSION,
+            )
+        )
+        download_anyway = box.addButton(
+            tr("plugins.download_anyway"),
+            QMessageBox.ButtonRole.AcceptRole,
+        )
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        return box.clickedButton() is download_anyway
+
     def import_paths(self, paths: list[str]) -> None:
         if not paths:
             return
@@ -537,6 +560,9 @@ QPushButton#cardButtonUninstall:disabled {{
                 logger.error("PluginsController: import failed for %s: %s", path, e, exc_info=True)
                 self.feedback_service.show_message("error", "errors.error", str(e))
         if imported:
+            self.plugin_runtime_service.scan_installed_plugins(
+                resolve_catalog=self.plugin_catalog_service.is_loaded()
+            )
             if analytics := getattr(self.app, "analytics_service", None):
                 analytics.record_plugin_imported(source="manual")
             self.refresh_main_tabs()
@@ -577,10 +603,26 @@ QPushButton#cardButtonUninstall:disabled {{
 
     def show_plugin_details(self, plugin_id: str) -> None:
         plugin = self.plugin_runtime_service.get_plugin(plugin_id)
-        if not plugin:
+        entry = None if plugin else self.plugin_catalog_service.get_entry(plugin_id, load_if_needed=False)
+        if not plugin and not entry:
             return
         if analytics := getattr(self.app, "analytics_service", None):
             analytics.count("plugin_details_opened")
+        if entry is not None:
+            dialog = PluginDetailsDialog(
+                None,
+                self.plugin_runtime_service,
+                self.plugin_state_service,
+                self.app_state,
+                catalog_entry=entry,
+                can_download=bool(entry.download_link),
+                parent=self.app,
+            )
+            dialog.exec()
+            if dialog.download_requested:
+                self.download_plugin(entry)
+            self.render()
+            return
         dialog = PluginDetailsDialog(
             plugin,
             self.plugin_runtime_service,
@@ -589,20 +631,21 @@ QPushButton#cardButtonUninstall:disabled {{
             can_update=bool(
                 plugin.update_available
                 and plugin.catalog_entry
-                and self._entry_api_compatible(plugin.catalog_entry)
                 and not plugin.is_local
             ),
             on_update=self.update_plugin,
-            on_delete=self.delete_plugin,
             parent=self.app,
         )
         dialog.exec()
+        if dialog.delete_requested:
+            QTimer.singleShot(0, lambda plugin_id=plugin_id: self.delete_plugin(plugin_id))
+            return
         self.render()
 
     def update_plugin(self, plugin_id: str) -> None:
         plugin = self.plugin_runtime_service.get_plugin(plugin_id)
         entry = plugin.catalog_entry if plugin else None
-        if not entry or not self._entry_api_compatible(entry):
+        if not entry:
             return
         self.download_plugin(entry)
 
@@ -610,6 +653,9 @@ QPushButton#cardButtonUninstall:disabled {{
         plugin = self.plugin_runtime_service.get_plugin(plugin_id)
         try:
             self.plugin_install_service.delete_plugin(plugin_id)
+            self.plugin_runtime_service.scan_installed_plugins(
+                resolve_catalog=self.plugin_catalog_service.is_loaded()
+            )
             if analytics := getattr(self.app, "analytics_service", None):
                 analytics.record_plugin_deleted(
                     plugin_id=plugin_id,
@@ -669,14 +715,13 @@ QPushButton#cardButtonUninstall:disabled {{
         return tr("plugins.action_download")
 
     def _apply_download_button_state(
-        self, button: QPushButton, entry, is_compatible: bool
+        self, button: QPushButton, entry, _is_compatible: bool
     ) -> None:
         record = self._get_plugin_download_record(entry.id)
         button.setText(self._download_button_text(record))
         button.setEnabled(
             bool(
                 entry.download_link
-                and is_compatible
                 and not self._is_plugin_download_busy(record)
             )
         )

@@ -14,7 +14,7 @@ class TestDownloadsManagerEdgeCases:
     """Tests for downloads manager edge cases."""
 
     def test_safe_filename_various_inputs(self):
-        """Checks that safeing filename various inputs."""
+        """Checks that sanitizing filename various inputs."""
         assert _safe_filename("mod.zip") == "mod.zip"
 
         assert _safe_filename("mod-v1.2.3.zip") == "mod-v1.2.3.zip"
@@ -36,7 +36,7 @@ class TestDownloadsManagerEdgeCases:
         assert _safe_filename("мод.zip") == "мод.zip"
 
     def test_enqueue_with_canonical_key_existing(self, temp_dir):
-        """Checks that enqueueing  with canonical key existing."""
+        """Checks that enqueuing with canonical key existing."""
         settings_getter = Mock(return_value={'downloads_no_auto_use': False})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -59,7 +59,7 @@ class TestDownloadsManagerEdgeCases:
         manager.deleteLater()
 
     def test_enqueue_file_extension_detection(self, temp_dir):
-        """Checks that enqueueing file extension detection."""
+        """Checks that enqueuing file extension detection."""
         settings_getter = Mock(return_value={'downloads_no_auto_use': False})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -76,7 +76,7 @@ class TestDownloadsManagerEdgeCases:
         manager.deleteLater()
 
     def test_enqueue_settings_integration(self, temp_dir):
-        """Checks that enqueueing settings integration."""
+        """Checks that enqueuing settings integration."""
         settings_getter = Mock(return_value={
             'downloads_no_auto_use': True,
             'downloads_delete_after_use': True
@@ -224,7 +224,7 @@ class TestDownloadsManagerEdgeCases:
         manager.deleteLater()
 
     def test_emit_badge_counts(self, temp_dir):
-        """Checks that emiting badge counts."""
+        """Checks that emitting badge counts."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -249,7 +249,7 @@ class TestDownloadsManagerEdgeCases:
         manager.deleteLater()
 
     def test_startup_recovery(self, temp_dir):
-        """Checks that startuping recovery."""
+        """Checks that startup recovery."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
 
@@ -273,7 +273,7 @@ class TestDownloadsManagerEdgeCases:
         manager.deleteLater()
 
     def test_enqueue_with_feedback_validation(self, temp_dir):
-        """Checks that enqueueing  with feedback validation."""
+        """Checks that enqueuing with feedback validation."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -297,7 +297,7 @@ class TestDownloadsManagerEdgeCases:
         manager.deleteLater()
 
     def test_worker_cleanup_on_finish(self, temp_dir):
-        """Checks that workering cleanup on finish."""
+        """Checks that worker cleanup on finish."""
         settings_getter = Mock(return_value={})
         manager = DownloadsManager(temp_dir, settings_getter)
         manager.startup()
@@ -335,7 +335,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return None
 
-            def parentWidget(self):  # noqa: N802
+            def parentWidget(self): # noqa: N802
                 return None
 
         class FakeDialog:
@@ -345,7 +345,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self):  # noqa: N802
+            def parentWidget(self): # noqa: N802
                 return self._parent
 
         host = FakeWindow()
@@ -371,7 +371,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return None
 
-            def parentWidget(self):  # noqa: N802
+            def parentWidget(self): # noqa: N802
                 return None
 
         class FakeDialog:
@@ -381,7 +381,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self):  # noqa: N802
+            def parentWidget(self): # noqa: N802
                 return self._parent
 
         host = FakeWindow()
@@ -405,7 +405,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self):  # noqa: N802
+            def parentWidget(self): # noqa: N802
                 return self._parent
 
         class FakeB:
@@ -415,7 +415,7 @@ class TestDownloadsManagerEdgeCases:
             def parent(self):
                 return self._parent
 
-            def parentWidget(self):  # noqa: N802
+            def parentWidget(self): # noqa: N802
                 return self._parent
 
         a = FakeA()

@@ -781,13 +781,19 @@ class ThemeController:
         font_file_key = None
         custom_font_exists = custom_f_path and os.path.exists(custom_f_path)
         if custom_font_exists:
-            stat_result = os.stat(custom_f_path)
-            font_file_key = (
-                custom_f_path,
-                stat_result.st_mtime_ns,
-                stat_result.st_size,
-            )
+            try:
+                stat_result = os.stat(custom_f_path)
+            except (FileNotFoundError, OSError):
+                custom_font_exists = False
+            else:
+                font_file_key = (
+                    custom_f_path,
+                    stat_result.st_mtime_ns,
+                    stat_result.st_size,
+                )
             if (
+                font_file_key
+                and
                 getattr(self.app, "_custom_font_file_key", None) == font_file_key
                 and getattr(self.app, "custom_font_family", None)
             ):
@@ -820,4 +826,5 @@ class ThemeController:
                 self.app.custom_font_family = localization_service.load_font()
         else:
             self.app._custom_font_file_key = None
+            self.app._custom_font_id = None
             self.app.custom_font_family = localization_service.load_font()

@@ -572,7 +572,7 @@ class AppWindow(QWidget):
             lambda index: handle_tab_changed(self, index)
         )
         self.main_tab_widget.setStyleSheet(
-            "\n            QTabWidget::tab-bar {\n                alignment: center;\n            }\n            QTabBar::tab {\n                min-width: 92px;\n                padding: 6px 10px;\n            }\n        "
+            "\n      QTabWidget::tab-bar {\n        alignment: center;\n      }\n      QTabBar::tab {\n        min-width: 92px;\n        padding: 6px 10px;\n      }\n    "
         )
         self.main_layout.addWidget(self.main_tab_widget)
         self.main_layout.addWidget(self.bottom_widget)
@@ -718,6 +718,19 @@ class AppWindow(QWidget):
             setattr(self, attr_name, timer)
         return timer
 
+    def _get_or_create_ui_scale_refresh_timer(self):
+        timer = getattr(self, "_ui_scale_refresh_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(75)
+            timer.timeout.connect(self._refresh_scaled_card_displays)
+            self._ui_scale_refresh_timer = timer
+        return timer
+
+    def _schedule_scaled_card_refresh(self):
+        self._get_or_create_ui_scale_refresh_timer().start()
+
     def _connect_theme_setting_spinbox(
         self,
         spinbox,
@@ -742,36 +755,47 @@ class AppWindow(QWidget):
         spinbox.valueChanged.connect(_on_changed)
 
     def _refresh_scaled_card_displays(self):
-        if hasattr(self, "search_tab_builder") and hasattr(
+        if getattr(self, "_scaled_refresh_in_progress", False):
+            self._scaled_refresh_pending = True
+            return
+        self._scaled_refresh_in_progress = True
+        self._scaled_refresh_pending = False
+        try:
+            if hasattr(self, "search_tab_builder") and hasattr(
             self.search_tab_builder, "refresh_dynamic_styles"
-        ):
-            self.search_tab_builder.refresh_dynamic_styles()
-        if hasattr(self, "settings_builder") and hasattr(
-            self.settings_builder, "refresh_dynamic_styles"
-        ):
-            self.settings_builder.refresh_dynamic_styles()
-        if hasattr(self, "theme") and hasattr(self.theme, "update_dynamic_elements"):
-            self.theme.update_dynamic_elements()
-        if hasattr(self, "search_display"):
-            self.search_display.update_display()
-        if hasattr(self, "library_display"):
-            self.library_display.update_display()
-        for dialog_attr in (
-            "_game_versions_dialog",
-            "_mod_versions_dialog",
-            "_downloads_dialog",
-            "_log_viewer_dialog",
-            "_modding_tools_dialog",
-        ):
-            dialog = getattr(self, dialog_attr, None)
-            if not dialog:
-                continue
-            if hasattr(dialog, "refresh_theme"):
-                dialog.refresh_theme()
-            elif hasattr(dialog, "apply_theme"):
-                dialog.apply_theme()
-            if hasattr(dialog, "scale_ui"):
-                dialog.scale_ui()
+            ):
+                self.search_tab_builder.refresh_dynamic_styles()
+            if hasattr(self, "settings_builder") and hasattr(
+                self.settings_builder, "refresh_dynamic_styles"
+            ):
+                self.settings_builder.refresh_dynamic_styles()
+            if hasattr(self, "theme") and hasattr(self.theme, "update_dynamic_elements"):
+                self.theme.update_dynamic_elements()
+            if getattr(self, "search_display", None) is not None:
+                self.search_display.update_display()
+            if getattr(self, "library_display", None) is not None:
+                self.library_display.update_display()
+            for dialog_attr in (
+                "_game_versions_dialog",
+                "_mod_versions_dialog",
+                "_downloads_dialog",
+                "_log_viewer_dialog",
+                "_modding_tools_dialog",
+            ):
+                dialog = getattr(self, dialog_attr, None)
+                if not dialog:
+                    continue
+                if hasattr(dialog, "refresh_theme"):
+                    dialog.refresh_theme()
+                elif hasattr(dialog, "apply_theme"):
+                    dialog.apply_theme()
+                if hasattr(dialog, "scale_ui"):
+                    dialog.scale_ui()
+        finally:
+            self._scaled_refresh_in_progress = False
+            if getattr(self, "_scaled_refresh_pending", False):
+                self._scaled_refresh_pending = False
+                QTimer.singleShot(0, self._refresh_scaled_card_displays)
 
     @staticmethod
     def _localized_value(data, ru_key, en_key, fallback_key=None) -> str:
@@ -780,6 +804,8 @@ class AppWindow(QWidget):
             "ru": ru_key,
             "en": en_key,
             "es": en_key.replace("_en", "_es"),
+            "ko": en_key.replace("_en", "_ko"),
+            "ja": en_key.replace("_en", "_ja"),
             "zh_cn": en_key.replace("_en", "_zh_cn"),
             "zh_tw": en_key.replace("_en", "_zh_tw"),
         }
@@ -1137,6 +1163,38 @@ class AppWindow(QWidget):
             self.progress_bar.setVisible(True)
 
     def _update_status(self, message: str, color: str = "white"):
+        self._last_status_translation = self._match_status_translation(message)
+        self._set_status_text(message, color)
+
+    def _update_localized_status(self, tr_key: str, color: str = "white", **kwargs):
+        self._last_status_translation = (tr_key, dict(kwargs))
+        self._set_status_text(tr(tr_key, **kwargs), color)
+
+    @staticmethod
+    def _match_status_translation(message: str) -> tuple[str, dict] | None:
+        status_strings = getattr(localization_service, "strings", {}).get("status", {})
+        if not isinstance(status_strings, dict):
+            return None
+        for key, value in status_strings.items():
+            if not isinstance(value, str):
+                continue
+            tr_key = f"status.{key.removeprefix('_')}"
+            if tr(tr_key) == message:
+                return tr_key, {}
+        return None
+
+    def _refresh_localized_status(self):
+        status_translation = getattr(self, "_last_status_translation", None)
+        if not status_translation:
+            return
+        tr_key, kwargs = status_translation
+        self._set_status_text(
+            tr(tr_key, **kwargs),
+            getattr(self, "_last_status_color", "white"),
+        )
+
+    def _set_status_text(self, message: str, color: str = "white"):
+        self._last_status_color = color
         actual_color = UI_COLORS.get(color, color)
         if not self.status_label.wordWrap():
             self.status_label.setWordWrap(True)
@@ -1426,6 +1484,9 @@ class AppWindow(QWidget):
     def _prompt_for_game_path(self, is_initial=False):
         result = self.settings_service.prompt_for_game_path(is_initial)
         if result:
+            from app.game_ui import update_path_inputs_ui
+
+            update_path_inputs_ui(self)
             self.game_launch.update_button_state()
         if is_initial and (not result):
             self.customization_service.start_background_music()
@@ -1520,4 +1581,4 @@ class AppWindow(QWidget):
             self.settings_service.write_local_config()
             if hasattr(self, "_ui_scale_timer"):
                 self._ui_scale_timer.start()
-            self._refresh_scaled_card_displays()
+            self._schedule_scaled_card_refresh()

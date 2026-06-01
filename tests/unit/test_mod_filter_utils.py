@@ -9,7 +9,7 @@ class TestModFilterUtils:
         assert result == []
 
     def test_filter_with_mod_accessor(self):
-        """Checks that filtering  with mod accessor."""
+        """Checks that filtering with mod accessor."""
         mod_a = {'id': 'gb_mod_12345', 'name': 'Mod A'}
         mod_b = {'id': 'gb_mod_67890', 'name': 'Mod B'}
         mods_list = [{'mod': mod_a}, {'mod': mod_b}]

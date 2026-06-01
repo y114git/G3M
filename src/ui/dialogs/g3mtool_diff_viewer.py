@@ -225,7 +225,7 @@ class _CollapsibleSection(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        self._header = QPushButton(f"\u25b6  {title}")
+        self._header = QPushButton(f"\u25b6 {title}")
         self._header.setObjectName("modding_tools_section_header")
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._header.clicked.connect(self._toggle)
@@ -249,7 +249,7 @@ class _CollapsibleSection(QWidget):
         self._expanded = not self._expanded
         self._body.setVisible(self._expanded)
         arrow = "\u25bc" if self._expanded else "\u25b6"
-        self._header.setText(f"{arrow}  {self._title}")
+        self._header.setText(f"{arrow} {self._title}")
         if self._expanded:
             doc_h = int(self._body.document().size().height()) + 16
             self._body.setMinimumHeight(min(doc_h, 500))

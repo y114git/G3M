@@ -4,7 +4,6 @@ import logging
 
 from app.game_ui import refresh_game_lists, update_checkbox_visibility
 from config.config import UI_COLORS
-from models.download_models import TargetKind
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
 
@@ -34,8 +33,6 @@ def on_downloads_record_updated(w, record):
             UI_COLORS["status_warning"],
         )
     refresh_mod_card_buttons(w)
-    if getattr(record, "target_kind", None) == TargetKind.PLUGIN and hasattr(w, "plugins_ui"):
-        w.plugins_ui.handle_external_refresh()
 
 
 def on_downloads_use_completed(w):
@@ -127,7 +124,7 @@ def open_modding_tools_dialog(w):
         analytics.record_dialog_opened("modding_tools")
     g3m = getattr(w, "_g3m_manager", None)
     if not g3m:
-        g3m = G3MToolManager()
+        g3m = G3MToolManager(w.app_state)
         w._g3m_manager = g3m
     w._modding_tools_dialog = ModdingToolsDialog(g3m, w.app_state, w)
     w._modding_tools_dialog.destroyed.connect(

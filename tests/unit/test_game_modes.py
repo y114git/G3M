@@ -12,7 +12,7 @@ from models.game_modes import (
 class TestGetTab:
     """Tests for game modes."""
     def test_match_by_tab_id(self):
-        """Checks that matching  by tab id."""
+        """Checks that matching by tab id."""
         game = DeltaruneGame()
         tab = game.get_tab("deltarune_1")
         assert tab is not None
@@ -20,7 +20,7 @@ class TestGetTab:
         assert tab.files_key == "1"
 
     def test_match_by_files_key(self):
-        """Checks that matching  by files key."""
+        """Checks that matching by files key."""
         game = DeltaruneGame()
         tab = game.get_tab("1")
         assert tab is not None
@@ -44,22 +44,22 @@ class TestGetTab:
 class TestGetFolderName:
     """Tests for game modes."""
     def test_folder_by_tab_id(self):
-        """Checks that foldering  by tab id."""
+        """Checks that folder lookup by tab id."""
         game = DeltaruneGame()
         assert game.get_folder_name("deltarune_1") == "chapter_1"
 
     def test_folder_by_files_key(self):
-        """Checks that foldering  by files key."""
+        """Checks that folder lookup by files key."""
         game = DeltaruneGame()
         assert game.get_folder_name("1") == "chapter_1"
 
     def test_folder_unknown_returns_raw(self):
-        """Checks that foldering unknown returns raw."""
+        """Checks that folder lookup unknown returns raw."""
         game = DeltaruneGame()
         assert game.get_folder_name("unknown") == "unknown"
 
     def test_single_tab_game_folder_by_files_key(self):
-        """Checks that singleing tab game folder by files key."""
+        """Checks that single-tab game folder by files key."""
         game = GameDefinition()
         game.game_id = "testgame"
         game.tabs = [

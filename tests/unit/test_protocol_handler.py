@@ -46,7 +46,7 @@ class TestProtocolHandler:
 
     def test_parse_g3m_url_with_whitespace(self):
         """Checks that parsing g3m url with whitespace."""
-        url = "g3m://  https://example.com/mod.zip  "
+        url = "g3m:// https://example.com/mod.zip "
         result = _parse_g3m_url(url)
         assert result == "https://example.com/mod.zip"
 
@@ -131,7 +131,7 @@ class TestProtocolHandler:
     @patch('ui.dialogs.confirm_external_download_dialog.ConfirmExternalDownloadDialog')
     @patch('app.protocol_handler.tr')
     def test_enqueue_g3m_url_invalid_url(self, mock_tr, mock_dialog):
-        """Checks that enqueueing g3m url invalid url."""
+        """Checks that enqueuing g3m url invalid url."""
         mock_tr.side_effect = lambda key, *args: key
 
         w = Mock()
@@ -148,7 +148,7 @@ class TestProtocolHandler:
     @patch('ui.dialogs.confirm_external_download_dialog.ConfirmExternalDownloadDialog')
     @patch('app.protocol_handler.tr')
     def test_enqueue_g3m_url_user_cancels(self, mock_tr, mock_dialog):
-        """Checks that enqueueing g3m url user cancels."""
+        """Checks that enqueuing g3m url user cancels."""
         mock_tr.side_effect = lambda key, *args: key
         mock_dialog.return_value.exec.return_value = False
 
@@ -166,7 +166,7 @@ class TestProtocolHandler:
     @patch('ui.dialogs.confirm_external_download_dialog.ConfirmExternalDownloadDialog')
     @patch('app.protocol_handler.tr')
     def test_enqueue_g3m_url_success(self, mock_tr, mock_dialog):
-        """Checks that enqueueing g3m url success."""
+        """Checks that enqueuing g3m url success."""
         mock_tr.side_effect = lambda key, *args: key
         mock_dialog.return_value.exec.return_value = True
 
@@ -188,7 +188,7 @@ class TestProtocolHandler:
     @patch('ui.dialogs.confirm_external_download_dialog.ConfirmExternalDownloadDialog')
     @patch('app.protocol_handler.tr')
     def test_enqueue_g3m_url_no_basename(self, mock_tr, mock_dialog):
-        """Checks that enqueueing g3m url no basename."""
+        """Checks that enqueuing g3m url no basename."""
         mock_tr.side_effect = lambda key, *args: key
         mock_dialog.return_value.exec.return_value = True
 

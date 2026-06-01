@@ -1,5 +1,5 @@
 {
-  "name": "DR Save Manager",
+  "name": "Gestor de guardados DR",
   "description": "Gestiona colecciones de guardados de DELTARUNE y cámbialas antes de iniciar.",
   "settings": {
     "save_path": "Carpeta de guardados"
@@ -8,14 +8,14 @@
     "back_button": "Atrás",
     "chapter_tab_title": "Capítulo {chapter_num}",
     "collections": "Colecciones",
-    "save_info": "{nickname} - {currency}D$\\n{status}",
+    "save_info": "{nickname} - {currency}D$\n{status}",
     "select": "Seleccionar",
     "select_deltarune_saves_folder": "Seleccionar carpeta de guardados de DELTARUNE",
     "select_save_file": "Seleccionar archivo de guardado",
     "select_storage": "Seleccionar almacenamiento",
     "simple_mode": "Modo simple",
     "advanced_mode": "Modo avanzado",
-    "general": "General",
+    "general": "Datos generales",
     "overview": "Resumen",
     "party": "Grupo",
     "inventory": "Inventario",
@@ -30,7 +30,7 @@
     "thrash_machine_editor": "Máquina Thrash",
     "dark_world_flags": "Mundo Oscuro",
     "light_world_flags": "Mundo de la Luz",
-    "onion_flags": "Onion",
+    "onion_flags": "Cebolla",
     "weird_route_flags": "Ruta Extraña",
     "gameshow_flags": "Concurso",
     "consumables": "Consumibles",
@@ -75,7 +75,7 @@
     "special": "Especial",
     "element": "Elemento",
     "element_power": "Poder elemental",
-    "set_label": "Set",
+    "set_label": "Conjunto",
     "weapon_set_label": "set de arma {number}",
     "stat_attack_short": "AT",
     "stat_defence_short": "DF",
@@ -148,7 +148,7 @@
     "save_changes": "¿Guardar cambios?",
     "original_save_overwrite": "El guardado original será sobrescrito.",
     "access_error": "Error de acceso",
-    "no_write_permissions": "Sin permisos de escritura para la carpeta:\\n{path}",
+    "no_write_permissions": "Sin permisos de escritura para la carpeta:\n{path}",
     "delete_save": "¿Eliminar guardado?",
     "delete_save_confirmation": "El guardado será eliminado permanentemente. ¿Continuar?",
     "no_collections": "Sin colecciones",
@@ -181,6 +181,6 @@
     "rename_failed": "No se pudo renombrar",
     "deletion_failed": "No se pudo eliminar",
     "copy_failed": "No se pudo copiar",
-    "error": "Error"
+    "error": "Error general"
   }
 }

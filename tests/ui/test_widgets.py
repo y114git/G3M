@@ -21,7 +21,7 @@ def _drain_events(qapp, cycles: int = 3) -> None:
 class TestModWidgets:
     """Tests for widgets."""
     def test_base_mod_widget_creation(self, qapp):
-        """Checks that baseing mod widget creation."""
+        """Checks that base mod widget creation."""
         from unittest.mock import patch
 
         from ui.widgets.mod.base_mod_widget import BaseModWidget
@@ -62,7 +62,7 @@ class TestModWidgets:
         _drain_events(qapp)
 
     def test_installed_mod_widget_scales_with_ui_scale(self, qapp):
-        """Checks that installeding mod widget scales with ui scale."""
+        """Checks that installed mod widget scales with ui scale."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -79,7 +79,7 @@ class TestModWidgets:
         _drain_events(qapp)
 
     def test_mod_card_widget_scales_with_ui_scale(self, qapp):
-        """Checks that moding card widget scales with ui scale."""
+        """Checks that mod card widget scales with ui scale."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -185,7 +185,7 @@ class TestModWidgets:
         analytics.record_mod_opened.assert_called_once_with("mods_browser", mod)
 
     def test_mod_card_widget_has_likes_label(self, qapp):
-        """Checks that moding card widget has likes label."""
+        """Checks that mod card widget has likes label."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -200,7 +200,7 @@ class TestModWidgets:
         _drain_events(qapp)
 
     def test_installed_mod_widget_creation(self, qapp):
-        """Checks that installeding mod widget creation."""
+        """Checks that installed mod widget creation."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -214,7 +214,7 @@ class TestModWidgets:
         _drain_events(qapp)
 
     def test_mod_card_widget_creation(self, qapp):
-        """Checks that moding card widget creation."""
+        """Checks that mod card widget creation."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -243,7 +243,7 @@ class TestModWidgets:
         _drain_events(qapp)
 
     def test_selected_mod_card_keeps_select_border_on_hover(self, qapp):
-        """Checks that selecteding mod card keeps select border on hover."""
+        """Checks that selected mod card keeps select border on hover."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -269,7 +269,7 @@ class TestModWidgets:
 class TestCommonWidgets:
     """Tests for widgets."""
     def test_custom_controls_creation(self, qapp):
-        """Checks that customing controls creation."""
+        """Checks that custom controls creation."""
         from ui.widgets.shared.custom_controls import NoScrollComboBox
         combo = NoScrollComboBox()
         assert combo is not None
@@ -278,7 +278,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_creation(self, qapp):
-        """Checks that moding details overlay creation."""
+        """Checks that mod details overlay creation."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune')
@@ -294,7 +294,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_hidden_during_construction(self, qapp):
-        """Checks that moding details overlay hidden during construction."""
+        """Checks that mod details overlay hidden during construction."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         host = QWidget()
@@ -306,7 +306,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_preloaded_screenshot_displays_on_navigate(self, qapp):
-        """Checks that moding details overlay preloaded screenshot displays on navigate."""
+        """Checks that mod details overlay preloaded screenshot displays on navigate."""
         from PyQt6.QtGui import QImage
 
         from models.mod_models import ModInfo
@@ -329,7 +329,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_metadata_order(self, qapp):
-        """Checks that moding details overlay metadata order."""
+        """Checks that mod details overlay metadata order."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='1.0', description_url='', downloads=42, game='deltarune', created_date='2024-01-01', gamebanana_category='Category')
@@ -353,7 +353,7 @@ class TestCommonWidgets:
 
     @pytest.mark.parametrize(('downloads', 'expected'), [(0, '0'), (None, '0')])
     def test_mod_details_overlay_shows_downloads(self, qapp, downloads, expected):
-        """Checks that moding details overlay shows downloads."""
+        """Checks that mod details overlay shows downloads."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='1.0', description_url='', downloads=downloads, game='deltarune', created_date='2024-01-01', gamebanana_category='Category')
@@ -364,7 +364,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_uses_custom_hover_color(self, qapp):
-        """Checks that moding details overlay uses custom hover color."""
+        """Checks that mod details overlay uses custom hover color."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         parent = QWidget()
@@ -377,7 +377,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_uses_custom_select_color(self, qapp):
-        """Checks that moding details overlay uses custom select color."""
+        """Checks that mod details overlay uses custom select color."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         parent = QWidget()
@@ -390,7 +390,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_update_screenshots(self, qapp):
-        """Checks that moding details overlay update screenshots."""
+        """Checks that mod details overlay update screenshots."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
@@ -406,7 +406,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_initializes_screenshots_from_mod_data(self, qapp):
-        """Checks that moding details overlay initializes screenshots from mod data."""
+        """Checks that mod details overlay initializes screenshots from mod data."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune', screenshots_url=['https://example.com/1.png', 'https://example.com/2.png'])
@@ -416,7 +416,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_nav(self, qapp):
-        """Checks that moding details overlay nav."""
+        """Checks that mod details overlay nav."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
@@ -437,7 +437,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_details_overlay_reuses_dot_labels_during_navigation(self, qapp):
-        """Checks that moding details overlay reuses dot labels during navigation."""
+        """Checks that mod details overlay reuses dot labels during navigation."""
         from models.mod_models import ModInfo
         from ui.widgets.mod_details_overlay import ModDetailsOverlay
         mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
@@ -451,7 +451,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_summary_panel_keeps_zero_playtime_visible(self, qapp):
-        """Checks that moding summary panel keeps zero playtime visible."""
+        """Checks that mod summary panel keeps zero playtime visible."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -482,7 +482,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_summary_panel_shows_only_final_file_and_folder_names(self, qapp):
-        """Checks that moding summary panel shows only final file and folder names."""
+        """Checks that mod summary panel shows only final file and folder names."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -526,7 +526,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_summary_panel_keeps_full_description_visible(self, qapp):
-        """Checks that moding summary panel keeps the full description text."""
+        """Checks that mod summary panel keeps the full description text."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -555,7 +555,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_mod_summary_panel_inserts_wrap_opportunities_for_long_file_names(self, qapp):
-        """Checks that moding summary panel can wrap long file names in popup layouts."""
+        """Checks that mod summary panel can wrap long file names in popup layouts."""
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
@@ -590,7 +590,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_library_drop_area_ignores_internal_file_drags_and_accepts_external_ones(self, qapp):
-        """Checks that librarying drop area ignores internal file drags and accepts external ones."""
+        """Checks that library drop area ignores internal file drags and accepts external ones."""
         from ui.builders.library_tab_builder import _DropAreaWidget
 
         drop_area = _DropAreaWidget()
@@ -695,7 +695,7 @@ class TestCommonWidgets:
         _drain_events(qapp)
 
     def test_rich_html_reserves_safe_width_for_inline_media(self):
-        """Checks that riching html reserves safe width for inline media."""
+        """Checks that rich HTML reserves safe width for inline media."""
         from ui.common.rich_html import (
             _build_img_tag,
             _placeholder_resource_width,
@@ -708,7 +708,7 @@ class TestCommonWidgets:
         assert 'width="290"' in img_tag
 
     def test_rich_html_loading_placeholder_keeps_outer_edges_transparent(self):
-        """Checks that riching html loading placeholder keeps outer edges transparent."""
+        """Checks that rich HTML loading placeholder keeps outer edges transparent."""
         from ui.common.rich_html import _create_loading_placeholder
         placeholder = _create_loading_placeholder(300, 120, 'Loading image...')
         center_y = placeholder.height() // 2

@@ -25,7 +25,7 @@ def _flatten_lang_keys(data, prefix=''):
 class TestLocalizationSystem:
     """Tests for localization updates."""
     def test_buttons_update_on_language_change(self):
-        """Checks that buttonsing update on language change."""
+        """Checks that buttons update on language change."""
         from services.localization_service import LocalizationManager
         loc_service = LocalizationManager()
         initial_lang = loc_service.get_current_language()
@@ -36,7 +36,7 @@ class TestLocalizationSystem:
             assert loc_service.get_current_language() == initial_lang
 
     def test_localization_service_has_rescan(self):
-        """Checks that localizationing service has rescan."""
+        """Checks that localization service has rescan."""
         from services.localization_service import LocalizationManager
         loc_service = LocalizationManager()
         assert hasattr(loc_service, 'rescan_languages')

@@ -7,6 +7,7 @@ import os
 import platform
 import re
 import shutil
+import subprocess
 import tempfile
 import zipfile
 
@@ -33,7 +34,11 @@ from services.migration_service import (
 )
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
-from utils.path_utils import find_theme_config_path
+from utils.path_utils import (
+    find_theme_config_path,
+    get_g3mtool_cache_dir,
+    resolve_game_executable,
+)
 
 
 class SettingsManager(QObject):
@@ -212,9 +217,6 @@ class SettingsManager(QObject):
     def on_toggle_pause_background_music_unfocused(self, enabled: bool):
         self._toggle_setting("pause_background_music_unfocused", enabled, None)
 
-    def on_toggle_skip_patching_warnings(self, enabled: bool):
-        self._toggle_setting("skip_patching_warnings", enabled)
-
     def on_toggle_hide_mods_browser_tab(self, enabled: bool):
         self._toggle_setting("hide_mods_browser_tab", enabled, None)
 
@@ -242,6 +244,36 @@ class SettingsManager(QObject):
     def on_toggle_merge_code(self, enabled: bool):
         self._toggle_setting("merge_code", enabled, None)
 
+    def clear_g3mtool_cache(self) -> bool:
+        if not self.feedback_service.ask_question(
+            "dialogs.clear_g3mtool_cache_confirm_title",
+            "dialogs.clear_g3mtool_cache_confirm_text",
+        ):
+            return False
+        cache_dir = get_g3mtool_cache_dir()
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+            for name in os.listdir(cache_dir):
+                path = os.path.join(cache_dir, name)
+                if os.path.isdir(path) and not os.path.islink(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+            self.feedback_service.show_message(
+                "info",
+                "dialogs.success",
+                tr("status.g3mtool_cache_cleared"),
+            )
+            return True
+        except Exception as e:
+            logging.error("Failed to clear G3MTool cache: %s", e, exc_info=True)
+            self.feedback_service.show_message(
+                "error",
+                "errors.error",
+                tr("errors.g3mtool_cache_clear_failed", error=str(e)),
+            )
+            return False
+
     def select_portproton_path(self) -> str | None:
         filepath, _ = QFileDialog.getOpenFileName(
             self.parent_widget, tr("ui.select_portproton_path")
@@ -250,6 +282,118 @@ class SettingsManager(QObject):
             self._toggle_setting("portproton_path", filepath)
             return filepath
         return None
+
+    def select_executable_path(self, title: str) -> str | None:
+        filepath, _ = QFileDialog.getOpenFileName(
+            self.parent_widget,
+            title,
+            os.path.expanduser("~"),
+            f"{tr('file_descriptions.all_files')} (*)",
+        )
+        if not filepath:
+            return None
+        if not self.validate_executable_path(filepath):
+            self.feedback_service.show_message(
+                "warning",
+                "errors.invalid_executable_file",
+                file=os.path.basename(filepath),
+            )
+            return None
+        return filepath
+
+    def validate_selected_game_path(
+        self, path: str, game=None, *, allow_custom_executable_override: bool = True
+    ) -> bool:
+        game = game or self.app_state.game_mode
+        cleaned_path = str(path or "").strip()
+        if not cleaned_path:
+            return True
+        if not os.path.isdir(cleaned_path):
+            return False
+        if allow_custom_executable_override:
+            custom_exec_key = getattr(game, "custom_exec_config_key", "")
+            if custom_exec_key and str(
+                self.app_state.local_config.get(custom_exec_key, "") or ""
+            ).strip():
+                return True
+        return resolve_game_executable(cleaned_path, getattr(game, "game_id", "")) is not None
+
+    def show_invalid_game_path_warning(self, path: str, game=None) -> None:
+        game = game or self.app_state.game_mode
+        display_name = getattr(game, "display_label", None) or getattr(
+            game, "display_name", "Game"
+        )
+        candidates = []
+        for platform_key in ("windows", "linux", "mac"):
+            for name in getattr(game, "executables", {}).get(platform_key, ()):
+                if name not in candidates:
+                    candidates.append(name)
+        self.feedback_service.show_message(
+            "warning",
+            "dialogs.path_not_found",
+            tr(
+                "errors.invalid_game_path_missing_executable",
+                game=display_name,
+                executables=", ".join(candidates) or "?",
+                path=path,
+            ),
+        )
+
+    @staticmethod
+    def _has_unix_executable_signature(filepath: str) -> bool:
+        try:
+            with open(filepath, "rb") as handle:
+                header = handle.read(4)
+        except OSError:
+            return False
+        if header.startswith(b"#!"):
+            return True
+        if header == b"\x7fELF":
+            return True
+        return header in {
+            b"\xfe\xed\xfa\xce",
+            b"\xce\xfa\xed\xfe",
+            b"\xfe\xed\xfa\xcf",
+            b"\xcf\xfa\xed\xfe",
+            b"\xca\xfe\xba\xbe",
+            b"\xbe\xba\xfe\xca",
+        }
+
+    def _validate_windows_executable_path(self, filepath: str) -> bool:
+        command = [filepath]
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
+            subprocess, "CREATE_SUSPENDED", 0
+        )
+        popen_kwargs = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "creationflags": creationflags,
+        }
+        process = None
+        try:
+            process = subprocess.Popen(command, **popen_kwargs)
+        except (
+            OSError,
+            ValueError,
+            subprocess.SubprocessError,
+        ):
+            return False
+        finally:
+            if process is not None:
+                with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
+                    process.kill()
+                with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
+                    process.wait(timeout=0.2)
+        return True
+
+    def validate_executable_path(self, filepath: str) -> bool:
+        if not os.path.isfile(filepath):
+            return False
+        if platform.system() == "Windows":
+            return self._validate_windows_executable_path(filepath)
+        if not os.access(filepath, os.X_OK):
+            return False
+        return self._has_unix_executable_signature(filepath)
 
     def pick_directory(self, title: str, start_dir: str = "") -> str:
         return QFileDialog.getExistingDirectory(
@@ -294,6 +438,9 @@ class SettingsManager(QObject):
                     if os.path.isdir(candidate):
                         corrected_path = candidate
                         break
+            if not self.validate_selected_game_path(corrected_path, game):
+                self.show_invalid_game_path_warning(corrected_path, game)
+                return False
             self.app_state.game_mode.set_game_path(
                 self.app_state.local_config, corrected_path
             )
@@ -875,7 +1022,6 @@ class SettingsManager(QObject):
                 for game in get_all_games():
                     self.app_state.local_config.pop(game.path_config_key, None)
             elif action == "custom_executables":
-                self.app_state.local_config.pop("use_custom_executable", None)
                 for game in get_all_games():
                     self.app_state.local_config.pop(game.custom_exec_config_key, None)
             elif action == "portproton_path":

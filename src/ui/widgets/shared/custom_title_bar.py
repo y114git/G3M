@@ -154,7 +154,7 @@ class CustomTitleBar(QWidget):
         self._maximize_tooltip = maximize_tooltip
         self._restore_tooltip = restore_tooltip
         self.close_button.setToolTip(close_tooltip)
-        self.sync_window_state(self.window().isMaximized())
+        self.sync_window_state(self.window().isMaximized() if self.window() else False)
 
     def _tc(self):
         return (

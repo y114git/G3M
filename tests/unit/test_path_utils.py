@@ -35,7 +35,7 @@ class TestPathUtils:
         assert "G3M" in mods_dir
 
     def test_resource_path_frozen(self):
-        """Checks that resourceing path frozen."""
+        """Checks that resource path frozen."""
         bundle_root = os.path.join("bundle-root", "pyinstaller")
         with (
             patch.object(sys, "frozen", True, create=True),
@@ -46,7 +46,7 @@ class TestPathUtils:
             assert "assets/icons/icon.ico" in path
 
     def test_resource_path_development(self):
-        """Checks that resourceing path development."""
+        """Checks that resource path development."""
         frozen_attr = getattr(sys, "frozen", None)
         meipass_attr = getattr(sys, "_MEIPASS", None)
         try:
@@ -242,7 +242,7 @@ class TestPathUtils:
         assert resolved == fallback
 
     def test_path_handling_special_characters(self, temp_dir):
-        """Checks that pathing handling special characters."""
+        """Checks that path handling special characters."""
         special_dir = os.path.join(temp_dir, "test dir with spaces & symbols!")
         os.makedirs(special_dir, exist_ok=True)
         test_file = os.path.join(special_dir, "test.txt")
@@ -252,7 +252,7 @@ class TestPathUtils:
         assert os.path.exists(special_dir)
 
     def test_path_handling_unicode(self, temp_dir):
-        """Checks that pathing handling unicode."""
+        """Checks that path handling unicode."""
         unicode_dir = os.path.join(temp_dir, "тест_目录_テスト")
         os.makedirs(unicode_dir, exist_ok=True)
         assert os.path.exists(unicode_dir)

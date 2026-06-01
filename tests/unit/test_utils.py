@@ -10,7 +10,7 @@ from utils.mod_utils import get_mod_id, get_mod_name
 class TestUiUtils:
     """Tests for utils."""
     def test_stop_existing_fade_clears_animation_reference_and_deletes_anim(self, qapp):
-        """Checks that stoping existing fade clears animation reference and deletes anim."""
+        """Checks that stopping existing fade clears animation reference and deletes anim."""
         from PyQt6.QtWidgets import QWidget
 
         from ui.utils.ui_utils import UIAnimator
@@ -81,7 +81,7 @@ class TestModUtils:
 class TestFileUtils:
     """Tests for utils."""
     def test_sanitize_filename(self):
-        """Checks that sanitizeing filename."""
+        """Checks that sanitizing filename."""
         assert sanitize_filename('test_file.txt') == 'test_file.txt'
         assert sanitize_filename('test/file.txt') == 'testfile.txt'
         assert sanitize_filename('test\\file.txt') == 'testfile.txt'
@@ -96,7 +96,7 @@ class TestFileUtils:
         assert sanitize_filename('AUX.txt') == 'AUX.txt'
 
     def test_safe_rmtree_default_params(self, temp_dir, qapp):
-        """Checks that safeing rmtree default params."""
+        """Checks that sanitizing rmtree default params."""
         from utils.file_utils import safe_rmtree
 
         test_dir = os.path.join(temp_dir, 'test_rmtree')
@@ -116,7 +116,7 @@ class TestFileUtils:
         assert not os.path.exists(test_dir2)
 
     def test_safe_rmtree_fails_when_directory_still_exists(self, temp_dir, monkeypatch):
-        """Checks that safeing rmtree fails when removal silently leaves directory behind."""
+        """Checks that sanitizing rmtree fails when removal silently leaves directory behind."""
         from utils.file_utils import safe_rmtree
 
         test_dir = os.path.join(temp_dir, "test_rmtree_stuck")
@@ -127,7 +127,7 @@ class TestFileUtils:
         assert os.path.exists(test_dir)
 
     def test_has_deltamod_info_file(self):
-        """Checks that hasing deltamod info file."""
+        """Checks that detecting deltamod info file."""
         file_list = ['file1.txt', '_deltamodInfo.json', 'file2.txt']
         assert has_deltamod_info_file(file_list) is True
         file_list = ['file1.txt', 'meta.json', 'file2.txt']
@@ -141,13 +141,14 @@ class TestGameUtils:
     """Tests for utils."""
     @patch('psutil.process_iter')
     def test_is_game_running(self, mock_process_iter):
-        """Checks that ising game running."""
+        """Checks that detects game running."""
         from services.game_detection_service import is_game_running
         mock_process = Mock()
         mock_process.info = {'name': 'DELTARUNE.exe'}
         mock_process_iter.return_value = [mock_process]
         assert is_game_running() is True
         mock_process_iter.return_value = []
+        assert is_game_running() is False
 
     @patch('services.game_detection_service.psutil.pid_exists', side_effect=TypeError)
     def test_is_game_running_invalid_pid_returns_false(self, mock_pid_exists):
@@ -174,7 +175,7 @@ class TestNetworkUtils:
 class TestCache:
     """Tests for utils."""
     def test_cache_basic_operations(self, qapp):
-        """Checks that cacheing basic operations."""
+        """Checks that cache basic operations."""
         try:
             from PyQt6.QtGui import QImage
 

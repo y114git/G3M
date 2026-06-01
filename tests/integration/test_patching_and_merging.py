@@ -85,7 +85,7 @@ class TestG3MToolAdapter:
         assert G3MToolManager._parse_progress("not progress") is None
 
     def test_run_returns_stdout_stderr_and_progress(self, monkeypatch):
-        """Checks that runing returns stdout stderr and progress."""
+        """Checks that running returns stdout stderr and progress."""
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = "g3mtool"
         progress = []
@@ -106,11 +106,42 @@ class TestG3MToolAdapter:
         assert progress == [(25, "Applying patch")]
         assert g3mtool._active_processes == []
 
+    def test_run_parses_multiple_carriage_return_progress_updates(self, monkeypatch):
+        """Checks that carriage-return progress updates are surfaced incrementally."""
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "g3mtool"
+        progress = []
+        monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.subprocess.Popen",
+            lambda *_args, **_kwargs: self._FakeProcess(
+                "Applying patch: 1%\rApplying patch: 2%\rApplying patch: 4%\r",
+                "",
+            ),
+        )
+
+        result = g3mtool._run(
+            ["g3mtool", "info", "target"],
+            progress_callback=lambda percent, label: progress.append((percent, label)),
+        )
+
+        assert result == (
+            0,
+            "Applying patch: 1%\rApplying patch: 2%\rApplying patch: 4%\r",
+            "",
+        )
+        assert progress == [
+            (1, "Applying patch"),
+            (2, "Applying patch"),
+            (4, "Applying patch"),
+        ]
+
     def test_get_version_uses_version_flag(self, monkeypatch):
         """Checks that version lookup uses the exact CLI contract."""
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = "g3mtool"
         calls = []
+        monkeypatch.setattr(g3mtool, "_find_executable", lambda: "g3mtool")
         monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
         monkeypatch.setattr(
             "adapters.g3mtool_adapter.subprocess.Popen",
@@ -121,7 +152,7 @@ class TestG3MToolAdapter:
         assert calls == [["g3mtool", "--version"]]
 
     @pytest.mark.parametrize(
-        ("caller", "expected_cmd"),
+        ("caller", "expected_args"),
         [
             (
                 lambda g3mtool: g3mtool.merge_patches(
@@ -178,6 +209,20 @@ class TestG3MToolAdapter:
                 ["g3mtool", "patch", "create", "original.win", "modified.win", "out.g3mpatch"],
             ),
             (
+                lambda g3mtool: g3mtool.validate_patch(
+                    "patch.g3mpatch",
+                    data_file="original.win",
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "validate",
+                    "patch.g3mpatch",
+                    "--data",
+                    "original.win",
+                ],
+            ),
+            (
                 lambda g3mtool: g3mtool.info("target.win", verbose=True),
                 ["g3mtool", "info", "target.win", "--verbose"],
             ),
@@ -204,22 +249,41 @@ class TestG3MToolAdapter:
         ],
     )
     def test_public_commands_forward_expected_contract(
-        self, monkeypatch, caller, expected_cmd
+        self, monkeypatch, tmp_path, caller, expected_args
     ):
         """Checks that public commands forward expected contract."""
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = "g3mtool"
         run = Mock(return_value=(7, "stdout", "stderr"))
+        monkeypatch.setattr(g3mtool, "_find_executable", lambda: "g3mtool")
         monkeypatch.setattr(g3mtool, "_run", run)
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.get_g3mtool_cache_dir",
+            lambda: str(tmp_path / "cache" / "G3MTool"),
+        )
 
         assert caller(g3mtool) == (7, "stdout", "stderr")
-        assert run.call_args.args[0] == expected_cmd
+        actual_cmd = run.call_args.args[0]
+        expected_cmd = expected_args[:]
+        if expected_args[1:3] in (
+            ["patch", "merge"],
+            ["patch", "apply"],
+            ["patch", "create"],
+            ["patch", "validate"],
+        ) or expected_args[1] in ("info", "diff"):
+            expected_cmd.extend(["--cache", str(tmp_path / "cache" / "G3MTool")])
+        assert actual_cmd == expected_cmd
 
-    def test_patch_create_with_xdelta_fallback_uses_flag(self, monkeypatch):
+    def test_patch_create_with_xdelta_fallback_uses_flag(self, monkeypatch, tmp_path):
         """Checks that patch creation forwards the fallback flag exactly."""
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = "g3mtool"
         calls = []
+        monkeypatch.setattr(g3mtool, "_find_executable", lambda: "g3mtool")
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.get_g3mtool_cache_dir",
+            lambda: str(tmp_path / "cache" / "G3MTool"),
+        )
         monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
         monkeypatch.setattr(
             "adapters.g3mtool_adapter.subprocess.Popen",
@@ -244,7 +308,72 @@ class TestG3MToolAdapter:
                 "modified.win",
                 "out.g3mpatch",
                 "--xdelta-fallback",
+                "--cache",
+                str(tmp_path / "cache" / "G3MTool"),
             ]
+        ]
+
+    def test_run_command_uses_custom_xdelta_path_from_app_state(
+        self, monkeypatch, tmp_path
+    ):
+        """Checks that the configured xdelta binary is forwarded to G3MTool."""
+        app_state = SimpleNamespace(
+            local_config={"custom_xdelta_path": "/tools/xdelta-custom"}
+        )
+        g3mtool = G3MToolManager(app_state)
+        g3mtool.g3mtool_path = "g3mtool"
+        run = Mock(return_value=(0, "", ""))
+        monkeypatch.setattr(g3mtool, "_find_executable", lambda: "g3mtool")
+        monkeypatch.setattr(g3mtool, "_run", run)
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.get_g3mtool_cache_dir",
+            lambda: str(tmp_path / "cache" / "G3MTool"),
+        )
+
+        assert g3mtool.apply_patch("original.win", "patch.xdelta", "out.win") == (
+            0,
+            "",
+            "",
+        )
+        assert run.call_args.args[0] == [
+            "g3mtool",
+            "patch",
+            "apply",
+            "original.win",
+            "patch.xdelta",
+            "out.win",
+            "--cache",
+            str(tmp_path / "cache" / "G3MTool"),
+            "--xdelta-path",
+            "/tools/xdelta-custom",
+        ]
+
+    def test_run_command_uses_custom_g3mtool_path_from_app_state(
+        self, monkeypatch, tmp_path
+    ):
+        """Checks that the configured G3MTool binary replaces the bundled one."""
+        app_state = SimpleNamespace(
+            local_config={"custom_g3mtool_path": "/tools/G3MTool-custom"}
+        )
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.os.path.exists",
+            lambda path: path == "/tools/G3MTool-custom",
+        )
+        g3mtool = G3MToolManager(app_state)
+        run = Mock(return_value=(0, "", ""))
+        monkeypatch.setattr(g3mtool, "_run", run)
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.get_g3mtool_cache_dir",
+            lambda: str(tmp_path / "cache" / "G3MTool"),
+        )
+
+        assert g3mtool.info("target.win") == (0, "", "")
+        assert run.call_args.args[0] == [
+            "/tools/G3MTool-custom",
+            "info",
+            "target.win",
+            "--cache",
+            str(tmp_path / "cache" / "G3MTool"),
         ]
 
     @pytest.mark.parametrize(
@@ -255,6 +384,7 @@ class TestG3MToolAdapter:
             lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
             lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
             lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
+            lambda g3mtool: g3mtool.validate_patch("patch.g3mpatch", "original.win"),
             lambda g3mtool: g3mtool.execute(
                 "script.csx",
                 data_file="original.win",
@@ -268,6 +398,7 @@ class TestG3MToolAdapter:
         """Checks that public commands share unavailable contract."""
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = None
+        g3mtool._find_executable = lambda: None
 
         assert caller(g3mtool) == (-1, "", "G3MTool is not available")
 
@@ -526,7 +657,7 @@ class TestServiceInitialization:
         assert patcher._cancelled is True
 
     def test_warning_handler_can_abort(self):
-        """Checks that warninging handler can abort."""
+        """Checks that warning handler can abort."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -597,7 +728,7 @@ class TestServiceInitialization:
 class TestBackupFlow:
     """Tests for patching and merging."""
     def test_backup_and_restore(self, tmp_path):
-        """Checks that backuping and restore."""
+        """Checks that backup and restore."""
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger("test"))
@@ -614,7 +745,7 @@ class TestBackupFlow:
         assert test_file.read_bytes() == b"ORIGINAL_CONTENT"
 
     def test_backup_manifest_tracking(self, tmp_path):
-        """Checks that backuping manifest tracking."""
+        """Checks that backup manifest tracking."""
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         bm = BackupManager(str(backup_dir), patching_logger=logging.getLogger("test"))
@@ -658,7 +789,7 @@ class TestReportParsing:
         assert patcher.get_report_stats() == (0, 0)
 
     def test_report_with_conflicts(self, tmp_path):
-        """Checks that reporting  with conflicts."""
+        """Checks that reporting with conflicts."""
         report = tmp_path / "report.md"
         report.write_text("## Merge Report\n\nTotal conflicts: 3\nAuto-resolved: 1\n")
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -669,7 +800,7 @@ class TestReportParsing:
         assert auto == 1
 
     def test_report_without_conflicts(self, tmp_path):
-        """Checks that reporting  without conflicts."""
+        """Checks that reporting without conflicts."""
         report = tmp_path / "report.md"
         report.write_text("## Merge Report\n\nAll patches applied cleanly.\n")
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -709,7 +840,7 @@ class TestReportParsing:
 class TestXdeltaPatchApplication:
     """Tests for patching and merging."""
     def test_xdelta_missing_output_uses_warning_fallback(self, tmp_path):
-        """Checks that xdeltaing missing output uses warning fallback."""
+        """Checks that xdelta missing output uses warning fallback."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -977,8 +1108,8 @@ class TestFileOverrideProgress:
         assert len(progress_updates) >= 2
         assert progress_updates[-1][0] == 1
 
-    def test_xdelta_without_matching_target_does_not_warn(self, tmp_path):
-        """Checks that xdeltaing  without matching target does not warn."""
+    def test_xdelta_without_matching_target_warns_and_continues(self, tmp_path):
+        """Checks that unmatched extra xdelta patches warn but can be skipped."""
         from utils.patching.file_override_utils import apply_file_overrides
 
         mod_dir = tmp_path / "mod"
@@ -988,7 +1119,7 @@ class TestFileOverrideProgress:
         (mod_dir / "chapter1.xdelta").write_bytes(b"fake")
         patcher = Mock()
         patcher.xdelta_modpack = False
-        patcher._request_warning = Mock(return_value=False)
+        patcher._request_warning = Mock(return_value=True)
         patcher.patching_logger = Mock()
 
         result = apply_file_overrides(
@@ -996,7 +1127,10 @@ class TestFileOverrideProgress:
         )
 
         assert result is True
-        patcher._request_warning.assert_not_called()
+        patcher._request_warning.assert_called_once()
+        assert patcher._request_warning.call_args.kwargs["warning_id"] == (
+            "extra_xdelta_no_target"
+        )
 
 
 class TestG3MPatchProgressText:

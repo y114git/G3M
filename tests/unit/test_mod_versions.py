@@ -20,7 +20,7 @@ def mod_folder(tmp_path):
 class TestListLocalVersions:
     """Tests for mod versions."""
     def test_empty(self, mod_folder):
-        """Checks that emptying works."""
+        """Checks that empty input is handled."""
         from ui.dialogs.mod_versions_dialog import _list_local_versions
 
         assert _list_local_versions(mod_folder) == []

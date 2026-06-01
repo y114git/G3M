@@ -177,7 +177,7 @@ def test_analytics_service_shutdown_uses_less_aggressive_fallback_timeout(
         def wait(self, _timeout):
             return False
 
-        def isRunning(self):  # noqa: N802
+        def isRunning(self): # noqa: N802
             return True
 
     service._upload_thread = _StuckThread()

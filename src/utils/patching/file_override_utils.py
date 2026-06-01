@@ -152,7 +152,13 @@ def _copy_override_file(
                         "dialogs.patching_warning.xdelta_override_skipped",
                         patch=file,
                         target=target_dir,
-                    )
+                    ),
+                    warning_id="extra_xdelta_apply_failed",
+                    context={
+                        "patch": file,
+                        "target": target_dir,
+                        "mod_name": mod_name,
+                    },
                 )
             ):
                 return False
@@ -183,7 +189,20 @@ def _copy_override_file(
                 patcher.patching_logger.error(
                     f"Failed to copy archive {source_path}: {e}"
                 )
-                return False
+                return patcher._request_warning(
+                    tr(
+                        "dialogs.patching_warning.extra_file_copy_failed",
+                        file=file,
+                        target=target_path,
+                    ),
+                    details=str(e),
+                    warning_id="extra_file_copy_failed",
+                    context={
+                        "file": file,
+                        "target": target_path,
+                        "mod_name": mod_name,
+                    },
+                )
         else:
             if not extract_archive_to_target(
                 patcher,
@@ -205,7 +224,20 @@ def _copy_override_file(
         patcher.patching_logger.error(
             f"Failed to copy override file {source_path}: {e}"
         )
-        return False
+        return patcher._request_warning(
+            tr(
+                "dialogs.patching_warning.extra_file_copy_failed",
+                file=file,
+                target=target_path,
+            ),
+            details=str(e),
+            warning_id="extra_file_copy_failed",
+            context={
+                "file": file,
+                "target": target_path,
+                "mod_name": mod_name,
+            },
+        )
     return True
 
 
@@ -230,6 +262,18 @@ def _apply_configured_override_entries(
                     "Configured extra directory not found, skipping: %s",
                     source_path,
                 )
+                if not patcher._request_warning(
+                    tr(
+                        "dialogs.patching_warning.extra_directory_missing",
+                        path=source_path,
+                    ),
+                    warning_id="extra_directory_missing",
+                    context={
+                        "path": source_path,
+                        "mod_name": mod_name,
+                    },
+                ):
+                    return False
                 continue
             for root, _dirs, files in os.walk(source_path):
                 rel_root = os.path.relpath(root, source_path)
@@ -263,6 +307,15 @@ def _apply_configured_override_entries(
                 "Configured extra file not found, skipping: %s",
                 source_path,
             )
+            if not patcher._request_warning(
+                tr("dialogs.patching_warning.extra_file_missing", path=source_path),
+                warning_id="extra_file_missing",
+                context={
+                    "path": source_path,
+                    "mod_name": mod_name,
+                },
+            ):
+                return False
             continue
         target_path = os.path.join(target_dir, target_relative)
         if not _copy_override_file(
@@ -302,6 +355,19 @@ def apply_xdelta_override(
         patcher.patching_logger.debug(
             f"No target files found for xdelta patch {file_name}{label}, skipping (expected filename: {os.path.splitext(file_name)[0]})"
         )
+        if not fallback_target and not patcher._request_warning(
+            tr(
+                "dialogs.patching_warning.xdelta_override_no_target",
+                patch=file_name,
+                target=target_dir,
+            ),
+            warning_id="extra_xdelta_no_target",
+            context={
+                "patch": file_name,
+                "target": target_dir,
+            },
+        ):
+            return False
         if fallback_target:
             patcher._backup_or_mark_file(chapter_id, fallback_target)
             shutil.copy2(source_path, fallback_target)
@@ -407,7 +473,14 @@ def extract_archive_to_target(
                 "dialogs.patching_warning.archive_extract_failed",
                 archive=os.path.basename(archive_path),
                 target=target_dir,
-            )
+            ),
+            details=str(e),
+            warning_id="extra_archive_extract_failed",
+            context={
+                "archive": os.path.basename(archive_path),
+                "target": target_dir,
+                "mod_name": mod_name,
+            },
         )
 
 
@@ -520,7 +593,13 @@ def apply_file_overrides(
                                 "dialogs.patching_warning.xdelta_override_skipped",
                                 patch=file,
                                 target=target_dir,
-                            )
+                            ),
+                            warning_id="extra_xdelta_apply_failed",
+                            context={
+                                "patch": file,
+                                "target": target_dir,
+                                "mod_name": mod_name,
+                            },
                         )
                     ):
                         return False

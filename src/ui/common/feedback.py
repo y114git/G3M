@@ -7,6 +7,11 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 
 from services.localization_service import tr
+from services.warning_service import (
+    WarningEvent,
+    WarningSeverity,
+    get_warning_definition,
+)
 
 if TYPE_CHECKING:
     from models.app_state import AppState
@@ -97,15 +102,35 @@ class FeedbackManager(QObject):
         return reply == QMessageBox.StandardButton.Yes
 
     def ask_patching_warning(
-        self, message: str, details: str = "", report_path: str | None = None
+        self,
+        message: str | WarningEvent,
+        details: str = "",
+        report_path: str | None = None,
     ) -> bool:
         if not self._should_show_dialog():
             return False
+        icon = QMessageBox.Icon.Warning
+        title = self._tr("dialogs.patching_warning.title")
+        if isinstance(message, WarningEvent):
+            definition = get_warning_definition(message.warning_id)
+            context = message.context
+            title = self._tr(definition.title_key, **context)
+            body = self._tr(definition.body_key, **context)
+            message_text = message.fallback_message or body
+            details = message.details or details
+            report_path = message.report_path or report_path
+            icon = {
+                WarningSeverity.CRITICAL: QMessageBox.Icon.Critical,
+                WarningSeverity.MAJOR: QMessageBox.Icon.Warning,
+                WarningSeverity.MINOR: QMessageBox.Icon.Information,
+            }[definition.severity]
+        else:
+            message_text = message
         while True:
             msg_box = QMessageBox(self.parent_widget)
-            msg_box.setIcon(QMessageBox.Icon.Warning)
-            msg_box.setWindowTitle(self._tr("dialogs.patching_warning.title"))
-            full_message = self._format_html(message)
+            msg_box.setIcon(icon)
+            msg_box.setWindowTitle(title)
+            full_message = self._format_html(message_text)
             if details:
                 full_message = f"{full_message}<br><br>{self._format_html(details)}"
             msg_box.setText(full_message)
@@ -183,7 +208,10 @@ class _ScopedFeedbackManager:
         )
 
     def ask_patching_warning(
-        self, message: str, details: str = "", report_path: str | None = None
+        self,
+        message: str | WarningEvent,
+        details: str = "",
+        report_path: str | None = None,
     ) -> bool:
         return FeedbackManager.ask_patching_warning(
             self,

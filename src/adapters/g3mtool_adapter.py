@@ -1,5 +1,6 @@
 """G3MTool CLI execution and management."""
 
+import json
 import logging
 import os
 import platform
@@ -8,7 +9,7 @@ import subprocess
 import threading
 from collections.abc import Callable
 
-from utils.path_utils import resource_path
+from utils.path_utils import get_g3mtool_cache_dir, get_user_data_root, resource_path
 
 
 class G3MToolManager:
@@ -18,14 +19,47 @@ class G3MToolManager:
     _cached_executable_paths: dict[str, str | None] = {}
     _logged_executable_paths: set[str] = set()
 
-    def __init__(self) -> None:
+    def __init__(self, app_state=None) -> None:
+        self.app_state = app_state
         self.platform = {"Windows": "windows", "Darwin": "macos"}.get(
             platform.system(), "linux"
         )
-        self.g3mtool_path = self._find_executable()
+        self.g3mtool_path = None
+        self.refresh_executable()
         self._active_processes: list[subprocess.Popen] = []
+        self._active_processes_lock = threading.Lock()
+
+    def _get_local_config(self) -> dict:
+        local_config = getattr(self.app_state, "local_config", None)
+        if isinstance(local_config, dict):
+            return local_config
+        try:
+            config_path = os.path.join(get_user_data_root(), "settings", "settings.json")
+            if os.path.isfile(config_path):
+                with open(config_path, encoding="utf-8") as handle:
+                    data = json.load(handle)
+                if isinstance(data, dict):
+                    return data
+        except Exception as e:
+            logging.debug("Failed to load local config for G3MToolManager: %s", e)
+        return {}
+
+    def _get_configured_g3mtool_path(self) -> str | None:
+        path = str(self._get_local_config().get("custom_g3mtool_path", "") or "").strip()
+        return path or None
+
+    def _get_configured_xdelta_path(self) -> str | None:
+        path = str(self._get_local_config().get("custom_xdelta_path", "") or "").strip()
+        return path or None
 
     def _find_executable(self) -> str | None:
+        custom_path = self._get_configured_g3mtool_path()
+        if custom_path:
+            if os.path.exists(custom_path):
+                return custom_path
+            logging.warning(
+                f"Custom G3MTool path not found, falling back to bundled: {custom_path}"
+            )
         if self.platform in self._cached_executable_paths:
             return self._cached_executable_paths[self.platform]
         base_path = resource_path(f"assets/bin/g3mtool_{self.platform}")
@@ -48,14 +82,19 @@ class G3MToolManager:
         self._cached_executable_paths[self.platform] = None
         return None
 
+    def refresh_executable(self) -> str | None:
+        self.g3mtool_path = self._find_executable()
+        return self.g3mtool_path
+
     def is_available(self) -> bool:
-        return self.g3mtool_path is not None
+        return self.refresh_executable() is not None
 
     def get_version(self) -> str | None:
         """Return the bundled G3MTool version string."""
-        if not self.g3mtool_path:
+        g3mtool_path = self.refresh_executable()
+        if not g3mtool_path:
             return None
-        returncode, stdout, stderr = self._run([self.g3mtool_path, "--version"])
+        returncode, stdout, stderr = self._run([g3mtool_path, "--version"])
         if returncode != 0:
             if stderr:
                 logging.debug("G3MTool version command failed: %s", stderr.strip())
@@ -67,15 +106,37 @@ class G3MToolManager:
     def _unavailable_result() -> tuple[int, str, str]:
         return (-1, "", "G3MTool is not available")
 
+    @staticmethod
+    def _supports_cache(args: list[str]) -> bool:
+        if not args:
+            return False
+        if args[0] in {"info", "diff"}:
+            return True
+        return len(args) >= 2 and args[0] == "patch" and args[1] in {
+            "apply",
+            "create",
+            "merge",
+            "validate",
+        }
+
     def _run_command(
         self,
         args: list[str],
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
-        if not self.g3mtool_path:
+        g3mtool_path = self.refresh_executable()
+        if not g3mtool_path:
             return self._unavailable_result()
+        full_args = [*args]
+        if self._supports_cache(full_args):
+            cache_dir = get_g3mtool_cache_dir()
+            os.makedirs(cache_dir, exist_ok=True)
+            full_args.extend(["--cache", cache_dir])
+        xdelta_path = self._get_configured_xdelta_path()
+        if xdelta_path:
+            full_args.extend(["--xdelta-path", xdelta_path])
         return self._run(
-            [self.g3mtool_path, *args],
+            [g3mtool_path, *full_args],
             progress_callback=progress_callback,
         )
 
@@ -188,28 +249,45 @@ class G3MToolManager:
             progress_callback=progress_callback,
         )
 
+    def validate_patch(
+        self,
+        patch_path: str,
+        data_file: str | None = None,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
+        """Call g3mtool patch validate <patch> [--data <file>]."""
+        cmd = ["patch", "validate", patch_path]
+        if data_file:
+            cmd.extend(["--data", data_file])
+        return self._run_command(
+            cmd,
+            progress_callback=progress_callback,
+        )
+
     def info(
         self,
         target: str,
         verbose: bool = False,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool info <target> [--verbose]."""
         cmd = ["info", target]
         if verbose:
             cmd.append("--verbose")
-        return self._run_command(cmd)
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def diff(
         self,
         file1: str,
         file2: str,
         output_dir: str | None = None,
+        progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool diff <file1> <file2> [output-dir]."""
         cmd = ["diff", file1, file2]
         if output_dir:
             cmd.append(output_dir)
-        return self._run_command(cmd)
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def execute(
         self,
@@ -236,7 +314,10 @@ class G3MToolManager:
         )
 
     def cancel_active_processes(self):
-        for process in list(self._active_processes):
+        with self._active_processes_lock:
+            processes = list(self._active_processes)
+            self._active_processes.clear()
+        for process in processes:
             try:
                 if process.poll() is None:
                     process.kill()
@@ -246,7 +327,6 @@ class G3MToolManager:
                     f"G3MToolManager.cancel_active_processes: failed to stop process: {e}",
                     exc_info=True,
                 )
-        self._active_processes.clear()
 
     @classmethod
     def _parse_progress(cls, text: str) -> tuple[int, str] | None:
@@ -307,7 +387,8 @@ class G3MToolManager:
                 startupinfo=startupinfo,
                 creationflags=creationflags,
             )
-            self._active_processes.append(process)
+            with self._active_processes_lock:
+                self._active_processes.append(process)
             stdout_chunks: list[str] = []
             stderr_chunks: list[str] = []
             stdout_thread = threading.Thread(
@@ -330,8 +411,9 @@ class G3MToolManager:
                 stderr_thread.join()
                 stdout = "".join(stdout_chunks)
                 stderr = "".join(stderr_chunks)
-                if process in self._active_processes:
-                    self._active_processes.remove(process)
+                with self._active_processes_lock:
+                    if process in self._active_processes:
+                        self._active_processes.remove(process)
             logging.info(f"G3MTool completed with return code {returncode}")
             stderr_text = stderr.strip()
             if returncode != 0:

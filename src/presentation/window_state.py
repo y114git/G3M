@@ -19,6 +19,8 @@ def initialize_window_runtime(window) -> None:
     window.background_pixmap: QPixmap | None = None
     window.custom_font_family = None
     window._suppress_tab_handlers = False
+    window._last_status_translation = None
+    window._last_status_color = "white"
     window._last_online_count = 0
     window._install_op_id = 0
     window.pending_updates = []

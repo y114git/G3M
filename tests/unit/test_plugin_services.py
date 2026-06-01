@@ -34,7 +34,7 @@ class _CatalogSpy:
         return None
 
 
-def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
+def _write_plugin(plugins_dir, plugin_id="sample_plugin", api_version=">=1.0.0"):
     plugin_dir = os.path.join(plugins_dir, plugin_id)
     os.makedirs(os.path.join(plugin_dir, "lang"), exist_ok=True)
     with open(
@@ -50,7 +50,7 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
                 "description": f"plugins.{plugin_id}.description",
                 "author": "Tester",
                 "version": "1.0.0",
-                "api_version": ">=1.0.0",
+                "api_version": api_version,
                 "entry": "plugin.py",
                 "tags": ["tool"],
                 "relations": {},
@@ -64,14 +64,14 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin"):
     with open(os.path.join(plugin_dir, "plugin.py"), "w", encoding="utf-8") as handle:
         handle.write(
             "class _Plugin:\n"
-            "    def on_load(self, context):\n"
-            "        self.context = context\n"
-            "    def on_after_mod_apply_before_launch(self, context, *args):\n"
-            "        self.hook_context = context\n"
-            "        return True\n"
+            "  def on_load(self, context):\n"
+            "    self.context = context\n"
+            "  def on_after_mod_apply_before_launch(self, context, *args):\n"
+            "    self.hook_context = context\n"
+            "    return True\n"
             "\n"
             "def create_plugin():\n"
-            "    return _Plugin()\n"
+            "  return _Plugin()\n"
         )
     with open(
         os.path.join(plugin_dir, "lang", "lang_en.json"),
@@ -122,14 +122,14 @@ def _write_dataclass_plugin(plugins_dir, plugin_id="dataclass_plugin"):
             "\n"
             "@dataclass\n"
             "class _State:\n"
-            "    value: str = 'ok'\n"
+            "  value: str = 'ok'\n"
             "\n"
             "class _Plugin:\n"
-            "    def __init__(self):\n"
-            "        self.state = _State()\n"
+            "  def __init__(self):\n"
+            "    self.state = _State()\n"
             "\n"
             "def create_plugin():\n"
-            "    return _Plugin()\n"
+            "  return _Plugin()\n"
         )
     with open(
         os.path.join(plugin_dir, "lang", "lang_en.json"),
@@ -148,7 +148,7 @@ def _write_dataclass_plugin(plugins_dir, plugin_id="dataclass_plugin"):
 
 
 def test_plugin_state_service_persists_settings_and_filters(temp_dir):
-    """Checks that plugining state service persists settings and filters."""
+    """Checks that plugin state service persists settings and filters."""
     settings_service = _DummySettingsService()
     service = PluginStateService(settings_service, temp_dir)
     service.set_enabled("alpha", True)
@@ -161,7 +161,7 @@ def test_plugin_state_service_persists_settings_and_filters(temp_dir):
 
 
 def test_plugin_catalog_service_returns_empty_when_cache_is_empty(temp_dir):
-    """Checks that plugining catalog service returns empty when cache is empty."""
+    """Checks that plugin catalog service returns empty when cache is empty."""
     app_state = Mock()
     app_state.network_session = None
     settings_service = _DummySettingsService()
@@ -173,7 +173,7 @@ def test_plugin_catalog_service_returns_empty_when_cache_is_empty(temp_dir):
 
 
 def test_plugin_catalog_service_uses_in_memory_cache(temp_dir):
-    """Checks that plugining catalog service uses in memory cache."""
+    """Checks that plugin catalog service uses in memory cache."""
     app_state = Mock()
     app_state.network_session = None
     settings_service = _DummySettingsService()
@@ -188,7 +188,7 @@ def test_plugin_catalog_service_uses_in_memory_cache(temp_dir):
 
 
 def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir):
-    """Checks that plugining runtime scan merges localizations without catalog load."""
+    """Checks that plugin runtime scan merges localizations without catalog load."""
     localization_service.clear_plugin_strings()
     localization_service.load_language("en")
     settings_service = _DummySettingsService()
@@ -240,6 +240,55 @@ def test_plugin_runtime_loads_dataclass_plugin(temp_dir):
 
     assert "dataclass_plugin" in installed
     assert installed["dataclass_plugin"].status != "broken"
+
+
+def test_plugin_install_accepts_newer_plugin_api_requirement(temp_dir):
+    """Checks that Plugin API mismatch does not block installation."""
+    source_root = os.path.join(temp_dir, "source")
+    plugins_dir = os.path.join(temp_dir, "installed")
+    _write_plugin(source_root, "future_plugin", api_version=">=99.0.0")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    runtime = Mock()
+    service = PluginInstallService(state_service, runtime, plugins_dir)
+
+    installed_id = service.install_path(
+        os.path.join(source_root, "future_plugin"),
+        source="manual",
+    )
+
+    assert installed_id == "future_plugin"
+    assert os.path.isdir(os.path.join(plugins_dir, "future_plugin"))
+    runtime.scan_installed_plugins.assert_not_called()
+
+
+def test_plugin_runtime_allows_enabling_newer_plugin_api_requirement(temp_dir):
+    """Checks that Plugin API mismatch is not treated as runtime incompatibility."""
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_plugin(temp_dir, "future_plugin", api_version=">=99.0.0")
+    state_service.set_enabled("future_plugin", True)
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+
+    installed = runtime.scan_installed_plugins()
+
+    assert installed["future_plugin"].compatible is True
+    assert installed["future_plugin"].enabled is True
+    assert installed["future_plugin"].status == "installed"
+    assert "future_plugin" in runtime._enabled_instances
 
 
 def test_plugin_runtime_reports_enabled_hook_and_passes_task_runtime(temp_dir):
@@ -301,18 +350,18 @@ def test_plugin_runtime_reports_enabled_shortcut_hook_and_passes_shortcut_contex
     with open(os.path.join(plugin_dir, "plugin.py"), "w", encoding="utf-8") as handle:
         handle.write(
             "class _Plugin:\n"
-            "    def on_before_mod_apply_shortcut(self, context, shortcut_context, *args):\n"
-            "        shortcut_context.set_plugin_state('shortcut_hook_plugin', {'selected': 'alpha'})\n"
-            "        shortcut_context.add_summary_line('Collection', 'alpha')\n"
-            "        self.capture_context = context\n"
-            "        return True\n"
-            "    def on_after_mod_apply_before_launch_shortcut(self, context, shortcut_context, *args):\n"
-            "        self.launch_context = context\n"
-            "        self.shortcut_context = shortcut_context\n"
-            "        return shortcut_context.get_plugin_state('shortcut_hook_plugin')\n"
+            "  def on_before_mod_apply_shortcut(self, context, shortcut_context, *args):\n"
+            "    shortcut_context.set_plugin_state('shortcut_hook_plugin', {'selected': 'alpha'})\n"
+            "    shortcut_context.add_summary_line('Collection', 'alpha')\n"
+            "    self.capture_context = context\n"
+            "    return True\n"
+            "  def on_after_mod_apply_before_launch_shortcut(self, context, shortcut_context, *args):\n"
+            "    self.launch_context = context\n"
+            "    self.shortcut_context = shortcut_context\n"
+            "    return shortcut_context.get_plugin_state('shortcut_hook_plugin')\n"
             "\n"
             "def create_plugin():\n"
-            "    return _Plugin()\n"
+            "  return _Plugin()\n"
         )
     state_service.set_enabled("shortcut_hook_plugin", True)
     runtime = PluginRuntimeService(
@@ -396,7 +445,7 @@ def test_plugin_runtime_context_uses_plugin_scoped_feedback(temp_dir, monkeypatc
 
 
 def test_plugin_install_service_accepts_plugin_folder(temp_dir):
-    """Checks that plugining install service accepts plugin folder."""
+    """Checks that plugin install service accepts plugin folder."""
     settings_service = _DummySettingsService()
     state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
     plugins_dir = os.path.join(temp_dir, "plugins")
@@ -415,10 +464,11 @@ def test_plugin_install_service_accepts_plugin_folder(temp_dir):
     assert os.path.isfile(os.path.join(source_dir, "folder_plugin", "plugin_config.json"))
     assert os.path.isfile(os.path.join(source_dir, "folder_plugin", "plugin.py"))
     assert state_service.get_install_meta("folder_plugin")["local"] is True
+    install_service.plugin_runtime_service.scan_installed_plugins.assert_not_called()
 
 
 def test_plugin_install_service_accepts_plugin_zip(temp_dir):
-    """Checks that plugining install service accepts plugin zip."""
+    """Checks that plugin install service accepts plugin zip."""
     settings_service = _DummySettingsService()
     state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
     plugins_dir = os.path.join(temp_dir, "plugins")
@@ -443,7 +493,7 @@ def test_plugin_install_service_accepts_plugin_zip(temp_dir):
 
 
 def test_plugin_install_service_accepts_deeply_nested_plugin_zip(temp_dir):
-    """Checks that plugining install service accepts deeply nested plugin zip."""
+    """Checks that plugin install service accepts deeply nested plugin zip."""
     settings_service = _DummySettingsService()
     state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
     plugins_dir = os.path.join(temp_dir, "plugins")

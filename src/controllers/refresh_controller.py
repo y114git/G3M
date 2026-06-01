@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import os
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -165,6 +166,7 @@ class RefreshController:
             self.fetch_thread.result.connect(
                 lambda success: self._on_fetch_finished(
                     success,
+                    is_initial=is_initial,
                     localization_callback=localization_callback,
                     **finished_kwargs,
                 )
@@ -201,6 +203,7 @@ class RefreshController:
     def _on_fetch_finished(
         self,
         success: bool,
+        is_initial: bool = False,
         localization_callback=None,
         update_filtered_mods_callback=None,
         update_installed_mods_callback=None,
@@ -253,6 +256,17 @@ class RefreshController:
                     self.feedback_service.update_status(
                         fallback_msg, UI_COLORS["status_error"]
                     )
+                if is_initial and success:
+                    current_game_path = (
+                        self.app_state.game_mode.get_game_path(
+                            self.app_state.local_config
+                        )
+                        or ""
+                    )
+                    if not current_game_path or not os.path.exists(current_game_path):
+                        self.feedback_service.update_status(
+                            tr("status.no_game_path"), UI_COLORS["status_error"]
+                        )
                 self.used_mods_service.load_used_mods_state()
             except Exception as e:
                 error_msg = f"Error processing mod list: {e}"

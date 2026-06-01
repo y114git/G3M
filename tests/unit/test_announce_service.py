@@ -24,7 +24,7 @@ class TestAnnounceService:
         assert options == ["A", "Option B", "C"]
 
     def test_submit_poll_vote_creates_identity_and_persists_vote(self, app_state):
-        """Checks that submiting poll vote creates identity and persists vote."""
+        """Checks that submitting poll vote creates identity and persists vote."""
         from services.announce_service import AnnounceService
 
         settings_service = Mock()

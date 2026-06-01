@@ -33,7 +33,6 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
-from utils.patching.patch_verification_utils import verify_generated_patch
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +46,14 @@ _DATA_PATCH_FILTER = (
 _ALL_FILTER = "All Files (*)"
 _CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", "data.win", "game.ios")
 _MONOSPACE_FONT_SIZE_PX = 12
+
+
+def _format_progress_status(percent: int, label: str) -> str:
+    clean_percent = max(0, min(100, int(percent)))
+    clean_label = str(label or "").strip()
+    if clean_label:
+        return f"{clean_label}: {clean_percent}%"
+    return f"{tr('modding_tools.running')} {clean_percent}%"
 
 
 def _is_g3mpatch_source(path: str) -> bool:
@@ -71,13 +78,34 @@ def _is_csx_source(path: str) -> bool:
     return str(path or "").lower().endswith(".csx")
 
 
-def _apply_source_to_data(g3m, original: str, patch: str, output: str):
+def _apply_source_to_data(
+    g3m,
+    original: str,
+    patch: str,
+    output: str,
+    progress_callback=None,
+):
     if _is_g3mpatch_source(patch):
-        return g3m.apply_patch(original, patch, output)
+        return g3m.apply_patch(
+            original,
+            patch,
+            output,
+            progress_callback=progress_callback,
+        )
     if _is_xdelta_source(patch):
-        return g3m.xpatch_apply(original, patch, output)
+        return g3m.xpatch_apply(
+            original,
+            patch,
+            output,
+            progress_callback=progress_callback,
+        )
     if _is_csx_source(patch):
-        return g3m.execute(patch, data_file=original, output_path=output)
+        return g3m.execute(
+            patch,
+            data_file=original,
+            output_path=output,
+            progress_callback=progress_callback,
+        )
     return -1, "", f"Unsupported source patch format: {patch}"
 
 
@@ -88,6 +116,7 @@ def _patch_create(
     output: str,
     *,
     include_xdelta_fallback: bool = False,
+    progress_callback=None,
 ):
     """Call patch_create with optional fallback support when available."""
     try:
@@ -96,11 +125,29 @@ def _patch_create(
             modified,
             output,
             include_xdelta_fallback=include_xdelta_fallback,
+            progress_callback=progress_callback,
         )
     except TypeError as exc:
         if "include_xdelta_fallback" not in str(exc):
-            raise
-        return g3m.patch_create(original, modified, output)
+            if "progress_callback" not in str(exc):
+                raise
+            return g3m.patch_create(
+                original,
+                modified,
+                output,
+                include_xdelta_fallback=include_xdelta_fallback,
+            )
+        try:
+            return g3m.patch_create(
+                original,
+                modified,
+                output,
+                progress_callback=progress_callback,
+            )
+        except TypeError as nested_exc:
+            if "progress_callback" not in str(nested_exc):
+                raise
+            return g3m.patch_create(original, modified, output)
 
 
 def _convert_target_mode(index: int) -> str:
@@ -165,6 +212,7 @@ class _WorkerThread(QThread):
     """Run a G3M command off the UI thread."""
 
     finished = pyqtSignal(int, str, str)
+    progress = pyqtSignal(int, str)
 
     def __init__(self, func, args, parent=None) -> None:
         super().__init__(parent)
@@ -172,10 +220,20 @@ class _WorkerThread(QThread):
 
     def run(self):
         try:
-            rc, out, err = self._func(*self._args)
-            self.finished.emit(rc, out, err)
+            rc, out, err = self._func(*self._args, progress_callback=self.progress.emit)
+        except TypeError as exc:
+            if "progress_callback" not in str(exc):
+                self.finished.emit(-1, "", str(exc))
+                return
+            try:
+                rc, out, err = self._func(*self._args)
+            except Exception as inner_exc:
+                self.finished.emit(-1, "", str(inner_exc))
+                return
         except Exception as e:
             self.finished.emit(-1, "", str(e))
+            return
+        self.finished.emit(rc, out, err)
 
 
 class _PathRow(QWidget):
@@ -243,6 +301,7 @@ class _ConvertWorkerThread(QThread):
     """Two-step conversion: apply source patch → create target format patch."""
 
     finished = pyqtSignal(int, str, str)
+    progress = pyqtSignal(int, str)
 
     def __init__(
         self,
@@ -265,16 +324,28 @@ class _ConvertWorkerThread(QThread):
             with managed_temporary_directory(prefix="g3m_convert_") as tmp:
                 temp_modified = os.path.join(tmp, "modified.tmp")
                 rc, out, err = _apply_source_to_data(
-                    self._g3m, self._orig, self._patch, temp_modified
+                    self._g3m,
+                    self._orig,
+                    self._patch,
+                    temp_modified,
+                    progress_callback=lambda percent, label: self.progress.emit(
+                        min(50, max(1 if percent > 0 else 0, round(percent * 0.5))),
+                        label,
+                    ),
                 )
                 if rc != 0:
                     self.finished.emit(rc, out, err)
                     return
                 if self._target_is_xdelta:
                     rc, out, err = self._g3m.xpatch_create(
-                        self._orig, temp_modified, self._output
+                        self._orig,
+                        temp_modified,
+                        self._output,
+                        progress_callback=lambda percent, label: self.progress.emit(
+                            min(100, 50 + max(1 if percent > 0 else 0, round(percent * 0.5))),
+                            label,
+                        ),
                     )
-                    patch_type = "xdelta"
                 else:
                     rc, out, err = _patch_create(
                         self._g3m,
@@ -282,30 +353,21 @@ class _ConvertWorkerThread(QThread):
                         temp_modified,
                         self._output,
                         include_xdelta_fallback=self._include_xdelta_fallback,
+                        progress_callback=lambda percent, label: self.progress.emit(
+                            min(100, 50 + max(1 if percent > 0 else 0, round(percent * 0.5))),
+                            label,
+                        ),
                     )
-                    patch_type = "g3mpatch"
-                if rc == 0:
-                    verified, verify_error = verify_generated_patch(
-                        self._g3m,
-                        self._orig,
-                        temp_modified,
-                        self._output,
-                        patch_type=patch_type,
-                    )
-                    if not verified:
-                        with suppress(OSError):
-                            os.remove(self._output)
-                        self.finished.emit(1, out, verify_error)
-                        return
                 self.finished.emit(rc, out, err)
         except Exception as e:
             self.finished.emit(-1, "", str(e))
 
 
 class _CreatePatchWorkerThread(QThread):
-    """Create a patch from two data files and verify the generated artifact."""
+    """Create a patch from two data files and report the tool return code."""
 
     finished = pyqtSignal(int, str, str)
+    progress = pyqtSignal(int, str)
 
     def __init__(
         self,
@@ -329,9 +391,11 @@ class _CreatePatchWorkerThread(QThread):
         try:
             if self._target_is_xdelta:
                 rc, out, err = self._g3m.xpatch_create(
-                    self._orig, self._modified, self._output
+                    self._orig,
+                    self._modified,
+                    self._output,
+                    progress_callback=self.progress.emit,
                 )
-                patch_type = "xdelta"
             else:
                 rc, out, err = _patch_create(
                     self._g3m,
@@ -339,21 +403,8 @@ class _CreatePatchWorkerThread(QThread):
                     self._modified,
                     self._output,
                     include_xdelta_fallback=self._include_xdelta_fallback,
+                    progress_callback=self.progress.emit,
                 )
-                patch_type = "g3mpatch"
-            if rc == 0:
-                verified, verify_error = verify_generated_patch(
-                    self._g3m,
-                    self._orig,
-                    self._modified,
-                    self._output,
-                    patch_type=patch_type,
-                )
-                if not verified:
-                    with suppress(OSError):
-                        os.remove(self._output)
-                    self.finished.emit(1, out, verify_error)
-                    return
             self.finished.emit(rc, out, err)
         except Exception as e:
             self.finished.emit(-1, "", str(e))
@@ -597,8 +648,12 @@ class _PatchTab(QWidget):
                 self._worker = _WorkerThread(self._g3m.xpatch_apply, (orig, second, out))
             else:
                 self._worker = _WorkerThread(self._g3m.apply_patch, (orig, second, out))
+        self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _on_progress(self, percent: int, label: str) -> None:
+        self._status_label.setText(_format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
@@ -742,14 +797,15 @@ class _DataConvertWorkerThread(QThread):
                             )
                             new_name = _rename_data_output_name(target_name)
                             new_path = os.path.join(os.path.dirname(patch_path), new_name)
-                            if (
-                                rc == 0
-                                and (
-                                    _is_g3mpatch_source(patch_path)
-                                    or _is_xdelta_source(patch_path)
-                                    or _is_csx_source(patch_path)
-                                )
-                            ):
+                            is_patch_source = (
+                                _is_g3mpatch_source(patch_path)
+                                or _is_xdelta_source(patch_path)
+                                or _is_csx_source(patch_path)
+                            )
+                            if is_patch_source:
+                                if rc != 0:
+                                    self.finished.emit(False, err[:300])
+                                    return
                                 shutil.copy2(temp_modified, new_path)
                             elif _is_ready_data_source(patch_path):
                                 shutil.copy2(patch_path, new_path)
@@ -772,7 +828,6 @@ class _DataConvertWorkerThread(QThread):
                                 rc, _, err = self._g3m.xpatch_create(
                                     original, temp_modified, new_path
                                 )
-                                patch_type = "xdelta"
                             else:
                                 rc, _, err = _patch_create(
                                     self._g3m,
@@ -780,21 +835,8 @@ class _DataConvertWorkerThread(QThread):
                                     temp_modified,
                                     new_path,
                                 )
-                                patch_type = "g3mpatch"
                             if rc != 0:
                                 self.finished.emit(False, err[:300])
-                                return
-                            verified, verify_error = verify_generated_patch(
-                                self._g3m,
-                                original,
-                                temp_modified,
-                                new_path,
-                                patch_type=patch_type,
-                            )
-                            if not verified:
-                                with suppress(OSError):
-                                    os.remove(new_path)
-                                self.finished.emit(False, verify_error[:300])
                                 return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
                         with suppress(OSError):
@@ -1214,8 +1256,12 @@ class _MergeTab(QWidget):
                 self._props_cb.isChecked(),
             ),
         )
+        self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _on_progress(self, percent: int, label: str) -> None:
+        self._status_label.setText(_format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
@@ -1296,8 +1342,12 @@ class _InfoTab(QWidget):
         self._worker = _WorkerThread(
             self._g3m.info, (target, self._verbose_cb.isChecked())
         )
+        self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _on_progress(self, percent: int, label: str) -> None:
+        self._set_output_text(_format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
@@ -1382,8 +1432,12 @@ class _DiffTab(QWidget):
         out_dir = tempfile.mkdtemp(prefix="modding_tools_diff_")
         self._out_dir = out_dir
         self._worker = _WorkerThread(self._g3m.diff, (f1, f2, out_dir))
+        self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _on_progress(self, percent: int, label: str) -> None:
+        self._status_label.setText(_format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)

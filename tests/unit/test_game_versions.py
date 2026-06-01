@@ -15,7 +15,7 @@ from utils.game_version_utils import (
 class TestGameVersionRecord:
     """Tests for game versions."""
     def test_default_values(self):
-        """Checks that defaulting values."""
+        """Checks that default values."""
         r = GameVersionRecord()
         assert r.archive_path == ''
         assert r.game == ''
@@ -26,7 +26,7 @@ class TestGameVersionRecord:
         assert r.imported is False
 
     def test_to_dict_round_trip(self):
-        """Checks that toing  to dict round trip."""
+        """Checks that to_dict round trip."""
         r = GameVersionRecord(archive_path='/test-data/test.zip', game='deltarune', size_bytes=1024, file_count=10)
         d = r.to_dict()
         assert d['archive_path'] == '/test-data/test.zip'
@@ -37,7 +37,7 @@ class TestGameVersionRecord:
         assert r2.size_bytes == r.size_bytes
 
     def test_from_dict_ignores_unknown_keys(self):
-        """Checks that froming  from dict ignores unknown keys."""
+        """Checks that from_dict ignores unknown keys."""
         d = {'archive_path': '/x.zip', 'unknown_field': 42, 'game': 'undertale'}
         r = GameVersionRecord.from_dict(d)
         assert r.archive_path == '/x.zip'
@@ -61,7 +61,7 @@ class TestGameVersionRecord:
         assert r.display_name == ''
 
     def test_effective_status_key(self):
-        """Checks that effectiveing status key."""
+        """Checks that effective status for key."""
         r = GameVersionRecord(archive_exists=True)
         assert r.effective_status_key == 'ready'
         r.archive_exists = False
@@ -138,7 +138,7 @@ class TestGameVersionsStore:
         assert os.path.exists(data_path + '.bak')
 
     def test_startup_recovery_marks_missing(self, temp_dir):
-        """Checks that startuping recovery marks missing."""
+        """Checks that startup recovery marks missing."""
         store = GameVersionsStore(temp_dir)
         store.load()
         r = GameVersionRecord(archive_path='/nonexistent/path.zip', game='deltarune', archive_exists=True)
@@ -151,7 +151,7 @@ class TestGameVersionsStore:
         assert found.archive_exists is False
 
     def test_startup_recovery_removes_stale(self, temp_dir):
-        """Checks that startuping recovery removes stale."""
+        """Checks that startup recovery removes stale."""
         store = GameVersionsStore(temp_dir)
         store.load()
         r = GameVersionRecord(archive_path='/nonexistent/stale.zip', game='deltarune', archive_exists=False)
@@ -162,7 +162,7 @@ class TestGameVersionsStore:
         assert store2.find('/nonexistent/stale.zip') is None
 
     def test_startup_recovery_marks_existing(self, temp_dir):
-        """Checks that startuping recovery marks existing."""
+        """Checks that startup recovery marks existing."""
         archive_path = os.path.join(temp_dir, 'game_versions', 'test.zip')
         store = GameVersionsStore(temp_dir)
         store.load()
@@ -186,26 +186,26 @@ class TestGameVersionsStore:
 class TestVersionUtils:
     """Tests for game versions."""
     def test_safe_archive_name(self):
-        """Checks that safeing archive name."""
+        """Checks that sanitizing archive name."""
         assert safe_archive_name('My Save v1.0') == 'My Save v1.0.zip'
 
     def test_safe_archive_name_special_chars(self):
-        """Checks that safeing archive name special chars."""
+        """Checks that sanitizing archive name special chars."""
         result = safe_archive_name('a/b\\c:d*e?f')
         assert '/' not in result.replace('.zip', '')
         assert '\\' not in result.replace('.zip', '')
         assert result.endswith('.zip')
 
     def test_safe_archive_name_trims_leading_and_trailing_dots_spaces(self):
-        """Checks that safeing archive name trims leading and trailing dots spaces."""
-        assert safe_archive_name('  .. My Save .  ') == 'My Save.zip'
+        """Checks that sanitizing archive name trims leading and trailing dots spaces."""
+        assert safe_archive_name(' .. My Save . ') == 'My Save.zip'
 
     def test_safe_archive_name_falls_back_when_trimmed_name_is_empty(self):
-        """Checks that safeing archive name falls back when trimmed name is empty."""
-        assert safe_archive_name('  ...   ') == 'version.zip'
+        """Checks that sanitizing archive name falls back when trimmed name is empty."""
+        assert safe_archive_name(' ...  ') == 'version.zip'
 
     def test_safe_archive_name_empty(self):
-        """Checks that safeing archive name empty."""
+        """Checks that sanitizing archive name empty."""
         assert safe_archive_name('') == 'version.zip'
 
     def test_unique_archive_path_no_conflict(self, temp_dir):
@@ -224,15 +224,15 @@ class TestVersionUtils:
         assert '_1' in os.path.basename(second)
 
     def test_get_base_game_folder_nonexistent(self):
-        """Checks that getting base game folder nonexistent."""
+        """Checks that missing base game folder."""
         assert get_base_game_folder('/nonexistent/path') is None
 
     def test_get_base_game_folder_empty(self):
-        """Checks that getting base game folder empty."""
+        """Checks that empty base game folder."""
         assert get_base_game_folder('') is None
 
     def test_get_base_game_folder_valid_dir(self, temp_dir):
-        """Checks that getting base game folder valid dir."""
+        """Checks that valid base game folder."""
         result = get_base_game_folder(temp_dir)
         assert result == temp_dir
 

@@ -20,6 +20,7 @@ from services.game_detection_service import (
     is_game_running,
 )
 from services.localization_service import tr
+from services.warning_service import create_warning_event, is_warning_enabled
 from ui.common.styling import get_launch_status_color
 from utils.file_utils import ensure_writable
 from utils.path_utils import (
@@ -611,7 +612,7 @@ class GameLauncher(QObject):
         return True
 
     def _on_patching_warning_confirmation_needed(
-        self, message: str, details: str, report_path: str | None
+        self, message: object, details: str, report_path: str | None
     ):
         patching_thread = self._patching_thread
         if not patching_thread:
@@ -658,12 +659,12 @@ class GameLauncher(QObject):
         logging.info("Multi-mod patching completed successfully")
         self._continue_after_patching(selections, True, True)
 
-    def _try_restore_backups(self, context: str = "") -> bool:
+    def _try_restore_backups(self, context: str = "", emit_status: bool = True) -> bool:
         if not hasattr(self, "mod_patcher") or not self.mod_patcher:
             return False
         try:
             restored = self.mod_patcher.restore_all_backups()
-            if restored:
+            if restored and emit_status:
                 logging.info(f"{context}: backups restored successfully")
                 self.status_changed.emit(
                     tr("status.files_restored"), UI_COLORS["status_success"]
@@ -780,11 +781,20 @@ class GameLauncher(QObject):
                 game_name = get_game_name_string(self.app_state.game_mode)
                 is_steam_path = is_path_in_steam_common(current_path, game_name)
                 if not is_steam_path:
-                    should_continue = self.feedback_service.ask_question(
-                        "ui.steam_launch_mods_warning_title",
-                        "ui.steam_launch_mods_warning_body",
-                        game_path=current_path,
-                    )
+                    should_continue = True
+                    if is_warning_enabled(
+                        "steam_launch_with_mods", self.app_state.local_config
+                    ):
+                        should_continue = self.feedback_service.ask_patching_warning(
+                            create_warning_event(
+                                "steam_launch_with_mods",
+                                context={"game_path": current_path},
+                                fallback_message=tr(
+                                    "ui.steam_launch_mods_warning_body",
+                                    game_path=current_path,
+                                ),
+                            )
+                        )
                     if not should_continue:
                         logging.info(
                             "Game launch cancelled: user declined Steam launch with mods warning"
@@ -824,7 +834,7 @@ class GameLauncher(QObject):
         restore_errors = []
         try:
             try:
-                self._try_restore_backups("[CLEANUP]")
+                self._try_restore_backups("[CLEANUP]", emit_status=False)
 
                 if hasattr(self, "mod_patcher") and self.mod_patcher:
                     self.mod_patcher.clear_session()
@@ -854,6 +864,10 @@ class GameLauncher(QObject):
                 self.status_changed.emit(
                     tr("errors.files_restore_error", error=str(restore_errors[0])),
                     UI_COLORS["status_error"],
+                )
+            else:
+                self.status_changed.emit(
+                    tr("status.files_restored"), UI_COLORS["status_success"]
                 )
         except Exception as e:
             logging.error(f"[CLEANUP] Critical error: {e}", exc_info=True)

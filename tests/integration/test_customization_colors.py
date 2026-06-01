@@ -113,7 +113,7 @@ class TestCustomizationColors:
         assert get_theme_color(config, "secondary_text", "#888888") == "#FF00FF"
 
     def test_rgba_from_color_preserves_explicit_alpha(self):
-        """Checks that rgbaing  from color preserves explicit alpha."""
+        """Checks that rgbaing from color preserves explicit alpha."""
         assert rgba_from_color("#8000FF00") == "rgba(0, 255, 0, 128)"
 
     def test_generate_widget_style_uses_hover_for_hover_border_and_select_for_selected_border(
@@ -165,7 +165,7 @@ class TestColorHexDisplayConversion:
 class TestColorValidation:
     """Tests for customization colors."""
     def test_settings_service_accepts_argb_hex_color(self, app_state):
-        """Checks that settingsing service accepts argb hex color."""
+        """Checks that settings service accepts argb hex color."""
         from unittest.mock import Mock
 
         from services.settings_service import SettingsManager
@@ -177,7 +177,7 @@ class TestColorValidation:
         assert not manager.is_valid_hex_color("#GG0000")
 
     def test_settings_service_saves_display_hex_as_qt_hex(self, app_state):
-        """Checks that settingsing service saves display hex as qt hex."""
+        """Checks that settings service saves display hex as qt hex."""
         from unittest.mock import Mock
 
         from services.settings_service import SettingsManager
@@ -192,7 +192,7 @@ class TestColorValidation:
 class TestColorWidgetLoading:
     """Tests for customization colors."""
     def test_customization_service_loads_qt_hex_as_display_hex(self, app_state):
-        """Checks that customizationing service loads qt hex as display hex."""
+        """Checks that customization service loads qt hex as display hex."""
         from unittest.mock import Mock
 
         from services.customization_service import CustomizationManager
@@ -204,7 +204,7 @@ class TestColorWidgetLoading:
         widget.setText.assert_called_once_with("#00FF0080")
 
     def test_background_default_is_loaded_into_text(self, app_state):
-        """Checks that backgrounding default is loaded into text."""
+        """Checks that background default is loaded into text."""
         from unittest.mock import Mock
 
         from services.customization_service import CustomizationManager
@@ -407,7 +407,7 @@ class TestBorderRadius:
         assert clamp_border_radius(12, width=18, height=18, border_width=2) == 11
 
     def test_settings_defaults_persist_default_border_radius(self, app_state):
-        """Checks that settingsing defaults persist default border radius."""
+        """Checks that settings defaults persist default border radius."""
         from unittest.mock import Mock
 
         from services.settings_service import SettingsManager
@@ -789,7 +789,7 @@ class TestThemeApplication:
     def test_mod_summary_panel_refreshes_translucent_background_and_radius(
         self, app_state, qapp
     ):
-        """Checks that moding summary panel refreshes translucent background and radius."""
+        """Checks that mod summary panel refreshes translucent background and radius."""
         from types import SimpleNamespace
 
         from ui.widgets.mod.mod_summary_panel import ModSummaryPanel

@@ -251,7 +251,7 @@ class ShortcutDialog(QDialog):
                 mod_name = (
                     get_mod_name(mod, "Unknown") if mod else tr("shortcut.vanilla")
                 )
-                lines.append(f"  {tr(tab.name_key)}: {mod_name}")
+                lines.append(f" {tr(tab.name_key)}: {mod_name}")
         else:
             any_mod = next((m for m in chapter_objs.values() if m), None)
             mod_name = (
@@ -408,7 +408,7 @@ def _validate_shortcut_prerequisites(app_state, has_any_mod: bool) -> str | None
     if has_any_mod:
         from adapters.g3mtool_adapter import G3MToolManager
 
-        if not G3MToolManager().is_available():
+        if not G3MToolManager(app_state).is_available():
             return tr("shortcut.error_g3mtool_unavailable")
     return None
 

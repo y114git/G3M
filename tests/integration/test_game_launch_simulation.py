@@ -81,7 +81,7 @@ class TestGameLaunchSimulation:
 
     @patch('services.game_detection_service.psutil.process_iter')
     def test_is_game_running_simulation(self, mock_process_iter):
-        """Checks that ising game running simulation."""
+        """Checks that detects game running simulation."""
         mock_process_iter.return_value = []
         assert not is_game_running()
         mock_process = MagicMock()
@@ -136,11 +136,27 @@ class TestGameLaunchSimulation:
         assert len(game_name) > 0
         assert 'Sugary Spire' in game_name
 
+    def test_cleanup_emits_files_restored_after_game_closed_restore(self, app_state, feedback_service):
+        """Checks that cleanup emits a final success status after restore completes."""
+        from services.launch_service import GameLauncher
+
+        mod_service = MagicMock()
+        launcher = GameLauncher(app_state, feedback_service, mod_service)
+        statuses = []
+        launcher.status_changed.connect(lambda message, color: statuses.append((message, color)))
+        launcher.mod_patcher.restore_all_backups = MagicMock(return_value=True)
+        launcher.mod_patcher.clear_session = MagicMock()
+        launcher._direct_launch_cleanup_info = None
+
+        launcher._cleanup_direct_launch_files()
+
+        assert statuses[-1][0] == "Files restored successfully."
+
 
 class TestPathResolution:
     """Tests for game launch simulation."""
     def test_path_resolution_linux(self, temp_dir):
-        """Checks that pathing resolution linux."""
+        """Checks that path resolution linux."""
         test_path = os.path.join(temp_dir, 'test', 'path')
         os.makedirs(test_path, exist_ok=True)
         resolved = os.path.abspath(test_path)
@@ -148,7 +164,7 @@ class TestPathResolution:
         assert os.path.isabs(resolved)
 
     def test_path_resolution_windows(self, temp_dir):
-        """Checks that pathing resolution windows."""
+        """Checks that path resolution windows."""
         test_path = os.path.join(temp_dir, 'test', 'path')
         os.makedirs(test_path, exist_ok=True)
         if os.name == 'nt':
@@ -159,7 +175,7 @@ class TestPathResolution:
             assert os.path.exists(resolved)
 
     def test_path_with_special_chars(self, temp_dir):
-        """Checks that pathing  with special chars."""
+        """Checks that path with special chars."""
         special_path = os.path.join(temp_dir, 'test path with spaces')
         os.makedirs(special_path, exist_ok=True)
         assert os.path.exists(special_path)

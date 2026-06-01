@@ -391,9 +391,6 @@ class BootstrapCoordinator:
             )
         update_change_path_button_text(window)
         window.theme.update_background_button_state()
-        window.skip_patching_warnings_checkbox.setChecked(
-            config.get("skip_patching_warnings", False)
-        )
         window.launch_via_steam_checkbox.setChecked(
             config.get("launch_via_steam", False)
         )

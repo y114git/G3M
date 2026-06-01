@@ -18,7 +18,7 @@
         {
         "id": "custom_saves_folders",
         "name": "Custom Saves Folders",
-        "description": "Create per-game custom save folders and apply them only for the current launch session. May not work with games that use complex save systems.",
+        "description": "Use separate save folders automatically for specific games, profiles, or selected mods.",
         "author": "Y114",
         "version": "1.1.0",
         "api_version": ">=1.1.0",

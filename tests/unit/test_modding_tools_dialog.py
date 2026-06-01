@@ -19,7 +19,16 @@ class _FakeG3M:
     _PATCH_PREFIX = b"PATCH|"
     _XPATCH_PREFIX = b"XPATCH|"
 
-    def apply_patch(self, original, patch, output):
+    @staticmethod
+    def _emit_progress(progress_callback, label) -> None:
+        if progress_callback:
+            progress_callback(1, label)
+            progress_callback(2, label)
+            progress_callback(4, label)
+            progress_callback(100, label)
+
+    def apply_patch(self, original, patch, output, progress_callback=None):
+        self._emit_progress(progress_callback, "Applying patch")
         with open(patch, "rb") as handle:
             payload = handle.read()
         if payload.startswith(self._PATCH_PREFIX):
@@ -30,7 +39,8 @@ class _FakeG3M:
             f.write(f"{original}|{patch}")
         return 0, "", ""
 
-    def xpatch_apply(self, original, patch, output):
+    def xpatch_apply(self, original, patch, output, progress_callback=None):
+        self._emit_progress(progress_callback, "Applying xdelta")
         with open(patch, "rb") as handle:
             payload = handle.read()
         if payload.startswith(self._XPATCH_PREFIX):
@@ -41,24 +51,66 @@ class _FakeG3M:
             f.write(f"{original}|{patch}")
         return 0, "", ""
 
-    def patch_create(self, original, modified, output):
+    def patch_create(
+        self,
+        original,
+        modified,
+        output,
+        include_xdelta_fallback=False,
+        progress_callback=None,
+    ):
+        self._emit_progress(progress_callback, "Creating patch")
         with open(modified, "rb") as handle:
             payload = handle.read()
         with open(output, "wb") as f:
             f.write(self._PATCH_PREFIX + payload)
         return 0, "", ""
 
-    def xpatch_create(self, original, modified, output):
+    def xpatch_create(self, original, modified, output, progress_callback=None):
+        self._emit_progress(progress_callback, "Creating xdelta")
         with open(modified, "rb") as handle:
             payload = handle.read()
         with open(output, "wb") as f:
             f.write(self._XPATCH_PREFIX + payload)
         return 0, "", ""
 
-    def execute(self, target, args=None, data_file=None, output_path=None, input_path=None):
+    def execute(
+        self,
+        target,
+        args=None,
+        data_file=None,
+        output_path=None,
+        input_path=None,
+        progress_callback=None,
+    ):
+        self._emit_progress(progress_callback, "Executing")
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(f"{target}|{data_file}|{input_path}|{args}")
         return 0, "", ""
+
+    def merge_patches(
+        self,
+        original_data_win,
+        mod_patches,
+        output_path,
+        report_path=None,
+        log_path=None,
+        merge_code=False,
+        merge_properties=False,
+        progress_callback=None,
+    ):
+        self._emit_progress(progress_callback, "Merging")
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write("|".join([original_data_win, *mod_patches]))
+        return 0, "", ""
+
+    def info(self, target, verbose=False, progress_callback=None):
+        self._emit_progress(progress_callback, "Reading info")
+        return 0, f"info:{target}:{verbose}", ""
+
+    def diff(self, file1, file2, output_dir=None, progress_callback=None):
+        self._emit_progress(progress_callback, "Diffing")
+        return 0, f"diff:{file1}:{file2}:{output_dir}", ""
 
     def is_available(self):
         return True
@@ -77,7 +129,7 @@ class _LossyFakeG3M(_FakeG3M):
 
 
 def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
-    """Checks that dataing convert tab blocks controls while busy."""
+    """Checks that DATA conversion tab blocks controls while busy."""
     app = QApplication.instance() or QApplication([])
 
     monkeypatch.setattr(_DataConvertTab, "_populate_profiles", lambda self: None)
@@ -108,7 +160,7 @@ def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
 def test_data_convert_creates_new_version_without_overwriting_mod(
     tmp_path, monkeypatch
 ):
-    """Checks that dataing convert creates new version without overwriting mod."""
+    """Checks that DATA conversion creates new version without overwriting mod."""
     mod_folder = tmp_path / "mod"
     versions_dir = mod_folder / "mod_versions"
     mod_folder.mkdir(parents=True)
@@ -181,7 +233,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
 
 
 def test_data_convert_accepts_g3mpatch_zip_as_source(tmp_path, monkeypatch):
-    """Checks that dataing convert accepts g3mpatch zip as source."""
+    """Checks that DATA conversion accepts g3mpatch zip as source."""
     mod_folder = tmp_path / "mod"
     versions_dir = mod_folder / "mod_versions"
     mod_folder.mkdir(parents=True)
@@ -381,8 +433,8 @@ def test_data_convert_preserves_chapter_relative_path_in_converted_config(
     )
 
 
-def test_convert_worker_rejects_generated_patch_that_fails_roundtrip(tmp_path):
-    """Checks that converting rejects generated patches that fail verification."""
+def test_convert_worker_keeps_generated_patch_even_if_roundtrip_would_fail(tmp_path):
+    """Checks that converting keeps the generated patch without local verification."""
     original_path = tmp_path / "original.win"
     source_patch = tmp_path / "source.xdelta"
     output_path = tmp_path / "converted.g3mpatch"
@@ -401,14 +453,12 @@ def test_convert_worker_rejects_generated_patch_that_fails_roundtrip(tmp_path):
 
     worker.run()
 
-    assert len(result) == 1
-    assert result[0][0] == 1
-    assert "failed verification" in result[0][2]
-    assert not output_path.exists()
+    assert result == [(0, "", "")]
+    assert output_path.exists()
 
 
-def test_create_patch_worker_rejects_generated_patch_that_fails_roundtrip(tmp_path):
-    """Checks that create rejects generated patches that fail verification."""
+def test_create_patch_worker_keeps_generated_patch_even_if_roundtrip_would_fail(tmp_path):
+    """Checks that patch create keeps the generated patch without local verification."""
     original_path = tmp_path / "original.win"
     modified_path = tmp_path / "modified.win"
     output_path = tmp_path / "created.g3mpatch"
@@ -427,14 +477,12 @@ def test_create_patch_worker_rejects_generated_patch_that_fails_roundtrip(tmp_pa
 
     worker.run()
 
-    assert len(result) == 1
-    assert result[0][0] == 1
-    assert "failed verification" in result[0][2]
-    assert not output_path.exists()
+    assert result == [(0, "", "")]
+    assert output_path.exists()
 
 
-def test_data_convert_rejects_unverifiable_generated_patch(tmp_path, monkeypatch):
-    """Checks that data convert stops when generated patch fails verification."""
+def test_data_convert_allows_generated_patch_without_roundtrip_check(tmp_path, monkeypatch):
+    """Checks that data convert keeps generated patches without local verification."""
     mod_folder = tmp_path / "mod"
     versions_dir = mod_folder / "mod_versions"
     mod_folder.mkdir(parents=True)
@@ -487,17 +535,13 @@ def test_data_convert_rejects_unverifiable_generated_patch(tmp_path, monkeypatch
 
     worker.run()
 
-    assert len(result) == 1
-    assert result[0][0] is False
-    assert "failed verification" in result[0][1]
-    assert patch_path.read_text(encoding="utf-8") == "old patch"
-    assert not (versions_dir / "1.2.3 - g3mpatch.zip").exists()
-    assert (
-        json.loads(config_path.read_text(encoding="utf-8"))["files"]["deltarune_1"][
-            "data_file_path"
-        ]
-        == "data.xdelta"
-    )
+    assert result == [
+        (True, tr("modding_tools.convert_data_success", count=1, version="1.2.3 - g3mpatch"))
+    ]
+    version_zip = versions_dir / "1.2.3 - g3mpatch.zip"
+    assert version_zip.exists()
+    with zipfile.ZipFile(version_zip) as zf:
+        assert "data.g3mpatch" in zf.namelist()
 
 
 def test_patch_tab_suggests_output_extension(monkeypatch):
@@ -527,9 +571,24 @@ def test_patch_tab_csx_apply_uses_execute(tmp_path):
     calls = []
 
     class _RecordingG3M(_FakeG3M):
-        def execute(self, target, args=None, data_file=None, output_path=None, input_path=None):
+        def execute(
+            self,
+            target,
+            args=None,
+            data_file=None,
+            output_path=None,
+            input_path=None,
+            progress_callback=None,
+        ):
             calls.append((target, args, data_file, output_path, input_path))
-            return super().execute(target, args, data_file, output_path, input_path)
+            return super().execute(
+                target,
+                args,
+                data_file,
+                output_path,
+                input_path,
+                progress_callback,
+            )
 
         def is_available(self):
             return True
@@ -563,3 +622,96 @@ def test_merge_tab_suggests_patched_output_name():
 
     assert tab._output_row.path().endswith("data_merged.win")
     app.processEvents()
+
+
+def test_create_patch_worker_emits_incremental_progress(tmp_path):
+    original_path = tmp_path / "original.win"
+    modified_path = tmp_path / "modified.win"
+    output_path = tmp_path / "created.g3mpatch"
+    original_path.write_text("original", encoding="utf-8")
+    modified_path.write_text("modified", encoding="utf-8")
+
+    worker = _CreatePatchWorkerThread(
+        _FakeG3M(),
+        str(original_path),
+        str(modified_path),
+        str(output_path),
+        False,
+    )
+    progress = []
+    worker.progress.connect(lambda percent, label: progress.append((percent, label)))
+
+    worker.run()
+
+    assert progress == [
+        (1, "Creating patch"),
+        (2, "Creating patch"),
+        (4, "Creating patch"),
+        (100, "Creating patch"),
+    ]
+
+
+def test_convert_worker_maps_both_stages_into_smoother_progress(tmp_path):
+    original_path = tmp_path / "original.win"
+    source_patch = tmp_path / "source.xdelta"
+    output_path = tmp_path / "converted.g3mpatch"
+    original_path.write_text("original", encoding="utf-8")
+    source_patch.write_text("source patch", encoding="utf-8")
+
+    worker = _ConvertWorkerThread(
+        _FakeG3M(),
+        str(original_path),
+        str(source_patch),
+        str(output_path),
+        False,
+    )
+    progress = []
+    worker.progress.connect(lambda percent, label: progress.append((percent, label)))
+
+    worker.run()
+
+    assert progress == [
+        (1, "Applying xdelta"),
+        (1, "Applying xdelta"),
+        (2, "Applying xdelta"),
+        (50, "Applying xdelta"),
+        (51, "Creating patch"),
+        (51, "Creating patch"),
+        (52, "Creating patch"),
+        (100, "Creating patch"),
+    ]
+
+
+def test_patch_tab_updates_status_during_apply_progress(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    tab = _PatchTab(_FakeG3M(), SimpleNamespace(local_config={}))
+    input_data = tmp_path / "data.win"
+    patch_file = tmp_path / "patch.g3mpatch"
+    output_data = tmp_path / "patched.win"
+    input_data.write_text("original", encoding="utf-8")
+
+    with open(patch_file, "wb") as handle:
+        handle.write(_FakeG3M._PATCH_PREFIX + b"patched")
+
+    tab._mode_combo.setCurrentText("g3mpatch")
+    tab._action_combo.setCurrentIndex(1)
+    tab._original_row.set_path(str(input_data))
+    tab._second_row.set_path(str(patch_file))
+    tab._output_row.set_path(str(output_data))
+
+    updates = []
+    original_set_text = tab._status_label.setText
+
+    def capture(text):
+        updates.append(text)
+        original_set_text(text)
+
+    tab._status_label.setText = capture
+    tab._on_run()
+    tab._worker.wait(5000)
+    app.processEvents()
+
+    assert any("Applying patch: 1%" in text for text in updates)
+    assert any("Applying patch: 4%" in text for text in updates)
+    assert tab._status_label.text() == tr("modding_tools.success")

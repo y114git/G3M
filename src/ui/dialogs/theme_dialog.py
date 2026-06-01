@@ -69,7 +69,7 @@ class ThemeManagementDialog(QDialog):
         }
 
         changed_colors = [
-            "  - " + tr(lang_key).rstrip(":")
+            " - " + tr(lang_key).rstrip(":")
             for conf_key, lang_key in color_map.items()
             if config.get(conf_key)
         ]

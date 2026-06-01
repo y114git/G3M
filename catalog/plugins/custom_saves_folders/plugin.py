@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from PyQt6.QtCore import QSize, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -21,28 +27,30 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from adapters.g3mtool_adapter import G3MToolManager
+from config.config import MOD_CONFIG_FILENAME
 from models.game_modes import get_all_games, get_game
 from services.backup_service import BackupManager
-from services.localization_service import tr
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 from ui.common.styling import (
     apply_stylesheet_if_changed,
-    build_button_style,
     clamp_border_radius,
     get_border_radius,
-    get_card_button_metrics,
     get_theme_color,
     get_theme_colors,
 )
+from utils.mod_config_parser import normalize_mod_config_data
+from utils.mod_utils import get_mod_id, get_mod_name
 from utils.path_utils import (
     colored_icon,
     find_chapter_resource_dir,
     find_supported_game_data_file,
+    get_profile_mods_root,
     get_user_data_root,
 )
 
@@ -50,6 +58,9 @@ logger = logging.getLogger(__name__)
 
 _SETTINGS_FOLDERS_KEY = "folders_by_game"
 _SETTINGS_SELECTED_KEY = "selected_by_game"
+_SETTINGS_NEW_FOLDERS_KEY = "folders"
+_SETTINGS_RULES_KEY = "mod_rules"
+_GLOBAL_PROFILE = ""
 _INVALID_NAME_CHARS = set('<>:"/\\|?*')
 _WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -146,30 +157,10 @@ class _InteractiveRow(QFrame):
         )
 
 
-class _GameRow(_InteractiveRow):
-    def __init__(self, app_state, title: str, parent=None) -> None:
-        super().__init__(app_state, compact=True, parent=parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
-        self._title = QLabel(title, self)
-        self._title.setWordWrap(True)
-        self._title.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        self._title.setStyleSheet("font-size: 15px; font-weight: 700;")
-        layout.addWidget(self._title, 1)
-        self.refresh_theme()
-
-    @property
-    def title(self) -> str:
-        return self._title.text()
-
-
 class _FolderRow(_InteractiveRow):
-    use_requested = pyqtSignal()
-    unuse_requested = pyqtSignal()
     delete_requested = pyqtSignal()
 
-    def __init__(self, app_state, title: str, tr_func, parent=None) -> None:
+    def __init__(self, app_state, title: str, subtitle: str, tr_func, parent=None) -> None:
         super().__init__(app_state, compact=False, parent=parent)
         self._tr = tr_func
         layout = QHBoxLayout(self)
@@ -183,40 +174,20 @@ class _FolderRow(_InteractiveRow):
         self._title.setWordWrap(True)
         self._title.setStyleSheet("font-size: 18px; font-weight: 800;")
         text_wrap.addWidget(self._title)
-        self._subtitle = QLabel(self._tr("ui.folder_item_hint"), self)
+        self._subtitle = QLabel(subtitle, self)
         self._subtitle.setObjectName("customSavesFolderSubtitle")
         self._subtitle.setWordWrap(True)
         self._subtitle.setStyleSheet("font-size: 12px;")
         text_wrap.addWidget(self._subtitle)
         layout.addLayout(text_wrap, 1)
 
-        self._checkmark = QPushButton(self)
-        self._checkmark.setObjectName("profileCheckmark")
-        self._checkmark.setFixedSize(36, 36)
-        self._checkmark.setIconSize(QSize(22, 22))
-        self._checkmark.setEnabled(False)
-        layout.addWidget(self._checkmark)
-
-        self._actions_widget = QWidget(self)
-        actions = QHBoxLayout(self._actions_widget)
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setSpacing(6)
-        self._use_button = QPushButton(self._tr("ui.use_button"), self._actions_widget)
-        self._use_button.setObjectName("profileUseBtn")
-        self._use_button.clicked.connect(lambda: self.use_requested.emit())
-        actions.addWidget(self._use_button)
-        self._unuse_button = QPushButton(tr("ui.remove_button"), self._actions_widget)
-        self._unuse_button.setObjectName("profileUseBtn")
-        self._unuse_button.clicked.connect(lambda: self.unuse_requested.emit())
-        actions.addWidget(self._unuse_button)
-
-        self._delete_button = QPushButton(self._actions_widget)
+        self._subtitle_text = subtitle
+        self._delete_button = QPushButton(self)
         self._delete_button.setObjectName("summaryActionButton")
         self._delete_button.setFixedSize(32, 32)
         self._delete_button.setIconSize(QSize(18, 18))
         self._delete_button.clicked.connect(lambda: self.delete_requested.emit())
-        actions.addWidget(self._delete_button)
-        layout.addWidget(self._actions_widget, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self._delete_button, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.refresh_theme()
 
     def refresh_theme(self) -> None:
@@ -229,48 +200,9 @@ class _FolderRow(_InteractiveRow):
             height=38,
             border_width=2,
         )
-        bw, bh, bfs = get_card_button_metrics(config)
         self._delete_button.setIcon(colored_icon("delete", colors["main_text"]))
-        self._checkmark.setIcon(colored_icon("checkmark", colors["main_text"]))
         self._delete_button.setToolTip(self._tr("ui.delete_tooltip"))
-        self._use_button.setText(self._tr("ui.use_button"))
-        self._unuse_button.setText(tr("ui.remove_button"))
-        self._subtitle.setText(self._tr("ui.folder_item_hint"))
-        apply_stylesheet_if_changed(
-            self._use_button,
-            build_button_style(
-                "profileUseBtn",
-                "#4CAF50",
-                "#5cb85c",
-                "#e8e9eb",
-                colors["border"],
-                width=bw,
-                height=bh,
-                font_size=bfs,
-                border_radius=br,
-            ),
-            cache_attr="_use_btn_ss_cache",
-        )
-        apply_stylesheet_if_changed(
-            self._unuse_button,
-            build_button_style(
-                "profileUseBtn",
-                "#FF9800",
-                "#F57C00",
-                "#e8e9eb",
-                colors["border"],
-                width=bw,
-                height=bh,
-                font_size=bfs,
-                border_radius=br,
-            ),
-            cache_attr="_unuse_btn_ss_cache",
-        )
-        apply_stylesheet_if_changed(
-            self._checkmark,
-            "QPushButton#profileCheckmark { background: transparent; border: none; padding: 0px; min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px; }",
-            cache_attr="_checkmark_ss_cache",
-        )
+        self._subtitle.setText(self._subtitle_text)
         apply_stylesheet_if_changed(
             self._delete_button,
             f"""
@@ -290,27 +222,106 @@ class _FolderRow(_InteractiveRow):
             """,
             cache_attr="_delete_btn_ss_cache",
         )
-        self._update_actions_visibility()
 
-    def set_active(self, active: bool) -> None:
-        super().set_active(active)
-        self._update_actions_visibility()
+    def update_subtitle(self, subtitle: str) -> None:
+        self._subtitle_text = subtitle
+        self._subtitle.setText(subtitle)
 
-    def set_selected(self, selected: bool) -> None:
-        super().set_selected(selected)
-        self._update_actions_visibility()
 
-    def _update_actions_visibility(self) -> None:
-        self._actions_widget.setVisible(self._selected)
-        self._checkmark.setVisible(self._active and not self._selected)
-        self._use_button.setVisible(self._selected and not self._active)
-        self._unuse_button.setVisible(self._selected and self._active)
+class _RuleRow(_InteractiveRow):
+    enabled_changed = pyqtSignal(bool)
+    delete_requested = pyqtSignal()
+
+    def __init__(
+        self,
+        app_state,
+        title: str,
+        subtitle: str,
+        enabled: bool,
+        tr_func,
+        parent=None,
+    ) -> None:
+        super().__init__(app_state, compact=False, parent=parent)
+        self._tr = tr_func
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        self._enabled_box = QCheckBox(self)
+        self._enabled_box.setChecked(enabled)
+        self._enabled_box.stateChanged.connect(
+            lambda state: self.enabled_changed.emit(state == Qt.CheckState.Checked.value)
+        )
+        layout.addWidget(self._enabled_box, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        text_wrap = QVBoxLayout()
+        text_wrap.setContentsMargins(0, 0, 0, 0)
+        text_wrap.setSpacing(2)
+        self._title = QLabel(title, self)
+        self._title.setWordWrap(True)
+        self._title.setStyleSheet("font-size: 16px; font-weight: 800;")
+        text_wrap.addWidget(self._title)
+        self._subtitle = QLabel(subtitle, self)
+        self._subtitle.setObjectName("customSavesFolderSubtitle")
+        self._subtitle.setWordWrap(True)
+        self._subtitle.setStyleSheet("font-size: 12px;")
+        text_wrap.addWidget(self._subtitle)
+        layout.addLayout(text_wrap, 1)
+
+        self._delete_button = QPushButton(self)
+        self._delete_button.setObjectName("summaryActionButton")
+        self._delete_button.setFixedSize(32, 32)
+        self._delete_button.setIconSize(QSize(18, 18))
+        self._delete_button.clicked.connect(lambda: self.delete_requested.emit())
+        layout.addWidget(self._delete_button, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        super().refresh_theme()
+        colors = get_theme_colors(self._app_state.local_config)
+        br = clamp_border_radius(
+            get_border_radius(self._app_state.local_config),
+            width=38,
+            height=38,
+            border_width=2,
+        )
+        self._enabled_box.setText(self._tr("ui.rule_enabled"))
+        self._delete_button.setIcon(colored_icon("delete", colors["main_text"]))
+        self._delete_button.setToolTip(self._tr("ui.delete_tooltip"))
+        apply_stylesheet_if_changed(
+            self._delete_button,
+            f"""
+            QPushButton#summaryActionButton {{
+                background: transparent;
+                border: 2px solid {colors["border"]};
+                border-radius: {min(br, 10)}px;
+                min-width: 32px;
+                min-height: 32px;
+                max-width: 32px;
+                max-height: 32px;
+                padding: 0;
+            }}
+            QPushButton#summaryActionButton:hover {{
+                background: {colors["hover"]};
+            }}
+            """,
+            cache_attr="_delete_btn_ss_cache",
+        )
 
 
 class _StateStore:
-    def __init__(self, settings_accessor, game_registry_service) -> None:
+    def __init__(
+        self,
+        settings_accessor,
+        game_registry_service,
+        profile_service=None,
+        app_state=None,
+    ) -> None:
         self._settings = settings_accessor
         self._game_registry = game_registry_service
+        self._profile_service = profile_service
+        self._app_state = app_state
+        self._migrate_legacy_settings()
 
     def list_games(self):
         if self._game_registry and hasattr(self._game_registry, "list_visible_games"):
@@ -320,7 +331,70 @@ class _StateStore:
             for game in get_all_games()
         ]
 
-    def get_folders_map(self) -> dict[str, list[str]]:
+    def list_profiles(self) -> list[str]:
+        active = self.active_profile()
+        if self._profile_service and hasattr(self._profile_service, "list_profiles"):
+            profiles = list(self._profile_service.list_profiles())
+            if active and active not in profiles:
+                profiles.insert(0, active)
+            return profiles
+        return [active] if active else []
+
+    def active_profile(self) -> str:
+        if self._profile_service and hasattr(self._profile_service, "active_name"):
+            return str(self._profile_service.active_name or "Default")
+        config = getattr(self._app_state, "local_config", {}) or {}
+        return str(config.get("active_profile", "Default") or "Default")
+
+    def profile_label(self, profile: str) -> str:
+        return profile or "Global"
+
+    def game_label(self, game_id: str) -> str:
+        for entry in self.list_games():
+            if getattr(entry, "id", "") == game_id:
+                return getattr(entry, "display_name", game_id)
+        game = get_game(game_id)
+        return game.display_label if game else game_id
+
+    def _migrate_legacy_settings(self) -> None:
+        try:
+            existing_folders = self._settings.get(_SETTINGS_NEW_FOLDERS_KEY, None)
+            folders_map = self._read_legacy_folders_map()
+            if isinstance(existing_folders, list) and (existing_folders or not folders_map):
+                self.get_folders()
+                self.get_rules()
+                return
+            selected_map = self._read_legacy_selected_map()
+            folders: list[dict] = []
+            for game_id, names in folders_map.items():
+                ordered_names = list(names)
+                selected = selected_map.get(game_id, "")
+                if selected in ordered_names:
+                    ordered_names.remove(selected)
+                    ordered_names.insert(0, selected)
+                elif selected:
+                    ordered_names.insert(0, selected)
+                for name in ordered_names:
+                    folders.append(
+                        {
+                            "id": self._new_id("folder"),
+                            "game_id": game_id,
+                            "profile": _GLOBAL_PROFILE,
+                            "name": name,
+                        }
+                    )
+            rules = self._normalize_rules([])
+        except Exception:
+            logger.exception("Failed to migrate legacy custom save folder settings")
+            return
+        self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, folders)
+        self._settings.set(_SETTINGS_RULES_KEY, rules)
+
+    @staticmethod
+    def _new_id(prefix: str) -> str:
+        return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+    def _read_legacy_folders_map(self) -> dict[str, list[str]]:
         raw = self._settings.get(_SETTINGS_FOLDERS_KEY, {})
         if not isinstance(raw, dict):
             return {}
@@ -337,24 +411,112 @@ class _StateStore:
                 result[game_id] = list(dict.fromkeys(cleaned))
         return result
 
-    def get_selected_map(self) -> dict[str, str]:
+    def _read_legacy_selected_map(self) -> dict[str, str]:
         raw = self._settings.get(_SETTINGS_SELECTED_KEY, {})
         if not isinstance(raw, dict):
             return {}
-        result: dict[str, str] = {}
-        for game_id, value in raw.items():
-            if isinstance(game_id, str) and isinstance(value, str) and value.strip():
-                result[game_id] = value.strip()
+        return {
+            game_id: value.strip()
+            for game_id, value in raw.items()
+            if isinstance(game_id, str) and isinstance(value, str) and value.strip()
+        }
+
+    def _normalize_folders(self, raw) -> list[dict]:
+        if not isinstance(raw, list):
+            return []
+        result = []
+        seen_ids = set()
+        seen_keys = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            game_id = str(item.get("game_id", "") or "").strip()
+            name = str(item.get("name", "") or "").strip()
+            profile = str(item.get("profile", "") or "").strip()
+            if not game_id or not name:
+                continue
+            duplicate_key = (game_id, profile, name)
+            if duplicate_key in seen_keys:
+                continue
+            folder_id = str(item.get("id", "") or "").strip()
+            if not folder_id or folder_id in seen_ids:
+                folder_id = self._new_id("folder")
+            seen_ids.add(folder_id)
+            seen_keys.add(duplicate_key)
+            result.append(
+                {
+                    "id": folder_id,
+                    "game_id": game_id,
+                    "profile": profile,
+                    "name": name,
+                }
+            )
         return result
 
-    def get_folders(self, game_id: str) -> list[str]:
-        return self.get_folders_map().get(game_id, [])
+    def _normalize_rules(self, raw) -> list[dict]:
+        if not isinstance(raw, list):
+            return []
+        result = []
+        seen_ids = set()
+        seen_keys = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            profile = str(item.get("profile", "") or "").strip()
+            game_id = str(item.get("game_id", "") or "").strip()
+            mod_id = str(item.get("mod_id", "") or "").strip()
+            folder_id = str(item.get("folder_id", "") or "").strip()
+            if not profile or not game_id or not mod_id or not folder_id:
+                continue
+            duplicate_key = (profile, game_id, mod_id, folder_id)
+            if duplicate_key in seen_keys:
+                continue
+            rule_id = str(item.get("id", "") or "").strip()
+            if not rule_id or rule_id in seen_ids:
+                rule_id = self._new_id("rule")
+            seen_ids.add(rule_id)
+            seen_keys.add(duplicate_key)
+            result.append(
+                {
+                    "id": rule_id,
+                    "enabled": bool(item.get("enabled", True)),
+                    "profile": profile,
+                    "game_id": game_id,
+                    "mod_id": mod_id,
+                    "mod_name": str(item.get("mod_name", "") or "").strip() or mod_id,
+                    "folder_id": folder_id,
+                }
+            )
+        return result
 
-    def get_selected(self, game_id: str) -> str:
-        selected = self.get_selected_map().get(game_id, "")
-        if selected and selected in self.get_folders(game_id):
-            return selected
-        return ""
+    def get_folders(self, game_id: str = "", *, active_profile_only: bool = False) -> list[dict]:
+        folders = self._normalize_folders(self._settings.get(_SETTINGS_NEW_FOLDERS_KEY, []))
+        self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, folders)
+        active_profile = self.active_profile()
+        return [
+            folder
+            for folder in folders
+            if (not game_id or folder["game_id"] == game_id)
+            and (
+                not active_profile_only
+                or folder["profile"] in {_GLOBAL_PROFILE, active_profile}
+            )
+        ]
+
+    def get_rules(self, game_id: str = "") -> list[dict]:
+        rules = self._normalize_rules(self._settings.get(_SETTINGS_RULES_KEY, []))
+        self._settings.set(_SETTINGS_RULES_KEY, rules)
+        return [
+            rule
+            for rule in rules
+            if not game_id or rule["game_id"] == game_id
+        ]
+
+    def get_folder(self, folder_id: str) -> dict | None:
+        return next(
+            (folder for folder in self.get_folders() if folder["id"] == folder_id),
+            None,
+        )
 
     @staticmethod
     def validate_name(name: str) -> str | None:
@@ -373,96 +535,381 @@ class _StateStore:
             return "errors.name_reserved"
         return None
 
-    def add_folder(self, game_id: str, folder_name: str) -> str | None:
+    def add_folder(self, game_id: str, profile: str, folder_name: str) -> str | None:
         cleaned = str(folder_name or "").strip()
         error_key = self.validate_name(cleaned)
         if error_key:
             return error_key
-        folders_map = self.get_folders_map()
-        folders = folders_map.setdefault(game_id, [])
-        if cleaned in folders:
+        profile = str(profile or "").strip()
+        folders = self.get_folders()
+        if any(
+            folder["game_id"] == game_id
+            and folder["profile"] == profile
+            and folder["name"] == cleaned
+            for folder in folders
+        ):
             return "errors.folder_exists"
-        folders.append(cleaned)
-        folders_map[game_id] = folders
-        self._settings.set(_SETTINGS_FOLDERS_KEY, folders_map)
-        selected_map = self.get_selected_map()
-        selected_map[game_id] = cleaned
-        self._settings.set(_SETTINGS_SELECTED_KEY, selected_map)
+        folders.append(
+            {
+                "id": self._new_id("folder"),
+                "game_id": game_id,
+                "profile": profile,
+                "name": cleaned,
+            }
+        )
+        self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, folders)
         return None
 
-    def remove_folder(self, game_id: str, folder_name: str) -> None:
-        folders_map = self.get_folders_map()
-        selected_map = self.get_selected_map()
-        folders = [value for value in folders_map.get(game_id, []) if value != folder_name]
-        if folders:
-            folders_map[game_id] = folders
+    def remove_folder(self, folder_id: str) -> None:
+        folders = [
+            folder for folder in self.get_folders() if folder["id"] != folder_id
+        ]
+        self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, folders)
+
+    def reorder_folders(self, ordered_ids: list[str]) -> None:
+        folders = self.get_folders()
+        by_id = {folder["id"]: folder for folder in folders}
+        ordered = [by_id[folder_id] for folder_id in ordered_ids if folder_id in by_id]
+        ordered.extend(folder for folder in folders if folder["id"] not in ordered_ids)
+        self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, ordered)
+
+    def add_rule(
+        self,
+        profile: str,
+        game_id: str,
+        mod_id: str,
+        mod_name: str,
+        folder_id: str,
+    ) -> str | None:
+        profile = str(profile or "").strip()
+        game_id = str(game_id or "").strip()
+        mod_id = str(mod_id or "").strip()
+        folder_id = str(folder_id or "").strip()
+        folder = self.get_folder(folder_id)
+        if not profile or not game_id or not mod_id or not folder:
+            return "errors.rule_selection_missing"
+        if folder["game_id"] != game_id or folder["profile"] not in {
+            _GLOBAL_PROFILE,
+            profile,
+        }:
+            return "errors.folder_game_mismatch"
+        rules = self.get_rules()
+        if any(
+            rule["profile"] == profile
+            and rule["game_id"] == game_id
+            and rule["mod_id"] == mod_id
+            and rule["folder_id"] == folder_id
+            for rule in rules
+        ):
+            return "errors.rule_exists"
+        rules.append(
+            {
+                "id": self._new_id("rule"),
+                "enabled": True,
+                "profile": profile,
+                "game_id": game_id,
+                "mod_id": mod_id,
+                "mod_name": str(mod_name or "").strip() or mod_id,
+                "folder_id": folder_id,
+            }
+        )
+        self._settings.set(_SETTINGS_RULES_KEY, rules)
+        return None
+
+    def remove_rule(self, rule_id: str) -> None:
+        self._settings.set(
+            _SETTINGS_RULES_KEY,
+            [rule for rule in self.get_rules() if rule["id"] != rule_id],
+        )
+
+    def set_rule_enabled(self, rule_id: str, enabled: bool) -> None:
+        rules = self.get_rules()
+        for rule in rules:
+            if rule["id"] == rule_id:
+                rule["enabled"] = bool(enabled)
+                break
+        self._settings.set(_SETTINGS_RULES_KEY, rules)
+
+    def reorder_rules(self, ordered_ids: list[str]) -> None:
+        rules = self.get_rules()
+        by_id = {rule["id"]: rule for rule in rules}
+        ordered = [by_id[rule_id] for rule_id in ordered_ids if rule_id in by_id]
+        ordered.extend(rule for rule in rules if rule["id"] not in ordered_ids)
+        self._settings.set(_SETTINGS_RULES_KEY, ordered)
+
+    def list_profile_mods(self, profile: str, game_id: str) -> list[dict]:
+        mods_root = get_profile_mods_root(profile)
+        if not os.path.isdir(mods_root):
+            return []
+        mods = []
+        seen_ids = set()
+        for folder_name in sorted(os.listdir(mods_root), key=str.casefold):
+            folder_path = os.path.join(mods_root, folder_name)
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+            if not os.path.isfile(config_path):
+                continue
+            try:
+                with open(config_path, encoding="utf-8") as handle:
+                    config_data = json.load(handle)
+                normalize_mod_config_data(config_data, mod_root_path=folder_path)
+            except Exception:
+                logger.debug("Skipping unreadable mod config: %s", config_path)
+                continue
+            if str(config_data.get("game", "") or "").strip() != game_id:
+                continue
+            mod_id = get_mod_id(config_data) or folder_name
+            if not mod_id or mod_id in seen_ids:
+                continue
+            seen_ids.add(mod_id)
+            mods.append(
+                {
+                    "id": mod_id,
+                    "name": get_mod_name(config_data, folder_name),
+                    "game": game_id,
+                }
+            )
+        return mods
+
+    def rule_status(self, rule: dict) -> str:
+        folder = self.get_folder(str(rule.get("folder_id", "")))
+        if not folder:
+            return "missing_folder"
+        profile = str(rule.get("profile", "") or "")
+        if (
+            folder["game_id"] != rule.get("game_id")
+            or folder["profile"] not in {_GLOBAL_PROFILE, profile}
+        ):
+            return "missing_folder"
+        mod_id = str(rule.get("mod_id", "") or "")
+        if not any(mod["id"] == mod_id for mod in self.list_profile_mods(profile, rule["game_id"])):
+            return "missing_mod"
+        return "ok"
+
+    def _collect_selected_mod_ids(self, selections) -> set[str]:
+        selected = set()
+        if isinstance(selections, dict):
+            values = selections.values()
         else:
-            folders_map.pop(game_id, None)
-        if selected_map.get(game_id) == folder_name:
-            if folders:
-                selected_map[game_id] = folders[0]
-            else:
-                selected_map.pop(game_id, None)
-        self._settings.set(_SETTINGS_FOLDERS_KEY, folders_map)
-        self._settings.set(_SETTINGS_SELECTED_KEY, selected_map)
+            values = []
+        for value in values:
+            mods = value if isinstance(value, list) else [value]
+            for mod in mods:
+                mod_id = get_mod_id(mod)
+                if mod_id:
+                    selected.add(mod_id)
+        return selected
 
-    def select_folder(self, game_id: str, folder_name: str) -> None:
-        if folder_name not in self.get_folders(game_id):
-            return
-        selected_map = self.get_selected_map()
-        selected_map[game_id] = folder_name
-        self._settings.set(_SETTINGS_SELECTED_KEY, selected_map)
+    def _collect_config_mod_ids(self, game_id: str) -> set[str]:
+        config = getattr(self._app_state, "local_config", {}) or {}
+        selected = set()
+        for key, value in config.items():
+            if not key.startswith(f"used_mods_{game_id}") or not isinstance(value, dict):
+                continue
+            for raw in value.values():
+                items = [raw] if isinstance(raw, str) else raw if isinstance(raw, list) else []
+                selected.update(str(item) for item in items if item)
+        return selected
 
-    def clear_selected(self, game_id: str) -> None:
-        selected_map = self.get_selected_map()
-        if game_id in selected_map:
-            selected_map.pop(game_id, None)
-            self._settings.set(_SETTINGS_SELECTED_KEY, selected_map)
+    def resolve_launch_folder(
+        self,
+        game_id: str,
+        profile: str | None = None,
+        selections=None,
+    ) -> dict | None:
+        profile = str(profile or self.active_profile() or "Default")
+        selected_mod_ids = self._collect_selected_mod_ids(selections)
+        if not selected_mod_ids:
+            selected_mod_ids = self._collect_config_mod_ids(game_id)
+        folders_by_id = {folder["id"]: folder for folder in self.get_folders()}
+        available_mod_ids = {
+            mod["id"] for mod in self.list_profile_mods(profile, game_id)
+        }
+        for rule in self.get_rules(game_id):
+            folder = folders_by_id.get(rule["folder_id"])
+            if (
+                rule["enabled"]
+                and rule["profile"] == profile
+                and rule["mod_id"] in selected_mod_ids
+                and rule["mod_id"] in available_mod_ids
+                and folder
+                and folder["game_id"] == game_id
+                and folder["profile"] in {_GLOBAL_PROFILE, profile}
+            ):
+                return folder
+        for folder in self.get_folders(game_id):
+            if folder["profile"] in {_GLOBAL_PROFILE, profile}:
+                return folder
+        return None
 
 
-class _FolderNameDialog(QDialog):
-    def __init__(self, app_state, tr_func, parent=None) -> None:
+class _FolderDialog(QDialog):
+    def __init__(self, app_state, state: _StateStore, tr_func, parent=None) -> None:
         super().__init__(parent)
         self._app_state = app_state
+        self._state = state
         self._tr = tr_func
         self.setWindowTitle(self._tr("ui.add_folder"))
         self.setModal(True)
-        self.setMinimumWidth(430)
+        self.setMinimumWidth(460)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
 
-        title = QLabel(self._tr("ui.name_label"), self)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setWordWrap(True)
-        layout.addWidget(title)
+        game_label = QLabel(self._tr("ui.game_label"), self)
+        layout.addWidget(game_label)
+        self.game_combo = QComboBox(self)
+        for entry in self._state.list_games():
+            self.game_combo.addItem(entry.display_name, entry.id)
+        layout.addWidget(self.game_combo)
 
-        self.edit = QLineEdit(self)
-        self.edit.setPlaceholderText(self._tr("ui.name_placeholder"))
-        self.edit.returnPressed.connect(self.accept)
-        layout.addWidget(self.edit)
+        profile_label = QLabel(self._tr("ui.profile_label"), self)
+        layout.addWidget(profile_label)
+        self.profile_combo = QComboBox(self)
+        self.profile_combo.addItem(self._tr("ui.global_profile"), _GLOBAL_PROFILE)
+        for profile in self._state.list_profiles():
+            self.profile_combo.addItem(profile, profile)
+        layout.addWidget(self.profile_combo)
+
+        name_label = QLabel(self._tr("ui.name_label"), self)
+        layout.addWidget(name_label)
+        self.name_edit = QLineEdit(self)
+        self.name_edit.setPlaceholderText(self._tr("ui.name_placeholder"))
+        self.name_edit.returnPressed.connect(self.accept)
+        layout.addWidget(self.name_edit)
 
         hint = QLabel(self._tr("ui.name_hint"), self)
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        cancel_btn = QPushButton(self._tr("ui.cancel_button"), self)
-        cancel_btn.clicked.connect(self.reject)
-        create_btn = QPushButton(self._tr("ui.create_button"), self)
-        create_btn.clicked.connect(self.accept)
-        buttons.addWidget(cancel_btn)
-        buttons.addWidget(create_btn)
-        buttons.addStretch(1)
-        layout.addLayout(buttons)
-
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok,
+            self,
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(self._tr("ui.create_button"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(self._tr("ui.cancel_button"))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
         apply_dialog_theme(self, self._app_state)
 
-    def value(self) -> str:
-        return self.edit.text().strip()
+    def value(self) -> tuple[str, str, str]:
+        return (
+            str(self.game_combo.currentData() or ""),
+            str(self.profile_combo.currentData() or ""),
+            self.name_edit.text().strip(),
+        )
+
+
+class _RuleDialog(QDialog):
+    def __init__(self, app_state, state: _StateStore, tr_func, parent=None) -> None:
+        super().__init__(parent)
+        self._app_state = app_state
+        self._state = state
+        self._tr = tr_func
+        self.setWindowTitle(self._tr("ui.add_rule"))
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+
+        top_row = QHBoxLayout()
+        profile_box = QVBoxLayout()
+        profile_box.addWidget(QLabel(self._tr("ui.profile_label"), self))
+        self.profile_combo = QComboBox(self)
+        for profile in self._state.list_profiles():
+            self.profile_combo.addItem(profile, profile)
+        profile_box.addWidget(self.profile_combo)
+        top_row.addLayout(profile_box, 1)
+
+        game_box = QVBoxLayout()
+        game_box.addWidget(QLabel(self._tr("ui.game_label"), self))
+        self.game_combo = QComboBox(self)
+        for entry in self._state.list_games():
+            self.game_combo.addItem(entry.display_name, entry.id)
+        game_box.addWidget(self.game_combo)
+        top_row.addLayout(game_box, 1)
+        layout.addLayout(top_row)
+
+        layout.addWidget(QLabel(self._tr("ui.mod_label"), self))
+        self.mod_combo = QComboBox(self)
+        layout.addWidget(self.mod_combo)
+
+        layout.addWidget(QLabel(self._tr("ui.folder_label"), self))
+        self.folder_combo = QComboBox(self)
+        layout.addWidget(self.folder_combo)
+
+        hint = QLabel(self._tr("ui.rule_dialog_hint"), self)
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok,
+            self,
+        )
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(self._tr("ui.create_button"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(self._tr("ui.cancel_button"))
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+        self.profile_combo.currentIndexChanged.connect(self._refresh_choices)
+        self.game_combo.currentIndexChanged.connect(self._refresh_choices)
+        self._refresh_choices()
+        apply_dialog_theme(self, self._app_state)
+
+    def _refresh_choices(self) -> None:
+        profile = str(self.profile_combo.currentData() or "")
+        game_id = str(self.game_combo.currentData() or "")
+
+        self.mod_combo.clear()
+        for mod in self._state.list_profile_mods(profile, game_id):
+            self.mod_combo.addItem(mod["name"], mod)
+
+        self.folder_combo.clear()
+        for folder in self._state.get_folders(game_id):
+            if folder["profile"] not in {_GLOBAL_PROFILE, profile}:
+                continue
+            label = f'{folder["name"]} ({self._state.profile_label(folder["profile"])})'
+            self.folder_combo.addItem(label, folder["id"])
+
+        has_choices = self.mod_combo.count() > 0 and self.folder_combo.count() > 0
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(has_choices)
+
+    def value(self) -> tuple[str, str, str, str, str]:
+        mod = self.mod_combo.currentData() or {}
+        return (
+            str(self.profile_combo.currentData() or ""),
+            str(self.game_combo.currentData() or ""),
+            str(mod.get("id", "")),
+            str(mod.get("name", "")),
+            str(self.folder_combo.currentData() or ""),
+        )
+
+
+class _HelpDialog(QDialog):
+    def __init__(self, app_state, tr_func, parent=None) -> None:
+        super().__init__(parent)
+        self._app_state = app_state
+        self._tr = tr_func
+        self.setWindowTitle(self._tr("ui.help_title"))
+        self.setModal(True)
+        self.setMinimumSize(1120, 630)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+        body = QTextBrowser(self)
+        body.setOpenExternalLinks(False)
+        body.setPlainText(self._tr("ui.help_body"))
+        layout.addWidget(body, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok, self)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(self._tr("ui.close_button"))
+        buttons.accepted.connect(self.accept)
+        layout.addWidget(buttons)
+        apply_dialog_theme(self, self._app_state)
 
 
 class _CustomSavesFoldersWidget(QWidget):
@@ -473,16 +920,17 @@ class _CustomSavesFoldersWidget(QWidget):
         self._ui_context = ui_context
         self._state = state
         self._tr = tr_func
-        self._game_rows: dict[str, _GameRow] = {}
         self._folder_rows: dict[str, _FolderRow] = {}
-        self._focused_folder_name = ""
+        self._rule_rows: dict[str, _RuleRow] = {}
         self._build_ui()
         self._apply_theme()
-        self._refresh_games()
+        self._refresh_game_filters()
+        self._refresh_all()
 
         game_registry = getattr(self._ui_context.host_context, "game_registry_service", None)
         if game_registry and hasattr(game_registry, "games_changed"):
-            game_registry.games_changed.connect(self._refresh_games)
+            game_registry.games_changed.connect(self._refresh_game_filters)
+            game_registry.games_changed.connect(self._refresh_all)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -492,22 +940,16 @@ class _CustomSavesFoldersWidget(QWidget):
         header = QHBoxLayout()
         header.setSpacing(10)
         header.addStretch(1)
-        self._title_label = QLabel(self._tr("ui.title"), self)
-        self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_label.setObjectName("customSavesFoldersTitle")
-        header.addWidget(self._title_label)
+        self._help_btn = QPushButton(self)
+        self._help_btn.setObjectName("customSavesFoldersAppDataButton")
+        self._help_btn.clicked.connect(self._show_help)
+        header.addWidget(self._help_btn)
         self._appdata_btn = QPushButton(self)
         self._appdata_btn.setObjectName("customSavesFoldersAppDataButton")
         self._appdata_btn.clicked.connect(self._open_appdata_folder)
         header.addWidget(self._appdata_btn)
         header.addStretch(1)
         outer.addLayout(header)
-
-        self._hint_label = QLabel(self._tr("ui.current_game_hint"), self)
-        self._hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._hint_label.setWordWrap(True)
-        self._hint_label.setObjectName("customSavesFoldersHint")
-        outer.addWidget(self._hint_label)
 
         content = QHBoxLayout()
         content.setSpacing(14)
@@ -518,13 +960,28 @@ class _CustomSavesFoldersWidget(QWidget):
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(14, 14, 14, 14)
         left_layout.setSpacing(10)
-        self._games_title_label = QLabel(self._tr("ui.games_title"), left)
-        self._games_title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_layout.addWidget(self._games_title_label)
-        self.games_list = QListWidget(left)
-        self.games_list.setSpacing(8)
-        self.games_list.currentItemChanged.connect(self._refresh_folders)
-        left_layout.addWidget(self.games_list, 1)
+        folder_header = QHBoxLayout()
+        self._folder_filter = QComboBox(left)
+        self._folder_filter.currentIndexChanged.connect(self._refresh_folders)
+        folder_header.addWidget(self._folder_filter, 1)
+        self.add_folder_btn = QPushButton(left)
+        self.add_folder_btn.setObjectName("game_versions_add_btn")
+        self.add_folder_btn.setFixedSize(38, 38)
+        self.add_folder_btn.setIconSize(QSize(20, 20))
+        self.add_folder_btn.clicked.connect(self._on_add_folder_clicked)
+        folder_header.addWidget(self.add_folder_btn)
+        left_layout.addLayout(folder_header)
+
+        self.folders_list = QListWidget(left)
+        self.folders_list.setSpacing(10)
+        self.folders_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.folders_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.folders_list.model().rowsMoved.connect(lambda *_args: self._save_folder_order())
+        left_layout.addWidget(self.folders_list, 1)
+        self.folders_empty_label = QLabel(self._tr("ui.empty_folders"), left)
+        self.folders_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.folders_empty_label.setWordWrap(True)
+        left_layout.addWidget(self.folders_empty_label)
         content.addWidget(left, 1)
 
         right = QFrame(self)
@@ -533,28 +990,28 @@ class _CustomSavesFoldersWidget(QWidget):
         right_layout.setContentsMargins(14, 14, 14, 14)
         right_layout.setSpacing(10)
 
-        header = QHBoxLayout()
-        header.addStretch(1)
-        self._folders_title_label = QLabel(self._tr("ui.folders_title"), right)
-        self._folders_title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.addWidget(self._folders_title_label)
-        header.addStretch(1)
-        self.add_btn = QPushButton(right)
-        self.add_btn.setObjectName("game_versions_add_btn")
-        self.add_btn.setFixedSize(38, 38)
-        self.add_btn.setIconSize(QSize(20, 20))
-        self.add_btn.clicked.connect(self._on_add_clicked)
-        header.addWidget(self.add_btn, 0, Qt.AlignmentFlag.AlignRight)
-        right_layout.addLayout(header)
+        rule_header = QHBoxLayout()
+        self._rule_filter = QComboBox(right)
+        self._rule_filter.currentIndexChanged.connect(self._refresh_rules)
+        rule_header.addWidget(self._rule_filter, 1)
+        self.add_rule_btn = QPushButton(right)
+        self.add_rule_btn.setObjectName("game_versions_add_btn")
+        self.add_rule_btn.setFixedSize(38, 38)
+        self.add_rule_btn.setIconSize(QSize(20, 20))
+        self.add_rule_btn.clicked.connect(self._on_add_rule_clicked)
+        rule_header.addWidget(self.add_rule_btn)
+        right_layout.addLayout(rule_header)
 
-        self.folders_list = QListWidget(right)
-        self.folders_list.setSpacing(10)
-        right_layout.addWidget(self.folders_list, 1)
-
-        self.empty_label = QLabel(self._tr("ui.empty_selection"), right)
-        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.setWordWrap(True)
-        right_layout.addWidget(self.empty_label)
+        self.rules_list = QListWidget(right)
+        self.rules_list.setSpacing(10)
+        self.rules_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.rules_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.rules_list.model().rowsMoved.connect(lambda *_args: self._save_rule_order())
+        right_layout.addWidget(self.rules_list, 1)
+        self.rules_empty_label = QLabel(self._tr("ui.empty_rules"), right)
+        self.rules_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.rules_empty_label.setWordWrap(True)
+        right_layout.addWidget(self.rules_empty_label)
         content.addWidget(right, 1)
 
     def _apply_theme(self) -> None:
@@ -566,10 +1023,6 @@ class _CustomSavesFoldersWidget(QWidget):
             f"""
             QWidget {{
                 color: {colors["main_text"]};
-            }}
-            QLabel#customSavesFoldersTitle {{
-                font-size: 24px;
-                font-weight: 800;
             }}
             QPushButton#customSavesFoldersAppDataButton {{
                 background-color: {colors["background"]};
@@ -605,6 +1058,12 @@ class _CustomSavesFoldersWidget(QWidget):
                 background: transparent;
                 padding: 0;
             }}
+            QComboBox {{
+                background-color: {colors["background"]};
+                border: 2px solid {colors["border"]};
+                border-radius: {small_radius}px;
+                padding: 6px 10px;
+            }}
             QPushButton#game_versions_add_btn {{
                 background-color: {colors["background"]};
                 border: 2px solid {colors["border"]};
@@ -621,16 +1080,20 @@ class _CustomSavesFoldersWidget(QWidget):
             }}
             """
         )
+        self._help_btn.setText(self._tr("ui.help_button"))
+        self._help_btn.setToolTip(self._tr("ui.help_tooltip"))
         self._appdata_btn.setIcon(colored_icon("folder", colors["main_text"]))
         self._appdata_btn.setText(self._tr("ui.open_appdata_button"))
         self._appdata_btn.setToolTip(self._tr("ui.open_appdata_tooltip"))
-        self.add_btn.setIcon(colored_icon("add", colors["main_text"]))
-        self.add_btn.setToolTip(self._tr("ui.add_tooltip"))
-        for row in self._game_rows.values():
-            row.refresh_theme()
+        self.add_folder_btn.setIcon(colored_icon("add", colors["main_text"]))
+        self.add_folder_btn.setToolTip(self._tr("ui.add_folder_tooltip"))
+        self.add_rule_btn.setIcon(colored_icon("add", colors["main_text"]))
+        self.add_rule_btn.setToolTip(self._tr("ui.add_rule_tooltip"))
         for row in self._folder_rows.values():
             row.refresh_theme()
-        self._refresh_folders()
+        for row in self._rule_rows.values():
+            row.refresh_theme()
+        self._refresh_all()
 
     def _open_appdata_folder(self) -> None:
         path = get_user_data_root()
@@ -639,152 +1102,197 @@ class _CustomSavesFoldersWidget(QWidget):
         os.makedirs(path, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
-    def _current_game_id(self) -> str:
-        item = self.games_list.currentItem()
-        return item.data(Qt.ItemDataRole.UserRole) if item else ""
+    def _show_help(self) -> None:
+        _HelpDialog(self._ui_context.app_state, self._tr, self).exec()
 
-    def _set_current_game(self, game_id: str) -> None:
-        for index in range(self.games_list.count()):
-            item = self.games_list.item(index)
-            if item and item.data(Qt.ItemDataRole.UserRole) == game_id:
-                self.games_list.setCurrentItem(item)
-                return
+    @staticmethod
+    def _combo_value(combo: QComboBox) -> str:
+        return str(combo.currentData() or "")
 
-    def _set_focused_folder(self, game_id: str, folder_name: str) -> None:
-        self._set_current_game(game_id)
-        self._focused_folder_name = folder_name
-        self._refresh_folders()
-        self.selection_changed.emit()
-
-    def _select_folder(self, game_id: str, folder_name: str) -> None:
-        self._state.select_folder(game_id, folder_name)
-        self._focused_folder_name = folder_name
-        self._set_current_game(game_id)
-        self._refresh_folders()
-        self.selection_changed.emit()
-
-    def _clear_selected_folder(self, game_id: str) -> None:
-        self._state.clear_selected(game_id)
-        self._focused_folder_name = ""
-        self._set_current_game(game_id)
-        self._refresh_folders()
-        self.selection_changed.emit()
-
-    def _refresh_games(self) -> None:
-        current_game_id = self._current_game_id()
-        self.games_list.clear()
-        self._game_rows.clear()
-        self._focused_folder_name = ""
+    def _refresh_game_filters(self) -> None:
+        current_folder = self._combo_value(self._folder_filter)
+        current_rule = self._combo_value(self._rule_filter)
         entries = self._state.list_games()
-        if not entries:
-            item = QListWidgetItem(self._tr("ui.empty_games"))
-            self.games_list.addItem(item)
-            self.games_list.setEnabled(False)
-            self._refresh_folders()
-            return
+        for combo, current in (
+            (self._folder_filter, current_folder),
+            (self._rule_filter, current_rule),
+        ):
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem(self._tr("ui.all_games"), "")
+            for entry in entries:
+                combo.addItem(entry.display_name, entry.id)
+            index = combo.findData(current)
+            combo.setCurrentIndex(index if index >= 0 else 0)
+            combo.blockSignals(False)
 
-        self.games_list.setEnabled(True)
-        for entry in entries:
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, entry.id)
-            item.setSizeHint(QSize(0, 58))
-            self.games_list.addItem(item)
-            row = _GameRow(self._ui_context.app_state, entry.display_name, self.games_list)
-            row.clicked.connect(lambda gid=entry.id: self._set_current_game(gid))
-            self.games_list.setItemWidget(item, row)
-            self._game_rows[entry.id] = row
-
-        if self.games_list.count():
-            self._set_current_game(current_game_id or entries[0].id)
-        self._refresh_folders()
-
-    def _on_add_clicked(self) -> None:
-        game_id = self._current_game_id()
-        if not game_id:
-            QMessageBox.warning(self, self._tr("ui.title"), self._tr("errors.selection_missing"))
-            return
-        dialog = _FolderNameDialog(self._ui_context.app_state, self._tr, self)
+    def _on_add_folder_clicked(self) -> None:
+        dialog = _FolderDialog(self._ui_context.app_state, self._state, self._tr, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        error_key = self._state.add_folder(game_id, dialog.value())
+        game_id, profile, name = dialog.value()
+        error_key = self._state.add_folder(game_id, profile, name)
         if error_key:
             QMessageBox.warning(self, self._tr("ui.title"), self._tr(error_key))
             return
+        self._set_filter(self._folder_filter, game_id)
         self._refresh_folders()
         self.selection_changed.emit()
 
-    def _on_delete_folder(self, game_id: str, folder_name: str) -> None:
+    def _on_add_rule_clicked(self) -> None:
+        dialog = _RuleDialog(self._ui_context.app_state, self._state, self._tr, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        profile, game_id, mod_id, mod_name, folder_id = dialog.value()
+        error_key = self._state.add_rule(profile, game_id, mod_id, mod_name, folder_id)
+        if error_key:
+            QMessageBox.warning(self, self._tr("ui.title"), self._tr(error_key))
+            return
+        self._set_filter(self._rule_filter, game_id)
+        self._refresh_rules()
+        self.selection_changed.emit()
+
+    def _set_filter(self, combo: QComboBox, game_id: str) -> None:
+        index = combo.findData(game_id)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    def _on_delete_folder(self, folder: dict) -> None:
         should_delete = QMessageBox.question(
             self,
             self._tr("dialogs.delete_title"),
-            self._tr("dialogs.delete_body", name=folder_name),
+            self._tr("dialogs.delete_body", name=folder["name"]),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if should_delete != QMessageBox.StandardButton.Yes:
             return
-        self._state.remove_folder(game_id, folder_name)
-        self._refresh_folders()
+        self._state.remove_folder(folder["id"])
+        self._refresh_all()
         self.selection_changed.emit()
 
-    def _refresh_folders(self, *_args) -> None:
-        game_id = self._current_game_id()
-        for row_game_id, row in self._game_rows.items():
-            row.set_selected(row_game_id == game_id)
+    def _on_delete_rule(self, rule: dict) -> None:
+        should_delete = QMessageBox.question(
+            self,
+            self._tr("dialogs.delete_rule_title"),
+            self._tr("dialogs.delete_rule_body", name=rule["mod_name"]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if should_delete != QMessageBox.StandardButton.Yes:
+            return
+        self._state.remove_rule(rule["id"])
+        self._refresh_rules()
+        self.selection_changed.emit()
 
+    def _save_folder_order(self) -> None:
+        ids = [
+            self.folders_list.item(index).data(Qt.ItemDataRole.UserRole)
+            for index in range(self.folders_list.count())
+        ]
+        self._state.reorder_folders([str(folder_id) for folder_id in ids if folder_id])
+
+    def _save_rule_order(self) -> None:
+        ids = [
+            self.rules_list.item(index).data(Qt.ItemDataRole.UserRole)
+            for index in range(self.rules_list.count())
+        ]
+        self._state.reorder_rules([str(rule_id) for rule_id in ids if rule_id])
+
+    def _refresh_all(self) -> None:
+        self._refresh_folders()
+        self._refresh_rules()
+
+    def _refresh_folders(self, *_args) -> None:
+        game_id = self._combo_value(self._folder_filter)
         self.folders_list.clear()
         self._folder_rows.clear()
-
-        if not game_id:
-            self.empty_label.setText(self._tr("ui.empty_selection"))
-            self.empty_label.setVisible(True)
-            self.folders_list.setVisible(False)
-            self.add_btn.setEnabled(False)
-            return
-
         folders = self._state.get_folders(game_id)
-        selected = self._state.get_selected(game_id)
-        focused = self._focused_folder_name if self._focused_folder_name in folders else ""
-        self.add_btn.setEnabled(True)
+        self.folders_empty_label.setVisible(not folders)
+        self.folders_empty_label.setText(self._tr("ui.empty_folders"))
+        self.folders_list.setVisible(bool(folders))
 
-        if not folders:
-            self.empty_label.setText(self._tr("ui.empty_folders"))
-            self.empty_label.setVisible(True)
-            self.folders_list.setVisible(False)
-            return
-
-        self.empty_label.setVisible(False)
-        self.folders_list.setVisible(True)
-        for folder_name in folders:
+        for folder in folders:
             item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, folder_name)
+            item.setData(Qt.ItemDataRole.UserRole, folder["id"])
             item.setSizeHint(QSize(0, 84))
             self.folders_list.addItem(item)
-            row = _FolderRow(self._ui_context.app_state, folder_name, self._tr, self.folders_list)
-            row.clicked.connect(
-                lambda gid=game_id, folder=folder_name: self._set_focused_folder(gid, folder)
+            subtitle = self._tr(
+                "ui.folder_scope",
+                game=self._state.game_label(folder["game_id"]),
+                profile=self._state.profile_label(folder["profile"]),
             )
-            row.use_requested.connect(
-                lambda gid=game_id, folder=folder_name: self._select_folder(gid, folder)
+            row = _FolderRow(
+                self._ui_context.app_state,
+                folder["name"],
+                subtitle,
+                self._tr,
+                self.folders_list,
             )
-            row.unuse_requested.connect(lambda gid=game_id: self._clear_selected_folder(gid))
-            row.delete_requested.connect(
-                lambda gid=game_id, folder=folder_name: self._on_delete_folder(gid, folder)
-            )
-            row.set_selected(folder_name == focused)
-            row.set_active(folder_name == selected)
+            row.delete_requested.connect(lambda _=False, data=folder: self._on_delete_folder(data))
             self.folders_list.setItemWidget(item, row)
-            self._folder_rows[folder_name] = row
+            self._folder_rows[folder["id"]] = row
+
+    def _refresh_rules(self, *_args) -> None:
+        game_id = self._combo_value(self._rule_filter)
+        self.rules_list.clear()
+        self._rule_rows.clear()
+        rules = self._state.get_rules(game_id)
+        self.rules_empty_label.setVisible(not rules)
+        self.rules_empty_label.setText(self._tr("ui.empty_rules"))
+        self.rules_list.setVisible(bool(rules))
+
+        for rule in rules:
+            folder = self._state.get_folder(rule["folder_id"])
+            status = self._state.rule_status(rule)
+            folder_name = folder["name"] if folder else self._tr("ui.rule_missing_folder")
+            status_text = ""
+            if not rule["enabled"]:
+                status_text = self._tr("ui.rule_disabled")
+            elif status == "missing_mod":
+                status_text = self._tr("ui.rule_missing_mod")
+            elif status == "missing_folder":
+                status_text = self._tr("ui.rule_missing_folder")
+            subtitle = self._tr(
+                "ui.rule_scope",
+                game=self._state.game_label(rule["game_id"]),
+                profile=rule["profile"],
+                folder=folder_name,
+                status=status_text,
+            ).strip()
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, rule["id"])
+            item.setSizeHint(QSize(0, 92))
+            self.rules_list.addItem(item)
+            row = _RuleRow(
+                self._ui_context.app_state,
+                rule["mod_name"],
+                subtitle,
+                rule["enabled"],
+                self._tr,
+                self.rules_list,
+            )
+            row.enabled_changed.connect(
+                lambda enabled, rule_id=rule["id"]: self._set_rule_enabled(rule_id, enabled)
+            )
+            row.delete_requested.connect(lambda _=False, data=rule: self._on_delete_rule(data))
+            self.rules_list.setItemWidget(item, row)
+            self._rule_rows[rule["id"]] = row
+
+    def _set_rule_enabled(self, rule_id: str, enabled: bool) -> None:
+        self._state.set_rule_enabled(rule_id, enabled)
+        self._refresh_rules()
+        self.selection_changed.emit()
 
     def refresh_language(self) -> None:
-        self._title_label.setText(self._tr("ui.title"))
+        self._help_btn.setText(self._tr("ui.help_button"))
+        self._help_btn.setToolTip(self._tr("ui.help_tooltip"))
         self._appdata_btn.setText(self._tr("ui.open_appdata_button"))
         self._appdata_btn.setToolTip(self._tr("ui.open_appdata_tooltip"))
-        self._hint_label.setText(self._tr("ui.current_game_hint"))
-        self._games_title_label.setText(self._tr("ui.games_title"))
-        self._folders_title_label.setText(self._tr("ui.folders_title"))
-        self.add_btn.setToolTip(self._tr("ui.add_tooltip"))
-        self._refresh_games()
+        self.add_folder_btn.setToolTip(self._tr("ui.add_folder_tooltip"))
+        self.add_rule_btn.setToolTip(self._tr("ui.add_rule_tooltip"))
+        self._refresh_game_filters()
+        self._refresh_all()
 
     def refresh_theme(self) -> None:
         self._apply_theme()
@@ -802,6 +1310,8 @@ class CustomSavesFoldersPlugin:
         self._state = _StateStore(
             context.plugin_settings,
             getattr(context, "game_registry_service", None),
+            getattr(context, "profile_service", None),
+            getattr(context, "app_state", None),
         )
 
     def _tr(self):
@@ -828,26 +1338,27 @@ class CustomSavesFoldersPlugin:
         game_mode = getattr(context.app_state, "game_mode", None)
         if game_mode is None or self._state is None:
             return []
-        selected_folder = self._state.get_selected(game_mode.game_id)
-        if not selected_folder:
+        folder = self._state.resolve_launch_folder(game_mode.game_id)
+        if not folder:
             return []
         shortcut_context.set_plugin_state(
             "custom_saves_folders",
             {
                 "game_id": game_mode.game_id,
-                "folder_name": selected_folder,
+                "folder_id": folder["id"],
+                "folder_name": folder["name"],
             },
         )
         shortcut_context.add_summary_line(
             self._tr()("ui.shortcut_summary_label"),
-            selected_folder,
+            folder["name"],
         )
         return [
             {
                 "plugin_id": "custom_saves_folders",
                 "type": "text",
                 "label": self._tr()("ui.shortcut_summary_label"),
-                "value": selected_folder,
+                "value": folder["name"],
             }
         ]
 
@@ -886,7 +1397,7 @@ class CustomSavesFoldersPlugin:
         if not os.path.isfile(script_path):
             return False, self._tr()("errors.script_missing")
 
-        g3mtool = G3MToolManager()
+        g3mtool = G3MToolManager(self._context.app_state)
         if not g3mtool.is_available():
             return False, self._tr()("errors.g3mtool_missing")
 
@@ -966,11 +1477,16 @@ class CustomSavesFoldersPlugin:
         game_mode = getattr(context.app_state, "game_mode", None)
         if game_mode is None or self._state is None:
             return True
-        selected_folder = self._state.get_selected(game_mode.game_id)
-        if not selected_folder:
+        selections = _args[0] if _args else None
+        folder = self._state.resolve_launch_folder(
+            game_mode.game_id,
+            self._state.active_profile(),
+            selections,
+        )
+        if not folder:
             return True
         task_runtime = getattr(context, "task_runtime", None)
-        ok, error = self._apply_name_to_targets(game_mode.game_id, selected_folder, task_runtime)
+        ok, error = self._apply_name_to_targets(game_mode.game_id, folder["name"], task_runtime)
         if ok:
             return True
         if error == "cancelled":

@@ -2,6 +2,7 @@ import platform
 from typing import Any
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QFocusEvent, QResizeEvent
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -73,6 +74,62 @@ class _FilesDropWidget(QWidget):
             if paths:
                 event.acceptProposedAction()
                 self.files_dropped.emit(paths)
+
+
+class _ElidedPathLineEdit(QLineEdit):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._full_text = ""
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.textEdited.connect(self._on_text_edited)
+
+    def _on_text_edited(self, text: str) -> None:
+        self._full_text = text
+
+    def set_full_text(self, text: str) -> None:
+        self._full_text = str(text or "")
+        if self.hasFocus():
+            self._show_full_text()
+        else:
+            self._apply_elided_text()
+
+    def full_text(self) -> str:
+        if self.hasFocus():
+            return self.text().strip()
+        return self._full_text.strip()
+
+    def focusInEvent(self, event: QFocusEvent) -> None:  # noqa: N802
+        self._show_full_text()
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event: QFocusEvent) -> None:
+        self._full_text = self.text()
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        super().focusOutEvent(event)
+        self._apply_elided_text()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        if not self.hasFocus():
+            self._apply_elided_text()
+
+    def _show_full_text(self) -> None:
+        was_blocked = self.blockSignals(True)
+        self.setText(self._full_text)
+        self.setCursorPosition(len(self._full_text))
+        self.blockSignals(was_blocked)
+
+    def _apply_elided_text(self) -> None:
+        metrics = self.fontMetrics()
+        elided = metrics.elidedText(
+            self._full_text,
+            Qt.TextElideMode.ElideMiddle,
+            max(0, self.contentsRect().width() - 12),
+        )
+        was_blocked = self.blockSignals(True)
+        self.setText(elided)
+        self.blockSignals(was_blocked)
 
 
 class SettingsViewBuilder:
@@ -361,6 +418,52 @@ class SettingsViewBuilder:
         row.addWidget(btn)
         row.addWidget(reset)
         return row, disp, btn, reset, label
+
+    def _create_path_input_row(
+        self,
+        *,
+        object_prefix: str,
+        label_text: str,
+        browse_tooltip: str,
+        reset_action: str = "",
+        reset_config_key: str = "",
+    ) -> tuple[QWidget, QLabel, _ElidedPathLineEdit, QPushButton, QPushButton]:
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row_layout.setSpacing(8)
+
+        row_label = self._styled_label(label_text, bold=True)
+        row_label.setMinimumWidth(150)
+        row_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(row_label)
+
+        path_edit = _ElidedPathLineEdit(row_widget)
+        path_edit.setObjectName(f"{object_prefix}_edit")
+        path_edit.setMinimumWidth(480)
+        path_edit.setMaximumWidth(720)
+        path_edit.setPlaceholderText(tr("ui.path_field_placeholder"))
+        path_edit.setToolTip("")
+        row_layout.addWidget(path_edit)
+
+        browse_button = self._styled_button("", 44, browse_tooltip)
+        browse_button.setObjectName(f"{object_prefix}_browse_button")
+        browse_button.setText("...")
+        browse_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        row_layout.addWidget(browse_button)
+
+        reset_button = self._create_icon_btn("⭯", app_state=self.app_state)
+        reset_button.setObjectName(f"{object_prefix}_reset_button")
+        reset_button.setToolTip(tr("buttons.reset_settings"))
+        reset_button.setVisible(False)
+        reset_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        if reset_config_key:
+            self._mark_reset(reset_button, config_key=reset_config_key)
+        elif reset_action:
+            self._mark_reset(reset_button, reset_action=reset_action)
+        row_layout.addWidget(reset_button)
+        return row_widget, row_label, path_edit, browse_button, reset_button
 
     def _build_general_tab(self, parent: QWidget = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
@@ -796,26 +899,29 @@ class SettingsViewBuilder:
         )
         gs_layout.addWidget(games_manager_button)
         cl.addWidget(game_selector_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        path_exe_row = QWidget(page)
-        path_exe_layout = QHBoxLayout(path_exe_row)
-        path_exe_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        path_exe_layout.setSpacing(10)
-        change_path_button = self._styled_button("", 140, reset_action="game_paths")
-        change_path_button.setObjectName("settings_change_path_button")
-        path_exe_layout.addWidget(change_path_button)
-        custom_executable_button = self._styled_button(
-            tr("buttons.custom_executable"),
-            120,
-            tr("tooltips.custom_executable_library"),
+        game_path_row, game_path_label, game_path_edit, game_path_browse_button, game_path_reset_button = (
+            self._create_path_input_row(
+                object_prefix="settings_game_path",
+                label_text=tr("ui.settings_game_path_label"),
+                browse_tooltip=tr("tooltips.select_game"),
+                reset_action="game_paths",
+            )
         )
-        custom_executable_button.setObjectName("settings_custom_executable_button")
-        path_exe_layout.addWidget(custom_executable_button)
-        reset_custom_exe_button = self._create_icon_btn("⭯", app_state=self.app_state)
-        reset_custom_exe_button.setToolTip(tr("buttons.reset_settings"))
-        reset_custom_exe_button.setVisible(False)
-        self._mark_reset(reset_custom_exe_button, reset_action="custom_executables")
-        path_exe_layout.addWidget(reset_custom_exe_button)
-        cl.addWidget(path_exe_row, alignment=Qt.AlignmentFlag.AlignCenter)
+        cl.addWidget(game_path_row, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        (
+            custom_executable_row,
+            custom_executable_label,
+            custom_executable_edit,
+            custom_executable_button,
+            reset_custom_exe_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_custom_executable",
+            label_text=tr("ui.settings_custom_executable_path_label"),
+            browse_tooltip=tr("tooltips.custom_executable_library"),
+            reset_action="custom_executables",
+        )
+        cl.addWidget(custom_executable_row, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(
@@ -851,22 +957,24 @@ class SettingsViewBuilder:
         if not is_linux:
             use_portproton_checkbox.setVisible(False)
         cl.addWidget(use_portproton_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        select_portproton_path_button = self._styled_button(
-            tr("buttons.select_portproton_path"), 200, reset_action="portproton_path"
+        (
+            portproton_row,
+            portproton_label,
+            portproton_path_edit,
+            select_portproton_path_button,
+            portproton_reset_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_portproton_path",
+            label_text=tr("ui.settings_portproton_path_label"),
+            browse_tooltip=tr("buttons.select_portproton_path"),
+            reset_action="portproton_path",
         )
         if not is_linux:
-            select_portproton_path_button.setVisible(False)
-        portproton_path_label = QLabel(tr("ui.file_not_selected"))
-        portproton_path_label.setMinimumHeight(20)
+            portproton_row.setVisible(False)
         portproton_frame = QFrame(page)
         portproton_layout = QVBoxLayout(portproton_frame)
         portproton_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        portproton_layout.addWidget(
-            select_portproton_path_button, alignment=Qt.AlignmentFlag.AlignCenter
-        )
-        portproton_layout.addWidget(
-            portproton_path_label, alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        portproton_layout.addWidget(portproton_row, alignment=Qt.AlignmentFlag.AlignCenter)
         portproton_frame.setVisible(False)
         cl.addWidget(portproton_frame, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
@@ -877,21 +985,10 @@ class SettingsViewBuilder:
             "ui.settings_section_patching",
             parent=page,
         )
-        skip_patching_warnings_checkbox = self._styled_checkbox(
-            tr("ui.skip_patching_warnings"),
-            tr("tooltips.skip_patching_warnings"),
-            "skip_patching_warnings",
-        )
-        cl.addWidget(
-            skip_patching_warnings_checkbox, alignment=Qt.AlignmentFlag.AlignCenter
-        )
-        layout.addWidget(sec)
-
-        sec, cl = self._collapsible_section(
-            tr("ui.settings_section_merging"),
-            "launch_merging",
-            "ui.settings_section_merging",
-            parent=page,
+        manage_warnings_button = self._styled_button(
+            tr("buttons.manage_warnings"),
+            210,
+            tr("tooltips.manage_warnings"),
         )
         cont = QWidget(page)
         mo_layout = QHBoxLayout(cont)
@@ -904,25 +1001,86 @@ class SettingsViewBuilder:
             mo_layout.addWidget(cb)
             self.widgets[f"{key}_checkbox"] = cb
         cl.addWidget(cont, alignment=Qt.AlignmentFlag.AlignCenter)
+        cl.addWidget(
+            manage_warnings_button, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        clear_g3mtool_cache_button = self._styled_button(
+            tr("buttons.clear_g3mtool_cache"),
+            180,
+            tr("tooltips.clear_g3mtool_cache"),
+        )
+        cl.addWidget(
+            clear_g3mtool_cache_button, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         layout.addWidget(sec)
+
+        sec_adv, cl_adv = self._collapsible_section(
+            tr("ui.settings_section_advanced"),
+            "launch_advanced",
+            "ui.settings_section_advanced",
+            parent=page,
+        )
+
+        (
+            g3mtool_row,
+            g3mtool_label,
+            g3mtool_path_edit,
+            custom_g3mtool_button,
+            reset_g3mtool_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_custom_g3mtool",
+            label_text=tr("ui.settings_custom_g3mtool_path_label"),
+            browse_tooltip=tr("tooltips.custom_g3mtool_binary"),
+            reset_config_key="custom_g3mtool_path",
+        )
+        cl_adv.addWidget(g3mtool_row, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        (
+            xdelta_row,
+            xdelta_label,
+            xdelta_path_edit,
+            custom_xdelta_button,
+            reset_xdelta_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_custom_xdelta",
+            label_text=tr("ui.settings_custom_xdelta_path_label"),
+            browse_tooltip=tr("tooltips.custom_xdelta_binary"),
+            reset_config_key="custom_xdelta_path",
+        )
+        cl_adv.addWidget(xdelta_row, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(sec_adv)
 
         layout.addStretch()
 
         self.widgets["settings_game_combo"] = settings_game_combo
         self.widgets["games_manager_button"] = games_manager_button
         self.widgets["settings_game_selector_label"] = game_selector_label
-        self.widgets["settings_change_path_button"] = change_path_button
+        self.widgets["settings_game_path_label"] = game_path_label
+        self.widgets["settings_game_path_edit"] = game_path_edit
+        self.widgets["settings_game_path_browse_button"] = game_path_browse_button
+        self.widgets["settings_game_path_reset_button"] = game_path_reset_button
         self.widgets["dont_hide_window_checkbox"] = dont_hide_window_checkbox
-        self.widgets["skip_patching_warnings_checkbox"] = (
-            skip_patching_warnings_checkbox
-        )
+        self.widgets["manage_warnings_button"] = manage_warnings_button
+        self.widgets["clear_g3mtool_cache_button"] = clear_g3mtool_cache_button
         self.widgets["launch_via_steam_checkbox"] = launch_via_steam_checkbox
         self.widgets["use_portproton_checkbox"] = use_portproton_checkbox
         self.widgets["select_portproton_path_button"] = select_portproton_path_button
-        self.widgets["portproton_path_label"] = portproton_path_label
+        self.widgets["settings_portproton_path_label"] = portproton_label
+        self.widgets["portproton_path_edit"] = portproton_path_edit
+        self.widgets["settings_portproton_path_reset_button"] = portproton_reset_button
         self.widgets["portproton_frame"] = portproton_frame
+        self.widgets["settings_custom_executable_label"] = custom_executable_label
+        self.widgets["settings_custom_executable_edit"] = custom_executable_edit
         self.widgets["settings_custom_executable_button"] = custom_executable_button
         self.widgets["settings_reset_custom_exe_button"] = reset_custom_exe_button
+        self.widgets["settings_custom_g3mtool_label"] = g3mtool_label
+        self.widgets["settings_custom_g3mtool_edit"] = g3mtool_path_edit
+        self.widgets["settings_custom_g3mtool_button"] = custom_g3mtool_button
+        self.widgets["settings_reset_g3mtool_button"] = reset_g3mtool_button
+        self.widgets["settings_custom_xdelta_label"] = xdelta_label
+        self.widgets["settings_custom_xdelta_edit"] = xdelta_path_edit
+        self.widgets["settings_custom_xdelta_button"] = custom_xdelta_button
+        self.widgets["settings_reset_xdelta_button"] = reset_xdelta_button
         return self._wrap_in_scroll(page, parent)
 
     def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:

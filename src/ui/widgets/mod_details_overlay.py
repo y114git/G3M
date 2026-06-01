@@ -56,6 +56,15 @@ _MOD_DETAILS_CACHE_TTL_SECONDS = 600
 _MOD_DETAILS_CACHE_MAX_ENTRIES = 64
 
 
+def _safe_int(value, default: int | None = None) -> int | None:
+    try:
+        if value in (None, ""):
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _get_cached_mod_details(cache_key: tuple[int, str]) -> dict | None:
     with _MOD_DETAILS_CACHE_LOCK:
         cached = _MOD_DETAILS_CACHE.get(cache_key)
@@ -202,7 +211,7 @@ class LoadModDetailsThread(QThread):
             if details and (not self.isInterruptionRequested()):
                 full_description = self._coerce_text(details.get("text"))
                 description = self._coerce_text(details.get("description"))
-                downloads_value = api._safe_int(
+                downloads_value = _safe_int(
                     details.get("_nDownloadCount")
                     if isinstance(details, dict)
                     else None
@@ -232,13 +241,13 @@ class ScreenshotViewerDialog(QDialog):
                 return
             super().mousePressEvent(event)
 
-        def mouse_release_event(self, event):
+        def mouseReleaseEvent(self, event):  # noqa: N802
             if event.button() == Qt.MouseButton.RightButton:
                 self.close()
                 return
             super().mouseReleaseEvent(event)
 
-        def context_menu_event(self, event):
+        def contextMenuEvent(self, event):  # noqa: N802
             event.ignore()
 
     def __init__(self, urls, index=0, parent=None) -> None:
@@ -550,12 +559,12 @@ class ModDetailsOverlay(QWidget):
             scrollbar_qss = self._scrollbar_qss(corner_inset)
             rules = [
                 f"{selector} {{",
-                f"    background-color: {self._colors['background']};",
-                *([f"    color: {text_color};"] if text_color else []),
-                f"    border: 2px solid {self._colors['border']};",
-                f"    border-radius: {radius}px;",
-                *([f"    font-size: {font_size}px;"] if font_size is not None else []),
-                *(["    padding: 0px;"] if document_margin else []),
+                f"  background-color: {self._colors['background']};",
+                *([f"  color: {text_color};"] if text_color else []),
+                f"  border: 2px solid {self._colors['border']};",
+                f"  border-radius: {radius}px;",
+                *([f"  font-size: {font_size}px;"] if font_size is not None else []),
+                *(["  padding: 0px;"] if document_margin else []),
                 "}",
                 scrollbar_qss,
             ]

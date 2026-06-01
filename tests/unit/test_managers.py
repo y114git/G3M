@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 class TestModManager:
     """Tests for managers."""
     def test_mod_service_initialization(self, app_state, feedback_service):
-        """Checks that moding service initialization."""
+        """Checks that mod service initialization."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -15,7 +15,7 @@ class TestModManager:
         assert mod_service.feedback_service == feedback_service
 
     def test_mod_service_cache_invalidation(self, app_state, feedback_service):
-        """Checks that moding service cache invalidation."""
+        """Checks that mod service cache invalidation."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -23,7 +23,7 @@ class TestModManager:
         assert not mod_service._mods_cache_valid
 
     def test_mod_service_scan_empty_directory(self, app_state, feedback_service):
-        """Checks that moding service scan empty directory."""
+        """Checks that mod service scan empty directory."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -34,7 +34,7 @@ class TestModManager:
     def test_mod_service_scan_with_mod(
         self, app_state, feedback_service, sample_mod_folder
     ):
-        """Checks that moding service scan with mod."""
+        """Checks that mod service scan with mod."""
         from services.mod_service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
@@ -43,7 +43,7 @@ class TestModManager:
         assert "test_mod_001" in cache
 
     def test_mod_service_validate_config_valid(self, app_state, feedback_service):
-        """Checks that moding service validate config valid."""
+        """Checks that mod service validate config valid."""
         from utils.mod_scan_utils import validate_mod_config
 
         valid_config = {
@@ -61,7 +61,7 @@ class TestModManager:
     def test_mod_service_validate_config_missing_fields(
         self, app_state, feedback_service
     ):
-        """Checks that moding service validate config missing fields."""
+        """Checks that mod service validate config missing fields."""
         from utils.mod_scan_utils import validate_mod_config
 
         invalid_config = {"version": "1.0.0"}
@@ -71,7 +71,7 @@ class TestModManager:
     def test_mod_service_validate_config_invalid_types(
         self, app_state, feedback_service
     ):
-        """Checks that moding service validate config invalid types."""
+        """Checks that mod service validate config invalid types."""
         from utils.mod_scan_utils import validate_mod_config
 
         invalid_config = {"id": "test", "name": 123}
@@ -90,7 +90,7 @@ class TestModManager:
 class TestSettingsManager:
     """Tests for managers."""
     def test_settings_service_initialization(self, app_state, feedback_service, qapp):
-        """Checks that settingsing service initialization."""
+        """Checks that settings service initialization."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -106,7 +106,7 @@ class TestSettingsManager:
     def test_settings_service_load_settings(
         self, app_state, feedback_service, temp_config_dir, qapp
     ):
-        """Checks that settingsing service load settings."""
+        """Checks that settings service load settings."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -128,7 +128,7 @@ class TestSettingsManager:
     def test_settings_service_can_restore_normal_geometry_without_applying_maximized_state(
         self, app_state, feedback_service, qapp
     ):
-        """Checks that settingsing service can restore normal geometry without applying maximized state."""
+        """Checks that settings service can restore normal geometry without applying maximized state."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -238,18 +238,191 @@ class TestSettingsManager:
         assert settings_emitted == [True]
         manager.feedback_service.show_message.assert_called()
 
+    def test_validate_executable_path_accepts_unix_script_signature(
+        self, app_state, feedback_service, qapp, monkeypatch, tmp_path
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        script_path = tmp_path / "tool"
+        script_path.write_bytes(b"#!/bin/sh\necho ok\n")
+        script_path.chmod(0o755)
+        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Linux")
+
+        assert manager.validate_executable_path(str(script_path)) is True
+
+    def test_validate_executable_path_uses_suspended_windows_probe(
+        self, app_state, feedback_service, qapp, monkeypatch, tmp_path
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        exe_path = tmp_path / "tool.exe"
+        exe_path.write_bytes(b"MZ")
+        calls = []
+
+        class _Process:
+            def kill(self):
+                return None
+
+            def wait(self, timeout=None):
+                return 0
+
+        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "services.settings_service.subprocess.CREATE_NO_WINDOW",
+            0x08000000,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "services.settings_service.subprocess.CREATE_SUSPENDED",
+            0x00000004,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "services.settings_service.subprocess.Popen",
+            lambda *args, **kwargs: calls.append((args, kwargs)) or _Process(),
+        )
+
+        assert manager.validate_executable_path(str(exe_path)) is True
+        assert calls[0][0][0] == [str(exe_path)]
+        assert calls[0][1]["creationflags"] == 0x08000000 | 0x00000004
+
+    def test_validate_executable_path_rejects_invalid_binary_error(
+        self, app_state, feedback_service, qapp, monkeypatch, tmp_path
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        exe_path = tmp_path / "bad.exe"
+        exe_path.write_bytes(b"MZ")
+        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Windows")
+
+        monkeypatch.setattr(
+            "services.settings_service.subprocess.Popen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                OSError("[WinError 193] %1 is not a valid Win32 application")
+            ),
+        )
+
+        assert manager.validate_executable_path(str(exe_path)) is False
+
+    def test_select_executable_path_rejects_invalid_binary_and_shows_warning(
+        self, app_state, feedback_service, qapp, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        manager.feedback_service.show_message = Mock()
+        monkeypatch.setattr(
+            "services.settings_service.QFileDialog.getOpenFileName",
+            lambda *args, **kwargs: ("C:/bad.bin", ""),
+        )
+        monkeypatch.setattr(manager, "validate_executable_path", lambda *_args, **_kwargs: False)
+
+        assert manager.select_executable_path("Select binary") is None
+        manager.feedback_service.show_message.assert_called_once()
+
+    def test_validate_selected_game_path_requires_supported_executable_without_custom_exe(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        game_dir = tmp_path / "game"
+        game_dir.mkdir()
+        monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
+
+        assert manager.validate_selected_game_path(str(game_dir)) is False
+
+    def test_validate_selected_game_path_allows_custom_exe_override(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        game_dir = tmp_path / "game"
+        game_dir.mkdir()
+        app_state.local_config[app_state.game_mode.get_custom_exec_config_key()] = "C:/custom.exe"
+        monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
+
+        assert manager.validate_selected_game_path(str(game_dir)) is True
+
+    def test_prompt_for_game_path_rejects_directory_without_supported_executable(
+        self, app_state, feedback_service, qapp, monkeypatch, tmp_path
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        manager.feedback_service.show_message = Mock()
+        manager.write_local_config = Mock()
+        invalid_dir = tmp_path / "invalid_game"
+        invalid_dir.mkdir()
+        monkeypatch.setattr(
+            "services.settings_service.QFileDialog.getExistingDirectory",
+            lambda *args, **kwargs: str(invalid_dir),
+        )
+        monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
+
+        assert manager.prompt_for_game_path(is_initial=False) is False
+        assert app_state.game_mode.get_game_path(app_state.local_config) == ""
+        manager.write_local_config.assert_not_called()
+        manager.feedback_service.show_message.assert_called_once()
+
 
 class TestLocalizationManager:
     """Tests for managers."""
     def test_localization_service_tr(self):
-        """Checks that localizationing service tr."""
+        """Checks that localization service tr."""
         from services.localization_service import tr
 
         result = tr("test.id")
         assert isinstance(result, str)
 
     def test_localization_service_detect_language(self):
-        """Checks that localizationing service detect language."""
+        """Checks that localization service detect language."""
         from services.localization_service import localization_service
 
         language = localization_service.detect_system_language()
@@ -260,7 +433,7 @@ class TestLocalizationManager:
 class TestLaunchManager:
     """Tests for managers."""
     def test_launch_service_initialization(self, app_state, feedback_service):
-        """Checks that launching service initialization."""
+        """Checks that launch service initialization."""
         from services.launch_service import GameLauncher
         from services.mod_service import ModManager
 
@@ -342,7 +515,7 @@ class TestLaunchManager:
     def test_execute_game_uses_detached_steam_launch_on_linux(
         self, app_state, feedback_service
     ):
-        """Checks that executeing game uses detached steam launch on linux."""
+        """Checks that executing game uses detached steam launch on linux."""
         from services.launch_service import GameLauncher
 
         launcher = GameLauncher(
@@ -371,7 +544,7 @@ class TestLaunchManager:
     def test_execute_game_falls_back_to_xdg_open_when_steam_detach_fails_on_linux(
         self, app_state, feedback_service
     ):
-        """Checks that executeing game falls back to xdg open when steam detach fails on linux."""
+        """Checks that executing game falls back to xdg open when steam detach fails on linux."""
         from services.launch_service import GameLauncher
 
         launcher = GameLauncher(
@@ -442,7 +615,7 @@ class TestUpdateCheckManager:
     """Tests for managers."""
     @patch("requests.get")
     def test_update_checker_initialization(self, mock_get, app_state, feedback_service):
-        """Checks that updating checker initialization."""
+        """Checks that update checker initialization."""
         from services.updatecheck_service import UpdateChecker
 
         mock_response = Mock()
@@ -456,7 +629,7 @@ class TestUpdateCheckManager:
 class TestCustomizationManager:
     """Tests for managers."""
     def test_customization_service_initialization(self, app_state):
-        """Checks that customizationing service initialization."""
+        """Checks that customization service initialization."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -561,7 +734,7 @@ class TestCustomizationManager:
             parent.close()
 
     def test_customization_service_get_font_path(self, app_state, temp_dir):
-        """Checks that customizationing service get font path."""
+        """Checks that customization service get font path."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -576,7 +749,7 @@ class TestCustomizationManager:
     def test_customization_service_get_font_button_text(
         self, mock_tr, app_state, temp_dir
     ):
-        """Checks that customizationing service get font button text."""
+        """Checks that customization service get font button text."""
         from services.customization_service import CustomizationManager
 
         mock_tr.side_effect = lambda key, **_: key
@@ -592,7 +765,7 @@ class TestCustomizationManager:
 class TestBackupManager:
     """Tests for managers."""
     def test_backup_restoration_order(self, temp_dir):
-        """Checks that backuping restoration order."""
+        """Checks that backup restoration order."""
         import logging
 
         from services.backup_service import BackupManager
@@ -623,7 +796,7 @@ class TestBackupManager:
                 assert content == "original", f"File {f} was not restored correctly"
 
     def test_backup_restoration_validation(self, temp_dir):
-        """Checks that backuping restoration validation."""
+        """Checks that backup restoration validation."""
         import logging
 
         from services.backup_service import BackupManager
@@ -652,7 +825,7 @@ class TestBackupManager:
         assert backup_size == restored_size
 
     def test_sound_file_backup_restoration(self, temp_dir):
-        """Checks that sounding file backup restoration."""
+        """Checks that sound file backup restoration."""
         import logging
 
         from services.backup_service import BackupManager
@@ -682,7 +855,7 @@ class TestBackupManager:
 class TestExpandedFormats:
     """Tests for managers."""
     def test_customization_service_audio_formats(self, app_state, temp_dir):
-        """Checks that customizationing service audio formats."""
+        """Checks that customization service audio formats."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -696,7 +869,7 @@ class TestExpandedFormats:
             os.remove(path)
 
     def test_customization_service_webp_logo(self, app_state, temp_dir):
-        """Checks that customizationing service webp logo."""
+        """Checks that customization service webp logo."""
         from services.customization_service import CustomizationManager
 
         manager = CustomizationManager(app_state)
@@ -708,7 +881,7 @@ class TestExpandedFormats:
         assert manager.get_custom_logo_path() == path
 
     def test_settings_manager_audio_paths(self, app_state, feedback_service, qapp):
-        """Checks that settingsing manager audio paths."""
+        """Checks that settings manager audio paths."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -723,7 +896,7 @@ class TestExpandedFormats:
     def test_settings_manager_applies_disable_startup_sound_default(
         self, app_state, feedback_service, qapp
     ):
-        """Checks that settingsing manager applies disable startup sound default."""
+        """Checks that settings manager applies disable startup sound default."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -736,7 +909,7 @@ class TestExpandedFormats:
     def test_background_selection_copies_file_to_config_dir(
         self, app_state, feedback_service, qapp, tmp_path, monkeypatch
     ):
-        """Checks that backgrounding selection copies file to config dir."""
+        """Checks that background selection copies file to config dir."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -767,7 +940,7 @@ class TestExpandedFormats:
     def test_background_removal_keeps_external_legacy_file(
         self, app_state, feedback_service, qapp, tmp_path
     ):
-        """Checks that backgrounding removal keeps external legacy file."""
+        """Checks that background removal keeps external legacy file."""
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
 
@@ -788,3 +961,54 @@ class TestExpandedFormats:
         assert app_state.local_config["custom_background_path"] == ""
         assert external_bg.exists()
         manager.write_local_config.assert_called_once()
+
+    def test_clear_g3mtool_cache_requires_confirmation(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        cache_dir = tmp_path / "cache" / "G3MTool"
+        cache_dir.mkdir(parents=True)
+        cached_file = cache_dir / "cached.g3mcache"
+        cached_file.write_text("cache", encoding="utf-8")
+        feedback_service.ask_question = Mock(return_value=False)
+
+        manager = SettingsManager(
+            app_state, feedback_service, localization_service, parent=qapp
+        )
+        monkeypatch.setattr(
+            "services.settings_service.get_g3mtool_cache_dir",
+            lambda: str(cache_dir),
+        )
+
+        assert manager.clear_g3mtool_cache() is False
+        assert cached_file.exists()
+        feedback_service.ask_question.assert_called_once()
+
+    def test_clear_g3mtool_cache_removes_contents_only(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        cache_dir = tmp_path / "cache" / "G3MTool"
+        nested_dir = cache_dir / "nested"
+        nested_dir.mkdir(parents=True)
+        (cache_dir / "root.g3mcache").write_text("cache", encoding="utf-8")
+        (nested_dir / "nested.g3mcache").write_text("cache", encoding="utf-8")
+        feedback_service.ask_question = Mock(return_value=True)
+        feedback_service.show_message = Mock()
+
+        manager = SettingsManager(
+            app_state, feedback_service, localization_service, parent=qapp
+        )
+        monkeypatch.setattr(
+            "services.settings_service.get_g3mtool_cache_dir",
+            lambda: str(cache_dir),
+        )
+
+        assert manager.clear_g3mtool_cache() is True
+        assert cache_dir.exists()
+        assert list(cache_dir.iterdir()) == []
+        feedback_service.show_message.assert_called_once()

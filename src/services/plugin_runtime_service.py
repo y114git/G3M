@@ -7,7 +7,6 @@ import os
 from typing import Any
 
 from models.plugin_models import (
-    PLUGIN_API_VERSION,
     InstalledPluginRecord,
     PluginContext,
     PluginManifest,
@@ -18,8 +17,6 @@ from models.plugin_models import (
 from services.localization_service import localization_service
 from services.plugin_support import (
     PluginValidationError,
-    is_plugin_manifest_compatible,
-    is_version_compatible,
     load_manifest,
     load_plugin_factory,
     load_plugin_langs,
@@ -83,28 +80,23 @@ class PluginRuntimeService:
                     manifest.id,
                     load_if_needed=should_resolve_catalog,
                 )
-                compatible = is_plugin_manifest_compatible(manifest)
                 install_meta = self.plugin_state_service.get_install_meta(manifest.id)
                 is_local = install_meta.get("source") == "manual" or catalog_entry is None
                 update_available = bool(
                     catalog_entry
                     and catalog_entry.version
                     and catalog_entry.version != manifest.version
-                    and is_version_compatible(PLUGIN_API_VERSION, catalog_entry.api_version)
                 )
                 error = ""
                 status = "installed"
-                if not compatible:
-                    status = "incompatible"
-                    error = "api_version"
                 installed[manifest.id] = InstalledPluginRecord(
                     manifest=manifest,
                     path=plugin_dir,
                     status=status,
-                    enabled=self.plugin_state_service.is_enabled(manifest.id) and compatible,
+                    enabled=self.plugin_state_service.is_enabled(manifest.id),
                     is_local=is_local,
                     error=error,
-                    compatible=compatible,
+                    compatible=True,
                     update_available=update_available,
                     catalog_entry=catalog_entry,
                 )

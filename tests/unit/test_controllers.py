@@ -13,7 +13,7 @@ class TestModOperationsController:
     def test_mod_operations_controller_initialization(
         self, app_state, feedback_service
     ):
-        """Checks that moding operations controller initialization."""
+        """Checks that mod operations controller initialization."""
         from controllers.mod_operations_controller import ModOperationsController
         from services.mod_service import ModManager
 
@@ -134,7 +134,7 @@ class TestLibraryDisplayController:
     def test_library_display_controller_initialization(
         self, app_state, feedback_service
     ):
-        """Checks that librarying display controller initialization."""
+        """Checks that library display controller initialization."""
         from controllers.library_display_controller import LibraryDisplayController
         from services.localization_service import localization_service
         from services.mod_service import ModManager
@@ -165,7 +165,7 @@ class TestLibraryDisplayController:
     def test_library_display_skips_refresh_for_unchanged_valid_cached_view(
         self, app_state, feedback_service
     ):
-        """Checks that librarying display skips refresh for unchanged valid cached view."""
+        """Checks that library display skips refresh for unchanged valid cached view."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -202,7 +202,7 @@ class TestLibraryDisplayController:
     def test_library_display_refreshes_when_installed_cache_is_invalid(
         self, app_state, feedback_service
     ):
-        """Checks that librarying display refreshes when installed cache is invalid."""
+        """Checks that library display refreshes when installed cache is invalid."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -237,7 +237,7 @@ class TestLibraryDisplayController:
     def test_library_display_refresh_async_clears_render_signature(
         self, app_state, feedback_service
     ):
-        """Checks that librarying refresh async clears cached render signature."""
+        """Checks that library refresh async clears cached render signature."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -277,7 +277,7 @@ class TestLibraryDisplayController:
     def test_library_display_refresh_async_accepts_non_qobject_controller_parent(
         self, app_state, feedback_service
     ):
-        """Checks that librarying display refresh async accepts non qobject controller parent."""
+        """Checks that library display refresh async accepts non qobject controller parent."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -308,7 +308,7 @@ class TestLibraryDisplayController:
     def test_library_display_clears_summary_when_selected_mod_disappears(
         self, app_state, feedback_service
     ):
-        """Checks that librarying display clears summary when selected mod disappears."""
+        """Checks that library display clears summary when selected mod disappears."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -476,7 +476,7 @@ class TestModImportExportController:
     def test_library_sort_order_name_ascending_and_date_descending(
         self, app_state, feedback_service
     ):
-        """Checks that librarying sort order name ascending and date descending."""
+        """Checks that library sort order name ascending and date descending."""
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
@@ -939,7 +939,7 @@ class TestSettingsUiController:
     def test_settings_ui_controller_initialization(
         self, app_state, feedback_service, qapp
     ):
-        """Checks that settingsing ui controller initialization."""
+        """Checks that settings ui controller initialization."""
         from controllers.settings_controller import SettingsUiController
         from services.localization_service import localization_service
         from services.settings_service import SettingsManager
@@ -970,6 +970,37 @@ class TestSettingsUiController:
         )
         assert controller is not None
         assert controller.app_state == app_state
+
+    def test_settings_view_status_is_relocalizable(self, app_state, feedback_service):
+        from config.config import UI_COLORS
+        from controllers.settings_controller import SettingsUiController
+
+        settings_service = Mock()
+        used_mods_service = Mock()
+        customization_service = Mock()
+        app_window = Mock()
+        app_window.color_widgets = {}
+        app_window.settings_button = Mock()
+        app_window.tab_widget = Mock()
+        app_window.bottom_widget = Mock()
+        app_window.settings_widget = Mock()
+        app_window._update_localized_status = Mock()
+        app_state.is_settings_view = False
+        controller = SettingsUiController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=settings_service,
+            used_mods_service=used_mods_service,
+            customization_service=customization_service,
+            app_window=app_window,
+        )
+
+        controller.toggle_settings_view()
+
+        app_window._update_localized_status.assert_called_once_with(
+            "status.launcher_settings",
+            UI_COLORS["status_info"],
+        )
 
 
 class TestThemeController:

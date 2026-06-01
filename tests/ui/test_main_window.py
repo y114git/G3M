@@ -285,6 +285,355 @@ class TestAppWindow:
             finally:
                 _close_app_window(qapp, window)
 
+    def test_settings_game_tab_path_fields_save_on_focus_loss_and_reset(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+                window.settings_service.validate_executable_path = (
+                    lambda path: path.endswith("G3MTool.exe")
+                )
+
+                custom_path = os.path.join(temp_dir, "tools", "G3MTool.exe")
+                os.makedirs(os.path.dirname(custom_path), exist_ok=True)
+                window.settings_custom_g3mtool_edit.setFocus()
+                window.settings_custom_g3mtool_edit.setText(custom_path)
+                window.settings_custom_xdelta_edit.setFocus()
+                _drain_events(qapp)
+
+                assert window.settings_game_path_label.text().endswith(" Path:")
+                assert (
+                    window.app_state.local_config.get("custom_g3mtool_path")
+                    == custom_path
+                )
+                assert not window.settings_reset_g3mtool_button.isHidden()
+
+                window.settings_reset_g3mtool_button.click()
+                _drain_events(qapp)
+
+                assert (
+                    window.app_state.local_config.get("custom_g3mtool_path", "") == ""
+                )
+                assert window.settings_reset_g3mtool_button.isHidden()
+                assert window.focusWidget() is not window.settings_custom_xdelta_edit
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_settings_custom_executable_manual_entry_rejects_invalid_path(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+                window.feedback_service.show_message = Mock()
+                window.settings_service.validate_executable_path = lambda _path: False
+
+                window.settings_custom_executable_edit.setFocus()
+                window.settings_custom_executable_edit.setText("C:/bad/path.exe")
+                window.settings_game_path_edit.setFocus()
+                _drain_events(qapp)
+
+                assert (
+                    window.app_state.local_config.get(
+                        window.app_state.game_mode.get_custom_exec_config_key(),
+                        "",
+                    )
+                    == ""
+                )
+                window.feedback_service.show_message.assert_called_once()
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_settings_custom_executable_browse_validates_binary_before_save(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+                window.feedback_service.show_message = Mock()
+                window.settings_service.select_executable_path = Mock(return_value=None)
+
+                window.settings_custom_executable_button.click()
+                _drain_events(qapp)
+
+                window.settings_service.select_executable_path.assert_called_once()
+                assert (
+                    window.app_state.local_config.get(
+                        window.app_state.game_mode.get_custom_exec_config_key(),
+                        "",
+                    )
+                    == ""
+                )
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_settings_game_path_browse_updates_visible_field_immediately(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+                new_game_path = os.path.join(temp_dir, "Games", "DELTARUNE")
+                os.makedirs(new_game_path, exist_ok=True)
+                window.settings_service.prompt_for_game_path = Mock(return_value=True)
+                window.app_state.game_mode.set_game_path(
+                    window.app_state.local_config, new_game_path
+                )
+
+                window.settings_game_path_browse_button.click()
+                _drain_events(qapp)
+
+                assert window.settings_game_path_edit.full_text() == new_game_path
+                assert window.settings_game_path_edit.toolTip() == new_game_path
+                assert not window.settings_game_path_reset_button.isHidden()
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_settings_game_path_manual_entry_rejects_invalid_folder_without_custom_exe(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+                window.feedback_service.show_message = Mock()
+                window.settings_service.validate_selected_game_path = lambda _path, *args, **kwargs: False
+                previous_path = window.settings_game_path_edit.full_text()
+
+                invalid_path = os.path.join(temp_dir, "BrokenGameFolder")
+                os.makedirs(invalid_path, exist_ok=True)
+                window.settings_game_path_edit.setFocus()
+                window.settings_game_path_edit.setText(invalid_path)
+                window.settings_custom_executable_edit.setFocus()
+                _drain_events(qapp)
+
+                assert window.app_state.game_mode.get_game_path(window.app_state.local_config) == previous_path
+                assert window.settings_game_path_edit.full_text() == previous_path
+                window.feedback_service.show_message.assert_called_once()
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_settings_path_fields_relocalize_placeholders_without_restart(
+        self, qapp, temp_dir
+    ):
+        from app.localization_utils import relocalize_ui
+        from app.window import AppWindow
+        from services.localization_service import localization_service, tr
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        original_language = localization_service.get_current_language()
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+
+                localization_service.load_language("en")
+                window.app_state.local_config["language"] = "en"
+                relocalize_ui(window)
+                window._update_status(tr("status.launcher_settings"), "status_info")
+                _drain_events(qapp)
+
+                assert (
+                    window.settings_custom_xdelta_edit.placeholderText()
+                    == "Specify path..."
+                )
+                assert window.manage_warnings_button.text() == "Manage Warnings"
+                assert window.clear_g3mtool_cache_button.text() == "Clear G3MTool Cache"
+                assert window.settings_custom_g3mtool_label.text() == "Custom G3MTool:"
+                assert (
+                    window.change_font_button.text()
+                    == window.customization_service.get_font_button_text()
+                )
+                assert window.status_label.text() == "Launcher settings"
+
+                localization_service.load_language("ru")
+                window.app_state.local_config["language"] = "ru"
+                relocalize_ui(window)
+                _drain_events(qapp)
+
+                assert (
+                    window.settings_custom_xdelta_edit.placeholderText()
+                    == "Укажите путь..."
+                )
+                assert window.manage_warnings_button.text() == "Управление предупреждениями"
+                assert (
+                    window.clear_g3mtool_cache_button.text()
+                    == "Очистить кеш G3MTool"
+                )
+                assert window.settings_custom_g3mtool_label.text() == "Кастомный G3MTool:"
+                assert (
+                    window.change_font_button.text()
+                    == window.customization_service.get_font_button_text()
+                )
+                assert window.status_label.text() == "Настройки лаунчера"
+            finally:
+                localization_service.load_language(original_language)
+                _close_app_window(qapp, window)
+
+    def test_clear_g3mtool_cache_button_calls_settings_service(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+                window.settings_service.clear_g3mtool_cache = Mock(return_value=True)
+
+                window.clear_g3mtool_cache_button.click()
+                _drain_events(qapp)
+
+                window.settings_service.clear_g3mtool_cache.assert_called_once()
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_manage_warnings_button_opens_dialog(self, qapp, temp_dir, monkeypatch):
+        from app.window import AppWindow
+
+        opened = {"value": False}
+
+        class FakeWarningDialog:
+            def __init__(self, *_args, **_kwargs) -> None:
+                opened["value"] = True
+
+            def exec(self):
+                return 0
+
+        monkeypatch.setattr(
+            "app.settings_setup.WarningPreferencesDialog", FakeWarningDialog
+        )
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                window.show()
+                _drain_events(qapp)
+
+                window.manage_warnings_button.click()
+                _drain_events(qapp)
+
+                assert opened["value"] is True
+            finally:
+                _close_app_window(qapp, window)
+
     def test_window_maximized_state_is_saved_on_state_change(self, qapp, temp_dir):
         from app.window import AppWindow
 
@@ -515,7 +864,7 @@ class TestTabBuilders:
     """Tests for main window."""
 
     def test_library_tab_builder_creation(self, qapp, app_state, feedback_service):
-        """Checks that librarying tab builder creation."""
+        """Checks that library tab builder creation."""
         from services.localization_service import tr
         from ui.builders.library_tab_builder import LibraryTabBuilder
 
@@ -620,7 +969,7 @@ class TestTabBuilders:
         widget.deleteLater()
 
     def test_settings_view_builder_creation(self, qapp, app_state, feedback_service):
-        """Checks that settingsing view builder creation."""
+        """Checks that settings view builder creation."""
         from services.localization_service import tr
         from ui.builders.settings_view_builder import SettingsViewBuilder
 
@@ -637,6 +986,35 @@ class TestTabBuilders:
         assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr(
             "tooltips.ui_scale"
         )
+
+    def test_settings_view_builder_exposes_custom_binary_controls(
+        self, qapp, app_state, feedback_service
+    ):
+        from services.localization_service import tr
+        from ui.builders.settings_view_builder import SettingsViewBuilder
+
+        builder = SettingsViewBuilder(app_state, None)
+        widget = builder.build()
+        try:
+            widgets = builder.get_widgets()
+            assert widgets["settings_game_path_label"].text() == "{GAME} Path:"
+            assert (
+                widgets["settings_custom_g3mtool_edit"].placeholderText()
+                == tr("ui.path_field_placeholder")
+            )
+            assert widgets["settings_custom_executable_label"].text() == tr(
+                "ui.settings_custom_executable_path_label"
+            )
+            assert widgets["settings_custom_g3mtool_edit"].toolTip() == ""
+            assert widgets["settings_custom_g3mtool_button"].toolTip() == tr(
+                "tooltips.custom_g3mtool_binary"
+            )
+            assert widgets["settings_custom_xdelta_button"].text() == "..."
+            assert widgets["settings_custom_xdelta_button"].toolTip() == tr(
+                "tooltips.custom_xdelta_binary"
+            )
+        finally:
+            widget.deleteLater()
 
     def test_settings_view_builder_icon_buttons_scale_with_ui_scale(
         self, qapp, app_state, feedback_service
@@ -656,3 +1034,89 @@ class TestTabBuilders:
         assert games_manager_button.iconSize().width() > base_icon_size
         assert games_manager_button.width() > base_button_width
         widget.deleteLater()
+
+    def test_zoom_ui_debounces_scaled_refresh(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                refresh_calls = []
+                window.settings_service.write_local_config = Mock()
+                window._refresh_scaled_card_displays = Mock(
+                    side_effect=lambda: refresh_calls.append("refresh")
+                )
+
+                window._zoom_ui(1)
+                window._zoom_ui(1)
+
+                assert refresh_calls == []
+                assert getattr(window, "_ui_scale_refresh_timer", None) is not None
+                window._ui_scale_refresh_timer.timeout.emit()
+                assert refresh_calls == ["refresh"]
+            finally:
+                _close_app_window(qapp, window)
+
+    def test_refresh_scaled_card_displays_coalesces_reentrant_requests(
+        self, qapp, temp_dir
+    ):
+        from app.window import AppWindow
+
+        scheduled = []
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+            patch(
+                "app.window.QTimer.singleShot",
+                side_effect=lambda _ms, callback: scheduled.append(callback),
+            ),
+        ):
+            window = AppWindow()
+            try:
+                calls = []
+
+                class _RefreshProbe:
+                    def __init__(self) -> None:
+                        self.triggered = False
+
+                    def refresh_dynamic_styles(self):
+                        calls.append("builder")
+                        if not self.triggered:
+                            self.triggered = True
+                            window._refresh_scaled_card_displays()
+
+                window.search_tab_builder = _RefreshProbe()
+                window.search_display = None
+                window.library_display = None
+                window.settings_builder = None
+                window.theme = None
+
+                window._refresh_scaled_card_displays()
+
+                assert calls == ["builder"]
+                assert scheduled
+                scheduled[-1]()
+                assert calls == ["builder", "builder"]
+            finally:
+                _close_app_window(qapp, window)

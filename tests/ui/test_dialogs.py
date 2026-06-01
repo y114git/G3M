@@ -54,7 +54,7 @@ class TestImportDialog:
 class TestGameBananaFilePickerDialog:
     """Tests for dialogs."""
     def test_file_picker_dialog_creation(self, qapp):
-        """Checks that fileing picker dialog creation."""
+        """Checks that file picker dialog creation."""
         from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
         dialog = GameBananaFilePickerDialog(None, [], 'Test Mod')
         assert dialog is not None
@@ -89,7 +89,7 @@ class TestConflictsDialog:
 class TestModPriorityDialog:
     """Tests for dialogs."""
     def test_mod_priority_dialog_creation(self, qapp, app_state):
-        """Checks that moding priority dialog creation."""
+        """Checks that mod priority dialog creation."""
         from models.mod_models import ModInfo
         from ui.dialogs.mod_priority_dialog import ModPriorityDialog
         mods_list = [ModInfo(id='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune')]
@@ -208,7 +208,7 @@ class TestPizzaOvenConversionDialog:
 class TestReadmeUi:
     """Tests for dialogs."""
     def test_mod_readme_dialog_creation(self, qapp, app_state, tmp_path):
-        """Checks that moding readme dialog creation."""
+        """Checks that mod readme dialog creation."""
         from ui.dialogs.mod_readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
@@ -265,7 +265,7 @@ class TestReadmeUi:
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text(
-            "    ### Sigma\n\n\t### another sigma\n\n\u00a0### third sigma",
+            "  ### Sigma\n\n\t### another sigma\n\n\u00a0### third sigma",
             encoding="utf-8",
         )
 
@@ -435,7 +435,7 @@ class TestReadmeUi:
         _close_dialog(qapp, dialog)
 
     def test_mod_summary_panel_uses_localized_info_button(self, qapp, app_state):
-        """Checks that moding summary panel uses localized info button."""
+        """Checks that mod summary panel uses localized info button."""
         from services.localization_service import tr
         from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
 
@@ -453,7 +453,7 @@ class TestReadmeUi:
         panel.deleteLater()
 
     def test_profile_manager_metadata_uses_new_format(self, qapp, app_state):
-        """Checks that profileing manager metadata uses new format."""
+        """Checks that profile manager metadata uses new format."""
         from unittest.mock import Mock
 
         from PyQt6.QtWidgets import QLabel
@@ -869,7 +869,7 @@ class TestModEditorDialog:
         parent.deleteLater()
 
     def test_mod_editor_populates_saved_files_as_relative_paths(self, qapp, tmp_path):
-        """Checks that moding editor populates saved files as relative paths."""
+        """Checks that mod editor populates saved files as relative paths."""
         from types import SimpleNamespace
 
         from ui.dialogs.mod_editor_dialog import ModEditorDialog
@@ -919,7 +919,7 @@ class TestModEditorDialog:
     def test_mod_editor_hides_add_data_button_per_tab_until_data_frame_removed(
         self, qapp, tmp_path
     ):
-        """Checks that moding editor hides add data button per tab until data frame removed."""
+        """Checks that mod editor hides add data button per tab until data frame removed."""
         from types import SimpleNamespace
 
         from PyQt6.QtWidgets import QPushButton
@@ -974,7 +974,7 @@ class TestModEditorDialog:
         parent.deleteLater()
 
     def test_mod_editor_file_container_has_larger_minimum_height(self, qapp, tmp_path):
-        """Checks that moding editor file container has larger minimum height."""
+        """Checks that mod editor file container has larger minimum height."""
         from types import SimpleNamespace
 
         from ui.dialogs.mod_editor_dialog import ModEditorDialog
@@ -993,7 +993,7 @@ class TestModEditorDialog:
         parent.deleteLater()
 
     def test_mod_editor_saves_folder_targets_with_trailing_slash(self, qapp, tmp_path):
-        """Checks that moding editor saves folder targets with trailing slash."""
+        """Checks that mod editor saves folder targets with trailing slash."""
         from types import SimpleNamespace
 
         from ui.dialogs.mod_editor_dialog import ModEditorDialog
@@ -1028,7 +1028,7 @@ class TestModEditorDialog:
         parent.deleteLater()
 
     def test_mod_editor_extra_path_fields_are_editable(self, qapp, tmp_path):
-        """Checks that moding editor extra path fields are editable."""
+        """Checks that mod editor extra path fields are editable."""
         from types import SimpleNamespace
 
         from ui.dialogs.mod_editor_dialog import ModEditorDialog
@@ -1059,7 +1059,7 @@ class TestModEditorDialog:
         parent.deleteLater()
 
     def test_mod_editor_populates_extra_file_paths_in_visible_inputs(self, qapp, tmp_path):
-        """Checks that moding editor populates extra file paths in visible inputs."""
+        """Checks that mod editor populates extra file paths in visible inputs."""
         from types import SimpleNamespace
 
         from ui.dialogs.mod_editor_dialog import ModEditorDialog
@@ -1227,7 +1227,7 @@ class TestModEditorDialog:
     def test_mod_editor_removes_stale_managed_files_after_replace_or_delete(
         self, qapp, tmp_path
     ):
-        """Checks that moding editor removes stale managed files after replace or delete."""
+        """Checks that mod editor removes stale managed files after replace or delete."""
         from types import SimpleNamespace
 
         from ui.dialogs.mod_editor_dialog import ModEditorDialog
@@ -1271,7 +1271,7 @@ class TestModEditorDialog:
         parent.deleteLater()
 
     def test_mod_editor_finish_creation_saves_local_mod(self, qapp, tmp_path, monkeypatch):
-        """Checks that moding editor finish creation saves local mod instead of crashing."""
+        """Checks that mod editor finish creation saves local mod instead of crashing."""
         from types import SimpleNamespace
 
         from PyQt6.QtWidgets import QMessageBox

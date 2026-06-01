@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 THEME_COLOR_SETTING_KEYS = {
@@ -22,7 +23,6 @@ THEME_COLOR_NAME_ALIASES = {
 DEFAULT_APP_SETTINGS = {
     "game_path": "",
     "last_selected": {},
-    "use_custom_executable": False,
     "demo_game_path": "",
     "launch_via_steam": False,
     "use_portproton": False,
@@ -45,7 +45,10 @@ DEFAULT_APP_SETTINGS = {
     "pizzatower_custom_executable_path": "",
     "frickbears3_game_path": "",
     "frickbears3_custom_executable_path": "",
-    "skip_patching_warnings": False,
+    "warning_preferences": {
+        "skip_all": False,
+        "warning_overrides": {},
+    },
     "merge_properties": False,
     "merge_code": False,
     "hide_mods_browser_tab": False,
@@ -71,4 +74,4 @@ def get_theme_color_key(color_name: str) -> str:
 def apply_settings_defaults(local_config: dict[str, Any], app_version: str) -> None:
     local_config["cache_format_version"] = app_version
     for key, value in DEFAULT_APP_SETTINGS.items():
-        local_config.setdefault(key, value)
+        local_config.setdefault(key, deepcopy(value))

@@ -9,6 +9,7 @@ from app.game_ui import (
     refresh_game_lists,
     update_change_path_button_text,
     update_custom_executable_ui,
+    update_path_input_localizations,
     update_portproton_ui,
     update_settings_library_tab,
     update_steam_launch_checkbox_state,
@@ -46,6 +47,7 @@ def relocalize_texts(w):
         if idx >= 0:
             w.main_tab_widget.setTabText(idx, label)
     w._apply_widget_localizations(WIDGET_LOCALIZATIONS)
+    update_path_input_localizations(w)
     for combo_name, keys in COMBO_LOCALIZATIONS.items():
         w._apply_combo_localizations(combo_name, keys)
     refresh_game_lists(w)
@@ -67,8 +69,6 @@ def relocalize_texts(w):
             + tr("tooltips.portproton")
             + "</body></html>"
         )
-    if w.select_portproton_path_button:
-        w.select_portproton_path_button.setText(tr("buttons.select_portproton_path"))
     update_change_path_button_text(w)
     if hasattr(w, "settings_tab_widget"):
         w.settings_tab_widget.setTabText(0, tr("ui.settings_tab_general"))
@@ -189,6 +189,8 @@ def relocalize_texts(w):
         summary.update_labels_text()
     if hasattr(w, "plugins_ui") and w.plugins_ui:
         w.plugins_ui.relocalize_ui()
+    if hasattr(w, "_refresh_localized_status"):
+        w._refresh_localized_status()
 
 
 def relocalize_ui(w):

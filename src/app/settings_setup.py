@@ -14,17 +14,28 @@ from PyQt6.QtWidgets import (
 
 from app.dialogs import open_game_manager
 from app.game_ui import (
+    commit_game_path_text,
     on_settings_game_combo_changed,
     refresh_game_lists,
     reset_custom_executable,
+    reset_custom_g3mtool_path,
+    reset_custom_xdelta_path,
+    save_custom_executable_text,
+    save_custom_g3mtool_text,
+    save_custom_xdelta_text,
+    save_portproton_path_text,
     select_custom_executable_file,
+    select_custom_g3mtool_file,
+    select_custom_xdelta_file,
     select_portproton_path,
+    update_custom_binary_ui,
     update_portproton_ui,
     update_settings_library_tab,
 )
 from services.localization_service import tr
 from ui.common.color_picker import BlackColorPickerEventFilter
 from ui.common.styling import display_hex_to_qt_hex
+from ui.dialogs.warning_preferences_dialog import WarningPreferencesDialog
 
 
 def _color_to_display_hex(color: QColor) -> str:
@@ -260,10 +271,24 @@ def setup_settings_tab(w):
             "hide_library_filters_checkbox",
             "settings_game_combo",
             "games_manager_button",
-            "settings_change_path_button",
+            "settings_game_path_label",
+            "settings_game_path_edit",
+            "settings_game_path_browse_button",
+            "settings_game_path_reset_button",
+            "settings_custom_executable_label",
+            "settings_custom_executable_edit",
             "settings_custom_executable_button",
             "settings_reset_custom_exe_button",
-            "skip_patching_warnings_checkbox",
+            "settings_custom_g3mtool_label",
+            "settings_custom_g3mtool_edit",
+            "settings_custom_g3mtool_button",
+            "settings_reset_g3mtool_button",
+            "settings_custom_xdelta_label",
+            "settings_custom_xdelta_edit",
+            "settings_custom_xdelta_button",
+            "settings_reset_xdelta_button",
+            "manage_warnings_button",
+            "clear_g3mtool_cache_button",
             "launch_via_steam_checkbox",
             "dont_hide_window_checkbox",
             "hide_mods_browser_tab_checkbox",
@@ -280,7 +305,9 @@ def setup_settings_tab(w):
         optional=(
             "use_portproton_checkbox",
             "select_portproton_path_button",
-            "portproton_path_label",
+            "settings_portproton_path_label",
+            "portproton_path_edit",
+            "settings_portproton_path_reset_button",
             "portproton_frame",
             "downloads_no_auto_use_checkbox",
             "downloads_delete_after_use_checkbox",
@@ -305,7 +332,7 @@ def setup_settings_tab(w):
         timer_attr="_ui_scale_timer",
         config_key="ui_scale",
         value_transform=lambda value: value / 100.0,
-        after_change=w._refresh_scaled_card_displays,
+        after_change=w._schedule_scaled_card_refresh,
     )
     w._connect_theme_setting_spinbox(
         w.border_radius_spinbox,
@@ -460,8 +487,32 @@ def setup_settings_tab(w):
             w.games_manager_button, lambda: open_game_manager(w)
         )
     )
-    w.settings_change_path_button.clicked.connect(
-        lambda: _guarded_trigger(w.settings_change_path_button, w._prompt_for_game_path)
+    w.settings_game_path_browse_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_game_path_browse_button, w._prompt_for_game_path
+        )
+    )
+    w.settings_game_path_reset_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_game_path_reset_button,
+            lambda: commit_game_path_text(w, ""),
+        )
+    )
+    w.settings_game_path_edit.editingFinished.connect(
+        lambda: commit_game_path_text(
+            w,
+            w.settings_game_path_edit.full_text()
+            if hasattr(w.settings_game_path_edit, "full_text")
+            else w.settings_game_path_edit.text(),
+        )
+    )
+    w.settings_custom_executable_edit.editingFinished.connect(
+        lambda: save_custom_executable_text(
+            w,
+            w.settings_custom_executable_edit.full_text()
+            if hasattr(w.settings_custom_executable_edit, "full_text")
+            else w.settings_custom_executable_edit.text(),
+        )
     )
     w.settings_custom_executable_button.clicked.connect(
         lambda: _guarded_trigger(
@@ -475,11 +526,58 @@ def setup_settings_tab(w):
             lambda: reset_custom_executable(w),
         )
     )
+    w.settings_custom_g3mtool_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_custom_g3mtool_button,
+            lambda: select_custom_g3mtool_file(w),
+        )
+    )
+    w.settings_custom_g3mtool_edit.editingFinished.connect(
+        lambda: save_custom_g3mtool_text(
+            w,
+            w.settings_custom_g3mtool_edit.full_text()
+            if hasattr(w.settings_custom_g3mtool_edit, "full_text")
+            else w.settings_custom_g3mtool_edit.text(),
+        )
+    )
+    w.settings_reset_g3mtool_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_reset_g3mtool_button,
+            lambda: reset_custom_g3mtool_path(w),
+        )
+    )
+    w.settings_custom_xdelta_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_custom_xdelta_button,
+            lambda: select_custom_xdelta_file(w),
+        )
+    )
+    w.settings_custom_xdelta_edit.editingFinished.connect(
+        lambda: save_custom_xdelta_text(
+            w,
+            w.settings_custom_xdelta_edit.full_text()
+            if hasattr(w.settings_custom_xdelta_edit, "full_text")
+            else w.settings_custom_xdelta_edit.text(),
+        )
+    )
+    w.settings_reset_xdelta_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_reset_xdelta_button,
+            lambda: reset_custom_xdelta_path(w),
+        )
+    )
     update_settings_library_tab(w)
-    w.skip_patching_warnings_checkbox.stateChanged.connect(
-        lambda state: _guarded_trigger(
-            w.skip_patching_warnings_checkbox,
-            lambda: w.settings_ui.on_toggle_skip_patching_warnings(bool(state)),
+    update_custom_binary_ui(w)
+    w.manage_warnings_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.manage_warnings_button,
+            lambda: open_warning_preferences_dialog(w),
+        )
+    )
+    w.clear_g3mtool_cache_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.clear_g3mtool_cache_button,
+            w.settings_service.clear_g3mtool_cache,
         )
     )
     w.launch_via_steam_checkbox.stateChanged.connect(
@@ -508,6 +606,22 @@ def setup_settings_tab(w):
         w.select_portproton_path_button.clicked.connect(
             lambda: _guarded_trigger(
                 w.select_portproton_path_button, lambda: select_portproton_path(w)
+            )
+        )
+    if w.portproton_path_edit:
+        w.portproton_path_edit.editingFinished.connect(
+            lambda: save_portproton_path_text(
+                w,
+                w.portproton_path_edit.full_text()
+                if hasattr(w.portproton_path_edit, "full_text")
+                else w.portproton_path_edit.text(),
+            )
+        )
+    if w.settings_portproton_path_reset_button:
+        w.settings_portproton_path_reset_button.clicked.connect(
+            lambda: _guarded_trigger(
+                w.settings_portproton_path_reset_button,
+                lambda: save_portproton_path_text(w, ""),
             )
         )
     w.hide_mods_browser_tab_checkbox.stateChanged.connect(
@@ -594,3 +708,9 @@ def setup_settings_tab(w):
                 checkbox.stateChanged.connect(w.plugins_ui.on_filters_changed)
         w.plugins_ui.restore_filter_state()
     w._update_section_reset_buttons_visibility()
+
+
+def open_warning_preferences_dialog(w) -> None:
+    dialog = WarningPreferencesDialog(w.app_state.local_config, w)
+    if dialog.exec():
+        w.settings_service.write_local_config()

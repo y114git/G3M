@@ -23,7 +23,7 @@ from utils.patching.mod_resolve_utils import get_mod_configured_extra_files
 class CreateModpackThread(QThread):
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
-    warning_confirmation_needed = pyqtSignal(str, str, object)
+    warning_confirmation_needed = pyqtSignal(object, str, object)
     finished = pyqtSignal(bool)
 
     def __init__(
@@ -61,7 +61,7 @@ class CreateModpackThread(QThread):
         self._warning_event.set()
 
     def _request_warning_confirmation(
-        self, message: str, details: str = "", report_path: str | None = None
+        self, message: object, details: str = "", report_path: str | None = None
     ) -> bool:
         self._warning_result = True
         self._warning_event.clear()
@@ -145,7 +145,7 @@ class CreateModpackThread(QThread):
 
     def _create_xdelta_patches(self):
         try:
-            g3mtool = G3MToolManager()
+            g3mtool = G3MToolManager(self.app_state)
             if not g3mtool.is_available():
                 logging.error("G3MTool not found, cannot create xdelta patches")
                 self.status_update.emit(tr("errors.g3mtool_not_available"), "error")

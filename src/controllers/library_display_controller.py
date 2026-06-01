@@ -1069,7 +1069,7 @@ class LibraryDisplayController:
         self.feedback_service.update_status(message, color)
 
     def _on_modpack_warning_confirmation_needed(
-        self, message: str, details: str, report_path: str | None
+        self, message: object, details: str, report_path: str | None
     ):
         thread = getattr(self, "_modpack_thread", None)
         if not thread:

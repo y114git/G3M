@@ -54,8 +54,8 @@ class SettingsUiController:
             self.customization_service.load_custom_style_settings(
                 self.app.color_widgets
             )
-            self.app._update_status(
-                tr("status.launcher_settings"), UI_COLORS["status_info"]
+            self.app._update_localized_status(
+                "status.launcher_settings", UI_COLORS["status_info"]
             )
         else:
             self.app.settings_button.setText(tr("ui.settings_title"))
@@ -296,9 +296,6 @@ class SettingsUiController:
         self.settings_service.on_toggle_pause_background_music_unfocused(bool(state))
         if hasattr(self.app, "_sync_background_audio_focus"):
             self.app._sync_background_audio_focus()
-
-    def on_toggle_skip_patching_warnings(self, state):
-        self.settings_service.on_toggle_skip_patching_warnings(bool(state))
 
     def on_toggle_hide_mods_browser_tab(self, state):
         self.settings_service.on_toggle_hide_mods_browser_tab(bool(state))

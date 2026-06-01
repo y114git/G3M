@@ -1,7 +1,7 @@
 """Headless shortcut runner - patches mods and launches the game without GUI.
 
 Uses G3MToolManager and BackupManager directly (plain classes) so no
-QApplication is needed.  Supports multi-chapter mod selections via the
+QApplication is needed. Supports multi-chapter mod selections via the
 ``chapter_mods`` dict embedded in the shortcut config.
 """
 

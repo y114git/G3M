@@ -73,10 +73,21 @@ def on_game_mode_updated_by_state(w, mode_obj):
 
 
 def update_change_path_button_text(w):
-    if hasattr(w, "settings_change_path_button") and w.settings_change_path_button:
-        w.settings_change_path_button.setText(
-            w.app_state.game_mode.path_change_button_text
-        )
+    update_path_inputs_ui(w)
+
+
+def update_path_input_localizations(w) -> None:
+    placeholder_text = tr("ui.path_field_placeholder")
+    for attr_name in (
+        "settings_game_path_edit",
+        "settings_custom_executable_edit",
+        "settings_custom_g3mtool_edit",
+        "settings_custom_xdelta_edit",
+        "portproton_path_edit",
+    ):
+        edit = getattr(w, attr_name, None)
+        if edit and hasattr(edit, "setPlaceholderText"):
+            edit.setPlaceholderText(placeholder_text)
 
 
 def on_settings_game_combo_changed(w, index):
@@ -90,8 +101,8 @@ def on_settings_game_combo_changed(w, index):
                 w.game_type_combo.setCurrentIndex(i)
             break
     game_def = get_game(game_id)
-    if game_def and hasattr(w, "settings_change_path_button"):
-        w.settings_change_path_button.setText(game_def.path_change_button_text)
+    if game_def:
+        update_path_inputs_ui(w)
     update_custom_executable_ui(w, game_id)
 
 
@@ -105,10 +116,7 @@ def update_settings_library_tab(w):
             combo.setCurrentIndex(i)
             combo.blockSignals(False)
             break
-    if hasattr(w, "settings_change_path_button"):
-        w.settings_change_path_button.setText(
-            w.app_state.game_mode.path_change_button_text
-        )
+    update_path_inputs_ui(w)
     update_custom_executable_ui(w, current_game_id)
     update_steam_launch_checkbox_state(w)
 
@@ -303,7 +311,7 @@ def update_chapter_tabs_style(w):
             height=max(25, btn.sizeHint().height()),
         )
         btn.setStyleSheet(
-            f"\n                QPushButton#chapter_tab_{i} {{\n                    background-color: {button_color};\n                    border: 2px {border_style} {border_color};\n                    color: {text_color};\n                    font-weight: bold;\n                    font-size: {fs}px;\n                    border-radius: {br}px;\n                    padding: 5px;\n                }}\n                QPushButton#chapter_tab_{i}:checked {{\n                    background-color: {hover_color};\n                    border: 3px {border_style} {border_color};\n                }}\n                QPushButton#chapter_tab_{i}:hover {{\n                    background-color: {hover_color};\n                }}\n            "
+            f"\n        QPushButton#chapter_tab_{i} {{\n          background-color: {button_color};\n          border: 2px {border_style} {border_color};\n          color: {text_color};\n          font-weight: bold;\n          font-size: {fs}px;\n          border-radius: {br}px;\n          padding: 5px;\n        }}\n        QPushButton#chapter_tab_{i}:checked {{\n          background-color: {hover_color};\n          border: 3px {border_style} {border_color};\n        }}\n        QPushButton#chapter_tab_{i}:hover {{\n          background-color: {hover_color};\n        }}\n      "
         )
 
 
@@ -325,7 +333,7 @@ def show_chapter_mode_instruction(w):
     )
     border_color = get_theme_color(w.app_state.local_config, "border", "#666666")
     instruction_widget.setStyleSheet(
-        f"\n            QLabel {{\n                color: {secondary_text_color};\n                font-size: 14px;\n                font-style: italic;\n                padding: 20px;\n                border: 2px dashed {border_color};\n                background-color: rgba(255, 255, 255, 0.1);\n            }}\n        "
+        f"\n      QLabel {{\n        color: {secondary_text_color};\n        font-size: 14px;\n        font-style: italic;\n        padding: 20px;\n        border: 2px dashed {border_color};\n        background-color: rgba(255, 255, 255, 0.1);\n      }}\n    "
     )
     instruction_widget.setWordWrap(True)
     instruction_widget.setMinimumHeight(80)
@@ -361,13 +369,129 @@ def save_custom_executable(w, path: str):
     w.app_state.local_config[config_key] = path
     w.settings_service.write_local_config()
     w.settings_service.settings_changed.emit()
-    update_custom_executable_ui(w)
+    update_path_inputs_ui(w)
+
+
+def save_custom_executable_text(w, path: str):
+    _commit_validated_executable_text(
+        w,
+        str(path or "").strip(),
+        lambda value: save_custom_executable(w, value),
+        lambda: update_custom_executable_ui(w),
+    )
+
+
+def _save_binary_override(w, config_key: str, path: str):
+    w.app_state.local_config[config_key] = path
+    w.settings_service.write_local_config()
+    w.settings_service.settings_changed.emit()
+
+
+def save_custom_g3mtool_text(w, path: str):
+    _commit_validated_executable_text(
+        w,
+        str(path or "").strip(),
+        lambda value: _save_binary_override(w, "custom_g3mtool_path", value),
+        lambda: update_custom_binary_ui(w),
+    )
+
+
+def save_custom_xdelta_text(w, path: str):
+    _commit_validated_executable_text(
+        w,
+        str(path or "").strip(),
+        lambda value: _save_binary_override(w, "custom_xdelta_path", value),
+        lambda: update_custom_binary_ui(w),
+    )
+
+
+def _commit_validated_executable_text(w, path: str, save_callback, refresh_callback):
+    cleaned_path = str(path or "").strip()
+    if cleaned_path and not w.settings_service.validate_executable_path(cleaned_path):
+        w.feedback_service.show_message(
+            "warning",
+            "errors.invalid_executable_file",
+            file=os.path.basename(cleaned_path),
+        )
+        refresh_callback()
+        _clear_active_path_focus(w)
+        return
+    save_callback(cleaned_path)
+    refresh_callback()
+    _clear_active_path_focus(w)
+
+
+def _clear_active_path_focus(w):
+    focus_widget = getattr(w, "focusWidget", lambda: None)()
+    if focus_widget is not None and hasattr(focus_widget, "clearFocus"):
+        focus_widget.clearFocus()
+
+
+def commit_game_path_text(w, path: str):
+    cleaned_path = str(path or "").strip()
+    if cleaned_path and not w.settings_service.validate_selected_game_path(cleaned_path):
+        w.settings_service.show_invalid_game_path_warning(cleaned_path)
+        update_path_inputs_ui(w)
+        _clear_active_path_focus(w)
+        return
+    w.app_state.game_mode.set_game_path(w.app_state.local_config, cleaned_path)
+    w.settings_service.write_local_config()
+    w.settings_service.settings_changed.emit()
+    update_path_inputs_ui(w)
+    _clear_active_path_focus(w)
+
+
+def select_custom_g3mtool_file(w):
+    filepath = w.settings_service.select_executable_path(
+        tr("buttons.select_g3mtool_binary")
+    )
+    if filepath:
+        _save_binary_override(w, "custom_g3mtool_path", filepath)
+        update_custom_binary_ui(w)
+
+
+def reset_custom_g3mtool_path(w):
+    save_custom_g3mtool_text(w, "")
+
+
+def select_custom_xdelta_file(w):
+    filepath = w.settings_service.select_executable_path(
+        tr("buttons.select_xdelta_binary")
+    )
+    if filepath:
+        _save_binary_override(w, "custom_xdelta_path", filepath)
+        update_custom_binary_ui(w)
+
+
+def reset_custom_xdelta_path(w):
+    save_custom_xdelta_text(w, "")
+
+
+def update_custom_binary_ui(w):
+    items = (
+        (
+            "custom_g3mtool_path",
+            getattr(w, "settings_custom_g3mtool_edit", None),
+            getattr(w, "settings_reset_g3mtool_button", None),
+        ),
+        (
+            "custom_xdelta_path",
+            getattr(w, "settings_custom_xdelta_edit", None),
+            getattr(w, "settings_reset_xdelta_button", None),
+        ),
+    )
+    for config_key, edit, reset_button in items:
+        if not edit:
+            continue
+        path = str(w.app_state.local_config.get(config_key, "") or "").strip()
+        edit.set_full_text(path) if hasattr(edit, "set_full_text") else edit.setText(path)
+        edit.setToolTip(path)
+        if reset_button:
+            reset_button.setVisible(bool(path))
 
 
 def select_custom_executable_file(w):
-    from PyQt6.QtWidgets import QFileDialog
-
-    filepath, _ = QFileDialog.getOpenFileName(w, tr("ui.select_launch_file"))
+    filepath = w.settings_service.select_executable_path(tr("ui.select_launch_file"))
     if filepath:
         save_custom_executable(w, filepath)
 
@@ -382,12 +506,42 @@ def update_custom_executable_ui(w, game_id=None):
         return
     config_key = game_def.get_custom_exec_config_key()
     path = w.app_state.local_config.get(config_key, "")
+    edit = getattr(w, "settings_custom_executable_edit", None)
+    if edit:
+        edit.set_full_text(path) if hasattr(edit, "set_full_text") else edit.setText(path)
+        edit.setToolTip(path)
     has_custom_exe = bool(path)
     if (
         hasattr(w, "settings_reset_custom_exe_button")
         and w.settings_reset_custom_exe_button
     ):
         w.settings_reset_custom_exe_button.setVisible(has_custom_exe)
+
+
+def save_portproton_path_text(w, path: str):
+    w.app_state.local_config["portproton_path"] = str(path or "").strip()
+    w.settings_service.write_local_config()
+    w.settings_service.settings_changed.emit()
+    update_portproton_ui(w)
+    _clear_active_path_focus(w)
+
+
+def update_path_inputs_ui(w):
+    game_path_label = getattr(w, "settings_game_path_label", None)
+    if game_path_label:
+        game_name = getattr(w.app_state.game_mode, "display_label", "") or "Game"
+        game_path_label.setText(
+            tr("ui.settings_game_path_label").replace("{GAME}", str(game_name))
+        )
+    game_path_edit = getattr(w, "settings_game_path_edit", None)
+    game_path = w.app_state.game_mode.get_game_path(w.app_state.local_config) or ""
+    if game_path_edit:
+        game_path_edit.set_full_text(game_path) if hasattr(game_path_edit, "set_full_text") else game_path_edit.setText(game_path)
+        game_path_edit.setToolTip(game_path)
+    reset_button = getattr(w, "settings_game_path_reset_button", None)
+    if reset_button:
+        reset_button.setVisible(bool(game_path))
+    update_custom_executable_ui(w)
 
 
 def select_portproton_path(w):
@@ -399,7 +553,7 @@ def select_portproton_path(w):
 
 
 def update_portproton_ui(w):
-    if not w.portproton_frame or not w.portproton_path_label:
+    if not w.portproton_frame:
         return
     is_steam_launch = w.app_state.local_config.get("launch_via_steam", False)
     if w.use_portproton_checkbox:
@@ -426,15 +580,14 @@ def update_portproton_ui(w):
         )
     )
     w.portproton_frame.setVisible(show_frame)
+    path_edit = getattr(w, "portproton_path_edit", None)
+    reset_button = getattr(w, "settings_portproton_path_reset_button", None)
     if w.portproton_frame.isVisible():
-        if path:
-            w.portproton_path_label.setText(
-                tr("ui.currently_selected", filename=os.path.basename(path))
-            )
-        else:
-            w.portproton_path_label.setText(
-                tr("ui.file_not_selected") + " (using PATH)"
-            )
+        if path_edit:
+            path_edit.set_full_text(path) if hasattr(path_edit, "set_full_text") else path_edit.setText(path)
+            path_edit.setToolTip(path)
+        if reset_button:
+            reset_button.setVisible(bool(path))
 
 
 def on_used_mods_updated(w):

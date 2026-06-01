@@ -48,7 +48,6 @@
     "clear_search_tooltip": "Clear search: '{text}'",
     "create_mod": "Create Mod",
     "created_label": "Created:",
-    "currently_selected": "Selected: {filename}",
     "use_portproton": "Use PortProton instead of Wine",
     "select_portproton_path": "Select PortProton executable",
     "delete_mod": "Delete Mod",
@@ -65,8 +64,8 @@
     "enable_direct_launch": "Enable direct launch for Chapter {chapter}?\\n\\nDirect launch starts the game on the selected chapter instead of opening the main menu.\\n\\nWhile direct launch is enabled, 'Launch via Steam' will be unavailable.\\n\\nThis feature can still break on some setups. Continue?",
     "enter_author_name": "Enter author's name",
     "enter_mod_name": "Enter mod name",
-    "file_not_selected": "File not selected",
     "file_path_placeholder": "Enter path or browse...",
+    "path_field_placeholder": "Specify path...",
     "finish_creation": "Finish Creation",
     "full_install": "Full Install",
     "full_description_label": "Full description:",
@@ -157,7 +156,6 @@
     "copy_image": "Copy image",
     "copy_image_url": "Copy image URL",
     "beta_updates": "Beta Updates",
-    "skip_patching_warnings": "Skip Patching Warnings",
     "fullscreen": "Fullscreen",
     "scale_label": "UI Scale",
     "sort_by_name": "By name",
@@ -203,15 +201,19 @@
     "settings_section_colors": "Colors",
     "settings_section_filters": "Filters",
     "settings_section_paths": "Paths",
+    "settings_game_path_label": "{GAME} Path:",
+    "settings_custom_executable_path_label": "Custom EXE:",
+    "settings_custom_g3mtool_path_label": "Custom G3MTool:",
+    "settings_custom_xdelta_path_label": "Custom XDELTA:",
+    "settings_portproton_path_label": "PortProton:",
     "settings_section_launch": "Launch",
-    "settings_section_patching": "Patching",
+    "settings_section_patching": "Patching / Merging",
     "select_mod": "Select mod",
     "close_button": "Close",
     "loading_placeholder": "Loading...",
     "no_screenshots": "No screenshots",
     "no_search_results": "No mods found.",
     "no_tabs_placeholder": "But nobody came...",
-    "settings_section_merging": "Merging",
     "settings_section_themes": "Themes",
     "settings_section_media": "Graphics",
     "settings_section_audio": "Audio",
@@ -291,14 +293,6 @@
   },
   "buttons": {
     "change_background": "Change Background",
-    "change_path": "Change DR folder path",
-    "change_demo_path": "Change DRdemo folder path",
-    "change_undertale_path": "Change UT folder path",
-    "change_undertaleyellow_path": "Change UTY folder path",
-    "change_sugaryspire_path": "Change SS folder path",
-    "change_pizzatower_path": "Change PT folder path",
-    "change_frickbears3_path": "Change FRICKBEARS3 folder path",
-    "change_custom_game_path": "Change game folder path",
     "open_g3m_folder": "Open G3M folder",
     "changelog": "Changelog",
     "discord": "DISCORD",
@@ -306,7 +300,8 @@
     "import": "Import",
     "remove_background": "Remove Background",
     "select_portproton_path": "Select PortProton Path",
-    "custom_executable": "Custom executable",
+    "select_g3mtool_binary": "Select G3MTool binary",
+    "select_xdelta_binary": "Select xdelta binary",
     "telegram": "TELEGRAM",
     "reset_settings": "Reset",
     "select_background_music": "Select Background Music",
@@ -327,10 +322,15 @@
     "shortcut": "Shortcut",
     "import_export_themes": "Im/Export Theme",
     "save_theme": "Save Theme",
-    "delete_theme": "Delete Theme"
+    "delete_theme": "Delete Theme",
+    "clear_g3mtool_cache": "Clear G3MTool Cache",
+    "manage_warnings": "Manage Warnings"
   },
   "tooltips": {
     "custom_executable_library": "Choose a custom executable for this game. This setting is saved per game.",
+    "custom_g3mtool_binary": "Choose a custom G3MTool executable. G3M will use it for all G3MTool operations instead of the bundled binary.",
+    "custom_xdelta_binary": "Choose a custom xdelta executable. G3M will pass it to G3MTool for xdelta patch creation and apply operations.",
+    "clear_g3mtool_cache": "Delete cached G3MTool analysis files. Use this only to free space or if patching/merging got noticeably worse.",
     "full_install_game_instructions": "Install {game_name} from scratch:\n  • Choose the folder you want to use.\n  • A new game folder will be created inside it.\n  • All required game files will be downloaded there.\n  • That folder will be selected as the active game folder automatically.\n\nThe checkbox will be turned off after installation is complete.",
     "macos_install_unavailable": "Game file installation is not available on macOS.\nIt's recommended to install the DEMO via Steam.",
     "online_counter": "This counter shows the number of players playing the game via the launcher.",
@@ -341,7 +341,6 @@
     "portproton": "Use PortProton instead of Wine to run Windows executables on Linux. PortProton is a compatibility layer that wraps Wine/Proton for easier game compatibility. If PortProton is not in your PATH, you can specify a custom path to the PortProton executable.",
     "portproton_disabled_steam": "PortProton is not used when launching via Steam. Steam manages its own Wine/Proton compatibility layer.",
     "beta_updates": "Get experimental updates and features before they are officially released.",
-    "skip_patching_warnings": "Continue patching automatically when only non-critical warnings appear. Warnings will still be logged.",
     "fullscreen_tooltip": "Toggle fullscreen mode.",
     "language": "Choose the language used by the G3M interface.",
     "ui_scale": "Scale the whole interface. Higher values make text and controls larger.",
@@ -412,7 +411,8 @@
     "merge_code": "Merge game logic so multiple mods can change the same behavior without overwriting each other.",
     "dont_hide_window_on_launch": "Keep the launcher window visible when the game is running.",
     "open_homepage": "Open the mod page.",
-    "open_mod_folder": "Open this mod's folder."
+    "open_mod_folder": "Open this mod's folder.",
+    "manage_warnings": "Choose which patching and merging warnings can interrupt the operation."
   },
   "dropdowns": {},
   "dialogs": {
@@ -445,6 +445,8 @@
     "extra_files_path_instructions_deltarune": "Enter the folder path where each file should be placed, relative to the game folder.\nExample: 'sprites/bgs' will place the file in the game folder's sprites/bgs/ directory.\nFor DELTARUNE, you can also start the path with a chapter folder like 'chapter_1/' or 'chapter1_windows/' to bind the file to that chapter.\nUse forward slashes (/) to separate folders.",
     "select_data_file_info": "Select a DATA file for {chapter}",
     "no_file_selected": "No file selected",
+    "clear_g3mtool_cache_confirm_title": "Clear G3MTool Cache",
+    "clear_g3mtool_cache_confirm_text": "Clear the G3MTool cache? Patching and merging may be a little slower until the cache is rebuilt. Do this only to free space or if patching/merging got noticeably worse.",
     "select_target_folder": "Select Target Folder",
     "finish_creating_mod": "Finish Creating Mod",
     "no_data_file_selected": "Please select at least one DATA file",
@@ -480,7 +482,11 @@
       "g3mpatch_validate_title": "Warning: G3MPatch Data File Mismatch",
       "g3mpatch_validate_body": "This G3MPatch was built for a different DATA file.\n\nPatch: {patch_name}\n\nExpected file: {expected_file}\nExpected MD5: {expected_md5}\n\nCurrent file: {actual_file}\nCurrent MD5: {actual_md5}\n\nIf the difference is minor, for example because of a game version or platform difference, the patch may still work.\n\nContinue anyway?",
       "g3mpatch_newer_tool_title": "Warning: G3MPatch Created by Newer G3MTool",
-      "g3mpatch_newer_tool_body": "This G3MPatch was created by a newer G3MTool than the one bundled with your current G3M.\n\nPatch: {patch_name}\nPatch G3MTool version: {patch_tool_version}\nBundled G3MTool version: {current_tool_version}\n\nThe patch may use behavior or format details that this older G3MTool does not fully support.\n\nContinue anyway?"
+      "g3mpatch_newer_tool_body": "This G3MPatch was created by a newer G3MTool than the one bundled with your current G3M.\n\nPatch: {patch_name}\nPatch G3MTool version: {patch_tool_version}\nBundled G3MTool version: {current_tool_version}\n\nThe patch may use behavior or format details that this older G3MTool does not fully support.\n\nContinue anyway?",
+      "extra_file_missing": "The extra file referenced by this mod was not found:\n{path}\n\nThat file will be skipped. The game may still launch, but this mod may be incomplete.\n\nContinue?",
+      "extra_directory_missing": "The extra folder referenced by this mod was not found:\n{path}\n\nFiles from that folder will be skipped. The game may still launch, but this mod may be incomplete.\n\nContinue?",
+      "extra_file_copy_failed": "Failed to copy extra file \"{file}\" into:\n{target}\n\nCheck permissions, antivirus blocks, or disk space.\n\nContinue?",
+      "xdelta_override_no_target": "The extra XDELTA patch \"{patch}\" did not find a matching target file in:\n{target}\n\nThat extra patch will be skipped.\n\nContinue?"
     },
     "app_will_restart": "The application will be restarted.",
     "are_you_sure": "Are you sure?",
@@ -577,11 +583,13 @@
     "exe_not_found_in_archive": ".exe file not found in the downloaded archive.",
     "executable_not_found": "Game executable not found.",
     "invalid_executable_file": "Selected file is not a valid executable: {file}",
+    "invalid_game_path_missing_executable": "The selected folder is not a valid {game} path. It does not contain a supported launch file ({executables}). If you want to use another launch file, set Custom EXE first.",
     "remove_font_failed": "Failed to remove font.",
     "invalid_font_file": "Invalid font file. Supported extensions are .ttf and .otf.",
     "executable_not_found_after_unpack": "G3M executable not found after unpacking.",
     "file_not_available": "(❌ not available)",
     "file_write_error": "Error writing file: {error}",
+    "g3mtool_cache_clear_failed": "Failed to clear G3MTool cache: {error}",
     "files_not_found": "Could not find files.",
     "files_restore_error": "Error restoring files: {error}",
     "folder_creation_failed": "Could not create folder:\n{error}",
@@ -681,6 +689,7 @@
     "downloading_version": "Downloading v{version}...",
     "files_restored": "Files restored successfully.",
     "game_closed_restoring_files": "Game closed. Restoring files...",
+    "g3mtool_cache_cleared": "G3MTool cache cleared.",
     "game_files_install_complete": "Game files installed.",
     "game_files_install_failed": "Game files installation failed. Check log.",
     "game_folder_found": "Game folder found: {path}",
@@ -1111,6 +1120,145 @@
     "status_incompatible": "Incompatible",
     "status_broken": "Broken",
     "enable_failed": "Failed to enable plugin.",
-    "incompatible_api_warning": "Requires Plugin API {required_version}. Current version: {current_version}."
+    "incompatible_api_warning": "Requires Plugin API {required_version}. Current version: {current_version}.",
+    "incompatible_api_download_title": "Update G3M recommended",
+    "incompatible_api_download_message": "\"{name}\" requires Plugin API {required_version}, but this G3M has {current_version}.\n\nFor correct plugin behavior, update G3M to the latest version. You can still download and try the plugin, but compatibility is not guaranteed.",
+    "download_anyway": "Download anyway"
+  },
+  "warnings": {
+    "manage_title": "Manage Warnings",
+    "skip_all": "Skip All Warnings",
+    "skip_all_tooltip": "Dangerous: G3M will continue without asking even when the patch, merge, game path, or tool output looks unsafe. This can hide damaged files.",
+    "sections": {
+      "critical": "Critical",
+      "major": "Major",
+      "minor": "Minor"
+    },
+    "items": {
+      "g3mtool_unavailable": "G3MTool cannot be started",
+      "xdelta_apply_failed": "XDELTA patch failed",
+      "g3mpatch_apply_failed": "G3MPatch apply failed",
+      "merge_failed": "Merge failed",
+      "patched_output_missing": "Patched output was not created",
+      "data_file_missing": "Game DATA file was not found",
+      "g3mpatch_original_hash_mismatch": "Patch was created for another original file",
+      "g3mpatch_newer_tool": "Patch was created by a newer G3MTool",
+      "merge_conflicts_detected": "Merge conflicts were detected",
+      "steam_launch_with_mods": "Steam may launch a different game folder",
+      "custom_binary_invalid": "Custom executable is invalid",
+      "minor_file_overrides_only": "Only loose files will be copied",
+      "cache_rebuild_needed": "G3MTool cache will be rebuilt",
+      "legacy_patching_warning": "Other patching warning",
+      "extra_file_missing": "Extra file is missing",
+      "extra_directory_missing": "Extra folder is missing",
+      "extra_file_copy_failed": "Extra file could not be copied",
+      "extra_archive_extract_failed": "Extra archive could not be extracted",
+      "extra_xdelta_no_target": "Extra XDELTA target was not found",
+      "extra_xdelta_apply_failed": "Extra XDELTA patch failed"
+    },
+    "messages": {
+      "g3mtool_unavailable": {
+        "title": "G3MTool cannot be started",
+        "body": "G3M could not start G3MTool. Check the configured G3MTool path, restore the bundled tool, or choose a valid custom executable."
+      },
+      "xdelta_apply_failed": {
+        "title": "XDELTA patch failed",
+        "body": "The XDELTA patch did not apply. This usually means the game version or DATA file does not match what the mod author used. Verify game files or use the required version."
+      },
+      "g3mpatch_apply_failed": {
+        "title": "G3MPatch apply failed",
+        "body": "The patch could not be applied cleanly. Check that the patch matches the selected game and try again with a clean game folder."
+      },
+      "merge_failed": {
+        "title": "Merge failed",
+        "body": "G3MTool could not merge the selected mods. Check the report/logs and try fewer mods to find the conflict."
+      },
+      "patched_output_missing": {
+        "title": "Patched output was not created",
+        "body": "The tool finished without creating the expected output file. This may be caused by permissions, antivirus software, or a tool crash."
+      },
+      "data_file_missing": {
+        "title": "Game DATA file was not found",
+        "body": "G3M could not find a game DATA file in the selected folder. Check the game path or install/restore the game files."
+      },
+      "g3mpatch_original_hash_mismatch": {
+        "title": "Patch was created for another original file",
+        "body": "This patch was created for a different original file. It may still work, but the result can be wrong if the game version is different."
+      },
+      "g3mpatch_newer_tool": {
+        "title": "Patch was created by a newer G3MTool",
+        "body": "This patch was created by a newer G3MTool version. Update G3M or choose a newer custom G3MTool executable if the result looks wrong."
+      },
+      "merge_conflicts_detected": {
+        "title": "Merge conflicts were detected",
+        "body": "Multiple mods changed the same resources. Review the conflict report; continuing may pick one change over another."
+      },
+      "steam_launch_with_mods": {
+        "title": "Steam may launch a different game folder",
+        "body": "Steam may launch a different game folder than the one G3M patched. Make sure the configured path matches Steam or launch directly."
+      },
+      "custom_binary_invalid": {
+        "title": "Custom executable is invalid",
+        "body": "The selected file could not be started as an executable. Choose the correct binary for this operating system."
+      },
+      "minor_file_overrides_only": {
+        "title": "Only loose files will be copied",
+        "body": "No DATA file was found, so G3M will only copy loose files. This is fine for file-only mods."
+      },
+      "cache_rebuild_needed": {
+        "title": "G3MTool cache will be rebuilt",
+        "body": "G3MTool will rebuild cache data for this file. The first run can be slower; later runs should be faster."
+      },
+      "legacy_patching_warning": {
+        "title": "Other patching warning",
+        "body": "G3M detected a patching or merging risk. Read the details before continuing."
+      },
+      "extra_file_missing": {
+        "title": "Extra file is missing",
+        "body": "An extra file referenced by the mod is missing: {path}. The mod may still run, but that file will not be installed. Reinstall or reimport the mod if this was not intentional."
+      },
+      "extra_directory_missing": {
+        "title": "Extra folder is missing",
+        "body": "An extra folder referenced by the mod is missing: {path}. Files from that folder will not be installed. Reinstall or reimport the mod if this was not intentional."
+      },
+      "extra_file_copy_failed": {
+        "title": "Extra file could not be copied",
+        "body": "G3M could not copy an extra file into the game folder. Check permissions, antivirus blocks, and free disk space."
+      },
+      "extra_archive_extract_failed": {
+        "title": "Extra archive could not be extracted",
+        "body": "An archive from the mod extra files could not be extracted. Some loose files from the mod may be missing in-game."
+      },
+      "extra_xdelta_no_target": {
+        "title": "Extra XDELTA target was not found",
+        "body": "An extra-file XDELTA patch did not find a matching target file. This is often harmless when the mod supports multiple game layouts, but that extra patch will be skipped."
+      },
+      "extra_xdelta_apply_failed": {
+        "title": "Extra XDELTA patch failed",
+        "body": "An XDELTA patch from the mod extra files could not be applied to its target. The main DATA patch may still work, but this extra file change will be skipped."
+      }
+    },
+    "tooltips": {
+      "g3mtool_unavailable": "Shown when G3M cannot start the configured or bundled G3MTool executable.",
+      "xdelta_apply_failed": "Shown when a main .xdelta or .vcdiff patch cannot be applied to the selected DATA file.",
+      "g3mpatch_apply_failed": "Shown when a .g3mpatch cannot be applied cleanly to the selected DATA file.",
+      "merge_failed": "Shown when G3MTool cannot merge the selected mods or patches.",
+      "patched_output_missing": "Shown when a tool command finishes but the expected output file is missing.",
+      "data_file_missing": "Shown when G3M cannot find the DATA file that should be patched for the selected game or chapter.",
+      "g3mpatch_original_hash_mismatch": "Shown when a patch was created for a different original DATA file than the one currently selected.",
+      "g3mpatch_newer_tool": "Shown when the patch was created by a newer G3MTool than the one currently used.",
+      "merge_conflicts_detected": "Shown when the merge report contains resource conflicts.",
+      "steam_launch_with_mods": "Shown when Steam launch may open a different game folder than the one G3M patched.",
+      "custom_binary_invalid": "Shown when a configured custom executable cannot be started by the operating system.",
+      "extra_file_missing": "Shown when a mod references an extra file that no longer exists in the mod folder.",
+      "extra_directory_missing": "Shown when a mod references an extra folder that no longer exists in the mod folder.",
+      "extra_file_copy_failed": "Shown when G3M cannot copy an extra file into the game folder.",
+      "extra_archive_extract_failed": "Shown when an archive listed as an extra file cannot be extracted into the game folder.",
+      "extra_xdelta_no_target": "Shown when an extra-file XDELTA patch cannot find a matching target file.",
+      "extra_xdelta_apply_failed": "Shown when an extra-file XDELTA patch finds a target but cannot apply to it.",
+      "minor_file_overrides_only": "Shown for file-only mods where no DATA patch is applied.",
+      "cache_rebuild_needed": "Shown when G3MTool needs to rebuild reusable cache data for an input file.",
+      "legacy_patching_warning": "Shown for older or uncategorized patching and merging risks."
+    }
   }
 }

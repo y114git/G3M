@@ -57,7 +57,7 @@ class ConflictsDialog(QDialog):
         layout.addWidget(title_label)
         stats_text = f"Conflicts: {self._conflicts_count}"
         if self._auto_resolved > 0:
-            stats_text += f"  |  Auto-resolved: {self._auto_resolved}"
+            stats_text += f" | Auto-resolved: {self._auto_resolved}"
         stats_label = QLabel(stats_text)
         stats_label.setWordWrap(True)
         layout.addWidget(stats_label)
