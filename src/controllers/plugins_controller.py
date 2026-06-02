@@ -607,7 +607,7 @@ QPushButton#cardButtonUninstall:disabled {{
         if not plugin and not entry:
             return
         if analytics := getattr(self.app, "analytics_service", None):
-            analytics.count("plugin_details_opened")
+            analytics.record_plugin_details_opened(entry)
         if entry is not None:
             dialog = PluginDetailsDialog(
                 None,
@@ -776,28 +776,36 @@ QPushButton#cardButtonUninstall:disabled {{
         if not hasattr(self.app, "main_tab_widget"):
             return
         tab_widget = self.app.main_tab_widget
-        for plugin_id in list(self._plugin_tab_ids):
-            widget = getattr(self.app, f"_plugin_tab_{plugin_id}", None)
-            if widget is None:
-                continue
-            index = tab_widget.indexOf(widget)
-            if index >= 0:
-                tab_widget.removeTab(index)
-            widget.deleteLater()
-            delattr(self.app, f"_plugin_tab_{plugin_id}")
-        self._plugin_tab_ids.clear()
-        for plugin in self.plugin_runtime_service.list_installed_plugins():
-            if (
-                not plugin.enabled
-                or not plugin.manifest
-                or "main_view" not in plugin.manifest.hooks
-            ):
-                continue
-            widget = self.plugin_runtime_service.get_main_widget(
-                plugin.plugin_id, tab_widget
-            )
-            if widget is None:
-                continue
-            setattr(self.app, f"_plugin_tab_{plugin.plugin_id}", widget)
-            tab_widget.addTab(widget, _resolve_text(plugin.manifest.name))
-            self._plugin_tab_ids.append(plugin.plugin_id)
+        updates_were_enabled = tab_widget.updatesEnabled()
+        tab_widget.setUpdatesEnabled(False)
+        try:
+            for plugin_id in list(self._plugin_tab_ids):
+                widget = getattr(self.app, f"_plugin_tab_{plugin_id}", None)
+                if widget is None:
+                    continue
+                index = tab_widget.indexOf(widget)
+                if index >= 0:
+                    tab_widget.removeTab(index)
+                widget.hide()
+                widget.deleteLater()
+                delattr(self.app, f"_plugin_tab_{plugin_id}")
+            self._plugin_tab_ids.clear()
+            for plugin in self.plugin_runtime_service.list_installed_plugins():
+                if (
+                    not plugin.enabled
+                    or not plugin.manifest
+                    or "main_view" not in plugin.manifest.hooks
+                ):
+                    continue
+                widget = self.plugin_runtime_service.get_main_widget(
+                    plugin.plugin_id, tab_widget
+                )
+                if widget is None:
+                    continue
+                widget.hide()
+                setattr(self.app, f"_plugin_tab_{plugin.plugin_id}", widget)
+                tab_widget.addTab(widget, _resolve_text(plugin.manifest.name))
+                self._plugin_tab_ids.append(plugin.plugin_id)
+        finally:
+            tab_widget.setUpdatesEnabled(updates_were_enabled)
+            tab_widget.update()

@@ -1,3 +1,8 @@
+### Version 3.1.1 — 02.06.26
+
+- Fixed few bugs with analytics
+- Fixed Custom Save Folder plugin bugs (e.g. border radius bugs and etc.)
+
 ### Version 3.1.0 — 01.06.26
 
 - **FRICKBEARS3 support**

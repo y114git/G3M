@@ -659,7 +659,7 @@ class LibraryDisplayController:
             )
             if path:
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.count("mod_export_requested")
+                    analytics.record_mod_export_requested(mod_data)
                 controller.export_mod_to_path(mod_data, path)
         except Exception as e:
             logging.error(f"Failed to export mod: {e}", exc_info=True)
@@ -670,7 +670,7 @@ class LibraryDisplayController:
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if mod_folder and os.path.isdir(mod_folder):
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.count("mod_folder_opened")
+                    analytics.record_mod_folder_opened(mod_data)
                 QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.normpath(mod_folder)))
         except Exception as e:
             logging.error(f"Failed to open mod folder: {e}", exc_info=True)
@@ -721,7 +721,7 @@ class LibraryDisplayController:
                 import webbrowser
 
                 if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.count("mod_homepage_opened")
+                    analytics.record_mod_homepage_opened(mod_data)
                 webbrowser.open(url)
         except Exception as e:
             logging.error(f"Failed to open homepage: {e}", exc_info=True)

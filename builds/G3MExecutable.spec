@@ -3,6 +3,7 @@
 block_cipher = None
 
 import os, sys
+from pathlib import Path
 
 binaries_extra = []
 # Support multiple VC runtime DLLs via VCREDIST_DLLS (pathsep-separated),
@@ -20,24 +21,44 @@ else:
 
 
 datas_extra = []
+debug_spec = os.getenv('G3M_SPEC_DEBUG', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 try:
-    spec_dir = os.path.dirname(os.path.abspath(__file__))
+    spec_path = Path(__file__).resolve()
 except NameError:
-    spec_dir = os.path.join(os.getcwd(), 'builds')
-project_root = os.path.dirname(spec_dir)
+    spec_path = None
+if spec_path is not None:
+    spec_dir = spec_path.parent
+    project_root = None
+    marker_names = ('builds', '.git', 'pyproject.toml')
+    search_roots = (spec_dir,) + tuple(spec_dir.parents)
+    for candidate in search_roots:
+        if debug_spec:
+            print(f"[spec debug] checking project root candidate: {candidate}")
+        if any((candidate / marker).exists() for marker in marker_names):
+            project_root = candidate
+            break
+    if project_root is None:
+        project_root = spec_dir.parent
+else:
+    cwd = Path(os.getcwd()).resolve()
+    project_root = cwd
+    spec_dir = cwd / 'builds'
 env_candidates = [
     os.path.join(project_root, 'src', '.env'),
     os.path.join(project_root, '.env'),
 ]
+found_env_path = None
 for env_path in env_candidates:
-    print(f"Looking for .env at: {env_path}")
-    print(f".env exists: {os.path.exists(env_path)}")
+    if debug_spec:
+        print(f"[spec debug] checking .env candidate: {env_path}")
     if os.path.exists(env_path):
-        print(f"Adding .env to datas: {env_path} -> src")
+        found_env_path = env_path
         datas_extra.append((env_path, 'src'))
         break
+if found_env_path:
+    print(f"Looking for .env: found at {found_env_path}")
 else:
-    print(f"WARNING: .env file not found at any expected path: {env_candidates}")
+    print("WARNING: .env not found")
 
 a = Analysis(
     ['../src/main.py'],
@@ -78,8 +99,6 @@ a = Analysis(
         'PyQt6.QtMultimedia',
         'PyQt6.QtMultimediaWidgets',
         'PyQt6.QtPrintSupport',
-        'PyQt6.QtPdf',
-        'PyQt6.QtPdfWidgets',
         'PyQt6.QtSql',
         'PyQt6.QtSvgWidgets',
         'PyQt6.QtXml',

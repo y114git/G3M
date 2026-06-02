@@ -50,6 +50,26 @@ def test_analytics_service_records_mods_browser_search_bucket(qapp, tmp_path):
     )
 
 
+def test_analytics_service_records_mods_browser_search_opt_in_detail(qapp, tmp_path):
+    app_state = SimpleNamespace(
+        local_config={
+            "language": "en",
+            "ui_scale": 1.0,
+            "analytics_opt_in_enabled": True,
+        }
+    )
+    service = AnalyticsService(app_state)
+
+    service.record_mods_browser_search("roaring edition")
+
+    assert any(
+        key.startswith("search_mods_browser_detail")
+        and "area=mods_browser" in key
+        and "query_len=13_plus" in key
+        for key in service._opt_in
+    )
+
+
 def test_analytics_service_records_single_character_mods_browser_search_bucket(
     qapp, tmp_path
 ):
@@ -265,6 +285,110 @@ def test_analytics_service_records_download_use_completion_details(qapp, tmp_pat
     assert any(key.startswith("use_completed") for key in service._always_on)
     assert any(
         key.startswith("use_completed_detail") and "ref=gb_mod_123" in key
+        for key in service._opt_in
+    )
+
+
+def test_analytics_service_records_safe_opt_in_details_for_generic_actions(
+    qapp, tmp_path
+):
+    app_state = SimpleNamespace(
+        local_config={
+            "language": "en",
+            "ui_scale": 1.0,
+            "analytics_opt_in_enabled": True,
+        }
+    )
+    service = AnalyticsService(app_state)
+
+    service.mark_ui_ready()
+    service.record_dialog_opened("downloads")
+    service.record_profile_switched()
+    service.record_setting_changed("analytics_opt_in_enabled", True)
+    service.record_update_check("available")
+    service.record_plugin_imported(source="catalog")
+    service.record_local_import(
+        source="file",
+        outcome="completed",
+        file_ext="zip",
+        merged=True,
+        manual=False,
+    )
+
+    assert any(key.startswith("app_ready_detail|startup=") for key in service._opt_in)
+    assert any(
+        key.startswith("dialog_opened_detail|name=downloads") for key in service._opt_in
+    )
+    assert any(key.startswith("profile_switched_detail") for key in service._opt_in)
+    assert any(
+        key.startswith("setting_changed_detail")
+        and "name=analytics_opt_in_enabled" in key
+        and "state=on" in key
+        for key in service._opt_in
+    )
+    assert any(
+        key.startswith("update_check_detail|outcome=available") for key in service._opt_in
+    )
+    assert any(
+        key.startswith("plugin_imported_detail|source=catalog") for key in service._opt_in
+    )
+    assert any(
+        key.startswith("local_import_detail")
+        and "source=file" in key
+        and "outcome=completed" in key
+        and "ext=zip" in key
+        for key in service._opt_in
+    )
+
+
+def test_analytics_service_records_mod_and_plugin_action_details(qapp, tmp_path):
+    app_state = SimpleNamespace(
+        local_config={
+            "language": "en",
+            "ui_scale": 1.0,
+            "analytics_opt_in_enabled": True,
+        }
+    )
+    service = AnalyticsService(app_state)
+    mod = {
+        "id": "gb_mod_123",
+        "name": "Roaring Patch",
+        "game": "deltarune",
+        "gamebanana_category": "Gameplay",
+    }
+    plugin = {
+        "id": "plugin.demo",
+        "name": "Demo Plugin",
+        "version": "1.2.3",
+        "source": "catalog",
+    }
+
+    service.record_mod_export_requested(mod)
+    service.record_mod_folder_opened(mod)
+    service.record_mod_homepage_opened(mod)
+    service.record_plugin_details_opened(plugin)
+
+    assert any(
+        key.startswith("mod_export_requested") and "game=deltarune" in key
+        for key in service._always_on
+    )
+    assert any(
+        key.startswith("mod_export_requested_detail")
+        and "ref=gb_mod_123" in key
+        for key in service._opt_in
+    )
+    assert any(
+        key.startswith("mod_folder_opened_detail") and "ref=gb_mod_123" in key
+        for key in service._opt_in
+    )
+    assert any(
+        key.startswith("mod_homepage_opened_detail") and "ref=gb_mod_123" in key
+        for key in service._opt_in
+    )
+    assert any(key.startswith("plugin_details_opened") for key in service._always_on)
+    assert any(
+        key.startswith("plugin_details_opened_detail")
+        and "plugin_id=plugin_demo" in key
         for key in service._opt_in
     )
 

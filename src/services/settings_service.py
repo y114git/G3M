@@ -105,6 +105,15 @@ class SettingsManager(QObject):
             return parent
         return None
 
+    def _analytics(self):
+        parent = self.parent_widget
+        return getattr(parent, "analytics_service", None) if parent else None
+
+    def _record_action(self, event: str, **dims) -> None:
+        analytics = self._analytics()
+        if analytics:
+            analytics.record_action(event, **dims)
+
     def read_json(self, path: str):
         from utils.file_utils import load_json
 
@@ -255,6 +264,7 @@ class SettingsManager(QObject):
             "dialogs.clear_g3mtool_cache_confirm_title",
             "dialogs.clear_g3mtool_cache_confirm_text",
         ):
+            self._record_action("g3mtool_cache_clear_cancelled")
             return False
         cache_dir = get_g3mtool_cache_dir()
         try:
@@ -270,9 +280,11 @@ class SettingsManager(QObject):
                 "dialogs.success",
                 tr("status.g3mtool_cache_cleared"),
             )
+            self._record_action("g3mtool_cache_cleared")
             return True
         except Exception as e:
             logging.error("Failed to clear G3MTool cache: %s", e, exc_info=True)
+            self._record_action("g3mtool_cache_clear_failed")
             self.feedback_service.show_message(
                 "error",
                 "errors.error",
@@ -286,6 +298,7 @@ class SettingsManager(QObject):
         )
         if filepath:
             self._toggle_setting("portproton_path", filepath)
+            self._record_action("setting_path_selected", setting="portproton_path")
             return filepath
         return None
 
@@ -445,12 +458,20 @@ class SettingsManager(QObject):
                         corrected_path = candidate
                         break
             if not self.validate_selected_game_path(corrected_path, game):
+                self._record_action(
+                    "game_path_rejected",
+                    game=getattr(game, "game_id", "unknown"),
+                )
                 self.show_invalid_game_path_warning(corrected_path, game)
                 return False
             self.app_state.game_mode.set_game_path(
                 self.app_state.local_config, corrected_path
             )
             self.write_local_config()
+            self._record_action(
+                "game_path_set",
+                game=getattr(game, "game_id", "unknown"),
+            )
             self.feedback_service.update_status(
                 tr("status.game_path_set", path=corrected_path),
                 UI_COLORS["status_success"],
@@ -463,6 +484,7 @@ class SettingsManager(QObject):
         if self.app_state.local_config.get("custom_background_path"):
             self._remove_custom_background_file()
             self.app_state.local_config["custom_background_path"] = ""
+            self._record_action("background_removed")
         else:
             filepath, _ = QFileDialog.getOpenFileName(
                 self._dialog_parent(),
@@ -476,6 +498,7 @@ class SettingsManager(QObject):
                 os.makedirs(self.app_state.config_dir, exist_ok=True)
                 ext = os.path.splitext(filepath)[1].lower()
                 if ext not in self._IMAGE_EXTENSIONS:
+                    self._record_action("background_rejected", reason="invalid_format")
                     self.feedback_service.show_message(
                         "warning", "errors.error", tr("errors.invalid_image_format")
                     )
@@ -484,8 +507,10 @@ class SettingsManager(QObject):
                 dest = os.path.join(self.app_state.config_dir, f"custom_background{ext}")
                 shutil.copy2(filepath, dest)
                 self.app_state.local_config["custom_background_path"] = dest
+                self._record_action("background_set", ext=ext.lstrip("."))
             except Exception as e:
                 logging.error(f"Failed to copy background: {e}", exc_info=True)
+                self._record_action("background_set_failed")
                 self.feedback_service.show_message(
                     "warning", "errors.error", tr("errors.copy_logo_failed")
                 )
@@ -820,8 +845,10 @@ class SettingsManager(QObject):
             f"{tr('file_descriptions.theme_files')} (*.zip)",
         )
         if not theme_file_path:
+            self._record_action("theme_export_cancelled")
             return
         self.write_theme_archive(theme_file_path)
+        self._record_action("theme_exported")
         self.feedback_service.show_message(
             "info", "dialogs.success", tr("dialogs.theme_exported_success")
         )
@@ -852,6 +879,7 @@ class SettingsManager(QObject):
                 ):
                     raise ValueError
         except Exception:
+            self._record_action("theme_import_rejected", reason="invalid_archive")
             self.feedback_service.show_message(
                 "error", "dialogs.error", tr("dialogs.theme_invalid_archive")
             )
@@ -935,10 +963,12 @@ class SettingsManager(QObject):
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()
+            self._record_action("theme_imported")
             self.feedback_service.show_message(
                 "info", "dialogs.success", tr("dialogs.theme_imported_success")
             )
         except Exception as e:
+            self._record_action("theme_import_failed")
             self.feedback_service.show_message(
                 "error",
                 "dialogs.error",
@@ -968,6 +998,7 @@ class SettingsManager(QObject):
             logging.error(
                 f"SettingsManager: Error installing theme from URL: {e}", exc_info=True
             )
+            self._record_action("theme_url_install_failed")
             self.feedback_service.show_message(
                 "error", "errors.error", tr("themes.installation_error", error=str(e))
             )
@@ -977,10 +1008,12 @@ class SettingsManager(QObject):
         if success:
             self.theme_changed.emit()
             self.settings_changed.emit()
+            self._record_action("theme_url_installed")
             self.feedback_service.update_status(message, "green")
             self.feedback_service.show_message("info", "dialogs.success", message)
         else:
             logging.warning(f"Theme installation failed: {message}")
+            self._record_action("theme_url_install_failed")
             self.feedback_service.update_status(message or tr("errors.error"), "red")
             self.feedback_service.show_message("error", "errors.error", message)
 

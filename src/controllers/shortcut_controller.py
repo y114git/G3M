@@ -422,6 +422,8 @@ def on_shortcut_button_click(
 
     result = _collect_chapter_data(used_mods_service, app_state)
     if result is None:
+        if analytics := getattr(parent_widget, "analytics_service", None):
+            analytics.record_action("shortcut_create_blocked", reason="too_many_mods")
         feedback_service.show_message(
             "warning", "common.warning", tr("shortcut.too_many_mods")
         )
@@ -430,6 +432,12 @@ def on_shortcut_button_click(
     chapter_mods, chapter_mod_objects = result
     error = _validate_shortcut_prerequisites(app_state, any(chapter_mods.values()))
     if error:
+        if analytics := getattr(parent_widget, "analytics_service", None):
+            analytics.record_action(
+                "shortcut_create_blocked",
+                reason="prerequisite_failed",
+                game=app_state.game_mode.game_id,
+            )
         feedback_service.show_message("warning", "common.warning", error)
         return
 
@@ -453,6 +461,11 @@ def on_shortcut_button_click(
         dialog.exec()
         != QDialog.DialogCode.Accepted
     ):
+        if analytics := getattr(parent_widget, "analytics_service", None):
+            analytics.record_action(
+                "shortcut_create_cancelled",
+                game=app_state.game_mode.game_id,
+            )
         return
     if dialog.plugin_actions_enabled():
         for plugin_id, payload in dialog.collect_plugin_values().items():
@@ -476,15 +489,38 @@ def on_shortcut_button_click(
         f"{ext_label} (*{ext})",
     )
     if not filepath:
+        if analytics := getattr(parent_widget, "analytics_service", None):
+            analytics.record_action(
+                "shortcut_save_cancelled",
+                game=app_state.game_mode.game_id,
+            )
         return
 
     try:
         _write_shortcut_file(filepath, shortcut_config)
+        if analytics := getattr(parent_widget, "analytics_service", None):
+            analytics.record_action(
+                "shortcut_created",
+                game=app_state.game_mode.game_id,
+                chapter_mode="yes" if shortcut_config.get("chapter_mode") else "no",
+                launch="steam"
+                if shortcut_config.get("launch_via_steam")
+                else "portproton"
+                if shortcut_config.get("use_portproton")
+                else "direct",
+                plugins="yes" if shortcut_config.get("plugins_enabled") else "no",
+            )
         logging.info(f"Shortcut created: {filepath}")
         feedback_service.show_message(
             "info", "shortcut.dialog_title", tr("shortcut.created", path=filepath)
         )
     except Exception as e:
+        if analytics := getattr(parent_widget, "analytics_service", None):
+            analytics.record_action(
+                "shortcut_create_failed",
+                game=app_state.game_mode.game_id,
+                reason="write_failed",
+            )
         logging.error(f"Failed to create shortcut: {e}", exc_info=True)
         feedback_service.show_message(
             "error", "errors.error", tr("shortcut.creation_failed", error=str(e))

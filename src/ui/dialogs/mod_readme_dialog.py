@@ -168,7 +168,6 @@ class ModReadmeDialog(QDialog):
 
         self._title_label = QLabel(self)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_label.setObjectName("readmeTitle")
         layout.addWidget(self._title_label)
 
         self._tabs = QTabWidget(self)

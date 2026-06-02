@@ -5,7 +5,12 @@ from __future__ import annotations
 import importlib.util
 import os
 
-from ui.common.styling import get_theme_color
+from ui.common.styling import (
+    apply_stylesheet_if_changed,
+    get_border_radius,
+    get_theme_color,
+    get_widget_border_radius,
+)
 
 
 def _load_local_module(filename: str, module_name: str):
@@ -142,6 +147,21 @@ class _SaveManagerWidgetController:
         self._update_slot_highlight()
         self._update_action_bar()
 
+    def refresh_theme(self) -> None:
+        self._update_slot_highlight()
+        for row in self.widgets.get("slot_rows", {}).values():
+            row.updateGeometry()
+            row.update()
+        for label in self.widgets.get("slot_labels", {}).values():
+            if hasattr(label, "_schedule_slot_height_sync"):
+                label._schedule_slot_height_sync()
+            label.updateGeometry()
+            label.update()
+        widget = self.widgets.get("save_manager_widget")
+        if widget is not None:
+            widget.updateGeometry()
+            widget.update()
+
     def _update_collection_ui(self) -> None:
         ui_state = self.save_manager.get_collection_ui_state()
         in_collection = ui_state["in_collection"]
@@ -169,9 +189,8 @@ class _SaveManagerWidgetController:
         selected_border = get_theme_color(self.app_state.local_config, "select")
         hover_border = get_theme_color(self.app_state.local_config, "hover")
         background = get_theme_color(
-            self.app_state.local_config, "background", "#282828"
+            self.app_state.local_config, "elements", "#282828"
         )
-        radius = self.app_state.local_config.get("custom_border_radius", 0)
         for (chapter, slot), row in self.widgets["slot_rows"].items():
             current_slot = (chapter, slot)
             base_border = (
@@ -181,7 +200,13 @@ class _SaveManagerWidgetController:
                 if self._hovered_slot == current_slot
                 else border
             )
-            row.setStyleSheet(
+            radius = get_widget_border_radius(
+                row,
+                get_border_radius(self.app_state.local_config),
+                border_width=2,
+            )
+            apply_stylesheet_if_changed(
+                row,
                 f"""
 QFrame#slot_row_{chapter}_{slot} {{
     border: 2px solid {base_border};
@@ -189,7 +214,8 @@ QFrame#slot_row_{chapter}_{slot} {{
     padding: 0;
     border-radius: {radius}px;
 }}
-"""
+""",
+                cache_attr="_slot_row_stylesheet_cache",
             )
 
     def _on_slot_hover_changed(self, slot) -> None:
@@ -249,6 +275,7 @@ class DRSaveManagerPlugin:
         self._backup_info = {}
         self._context = None
         self._save_manager = None
+        self._ui_widget = None
 
     def on_load(self, context) -> None:
         self._context = context
@@ -287,8 +314,15 @@ class DRSaveManagerPlugin:
         )
         save_manager.slots_updated.connect(controller.refresh_slots)
         widget._plugin_controller = controller
-        widget.setVisible(True)
+        self._ui_widget = widget
         return widget
+
+    def on_theme_changed(self, context, *_args):
+        if self._ui_widget is None:
+            return
+        controller = getattr(self._ui_widget, "_plugin_controller", None)
+        if controller is not None:
+            controller.refresh_theme()
 
     def on_shortcut_dialog(self, context, shortcut_context, *_args):
         if not shortcut_context.matches_game(allowed={"deltarune"}):

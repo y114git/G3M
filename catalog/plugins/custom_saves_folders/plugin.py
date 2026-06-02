@@ -43,6 +43,7 @@ from ui.common.styling import (
     get_border_radius,
     get_theme_color,
     get_theme_colors,
+    get_widget_border_radius,
 )
 from utils.mod_config_parser import normalize_mod_config_data
 from utils.mod_utils import get_mod_id, get_mod_name
@@ -55,6 +56,27 @@ from utils.path_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _show_translated_feedback_message(context, level: str, title_key: str, message: str) -> None:
+    title = context.localization_service.get_text(title_key)
+    feedback = getattr(context, "feedback_service", None)
+    base_feedback = getattr(feedback, "_base_manager", None)
+    if base_feedback is not None:
+        icon_map = {
+            "error": QMessageBox.Icon.Critical,
+            "warning": QMessageBox.Icon.Warning,
+            "info": QMessageBox.Icon.Information,
+            "success": QMessageBox.Icon.Information,
+        }
+        msg_box = QMessageBox(getattr(base_feedback, "parent_widget", None))
+        msg_box.setIcon(icon_map.get(level, QMessageBox.Icon.Information))
+        msg_box.setWindowTitle(title)
+        msg_box.setText(str(message))
+        msg_box.exec()
+        return
+    if feedback is not None:
+        feedback.show_message(level, title, message)
 
 _SETTINGS_FOLDERS_KEY = "folders_by_game"
 _SETTINGS_SELECTED_KEY = "selected_by_game"
@@ -135,10 +157,15 @@ class _InteractiveRow(QFrame):
 
     def _apply_state_style(self) -> None:
         colors = get_theme_colors(self._app_state.local_config)
-        radius = get_dialog_theme_values(self._app_state)["border_radius"]
+        radius = get_widget_border_radius(
+            self,
+            get_dialog_theme_values(self._app_state)["border_radius"],
+            border_width=2,
+        )
         border_color = colors["hover"] if (self._hovered or self._selected) else colors["border"]
         background = colors["elements"]
-        self.setStyleSheet(
+        apply_stylesheet_if_changed(
+            self,
             f"""
             QFrame {{
                 background-color: {background};
@@ -153,19 +180,28 @@ class _InteractiveRow(QFrame):
             QLabel#customSavesFolderSubtitle {{
                 color: {colors["secondary_text"]};
             }}
-            """
+            """,
+            cache_attr="_row_stylesheet_cache",
         )
 
 
 class _FolderRow(_InteractiveRow):
+    enabled_changed = pyqtSignal(bool)
     delete_requested = pyqtSignal()
 
-    def __init__(self, app_state, title: str, subtitle: str, tr_func, parent=None) -> None:
+    def __init__(self, app_state, title: str, subtitle: str, enabled: bool, tr_func, parent=None) -> None:
         super().__init__(app_state, compact=False, parent=parent)
         self._tr = tr_func
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
+
+        self._enabled_box = QCheckBox(self)
+        self._enabled_box.setChecked(enabled)
+        self._enabled_box.stateChanged.connect(
+            lambda state: self.enabled_changed.emit(state == Qt.CheckState.Checked.value)
+        )
+        layout.addWidget(self._enabled_box, 0, Qt.AlignmentFlag.AlignVCenter)
 
         text_wrap = QVBoxLayout()
         text_wrap.setContentsMargins(0, 0, 0, 0)
@@ -195,18 +231,18 @@ class _FolderRow(_InteractiveRow):
         config = self._app_state.local_config
         colors = get_theme_colors(config)
         br = clamp_border_radius(
-            get_border_radius(config),
+            get_widget_border_radius(self._delete_button, get_border_radius(config), border_width=2),
             width=38,
             height=38,
-            border_width=2,
         )
+        self._enabled_box.setText(self._tr("ui.rule_enabled"))
         self._delete_button.setIcon(colored_icon("delete", colors["main_text"]))
         self._delete_button.setToolTip(self._tr("ui.delete_tooltip"))
         self._subtitle.setText(self._subtitle_text)
         apply_stylesheet_if_changed(
             self._delete_button,
             f"""
-            QToolButton#summaryActionButton, QPushButton#summaryActionButton {{
+            QPushButton#summaryActionButton {{
                 background: transparent;
                 border: 2px solid {colors["border"]};
                 border-radius: {min(br, 10)}px;
@@ -216,7 +252,7 @@ class _FolderRow(_InteractiveRow):
                 max-height: 32px;
                 padding: 0;
             }}
-            QToolButton#summaryActionButton:hover, QPushButton#summaryActionButton:hover {{
+            QPushButton#summaryActionButton:hover {{
                 background: {colors["hover"]};
             }}
             """,
@@ -280,10 +316,13 @@ class _RuleRow(_InteractiveRow):
         super().refresh_theme()
         colors = get_theme_colors(self._app_state.local_config)
         br = clamp_border_radius(
-            get_border_radius(self._app_state.local_config),
+            get_widget_border_radius(
+                self._delete_button,
+                get_border_radius(self._app_state.local_config),
+                border_width=2,
+            ),
             width=38,
             height=38,
-            border_width=2,
         )
         self._enabled_box.setText(self._tr("ui.rule_enabled"))
         self._delete_button.setIcon(colored_icon("delete", colors["main_text"]))
@@ -446,6 +485,7 @@ class _StateStore:
             result.append(
                 {
                     "id": folder_id,
+                    "enabled": bool(item.get("enabled", True)),
                     "game_id": game_id,
                     "profile": profile,
                     "name": name,
@@ -552,6 +592,7 @@ class _StateStore:
         folders.append(
             {
                 "id": self._new_id("folder"),
+                "enabled": True,
                 "game_id": game_id,
                 "profile": profile,
                 "name": cleaned,
@@ -572,6 +613,14 @@ class _StateStore:
         ordered = [by_id[folder_id] for folder_id in ordered_ids if folder_id in by_id]
         ordered.extend(folder for folder in folders if folder["id"] not in ordered_ids)
         self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, ordered)
+
+    def set_folder_enabled(self, folder_id: str, enabled: bool) -> None:
+        folders = self.get_folders()
+        for folder in folders:
+            if folder["id"] == folder_id:
+                folder["enabled"] = bool(enabled)
+                break
+        self._settings.set(_SETTINGS_NEW_FOLDERS_KEY, folders)
 
     def add_rule(
         self,
@@ -732,12 +781,13 @@ class _StateStore:
                 and rule["mod_id"] in selected_mod_ids
                 and rule["mod_id"] in available_mod_ids
                 and folder
+                and folder.get("enabled", True)
                 and folder["game_id"] == game_id
                 and folder["profile"] in {_GLOBAL_PROFILE, profile}
             ):
                 return folder
         for folder in self.get_folders(game_id):
-            if folder["profile"] in {_GLOBAL_PROFILE, profile}:
+            if folder.get("enabled", True) and folder["profile"] in {_GLOBAL_PROFILE, profile}:
                 return folder
         return None
 
@@ -1018,7 +1068,7 @@ class _CustomSavesFoldersWidget(QWidget):
         colors = get_theme_colors(self._ui_context.app_state.local_config)
         theme = get_dialog_theme_values(self._ui_context.app_state)
         radius = theme["border_radius"]
-        small_radius = max(8, min(radius, 16))
+        small_radius = max(0, min(radius, 16))
         self.setStyleSheet(
             f"""
             QWidget {{
@@ -1091,8 +1141,16 @@ class _CustomSavesFoldersWidget(QWidget):
         self.add_rule_btn.setToolTip(self._tr("ui.add_rule_tooltip"))
         for row in self._folder_rows.values():
             row.refresh_theme()
+            row.updateGeometry()
+            row.update()
         for row in self._rule_rows.values():
             row.refresh_theme()
+            row.updateGeometry()
+            row.update()
+        self.folders_list.viewport().update()
+        self.rules_list.viewport().update()
+        self.folders_list.update()
+        self.rules_list.update()
         self._refresh_all()
 
     def _open_appdata_folder(self) -> None:
@@ -1222,12 +1280,18 @@ class _CustomSavesFoldersWidget(QWidget):
                 game=self._state.game_label(folder["game_id"]),
                 profile=self._state.profile_label(folder["profile"]),
             )
+            if not folder.get("enabled", True):
+                subtitle = f"{subtitle} · {self._tr('ui.rule_disabled')}"
             row = _FolderRow(
                 self._ui_context.app_state,
                 folder["name"],
                 subtitle,
+                folder.get("enabled", True),
                 self._tr,
                 self.folders_list,
+            )
+            row.enabled_changed.connect(
+                lambda enabled, folder_id=folder["id"]: self._set_folder_enabled(folder_id, enabled)
             )
             row.delete_requested.connect(lambda _=False, data=folder: self._on_delete_folder(data))
             self.folders_list.setItemWidget(item, row)
@@ -1282,6 +1346,11 @@ class _CustomSavesFoldersWidget(QWidget):
     def _set_rule_enabled(self, rule_id: str, enabled: bool) -> None:
         self._state.set_rule_enabled(rule_id, enabled)
         self._refresh_rules()
+        self.selection_changed.emit()
+
+    def _set_folder_enabled(self, folder_id: str, enabled: bool) -> None:
+        self._state.set_folder_enabled(folder_id, enabled)
+        self._refresh_folders()
         self.selection_changed.emit()
 
     def refresh_language(self) -> None:
@@ -1492,7 +1561,7 @@ class CustomSavesFoldersPlugin:
         if error == "cancelled":
             return False
         message = self._tr()("errors.apply_failed", error=error)
-        context.feedback_service.show_message("error", "errors.error", message)
+        _show_translated_feedback_message(context, "error", "errors.error", message)
         return False
 
     def on_after_mod_apply_before_launch_shortcut(self, context, shortcut_context, *_args):
@@ -1510,7 +1579,7 @@ class CustomSavesFoldersPlugin:
         if error == "cancelled":
             return False
         message = self._tr()("errors.apply_failed", error=error)
-        context.feedback_service.show_message("error", "errors.error", message)
+        _show_translated_feedback_message(context, "error", "errors.error", message)
         return False
 
     def on_mod_apply_cancelled(self, context, *_args):
@@ -1542,7 +1611,8 @@ class CustomSavesFoldersPlugin:
     def on_before_restore_after_exit(self, context, *_args):
         ok, error = self._restore_session()
         if not ok:
-            context.feedback_service.show_message(
+            _show_translated_feedback_message(
+                context,
                 "error",
                 "errors.error",
                 self._tr()("errors.restore_failed", error=error),

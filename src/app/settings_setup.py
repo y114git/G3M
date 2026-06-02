@@ -1,5 +1,8 @@
 """Settings tab wiring extracted from AppWindow._setup_settings_tab."""
 
+import logging
+from collections.abc import Callable
+
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
@@ -37,6 +40,8 @@ from ui.common.color_picker import BlackColorPickerEventFilter
 from ui.common.styling import display_hex_to_qt_hex
 from ui.dialogs.warning_preferences_dialog import WarningPreferencesDialog
 
+logger = logging.getLogger(__name__)
+
 
 def _color_to_display_hex(color: QColor) -> str:
     if color.alpha() < 255:
@@ -70,6 +75,17 @@ def _on_color_dialog_html_edited(
     updated_color = QColor(display_hex_to_qt_hex(color_name_line_edit.text().strip()))
     if updated_color.isValid():
         dialog.setCurrentColor(updated_color)
+
+
+def _run_actions(*actions: Callable[[], None]) -> None:
+    for action in actions:
+        try:
+            action()
+        except Exception:
+            logger.exception(
+                "settings_setup: action failed in _run_actions: %r",
+                action,
+            )
 
 
 def prepare_color_dialog(w, dialog: QColorDialog):
@@ -221,6 +237,12 @@ def _guarded_trigger(widget, callback, cooldown_ms: int = 500):
         )
 
 
+def _record_setting_change(w, setting_name: str, enabled: bool):
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.record_setting_changed(setting_name, bool(enabled))
+
+
 def setup_settings_tab(w):
     """Wire all settings tab widgets, signals, and initial state."""
     from ui.builders.settings_view_builder import SettingsViewBuilder
@@ -342,7 +364,10 @@ def setup_settings_tab(w):
     w.beta_updates_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.beta_updates_checkbox,
-            lambda: w.settings_ui.on_toggle_beta_updates(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_beta_updates(bool(state)),
+                lambda: _record_setting_change(w, "beta_updates_enabled", bool(state)),
+            ),
         )
     )
     for reset_btn, section_key, lang_key, content in w._section_reset_buttons:
@@ -355,17 +380,20 @@ def setup_settings_tab(w):
     w.show_reset_buttons_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.show_reset_buttons_checkbox,
-            lambda: w.settings_ui.on_toggle_show_reset_buttons(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_show_reset_buttons(bool(state)),
+                lambda: _record_setting_change(w, "show_reset_buttons", bool(state)),
+            ),
         )
     )
     w.analytics_opt_in_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.analytics_opt_in_checkbox,
-            lambda: (
-                w.settings_service.on_toggle_analytics_opt_in(bool(state)),
-                w.analytics_service.set_opt_in_enabled(bool(state)),
-                w.analytics_service.record_setting_changed(
-                    "analytics_opt_in_enabled", bool(state)
+            lambda: _run_actions(
+                lambda: w.settings_service.on_toggle_analytics_opt_in(bool(state)),
+                lambda: w.analytics_service.set_opt_in_enabled(bool(state)),
+                lambda: _record_setting_change(
+                    w, "analytics_opt_in_enabled", bool(state)
                 ),
             ),
         )
@@ -373,32 +401,49 @@ def setup_settings_tab(w):
     w.fullscreen_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.fullscreen_checkbox,
-            lambda: w.settings_ui.on_toggle_fullscreen(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_fullscreen(bool(state)),
+                lambda: _record_setting_change(w, "fullscreen_enabled", bool(state)),
+            ),
         )
     )
     w.disable_animations_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.disable_animations_checkbox,
-            lambda: w.settings_ui.on_toggle_disable_animations(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_disable_animations(bool(state)),
+                lambda: _record_setting_change(w, "disable_animations", bool(state)),
+            ),
         )
     )
     w.disable_background_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.disable_background_checkbox,
-            lambda: w.settings_ui.on_toggle_disable_background(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_disable_background(bool(state)),
+                lambda: _record_setting_change(w, "background_disabled", bool(state)),
+            ),
         )
     )
     w.disable_startup_sound_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.disable_startup_sound_checkbox,
-            lambda: w.settings_ui.on_toggle_disable_startup_sound(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_disable_startup_sound(bool(state)),
+                lambda: _record_setting_change(w, "disable_startup_sound", bool(state)),
+            ),
         )
     )
     w.pause_background_music_unfocused_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.pause_background_music_unfocused_checkbox,
-            lambda: w.settings_ui.on_toggle_pause_background_music_unfocused(
-                bool(state)
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_pause_background_music_unfocused(
+                    bool(state)
+                ),
+                lambda: _record_setting_change(
+                    w, "pause_background_music_unfocused", bool(state)
+                ),
             ),
         )
     )
@@ -476,7 +521,10 @@ def setup_settings_tab(w):
     w.hide_library_filters_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.hide_library_filters_checkbox,
-            lambda: w.settings_ui.on_toggle_hide_library_filters(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_hide_library_filters(bool(state)),
+                lambda: _record_setting_change(w, "hide_library_filters", bool(state)),
+            ),
         )
     )
     w.settings_game_combo.currentIndexChanged.connect(
@@ -583,22 +631,31 @@ def setup_settings_tab(w):
     w.launch_via_steam_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.launch_via_steam_checkbox,
-            lambda: w.settings_ui.on_toggle_steam_launch(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_steam_launch(bool(state)),
+                lambda: _record_setting_change(w, "launch_via_steam", bool(state)),
+            ),
         )
     )
     w.dont_hide_window_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.dont_hide_window_checkbox,
-            lambda: w.settings_ui.on_toggle_dont_hide_window_on_launch(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_dont_hide_window_on_launch(bool(state)),
+                lambda: _record_setting_change(
+                    w, "dont_hide_window_on_launch", bool(state)
+                ),
+            ),
         )
     )
     if w.use_portproton_checkbox:
         w.use_portproton_checkbox.stateChanged.connect(
             lambda state: _guarded_trigger(
                 w.use_portproton_checkbox,
-                lambda: (
-                    w.settings_ui.on_toggle_portproton(bool(state)),
-                    update_portproton_ui(w),
+                lambda: _run_actions(
+                    lambda: w.settings_ui.on_toggle_portproton(bool(state)),
+                    lambda: update_portproton_ui(w),
+                    lambda: _record_setting_change(w, "use_portproton", bool(state)),
                 ),
             )
         )
@@ -627,26 +684,38 @@ def setup_settings_tab(w):
     w.hide_mods_browser_tab_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.hide_mods_browser_tab_checkbox,
-            lambda: w.settings_ui.on_toggle_hide_mods_browser_tab(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_hide_mods_browser_tab(bool(state)),
+                lambda: _record_setting_change(w, "hide_mods_browser_tab", bool(state)),
+            ),
         )
     )
     refresh_game_lists(w)
     w.hide_library_tab_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.hide_library_tab_checkbox,
-            lambda: w.settings_ui.on_toggle_hide_library_tab(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_hide_library_tab(bool(state)),
+                lambda: _record_setting_change(w, "hide_library_tab", bool(state)),
+            ),
         )
     )
     w.merge_properties_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.merge_properties_checkbox,
-            lambda: w.settings_ui.on_toggle_merge_properties(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_merge_properties(bool(state)),
+                lambda: _record_setting_change(w, "merge_properties", bool(state)),
+            ),
         )
     )
     w.merge_code_checkbox.stateChanged.connect(
         lambda state: _guarded_trigger(
             w.merge_code_checkbox,
-            lambda: w.settings_ui.on_toggle_merge_code(bool(state)),
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_merge_code(bool(state)),
+                lambda: _record_setting_change(w, "merge_code", bool(state)),
+            ),
         )
     )
     w.show_reset_buttons_checkbox.setChecked(
@@ -670,7 +739,10 @@ def setup_settings_tab(w):
         w.downloads_no_auto_use_checkbox.stateChanged.connect(
             lambda s: _guarded_trigger(
                 w.downloads_no_auto_use_checkbox,
-                lambda: w.settings_service.on_toggle_downloads_no_auto_use(bool(s)),
+                lambda: _run_actions(
+                    lambda: w.settings_service.on_toggle_downloads_no_auto_use(bool(s)),
+                    lambda: _record_setting_change(w, "downloads_no_auto_use", bool(s)),
+                ),
             )
         )
     if w.downloads_delete_after_use_checkbox:
@@ -680,7 +752,12 @@ def setup_settings_tab(w):
         w.downloads_delete_after_use_checkbox.stateChanged.connect(
             lambda s: _guarded_trigger(
                 w.downloads_delete_after_use_checkbox,
-                lambda: w.settings_service.on_toggle_downloads_delete_after_use(bool(s)),
+                lambda: _run_actions(
+                    lambda: w.settings_service.on_toggle_downloads_delete_after_use(bool(s)),
+                    lambda: _record_setting_change(
+                        w, "downloads_delete_after_use", bool(s)
+                    ),
+                ),
             )
         )
     if w.downloads_save_local_imports_checkbox:
@@ -690,7 +767,12 @@ def setup_settings_tab(w):
         w.downloads_save_local_imports_checkbox.stateChanged.connect(
             lambda s: _guarded_trigger(
                 w.downloads_save_local_imports_checkbox,
-                lambda: w.settings_service.on_toggle_downloads_save_local_imports(bool(s)),
+                lambda: _run_actions(
+                    lambda: w.settings_service.on_toggle_downloads_save_local_imports(bool(s)),
+                    lambda: _record_setting_change(
+                        w, "downloads_save_local_imports", bool(s)
+                    ),
+                ),
             )
         )
     if hasattr(w, "plugins_ui") and w.plugins_ui:

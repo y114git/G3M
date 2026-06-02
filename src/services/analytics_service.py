@@ -120,11 +120,7 @@ class AnalyticsService(QObject):
     _MAX_PENDING_PAYLOADS = 80
     _MAX_UNIQUE_ALWAYS = 256
     _MAX_UNIQUE_OPT_IN = 512
-    _ACTIVITY_FLUSH_DELAY_MS = 180000
-    _BURST_FLUSH_DELAY_MS = 8000
     _STATE_SAVE_DELAY_MS = 1500
-    _ALWAYS_FLUSH_THRESHOLD = 90
-    _OPT_IN_FLUSH_THRESHOLD = 140
 
     def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
@@ -223,26 +219,52 @@ class AnalyticsService(QObject):
         if app:
             with contextlib.suppress(Exception):
                 app.aboutToQuit.connect(self.shutdown)
-        QTimer.singleShot(2500, self.flush)
 
     def mark_ui_ready(self) -> None:
         if self._ui_ready_recorded:
             return
         self._ui_ready_recorded = True
-        self.count(
-            "app_ready",
-            startup=self._bucket_seconds(time.monotonic() - self._startup_started_at),
+        startup_bucket = self._bucket_seconds(
+            time.monotonic() - self._startup_started_at
         )
+        self.count("app_ready", startup=startup_bucket)
+        self.count("app_ready_detail", scope="opt_in", startup=startup_bucket)
 
     def record_dialog_opened(self, name: str) -> None:
-        self.count("dialog_opened", name=name)
+        clean_name = self._clean_value(name)
+        self.count("dialog_opened", name=clean_name)
+        self.count("dialog_opened_detail", scope="opt_in", name=clean_name)
+
+    def record_profile_switched(self) -> None:
+        self.count("profile_switched")
+        self.count("profile_switched_detail", scope="opt_in")
+
+    def record_action(self, event: str, *, detail_event: str | None = None, **dims) -> None:
+        clean_dims = {self._clean_value(key): self._clean_value(value) for key, value in dims.items()}
+        clean_dims = {key: value for key, value in clean_dims.items() if key and value}
+        self.count(event, **clean_dims)
+        self.count(detail_event or f"{event}_detail", scope="opt_in", **clean_dims)
 
     def record_setting_changed(self, name: str, enabled: bool) -> None:
-        self.count("setting_changed", name=name, state="on" if enabled else "off")
+        clean_name = self._clean_value(name)
+        state = "on" if enabled else "off"
+        self.count("setting_changed", name=clean_name, state=state)
+        self.count(
+            "setting_changed_detail",
+            scope="opt_in",
+            name=clean_name,
+            state=state,
+        )
 
     def record_mods_browser_search(self, query: str) -> None:
         bucket = self._mods_browser_query_length_bucket(query)
         self.count("search_mods_browser", area="mods_browser", query_len=bucket)
+        self.count(
+            "search_mods_browser_detail",
+            scope="opt_in",
+            area="mods_browser",
+            query_len=bucket,
+        )
 
     def record_mod_opened(self, area: str, mod=None) -> None:
         dims = {"area": area, **self._mod_common_dims(mod)}
@@ -253,6 +275,26 @@ class AnalyticsService(QObject):
         dims = {"area": area, **self._mod_common_dims(mod)}
         self.count("mod_details_opened", **dims)
         self._record_mod_detail("mod_details_opened_detail", "area", area, mod)
+
+    def record_mod_export_requested(self, mod=None) -> None:
+        dims = self._mod_common_dims(mod)
+        self.count("mod_export_requested", **dims)
+        self._record_mod_detail("mod_export_requested_detail", "action", "export", mod)
+
+    def record_mod_folder_opened(self, mod=None) -> None:
+        dims = self._mod_common_dims(mod)
+        self.count("mod_folder_opened", **dims)
+        self._record_mod_detail("mod_folder_opened_detail", "action", "open_folder", mod)
+
+    def record_mod_homepage_opened(self, mod=None) -> None:
+        dims = self._mod_common_dims(mod)
+        self.count("mod_homepage_opened", **dims)
+        self._record_mod_detail(
+            "mod_homepage_opened_detail",
+            "action",
+            "open_homepage",
+            mod,
+        )
 
     def record_launch_started(
         self,
@@ -326,7 +368,9 @@ class AnalyticsService(QObject):
         self.count("game_launch_failed_detail", scope="opt_in", reason=reason, **dims)
 
     def record_update_check(self, outcome: str) -> None:
-        self.count("update_check", outcome=outcome)
+        clean_outcome = self._clean_value(outcome) or "unknown"
+        self.count("update_check", outcome=clean_outcome)
+        self.count("update_check_detail", scope="opt_in", outcome=clean_outcome)
 
     def record_mod_install_requested(self, mod, *, mode: str) -> None:
         dims = {"mode": self._clean_value(mode), **self._mod_common_dims(mod)}
@@ -361,8 +405,18 @@ class AnalyticsService(QObject):
             source="catalog",
         )
 
+    def record_plugin_details_opened(self, entry) -> None:
+        self.count("plugin_details_opened")
+        self._record_plugin_detail(
+            "plugin_details_opened_detail",
+            entry,
+            source="catalog",
+        )
+
     def record_plugin_imported(self, *, source: str = "manual") -> None:
-        self.count("plugin_imported", source=self._clean_value(source) or "manual")
+        clean_source = self._clean_value(source) or "manual"
+        self.count("plugin_imported", source=clean_source)
+        self.count("plugin_imported_detail", scope="opt_in", source=clean_source)
 
     def record_plugin_state_changed(
         self,
@@ -426,6 +480,7 @@ class AnalyticsService(QObject):
         if file_ext:
             dims["ext"] = self._clean_value(file_ext)
         self.count("local_import", **dims)
+        self.count("local_import_detail", scope="opt_in", **dims)
 
     def count(self, event: str, scope: str = "always", value: int = 1, **dims) -> None:
         if value <= 0:
@@ -442,16 +497,7 @@ class AnalyticsService(QObject):
             key = self._event_key(f"{event}_overflow", {})
         counter[key] += int(value)
         setattr(self, total_attr, getattr(self, total_attr) + int(value))
-        threshold = (
-            self._OPT_IN_FLUSH_THRESHOLD
-            if scope == "opt_in"
-            else self._ALWAYS_FLUSH_THRESHOLD
-        )
         self._schedule_state_save()
-        if getattr(self, total_attr) >= threshold:
-            self._schedule_flush(self._BURST_FLUSH_DELAY_MS)
-        else:
-            self._schedule_flush(self._ACTIVITY_FLUSH_DELAY_MS)
 
     def record_timing(
         self, event: str, seconds: float, scope: str = "always", **dims
@@ -487,6 +533,9 @@ class AnalyticsService(QObject):
     def _flush_async(self, force: bool = False) -> None:
         if not force:
             self._flush_timer.stop()
+            self._enqueue_session_payload()
+            self._save_state()
+            return
         if self._always_on or self._opt_in:
             self._enqueue_session_payload(transient=True)
         if self._upload_thread or not self._pending:
@@ -537,14 +586,7 @@ class AnalyticsService(QObject):
             return
         self._upload_thread = None
         self._save_state()
-        if self._pending and not self._session_closed:
-            self._schedule_flush(250)
         self._notify_shutdown_complete_if_idle()
-
-    def _schedule_flush(self, delay_ms: int = 3000) -> None:
-        if self._session_closed:
-            return
-        self._flush_timer.start(max(250, int(delay_ms)))
 
     def _schedule_state_save(self) -> None:
         self._state_timer.start(self._STATE_SAVE_DELAY_MS)
@@ -868,6 +910,7 @@ class AnalyticsService(QObject):
         name = self._tab_name(index)
         if name != "unknown":
             self.count("tab_opened", tab=name)
+            self.count("tab_opened_detail", scope="opt_in", tab=name)
 
     def _on_search_text_changed(self, area: str, text: str) -> None:
         active = bool(str(text or "").strip())

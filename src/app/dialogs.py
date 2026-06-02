@@ -186,7 +186,7 @@ def on_profile_switched(w, name: str):
     """Reload full library UI state from the newly active profile."""
     analytics = getattr(w, "analytics_service", None)
     if analytics:
-        analytics.count("profile_switched")
+        analytics.record_profile_switched()
     saved_game_type = w.app_state.local_config.get("selected_game_type", "deltarune")
     saved_chapter_mode = w.app_state.local_config.get("chapter_mode_enabled", False)
     saved_full_install = w.app_state.local_config.get("full_install_enabled", False)
