@@ -781,7 +781,6 @@ class _StateStore:
                 and rule["mod_id"] in selected_mod_ids
                 and rule["mod_id"] in available_mod_ids
                 and folder
-                and folder.get("enabled", True)
                 and folder["game_id"] == game_id
                 and folder["profile"] in {_GLOBAL_PROFILE, profile}
             ):
