@@ -178,9 +178,19 @@ def test_analytics_upload_worker_preserves_session_context_when_merging(qapp):
     with patch("services.analytics_service.cloud_function_request", side_effect=fake_request):
         _AnalyticsUploadWorker(payloads).run()
 
-    assert [item["session"]["id"] for item in captured] == ["session-a", "session-b"]
-    assert [item["client"]["os_family"] for item in captured] == ["windows", "linux"]
-    assert [item["always"][0]["name"] for item in captured] == ["event_a", "event_b"]
+    assert len(captured) == 1
+    assert [item["session"]["id"] for item in captured[0]["batches"]] == [
+        "session-a",
+        "session-b",
+    ]
+    assert [item["client"]["os_family"] for item in captured[0]["batches"]] == [
+        "windows",
+        "linux",
+    ]
+    assert [item["always"][0]["name"] for item in captured[0]["batches"]] == [
+        "event_a",
+        "event_b",
+    ]
 
 
 def test_analytics_service_never_creates_analytics_dir(qapp, tmp_path):

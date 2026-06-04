@@ -43,7 +43,10 @@ class _AnalyticsUploadWorker(QObject):
         try:
             session = requests.Session()
             success = True
-            for payload in self._merge_batch(self._batch):
+            payload = self._request_payload(self._batch)
+            if not payload:
+                success = False
+            else:
                 encoded = base64.b64encode(
                     gzip.compress(
                         json.dumps(
@@ -111,6 +114,19 @@ class _AnalyticsUploadWorker(QObject):
                 }
             )
         return merged
+
+    @classmethod
+    def _request_payload(cls, batch: list[dict[str, Any]]) -> dict[str, Any] | None:
+        merged = cls._merge_batch(batch)
+        if not merged:
+            return None
+        if len(merged) == 1:
+            return merged[0]
+        return {
+            "schema": 1,
+            "sent_at": int(time.time()),
+            "batches": merged,
+        }
 
 
 class AnalyticsService(QObject):
