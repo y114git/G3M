@@ -141,7 +141,7 @@ def test_analytics_service_uploads_analytics_payload(qapp, tmp_path):
             time.sleep(0.01)
 
     assert captured["method"] == "post"
-    assert captured["url"].endswith("/ingestAnalytics")
+    assert captured["url"].endswith("/sendAnalytics")
     assert captured["payload"]["schema"] == 1
     assert captured["payload"]["batch_id"]
     assert any(event["name"] == "always_event" for event in captured["payload"]["always"])

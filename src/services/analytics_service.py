@@ -59,7 +59,7 @@ class _AnalyticsUploadWorker(QObject):
                 ).decode("ascii")
                 response = cloud_function_request(
                     "post",
-                    f"{CLOUD_FUNCTIONS_BASE_URL}/ingestAnalytics",
+                    f"{CLOUD_FUNCTIONS_BASE_URL}/sendAnalytics",
                     session=session,
                     json={"encoding": "gzip+base64", "payload": encoded},
                     timeout=self._REQUEST_TIMEOUT_SECONDS,
