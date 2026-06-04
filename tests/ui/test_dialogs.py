@@ -390,6 +390,25 @@ class TestReadmeUi:
         assert document.find("link").charFormat().anchorHref() == "https://example.com"
         _close_dialog(qapp, dialog)
 
+    def test_mod_readme_html_stays_unstyled_next_to_markdown(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that HTML tabs keep their own default styling in mixed readme sets."""
+        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+
+        md_path = tmp_path / "README.md"
+        html_path = tmp_path / "README.html"
+        md_path.write_text("# Guide", encoding="utf-8")
+        html_path.write_text("<p><a href='https://example.com'>Link</a></p>", encoding="utf-8")
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(md_path), str(html_path)])
+        dialog._tabs.setCurrentIndex(1)
+        qapp.processEvents()
+        tab = dialog._tabs.widget(1)
+
+        assert tab.viewer.document().defaultStyleSheet().strip() == ""
+        _close_dialog(qapp, dialog)
+
     def test_mod_readme_pdf_loads_in_pdf_viewer(self, qapp, app_state, tmp_path):
         """Checks that PDF INFO files load through Qt PDF support."""
         from PyQt6.QtPdfWidgets import QPdfView

@@ -284,7 +284,7 @@ class ModReadmeDialog(QDialog):
         self._title_label.setObjectName("readmeTitle")
         for index in range(self._tabs.count()):
             tab = self._tabs.widget(index)
-            if isinstance(tab, _ReadmeTab) and tab.viewer:
+            if isinstance(tab, _ReadmeTab) and tab.viewer and is_markdown_file(tab.file_path):
                 tab.viewer.document().setDefaultStyleSheet(markdown_css)
 
     def relocalize_ui(self) -> None:
