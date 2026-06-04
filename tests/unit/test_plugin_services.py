@@ -4,11 +4,14 @@ import time
 import zipfile
 from unittest.mock import Mock
 
+import pytest
+
 from services.localization_service import localization_service
 from services.plugin_catalog_service import PluginCatalogService
 from services.plugin_install_service import PluginInstallService
 from services.plugin_runtime_service import PluginRuntimeService
 from services.plugin_state_service import PluginStateService
+from services.plugin_support import PluginValidationError, safe_extract_zip
 
 
 class _DummySettingsService:
@@ -525,3 +528,55 @@ def test_plugin_install_service_accepts_deeply_nested_plugin_zip(temp_dir):
     assert os.path.isfile(
         os.path.join(plugins_dir, "nested_plugin", "plugin_config.json")
     )
+
+
+def test_plugin_install_delete_does_not_touch_runtime_from_install_service(temp_dir):
+    """Checks that plugin file deletion does not execute runtime hooks directly."""
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    _write_plugin(plugins_dir, "delete_plugin")
+    runtime = Mock()
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=runtime,
+        plugins_dir=plugins_dir,
+    )
+    state_service.set_enabled("delete_plugin", True)
+
+    install_service.delete_plugin("delete_plugin")
+
+    runtime.disable_plugin.assert_not_called()
+    assert not os.path.exists(os.path.join(plugins_dir, "delete_plugin"))
+    assert state_service.is_enabled("delete_plugin") is False
+
+
+def test_plugin_zip_extraction_rejects_excessive_uncompressed_size(
+    temp_dir, monkeypatch
+):
+    """Checks that plugin archives are size-checked before extraction."""
+    import services.plugin_support as plugin_support
+
+    archive_path = os.path.join(temp_dir, "huge_plugin.zip")
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("plugin_config.json", "{}")
+    monkeypatch.setattr(plugin_support, "MAX_PLUGIN_ARCHIVE_UNCOMPRESSED_BYTES", 1)
+
+    with pytest.raises(PluginValidationError) as exc_info:
+        safe_extract_zip(archive_path, os.path.join(temp_dir, "out"))
+    assert str(exc_info.value) == "archive_too_large"
+
+
+def test_plugin_zip_extraction_rejects_too_many_members(temp_dir, monkeypatch):
+    """Checks that plugin archives are member-count checked before extraction."""
+    import services.plugin_support as plugin_support
+
+    archive_path = os.path.join(temp_dir, "many_plugin.zip")
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("a.txt", "a")
+        archive.writestr("b.txt", "b")
+    monkeypatch.setattr(plugin_support, "MAX_PLUGIN_ARCHIVE_MEMBERS", 1)
+
+    with pytest.raises(PluginValidationError) as exc_info:
+        safe_extract_zip(archive_path, os.path.join(temp_dir, "out"))
+    assert str(exc_info.value) == "archive_too_many_files"

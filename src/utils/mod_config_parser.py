@@ -37,7 +37,7 @@ MOD_METADATA_KEY_ORDER = (
     "game_version",
     "tags",
 )
-MOD_INFO_FILE_VISIBILITY = ("show", "hide")
+MOD_INFO_FILE_VISIBILITY = ("show", "hide", "remove")
 MOD_RUNTIME_KEY_ORDER = (
     "config_version",
     *MOD_METADATA_KEY_ORDER,

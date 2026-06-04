@@ -100,6 +100,5 @@ class PluginInstallService:
         return manifest.id
 
     def delete_plugin(self, plugin_id: str) -> None:
-        self.plugin_runtime_service.disable_plugin(plugin_id)
         shutil.rmtree(os.path.join(self.plugins_dir, plugin_id), ignore_errors=True)
         self.plugin_state_service.clear_plugin(plugin_id)

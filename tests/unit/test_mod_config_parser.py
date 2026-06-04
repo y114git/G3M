@@ -205,6 +205,7 @@ def test_normalize_mod_config_data_normalizes_info_files_order_and_values():
         "game": "deltarune",
         "info_files": {
             " chapter/readme.md ": "hide",
+            " old/readme.md ": "remove",
             "README.md": "weird",
             "": "show",
         },
@@ -213,5 +214,6 @@ def test_normalize_mod_config_data_normalizes_info_files_order_and_values():
     assert normalize_mod_config_data(config) is True
     assert config["info_files"] == {
         "chapter/readme.md": "hide",
+        "old/readme.md": "remove",
         "README.md": "show",
     }

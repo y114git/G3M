@@ -652,6 +652,7 @@ QPushButton#cardButtonUninstall:disabled {{
     def delete_plugin(self, plugin_id: str) -> None:
         plugin = self.plugin_runtime_service.get_plugin(plugin_id)
         try:
+            self.plugin_runtime_service.disable_plugin(plugin_id)
             self.plugin_install_service.delete_plugin(plugin_id)
             self.plugin_runtime_service.scan_installed_plugins(
                 resolve_catalog=self.plugin_catalog_service.is_loaded()

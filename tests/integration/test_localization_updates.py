@@ -85,8 +85,10 @@ class TestUIElementsUseTrFunction:
             for line_num, line in enumerate(lines, 1):
                 if re.search(r'setText\\([\\\'"][^\\\'"]+[\\\'"]\\)|setToolTip\\([\\\'"][^\\\'"]+[\\\'"]\\)|setWindowTitle\\([\\\'"][^\\\'"]+[\\\'"]\\)', line) and 'tr(' not in line and not ('{' in line and '}' in line) and ('+' not in line and 'f"' not in line and "f'" not in line) and not line.strip().startswith('#') and not any(skip in line.lower() for skip in ['n/a', 'n/a', 'none', 'true', 'false', '0', '1']):
                     issues.append(f'{py_file.relative_to(Path.cwd())}:{line_num} - Hardcoded text: {line.strip()[:80]}')
-        if issues:
-            pytest.fail(f'Found {len(issues)} potential hardcoded UI texts (should use tr()):\n' + '\n'.join(issues[:30]))
+        assert not issues, (
+            f'Found {len(issues)} potential hardcoded UI texts (should use tr()):\n'
+            + '\n'.join(issues[:30])
+        )
 
 
 class TestWidgetRelocalizeMethods:
@@ -107,8 +109,9 @@ class TestWidgetRelocalizeMethods:
             has_relocalize = bool(re.search(r'def\\s+relocalize', content, re.IGNORECASE))
             if has_localization and (not has_relocalize) and 'class' in content and ('Widget' in content or 'QFrame' in content or 'QWidget' in content):
                 issues.append(f'{widget_file} uses localization but may not have relocalize method')
-        if issues:
-            pytest.skip(f"Widgets that may need relocalize methods: {', '.join(issues)}")
+        assert not issues, (
+            "Widgets that may need relocalize methods: " + ", ".join(issues)
+        )
 
 
 class TestTrKeysExistInLangFiles:
@@ -131,8 +134,10 @@ class TestTrKeysExistInLangFiles:
                 for m in tr_pattern.finditer(line):
                     if m.group(1) not in available_keys:
                         missing.append(f'{py_file.relative_to(_PROJECT_ROOT)}:{line_num} - tr(\'{m.group(1)}\')')
-        if missing:
-            pytest.fail(f'Found {len(missing)} tr() key(s) missing from lang_en.json:\n' + '\n'.join(missing))
+        assert not missing, (
+            f'Found {len(missing)} tr() key(s) missing from lang_en.json:\n'
+            + '\n'.join(missing)
+        )
 
 
 class TestLocalizationRefresh:

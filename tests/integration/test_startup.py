@@ -5,12 +5,14 @@ Extracts archive and verifies the binary can start successfully.
 Can be used both as a standalone script and as pytest tests.
 """
 
+import faulthandler
 import importlib.util
 import os
 import pathlib
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import zipfile
 from unittest.mock import Mock, patch
@@ -202,6 +204,7 @@ def test_run_app_startup_path_imports(monkeypatch):
         startup_module, "resolve_user_data_root_with_migration", lambda: ""
     )
     monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "")
+    monkeypatch.setattr(startup_module, "install_crash_diagnostics", lambda *_args: "")
     monkeypatch.setattr(startup_module, "install_excepthook", lambda: None)
     monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", lambda: None)
     monkeypatch.setitem(
@@ -209,6 +212,30 @@ def test_run_app_startup_path_imports(monkeypatch):
     )
 
     assert startup_module.run_app([]) == 0
+
+
+def test_install_crash_diagnostics_uses_main_log(temp_dir):
+    from app import startup as startup_module
+
+    log_dir = os.path.join(temp_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "g3m.log")
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write("existing log\n")
+
+    diagnostics_path = startup_module.install_crash_diagnostics("G3M", log_path)
+
+    assert diagnostics_path == log_path
+    assert faulthandler.is_enabled()
+    assert startup_module._fault_log_handle
+    assert not startup_module._fault_log_handle.closed
+    assert threading.excepthook is not threading.__excepthook__
+    with open(log_path, encoding="utf-8") as handle:
+        assert "G3M crash diagnostics start" in handle.read()
+    faulthandler.disable()
+    if startup_module._fault_log_handle:
+        startup_module._fault_log_handle.close()
+        startup_module._fault_log_handle = None
 
 
 def _connected_socket_factory():

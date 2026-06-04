@@ -2,16 +2,24 @@
 
 import argparse
 import contextlib
+import faulthandler
 import logging
 import os
 import platform
 import shutil
 import sys
+import threading
 import time
 import traceback
 
 import psutil
-from PyQt6.QtCore import QLibraryInfo, QProcess, QTranslator
+from PyQt6.QtCore import (
+    QLibraryInfo,
+    QProcess,
+    QtMsgType,
+    QTranslator,
+    qInstallMessageHandler,
+)
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -39,6 +47,7 @@ if platform.system() == "Windows":
     import winreg
 _translator = QTranslator()
 SINGLE_INSTANCE_ACTIVATE = "__g3m_activate__"
+_fault_log_handle = None
 
 
 def check_game_processes():
@@ -83,6 +92,63 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
         urllib3_logger.setLevel(logging.WARNING)
         requests_logger = logging.getLogger("requests")
         requests_logger.setLevel(logging.WARNING)
+    return log_path
+
+
+def install_crash_diagnostics(app_name: str, log_path: str) -> str:
+    """Install best-effort diagnostics into the main application log.
+
+    _fault_log_handle is intentionally kept open for the process lifetime rather
+    than managed by a context manager: faulthandler and _qt_message_handler need
+    a live descriptor when a crash happens. Repeated calls close and replace the
+    previous handle, and the OS closes the final descriptor on process exit.
+    """
+    global _fault_log_handle
+    try:
+        if _fault_log_handle:
+            with contextlib.suppress(Exception):
+                faulthandler.disable()
+            with contextlib.suppress(Exception):
+                _fault_log_handle.close()
+        _fault_log_handle = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+        _fault_log_handle.write(f"\n===== {app_name} crash diagnostics start =====\n")
+        _fault_log_handle.flush()
+        faulthandler.enable(file=_fault_log_handle, all_threads=True)
+    except Exception:
+        logging.debug("Failed to enable faulthandler diagnostics", exc_info=True)
+
+    def _thread_hook(args):
+        logging.critical(
+            "Uncaught thread exception in %s",
+            getattr(args.thread, "name", "<unknown>"),
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    threading.excepthook = _thread_hook
+
+    def _qt_message_handler(msg_type, context, message):
+        level = logging.INFO
+        if msg_type == QtMsgType.QtWarningMsg:
+            level = logging.WARNING
+        elif msg_type == QtMsgType.QtCriticalMsg:
+            level = logging.ERROR
+        elif msg_type == QtMsgType.QtFatalMsg:
+            level = logging.CRITICAL
+        logging.log(
+            level,
+            "Qt message: %s (%s:%s, %s)",
+            message,
+            getattr(context, "file", None) or "",
+            getattr(context, "line", 0) or 0,
+            getattr(context, "function", None) or "",
+        )
+        if msg_type == QtMsgType.QtFatalMsg and _fault_log_handle:
+            with contextlib.suppress(Exception):
+                _fault_log_handle.write(f"Qt fatal: {message}\n")
+                faulthandler.dump_traceback(file=_fault_log_handle, all_threads=True)
+                _fault_log_handle.flush()
+
+    qInstallMessageHandler(_qt_message_handler)
     return log_path
 
 
@@ -253,7 +319,8 @@ def run_app(argv: list[str] | None = None) -> int:
     app = setup_app()
     try:
         user_root = resolve_user_data_root_with_migration()
-        configure_logging(APP_DISPLAY_NAME, user_root)
+        log_path = configure_logging(APP_DISPLAY_NAME, user_root)
+        install_crash_diagnostics(APP_DISPLAY_NAME, log_path)
         install_excepthook()
         cleanup_old_temp_directories()
     except Exception:

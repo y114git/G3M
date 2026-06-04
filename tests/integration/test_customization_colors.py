@@ -297,11 +297,10 @@ class TestNoHardcodedWhiteColors:
                 )
             ),
         )
-        if issues:
-            pytest.fail(
-                f"Found {len(issues)} potential hardcoded white colors that should use get_theme_color:\n"
-                + "\n".join(issues[:30])
-            )
+        assert not issues, (
+            f"Found {len(issues)} potential hardcoded white colors that should use get_theme_color:\n"
+            + "\n".join(issues[:30])
+        )
 
 
 class TestNoHardcodedBlackColors:
@@ -329,11 +328,10 @@ class TestNoHardcodedBlackColors:
                 or line.strip().startswith("else ")
             ),
         )
-        if issues:
-            pytest.fail(
-                f"Found {len(issues)} potential hardcoded black colors:\n"
-                + "\n".join(issues[:30])
-            )
+        assert not issues, (
+            f"Found {len(issues)} potential hardcoded black colors:\n"
+            + "\n".join(issues[:30])
+        )
 
 
 class TestNoHardcodedGrayColors:
@@ -361,11 +359,10 @@ class TestNoHardcodedGrayColors:
                 or "secondary_text" in line
             ),
         )
-        if issues:
-            pytest.fail(
-                f"Found {len(issues)} potential hardcoded gray colors:\n"
-                + "\n".join(issues[:30])
-            )
+        assert not issues, (
+            f"Found {len(issues)} potential hardcoded gray colors:\n"
+            + "\n".join(issues[:30])
+        )
 
 
 def _build_test_stylesheet(custom_border_radius="7px", **extra):

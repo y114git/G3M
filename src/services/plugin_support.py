@@ -22,6 +22,8 @@ from services.localization_service import localization_service
 
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 _RANGE_RE = re.compile(r"^(\^|~|>=|<=|>|<)?(.+)$")
+MAX_PLUGIN_ARCHIVE_MEMBERS = 5000
+MAX_PLUGIN_ARCHIVE_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
 
 
 class PluginValidationError(ValueError):
@@ -199,7 +201,14 @@ def load_plugin_factory(plugin_id: str, entry_path: str):
 
 def safe_extract_zip(archive_path: str, target_dir: str) -> None:
     with zipfile.ZipFile(archive_path) as archive:
-        for member in archive.infolist():
+        total_size = 0
+        infos = archive.infolist()
+        if len(infos) > MAX_PLUGIN_ARCHIVE_MEMBERS:
+            raise PluginValidationError("archive_too_many_files")
+        for member in infos:
+            total_size += max(0, int(member.file_size or 0))
+            if total_size > MAX_PLUGIN_ARCHIVE_UNCOMPRESSED_BYTES:
+                raise PluginValidationError("archive_too_large")
             member_path = Path(target_dir, member.filename).resolve()
             if Path(target_dir).resolve() not in member_path.parents and member_path != Path(target_dir).resolve():
                 raise PluginValidationError("path_traversal")

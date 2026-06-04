@@ -70,6 +70,19 @@ def test_find_mod_readme_files_treats_invalid_info_file_value_as_show(temp_dir):
     assert found == ["B.txt", "A.txt"]
 
 
+def test_find_mod_readme_files_respects_removed_info_file(temp_dir):
+    """Checks that removed info_files entries suppress auto-discovery."""
+    for name in ("A.txt", "Removed.txt"):
+        with open(os.path.join(temp_dir, name), "w", encoding="utf-8") as handle:
+            handle.write(name)
+    with open(os.path.join(temp_dir, "mod_config.json"), "w", encoding="utf-8") as handle:
+        json.dump({"info_files": {"Removed.txt": "remove"}}, handle)
+
+    found = [os.path.basename(path) for path in find_mod_readme_files(temp_dir)]
+
+    assert found == ["A.txt"]
+
+
 def test_read_mod_readme_supports_utf8_sig(temp_dir):
     """Checks that reading mod readme supports utf8 sig."""
     file_path = os.path.join(temp_dir, "README.txt")

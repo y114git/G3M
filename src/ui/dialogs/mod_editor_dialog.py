@@ -492,12 +492,17 @@ class ModEditorDialog(QDialog):
             "cross_icon.svg", tr("ui.info_file_remove_custom")
         )
         self._info_reset_button.clicked.connect(self._reset_selected_info_file)
+        self._info_delete_button = self._make_icon_text_button(
+            "delete_icon.svg", tr("ui.delete_info_file_entry")
+        )
+        self._info_delete_button.clicked.connect(self._delete_selected_info_file)
         for button in (
             self._info_add_button,
             self._info_toggle_button,
             self._info_up_button,
             self._info_down_button,
             self._info_reset_button,
+            self._info_delete_button,
         ):
             buttons.addWidget(button)
         layout.addLayout(buttons)
@@ -527,7 +532,7 @@ class ModEditorDialog(QDialog):
     @staticmethod
     def _normalize_info_file_state(value) -> str:
         state = str(value or "").strip().lower()
-        return state if state in {"show", "hide"} else "show"
+        return state if state in {"show", "hide", "remove"} else "show"
 
     @staticmethod
     def _normalize_info_file_name(path: str) -> str:
@@ -539,15 +544,17 @@ class ModEditorDialog(QDialog):
             entry = item.data(Qt.ItemDataRole.UserRole) if item else None
             if not item or not isinstance(entry, dict):
                 continue
-            item.setText(
-                tr(
-                    "ui.mod_editor_info_file_item",
-                    file_name=entry["path"],
-                    visibility=tr(
-                        "ui.visible" if entry["state"] == "show" else "ui.hidden"
-                    ),
-                )
-            )
+            item.setText(self._format_info_file_item(entry))
+
+    def _format_info_file_item(self, entry: dict) -> str:
+        text = tr(
+            "ui.mod_editor_info_file_item",
+            file_name=entry["path"],
+            visibility=tr("ui.visible" if entry["state"] == "show" else "ui.hidden"),
+        )
+        if entry.get("missing"):
+            text = f"{text} [{tr('ui.missing')}]"
+        return text
 
     def _iter_info_file_entries(self) -> list[dict]:
         entries = []
@@ -561,15 +568,7 @@ class ModEditorDialog(QDialog):
     def _set_info_file_entries(self, entries: list[dict]) -> None:
         self._info_files_list.clear()
         for entry in entries:
-            item = QListWidgetItem(
-                tr(
-                    "ui.mod_editor_info_file_item",
-                    file_name=entry["path"],
-                    visibility=tr(
-                        "ui.visible" if entry["state"] == "show" else "ui.hidden"
-                    ),
-                )
-            )
+            item = QListWidgetItem(self._format_info_file_item(entry))
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._info_files_list.addItem(item)
 
@@ -649,12 +648,20 @@ class ModEditorDialog(QDialog):
             return
         entries = self._iter_info_file_entries()
         entry = entries[index]
+        if entry.get("missing"):
+            source_path = str(entry.get("source_path") or "").strip()
+            entry["missing"] = not bool(source_path and os.path.isfile(source_path))
+            if entry["missing"]:
+                self._set_info_file_entries(entries)
+                self._info_files_list.setCurrentRow(index)
+                return
         if entry.get("custom"):
             fallback_entry = {
                 "path": entry["path"],
                 "state": "show",
                 "custom": False,
                 "source_path": entry.get("source_path"),
+                "missing": False,
             }
             entries.pop(index)
             inserted = False
@@ -667,11 +674,104 @@ class ModEditorDialog(QDialog):
                 entries.append(fallback_entry)
         self._set_info_file_entries(entries)
 
+    def _delete_selected_info_file(self) -> None:
+        index = self._selected_info_file_index()
+        if index is None:
+            return
+        entries = self._iter_info_file_entries()
+        entry = entries[index]
+        source_path = str(entry.get("source_path") or "").strip()
+        can_delete_file = bool(source_path and os.path.isfile(source_path))
+        action = self._ask_delete_info_file_action(entry, can_delete_file)
+        if action is None:
+            return
+        if action == "entry_and_file":
+            if not self._is_info_file_inside_mod_folder(source_path):
+                QMessageBox.critical(
+                    self,
+                    tr("errors.error"),
+                    tr("errors.delete_info_file_failed", error="path_outside_mod_folder"),
+                )
+                return
+            try:
+                os.remove(source_path)
+            except OSError as exc:
+                QMessageBox.critical(
+                    self,
+                    tr("errors.error"),
+                    tr("errors.delete_info_file_failed", error=str(exc)),
+                )
+                return
+        elif can_delete_file:
+            entry["state"] = "remove"
+            entry["custom"] = True
+            entries[index] = entry
+            self._removed_info_files.add(entry["path"])
+        entries.pop(index)
+        self._set_info_file_entries(entries)
+        if entries:
+            self._info_files_list.setCurrentRow(min(index, len(entries) - 1))
+
+    def _is_info_file_inside_mod_folder(self, source_path: str) -> bool:
+        mod_folder = self._find_mod_folder()
+        if not mod_folder or not source_path:
+            return False
+        try:
+            mod_root = os.path.abspath(mod_folder)
+            source = os.path.abspath(source_path)
+            return os.path.commonpath([mod_root, source]) == mod_root
+        except ValueError:
+            return False
+
+    def _ask_delete_info_file_action(
+        self, entry: dict, can_delete_file: bool
+    ) -> str | None:
+        if not can_delete_file:
+            return (
+                "entry"
+                if QMessageBox.question(
+                    self,
+                    tr("dialogs.delete_info_file_entry_title"),
+                    tr(
+                        "dialogs.delete_missing_info_entry_message",
+                        file_name=entry.get("path", ""),
+                    ),
+                )
+                == QMessageBox.StandardButton.Yes
+                else None
+            )
+        message = tr(
+            "dialogs.delete_info_file_entry_message",
+            file_name=entry.get("path", ""),
+        )
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(tr("dialogs.delete_info_file_entry_title"))
+        box.setText(message)
+        entry_only_button = box.addButton(
+            tr("dialogs.delete_info_entry_only"),
+            QMessageBox.ButtonRole.AcceptRole,
+        )
+        entry_and_file_button = box.addButton(
+            tr("dialogs.delete_info_entry_and_file"),
+            QMessageBox.ButtonRole.DestructiveRole,
+        )
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == entry_and_file_button:
+            return "entry_and_file"
+        if clicked == entry_only_button:
+            return "entry"
+        return None
+
     def _collect_info_files(self) -> dict[str, str]:
         info_files: dict[str, str] = {}
         for entry in self._iter_info_file_entries():
             if entry.get("custom"):
                 info_files[entry["path"]] = self._normalize_info_file_state(entry.get("state"))
+        for path in getattr(self, "_removed_info_files", set()):
+            info_files[path] = "remove"
         return info_files
 
     def _update_file_tabs(self):
@@ -1296,12 +1396,23 @@ class ModEditorDialog(QDialog):
         return None
 
     def _save_mod(self):
+        if getattr(self, "_is_saving", False):
+            return
         if not self._validate():
             return
-        if self.is_creating:
-            self._create_local_mod()
-        else:
-            self._update_local_mod()
+        self._is_saving = True
+        if hasattr(self, "_save_button"):
+            self._save_button.setEnabled(False)
+        try:
+            if self.is_creating:
+                self._create_local_mod()
+            else:
+                self._update_local_mod()
+        finally:
+            if self.result() == QDialog.DialogCode.Rejected:
+                self._is_saving = False
+                if hasattr(self, "_save_button"):
+                    self._save_button.setEnabled(True)
 
     def _process_icon(self, target_dir):
         icon_path = self.icon_edit.text().strip()
@@ -1481,6 +1592,15 @@ class ModEditorDialog(QDialog):
         if hasattr(self.parent_app, "library_display"):
             self.parent_app.library_display.update_display()
 
+    def _finish_successful_save(self, title: str, message: str) -> None:
+        """Close the editor before rebuilding library widgets or showing modal UI."""
+        self.accept()
+        try:
+            self._refresh_after_save()
+        except Exception:
+            logging.exception("ModEditorDialog: failed to refresh UI after saving mod")
+        QMessageBox.information(self.parent_app, title, message)
+
     def _create_local_mod(self):
         data = self._collect_mod_data()
         mod_id = f"local_{uuid.uuid4().hex[:12]}"
@@ -1512,14 +1632,14 @@ class ModEditorDialog(QDialog):
                 os.path.join(mod_dir, "mod_config.json"),
                 build_mod_config_data(config),
             )
-            self._refresh_after_save()
-            QMessageBox.information(
-                self,
+            self._finish_successful_save(
                 tr("dialogs.local_mod_created_title"),
                 tr("dialogs.local_mod_created_message", mod_name=data["name"]),
             )
-            self.accept()
         except Exception as e:
+            self._is_saving = False
+            if hasattr(self, "_save_button"):
+                self._save_button.setEnabled(True)
             QMessageBox.critical(
                 self,
                 tr("errors.mod_creation_error"),
@@ -1593,14 +1713,14 @@ class ModEditorDialog(QDialog):
             self.parent_app.settings_service.write_json(
                 config_path, build_mod_config_data(config)
             )
-            self._refresh_after_save()
-            QMessageBox.information(
-                self,
+            self._finish_successful_save(
                 tr("dialogs.local_mod_updated_title"),
                 tr("dialogs.local_mod_updated_message", mod_name=data["name"]),
             )
-            self.accept()
         except Exception as e:
+            self._is_saving = False
+            if hasattr(self, "_save_button"):
+                self._save_button.setEnabled(True)
             QMessageBox.critical(
                 self,
                 tr("errors.update_error"),
@@ -1767,19 +1887,30 @@ class ModEditorDialog(QDialog):
         mod_folder = self._find_mod_folder()
         entries: list[dict] = []
         seen: set[str] = set()
+        self._removed_info_files = set()
         for path, state in (mod_data.get("info_files", {}) or {}).items():
             normalized_path = self._normalize_info_file_name(path)
             if not normalized_path or normalized_path in seen:
                 continue
+            normalized_state = self._normalize_info_file_state(state)
+            if normalized_state == "remove":
+                seen.add(normalized_path)
+                self._removed_info_files.add(normalized_path)
+                continue
+            source_path = (
+                os.path.join(mod_folder, normalized_path)
+                if mod_folder
+                else normalized_path
+            )
+            missing = bool(mod_folder and not os.path.isfile(source_path))
             seen.add(normalized_path)
             entries.append(
                 {
                     "path": normalized_path,
-                    "state": self._normalize_info_file_state(state),
+                    "state": normalized_state,
                     "custom": True,
-                    "source_path": os.path.join(mod_folder, normalized_path)
-                    if mod_folder
-                    else normalized_path,
+                    "source_path": source_path,
+                    "missing": missing,
                 }
             )
         for path in find_mod_info_candidates(mod_folder):
@@ -1795,6 +1926,7 @@ class ModEditorDialog(QDialog):
                     "source_path": os.path.join(mod_folder, normalized_path)
                     if mod_folder
                     else normalized_path,
+                    "missing": False,
                 }
             )
         self._set_info_file_entries(entries)
@@ -1893,6 +2025,8 @@ class ModEditorDialog(QDialog):
             self._info_down_button.setText(tr("ui.move_down"))
         if hasattr(self, "_info_reset_button"):
             self._info_reset_button.setText(tr("ui.info_file_remove_custom"))
+        if hasattr(self, "_info_delete_button"):
+            self._info_delete_button.setText(tr("ui.delete_info_file_entry"))
         if hasattr(self, "_cancel_button"):
             self._cancel_button.setText(tr("ui.cancel_button"))
         if hasattr(self, "_save_button"):
@@ -1917,6 +2051,8 @@ class ModEditorDialog(QDialog):
             self._info_add_button.setIcon(self._icon("add_icon.svg"))
         if hasattr(self, "_info_reset_button"):
             self._info_reset_button.setIcon(self._icon("cross_icon.svg"))
+        if hasattr(self, "_info_delete_button"):
+            self._info_delete_button.setIcon(self._icon("delete_icon.svg"))
         if hasattr(self, "_info_up_button"):
             self._info_up_button.setIcon(self._icon("arrow_up.svg"))
         if hasattr(self, "_info_down_button"):

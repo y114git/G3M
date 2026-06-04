@@ -1202,6 +1202,283 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_marks_missing_info_files_from_config(self, qapp, tmp_path):
+        """Checks that missing INFO files stay visible and marked in the editor."""
+        from types import SimpleNamespace
+
+        from services.localization_service import tr
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "renamed_info_mod"
+        mod_folder.mkdir()
+        (mod_folder / "README.md").write_text("renamed", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_renamed_info_mod",
+                "name": "Renamed Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"0 - README.md": "show"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+
+        listed = [
+            (
+                dialog._info_files_list.item(i).data(Qt.ItemDataRole.UserRole)["path"],
+                dialog._info_files_list.item(i).data(Qt.ItemDataRole.UserRole).get(
+                    "missing"
+                ),
+                dialog._info_files_list.item(i).text(),
+            )
+            for i in range(dialog._info_files_list.count())
+        ]
+
+        assert listed == [
+            (
+                "0 - README.md",
+                True,
+                f"0 - README.md [{tr('ui.visible')}] [{tr('ui.missing')}]",
+            ),
+            ("README.md", False, f"README.md [{tr('ui.visible')}]"),
+        ]
+        assert dialog._collect_info_files() == {"0 - README.md": "show"}
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._reset_selected_info_file()
+        assert dialog._info_files_list.count() == 2
+        assert dialog._collect_info_files() == {"0 - README.md": "show"}
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_delete_missing_info_file_removes_entry_only(
+        self, qapp, tmp_path
+    ):
+        """Checks that deleting a missing INFO file removes only its config entry."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "missing_info_mod"
+        mod_folder.mkdir()
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_missing_info_mod",
+                "name": "Missing Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"Gone.md": "hide"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+        dialog._ask_delete_info_file_action = Mock(return_value="entry")
+
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._delete_selected_info_file()
+
+        assert dialog._info_files_list.count() == 0
+        assert dialog._collect_info_files() == {}
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_delete_existing_info_entry_only_saves_remove_tombstone(
+        self, qapp, tmp_path
+    ):
+        """Checks that entry-only deletion survives future auto-discovery."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "entry_only_info_mod"
+        mod_folder.mkdir()
+        (mod_folder / "Guide.md").write_text("guide", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_entry_only_info_mod",
+                "name": "Entry Only Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"Guide.md": "show"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+        dialog._ask_delete_info_file_action = Mock(return_value="entry")
+
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._delete_selected_info_file()
+
+        assert dialog._info_files_list.count() == 0
+        assert (mod_folder / "Guide.md").is_file()
+        assert dialog._collect_info_files() == {"Guide.md": "remove"}
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_delete_info_file_can_remove_entry_and_file(
+        self, qapp, tmp_path
+    ):
+        """Checks that INFO deletion can remove both the entry and physical file."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "delete_info_mod"
+        mod_folder.mkdir()
+        info_file = mod_folder / "Guide.md"
+        info_file.write_text("guide", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_delete_info_mod",
+                "name": "Delete Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"Guide.md": "show"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+        dialog._ask_delete_info_file_action = Mock(return_value="entry_and_file")
+
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._delete_selected_info_file()
+
+        assert dialog._info_files_list.count() == 0
+        assert not info_file.exists()
+        assert dialog._collect_info_files() == {}
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_delete_info_file_refuses_external_source_file(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks that entry-and-file deletion cannot remove files outside the mod folder."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "delete_info_mod"
+        mod_folder.mkdir()
+        external_file = tmp_path / "external.md"
+        external_file.write_text("external", encoding="utf-8")
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog._set_info_file_entries(
+            [
+                {
+                    "path": "external.md",
+                    "state": "show",
+                    "custom": True,
+                    "source_path": str(external_file),
+                    "missing": False,
+                }
+            ]
+        )
+        dialog._ask_delete_info_file_action = Mock(return_value="entry_and_file")
+        critical_calls = []
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            lambda *args, **kwargs: critical_calls.append((args, kwargs)),
+        )
+
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._delete_selected_info_file()
+
+        assert external_file.is_file()
+        assert dialog._info_files_list.count() == 1
+        assert critical_calls
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_reset_rechecks_stale_missing_info_file(self, qapp, tmp_path):
+        """Checks that reset proceeds when a previously missing file now exists."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "stale_missing_info_mod"
+        mod_folder.mkdir()
+        restored_file = mod_folder / "Restored.md"
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_stale_missing_info_mod",
+                "name": "Stale Missing Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"Restored.md": "hide"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+        restored_file.write_text("restored", encoding="utf-8")
+
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._reset_selected_info_file()
+
+        entry = dialog._info_files_list.item(0).data(Qt.ItemDataRole.UserRole)
+        assert entry == {
+            "path": "Restored.md",
+            "state": "show",
+            "custom": False,
+            "source_path": str(restored_file),
+            "missing": False,
+        }
+        assert dialog._collect_info_files() == {}
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_info_widgets_are_parented_inside_section_content(self, qapp, tmp_path):
         """Checks that info widgets are created inside the info section, not on the dialog root."""
         from types import SimpleNamespace
@@ -1341,6 +1618,130 @@ class TestModEditorDialog:
         config_path = created_dirs[0] / "mod_config.json"
         assert config_path.is_file()
         assert info_calls
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_closes_before_refresh_and_success_message(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks that saving closes editor before refreshing library widgets."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from utils.file_utils import load_json, save_json
+
+        mod_dir = tmp_path / "mods" / "editable"
+        mod_dir.mkdir(parents=True)
+        config_path = mod_dir / "mod_config.json"
+        save_json(
+            str(config_path),
+            {
+                "id": "local_editable",
+                "name": "Editable",
+                "version": "1.0.0",
+                "author": "Author",
+                "description": "Desc",
+                "game": "deltarune",
+                "files": {},
+            },
+        )
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        call_order = []
+        parent.settings_service = SimpleNamespace(read_json=load_json, write_json=save_json)
+        parent.mod_service = Mock(
+            get_mod_folder_path=Mock(return_value=str(mod_dir)),
+            invalidate_mods_cache=Mock(side_effect=lambda: call_order.append(("refresh", dialog.isVisible()))),
+            load_local_mods=Mock(),
+            mod_list_updated=SimpleNamespace(emit=Mock()),
+        )
+        parent.library_display = SimpleNamespace(update_display=Mock())
+
+        def record_information(owner, *_args, **_kwargs):
+            call_order.append(("message", dialog.isVisible(), owner is parent))
+
+        monkeypatch.setattr(QMessageBox, "information", record_information)
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Unexpected critical")
+            ),
+        )
+
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_editable",
+                "folder_path": str(mod_dir),
+                "name": "Editable",
+                "version": "1.0.0",
+                "author": "Author",
+                "description": "Desc",
+                "game": "deltarune",
+                "files": {},
+            },
+        )
+        dialog.show()
+        qapp.processEvents()
+
+        dialog.name_edit.setText("Edited")
+        dialog._save_mod()
+
+        assert dialog.result() == QDialog.DialogCode.Accepted
+        assert call_order == [("refresh", False), ("message", False, True)]
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_ignores_duplicate_save_clicks(self, qapp, tmp_path, monkeypatch):
+        """Checks that repeated save clicks cannot start concurrent saves."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from utils.file_utils import save_json
+
+        source_file = tmp_path / "source.xdelta"
+        source_file.write_text("patch", encoding="utf-8")
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.app_state.mods_dir = str(tmp_path / "mods")
+        os.makedirs(parent.app_state.mods_dir, exist_ok=True)
+        parent.settings_service = SimpleNamespace(write_json=Mock(side_effect=lambda *args, **kwargs: dialog._save_mod() or save_json(*args, **kwargs)))
+        parent.mod_service = Mock(
+            invalidate_mods_cache=Mock(),
+            load_local_mods=Mock(),
+            mod_list_updated=SimpleNamespace(emit=Mock()),
+        )
+        parent.library_display = SimpleNamespace(update_display=Mock())
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Unexpected critical")
+            ),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog.name_edit.setText("Created Once")
+        first_tab = dialog.file_tabs.widget(0)
+        dialog._create_file_frame(first_tab._file_layout, "data")
+        data_input = next(
+            w for w in first_tab.findChildren(type(dialog.icon_edit)) if w.property("is_local_path")
+        )
+        data_input.setText(str(source_file))
+
+        dialog._save_mod()
+
+        created_dirs = [p for p in (tmp_path / "mods").iterdir() if p.is_dir()]
+        assert len(created_dirs) == 1
+        assert parent.settings_service.write_json.call_count == 1
         dialog.close()
         parent.deleteLater()
 
