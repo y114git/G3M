@@ -111,12 +111,19 @@ def _resolve_content_path(temp_dir: str) -> str:
 def _apply_version_zip(mod_folder: str, zip_path: str):
     """Apply version zip, converting deltamod contents if needed."""
     temp_dir = tempfile.mkdtemp(prefix="mv_apply_")
+    backup_dir = tempfile.mkdtemp(prefix="mv_backup_")
+    staged_current = False
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
         content_path = _resolve_content_path(temp_dir)
+        from utils.file_utils import normalize_mod_package
 
-        _clear_mod_folder(mod_folder)
+        normalize_mod_package(content_path, require_mod_config=True)
+        for item in os.listdir(mod_folder):
+            if item != MOD_VERSIONS_DIR:
+                shutil.move(os.path.join(mod_folder, item), os.path.join(backup_dir, item))
+        staged_current = True
         for item in os.listdir(content_path):
             src = os.path.join(content_path, item)
             dst = os.path.join(mod_folder, item)
@@ -126,8 +133,15 @@ def _apply_version_zip(mod_folder: str, zip_path: str):
                 shutil.copytree(src, dst)
             else:
                 shutil.copy2(src, dst)
+    except Exception:
+        if staged_current:
+            _clear_mod_folder(mod_folder)
+            for item in os.listdir(backup_dir):
+                shutil.move(os.path.join(backup_dir, item), os.path.join(mod_folder, item))
+        raise
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 def _convert_archive_to_version_zip(
@@ -608,10 +622,15 @@ class ModVersionsDialog(QDialog):
         itemtype = get_gamebanana_item_type(self._mod_data)
         from adapters.gamebanana_adapter import GameBananaAPI
 
-        api = GameBananaAPI()
-        all_files = self._format_gb_files(
-            api.get_mod_files(mod_id, itemtype=itemtype) or []
-        )
+        try:
+            api = GameBananaAPI()
+            all_files = self._format_gb_files(
+                api.get_mod_files(mod_id, itemtype=itemtype) or []
+            )
+        except Exception as e:
+            logger.error("mod_versions: GameBanana files failed: %s", e, exc_info=True)
+            QMessageBox.warning(self, tr("errors.error"), str(e))
+            return
         if not all_files:
             QMessageBox.information(
                 self,

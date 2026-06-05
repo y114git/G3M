@@ -116,6 +116,22 @@ class TestSnapshotAndApply:
         _apply_version_zip(mod_folder, zp)
         assert os.path.isfile(marker)
 
+    def test_apply_rejects_invalid_zip_without_removing_current_mod(self, mod_folder):
+        """Checks that invalid version zips do not uninstall the current mod."""
+        from ui.dialogs.mod_versions_dialog import _apply_version_zip
+
+        versions_dir = os.path.join(mod_folder, "mod_versions")
+        os.makedirs(versions_dir, exist_ok=True)
+        bad_zip = os.path.join(versions_dir, "bad.zip")
+        with zipfile.ZipFile(bad_zip, "w") as zf:
+            zf.writestr("notes.txt", "not a mod")
+
+        with pytest.raises(FileNotFoundError, match="mod_config_missing"):
+            _apply_version_zip(mod_folder, bad_zip)
+
+        assert os.path.isfile(os.path.join(mod_folder, "mod_config.json"))
+        assert os.path.isfile(os.path.join(mod_folder, "data.txt"))
+
 
 class TestUniqueVersionName:
     """Tests for mod versions."""
@@ -189,6 +205,64 @@ class TestConvertArchiveToVersionZip:
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(src_name)
+
+    def test_deltamod_archive_conversion_does_not_touch_current_mod(self, mod_folder):
+        """Checks that downloaded deltamod versions do not replace the installed mod."""
+        from ui.dialogs.mod_versions_dialog import _convert_archive_to_version_zip
+
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".zip", prefix="mv_deltamod_"
+        ) as src:
+            src_name = src.name
+        try:
+            with zipfile.ZipFile(src_name, "w") as zf:
+                zf.writestr(
+                    "_deltamodInfo.json",
+                    '{"metadata":{"name":"GB Version","author":["A"],"game":"toby.deltarune"}}',
+                )
+                zf.writestr(
+                    "modding.xml",
+                    '<patches><patch to="./chapter1_windows/data.win" patch="./patch.xdelta" type="xdelta" /></patches>',
+                )
+                zf.writestr("patch.xdelta", "patch")
+
+            ok = _convert_archive_to_version_zip(src_name, mod_folder, "gb-version")
+
+            assert ok
+            with open(os.path.join(mod_folder, "data.txt"), encoding="utf-8") as f:
+                assert f.read() == "hello"
+            assert os.listdir(os.path.dirname(mod_folder)) == ["test_mod"]
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(src_name)
+
+
+class TestDownloadFromGameBanana:
+    """Tests for GameBanana version download flow."""
+
+    def test_api_failure_shows_error_without_crashing(self, qapp, app_state, mod_folder, monkeypatch):
+        """Checks that GameBanana API failures do not escape the dialog."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_versions_dialog import ModVersionsDialog
+
+        class FailingApi:
+            def get_mod_files(self, *_args, **_kwargs):
+                raise RuntimeError("gb down")
+
+        warnings = []
+        monkeypatch.setattr("adapters.gamebanana_adapter.GameBananaAPI", FailingApi)
+        monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args))
+
+        dialog = ModVersionsDialog(
+            mod_folder,
+            {"id": "gb_mod_123", "name": "Test Mod", "homepage": "https://gamebanana.com/mods/123"},
+            app_state,
+        )
+
+        dialog._on_download_from_gb()
+
+        assert warnings
 
 
 class TestZipDirToVersion:
