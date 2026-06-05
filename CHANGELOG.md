@@ -1,3 +1,7 @@
+### Version 3.1.2 — 05.06.26
+
+- Just small bugfixes with flickereing, crashes etc.
+
 ### Version 3.1.1 — 02.06.26
 
 - Fixed few bugs with analytics

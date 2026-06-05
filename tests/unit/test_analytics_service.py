@@ -292,7 +292,10 @@ def test_analytics_service_records_download_use_completion_details(qapp, tmp_pat
 
     service._on_download_record_updated(record)
 
-    assert any(key.startswith("use_completed") for key in service._always_on)
+    assert any(
+        key.startswith("use_completed") and "ref=gb_mod_123" in key
+        for key in service._always_on
+    )
     assert any(
         key.startswith("use_completed_detail") and "ref=gb_mod_123" in key
         for key in service._opt_in
@@ -379,7 +382,9 @@ def test_analytics_service_records_mod_and_plugin_action_details(qapp, tmp_path)
     service.record_plugin_details_opened(plugin)
 
     assert any(
-        key.startswith("mod_export_requested") and "game=deltarune" in key
+        key.startswith("mod_export_requested")
+        and "game=deltarune" in key
+        and "ref=gb_mod_123" in key
         for key in service._always_on
     )
     assert any(
@@ -400,6 +405,89 @@ def test_analytics_service_records_mod_and_plugin_action_details(qapp, tmp_path)
         key.startswith("plugin_details_opened_detail")
         and "plugin_id=plugin_demo" in key
         for key in service._opt_in
+    )
+
+
+def test_analytics_service_records_safe_mod_refs_without_opt_in_names(qapp, tmp_path):
+    app_state = SimpleNamespace(local_config={"language": "en", "ui_scale": 1.0})
+    service = AnalyticsService(app_state)
+    gb_mod = {
+        "id": "gb_mod_123",
+        "name": "Roaring Patch",
+        "version": "2.0",
+        "game": "deltarune",
+        "gamebanana_category": "Gameplay",
+    }
+    local_mod = {
+        "id": "local_secret_folder_name",
+        "name": "Private Local Mod",
+        "game": "deltarune",
+    }
+
+    service.record_mod_install_completed(gb_mod, mode="one_click")
+    service.record_mod_opened("library", local_mod)
+
+    assert any(
+        key.startswith("mod_install_completed")
+        and "ref=gb_mod_123" in key
+        and "mod_version=2_0" in key
+        and "name=" not in key
+        for key in service._always_on
+    )
+    assert any(
+        key.startswith("mod_opened")
+        and "local_ref=local_" in key
+        and "Private" not in key
+        and "local_secret_folder_name" not in key
+        for key in service._always_on
+    )
+    assert not any("Roaring" in key or "Private" in key for key in service._always_on)
+
+
+def test_analytics_service_records_launch_mod_refs_always_and_names_opt_in(
+    qapp, tmp_path
+):
+    app_state = SimpleNamespace(
+        local_config={
+            "language": "en",
+            "ui_scale": 1.0,
+            "analytics_opt_in_enabled": True,
+        }
+    )
+    service = AnalyticsService(app_state)
+
+    service.record_launch_started(
+        mode="subprocess",
+        with_mods=True,
+        game="deltarune",
+        mod_count=1,
+        mod_refs=[{"ref": "gb_mod_123", "name": "Roaring Patch"}],
+    )
+    service.record_launch_finished(
+        12.0,
+        mode="subprocess",
+        with_mods=True,
+        game="deltarune",
+        mod_count=1,
+        mod_refs=[{"ref": "gb_mod_123", "name": "Roaring Patch"}],
+    )
+
+    assert any(
+        key.startswith("launch_mod_selected")
+        and "ref=gb_mod_123" in key
+        and "name=" not in key
+        for key in service._always_on
+    )
+    assert any(
+        key.startswith("launch_mod_selected_detail")
+        and "name=roaring_patch" in key
+        for key in service._opt_in
+    )
+    assert any(
+        key.startswith("launch_mod_playtime")
+        and "ref=gb_mod_123" in key
+        and "name=" not in key
+        for key in service._always_on
     )
 
 

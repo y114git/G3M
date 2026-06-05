@@ -332,7 +332,9 @@ class AnalyticsService(QObject):
         self.count("game_launch_started", **dims)
         self.count("game_launch_started_detail", scope="opt_in", **dims)
         for payload in self._normalized_mod_refs(mod_refs):
-            self.count("launch_mod_selected", scope="opt_in", game=dims["game"], **payload)
+            always_payload = {k: v for k, v in payload.items() if k != "name"}
+            self.count("launch_mod_selected", game=dims["game"], **always_payload)
+            self.count("launch_mod_selected_detail", scope="opt_in", game=dims["game"], **payload)
 
     def record_launch_finished(
         self,
@@ -355,8 +357,15 @@ class AnalyticsService(QObject):
         self.record_timing("game_launch_finished", seconds, **dims)
         self.record_timing("game_launch_finished_detail", seconds, scope="opt_in", **dims)
         for payload in self._normalized_mod_refs(mod_refs):
+            always_payload = {k: v for k, v in payload.items() if k != "name"}
             self.record_timing(
                 "launch_mod_playtime",
+                seconds,
+                game=dims["game"],
+                **always_payload,
+            )
+            self.record_timing(
+                "launch_mod_playtime_detail",
                 seconds,
                 scope="opt_in",
                 game=dims["game"],
@@ -968,16 +977,35 @@ class AnalyticsService(QObject):
         return {
             key: value
             for key, value in data.items()
-            if key in {"game", "source", "category", "item_type"}
+            if key
+            in {
+                "game",
+                "source",
+                "category",
+                "item_type",
+                "ref",
+                "local_ref",
+                "mod_version",
+                "game_version",
+            }
         }
 
     def _mod_detail_dims(self, mod, *, include_name: bool) -> dict[str, str]:
         if mod is None:
             return {}
-        mod_id = self._clean_value(get_mod_id(mod))
+        raw_mod_id = get_mod_id(mod)
+        mod_id = self._clean_value(raw_mod_id)
         gb_type, gb_id = parse_gamebanana_mod_id(mod_id)
         game = self._clean_value(
             mod.get("game") if isinstance(mod, dict) else getattr(mod, "game", "")
+        )
+        version = self._clean_value(
+            mod.get("version") if isinstance(mod, dict) else getattr(mod, "version", "")
+        )
+        game_version = self._clean_value(
+            mod.get("game_version")
+            if isinstance(mod, dict)
+            else getattr(mod, "game_version", "")
         )
         category = self._clean_value(
             (
@@ -997,6 +1025,10 @@ class AnalyticsService(QObject):
         }
         if category:
             dims["category"] = category
+        if version:
+            dims["mod_version"] = version
+        if game_version:
+            dims["game_version"] = game_version
         if gb_type and gb_id:
             dims["item_type"] = gb_type
             dims["ref"] = f"gb_{gb_type}_{gb_id}"
@@ -1004,13 +1036,21 @@ class AnalyticsService(QObject):
                 name = self._clean_value(get_mod_name(mod))
                 if name and name != "unknown":
                     dims["name"] = name
+        else:
+            local_ref = self._local_mod_ref(raw_mod_id, get_mod_name(mod))
+            if local_ref:
+                dims["local_ref"] = local_ref
+                if include_name:
+                    name = self._clean_value(get_mod_name(mod))
+                    if name and name != "unknown":
+                        dims["name"] = name
         return dims
 
     def _record_mod_detail(
         self, event: str, field_name: str, field_value: str, mod
     ) -> None:
         dims = self._mod_detail_dims(mod, include_name=True)
-        if "ref" not in dims:
+        if "ref" not in dims and "local_ref" not in dims:
             return
         payload = {**dims}
         payload[self._clean_value(field_name)] = self._clean_value(field_value)
@@ -1032,8 +1072,21 @@ class AnalyticsService(QObject):
             name = self._clean_value(item.get("name"))
             if name:
                 payload["name"] = name
+            item_type = self._clean_value(item.get("item_type"))
+            if item_type:
+                payload["item_type"] = item_type
+            source = self._clean_value(item.get("source"))
+            if source:
+                payload["source"] = source
             result.append(payload)
         return result
+
+    def _local_mod_ref(self, mod_id: Any, mod_name: Any = "") -> str:
+        seed = f"{mod_id or ''}|{mod_name or ''}".strip("|")
+        if not seed:
+            return ""
+        digest = hashlib.sha256(str(seed).encode("utf-8", errors="ignore")).hexdigest()
+        return f"local_{digest[:12]}"
 
     def _plugin_payload_dims(
         self,
@@ -1082,6 +1135,26 @@ class AnalyticsService(QObject):
         game = self._clean_value(metadata.get("game"))
         if game:
             dims["game"] = game
+        if metadata.get("gb_mod_id"):
+            item_type = self._clean_value(metadata.get("item_type") or "mod") or "mod"
+            mod_id = self._clean_value(metadata.get("gb_mod_id"))
+            if mod_id:
+                dims["ref"] = f"gb_{item_type}_{mod_id}"
+                dims["item_type"] = item_type
+            category = self._clean_value(metadata.get("category"))
+            if category:
+                dims["category"] = category
+            compatibility = self._clean_value(metadata.get("compatibility"))
+            if compatibility:
+                dims["compat"] = compatibility
+        elif metadata.get("plugin_id"):
+            plugin_id = self._clean_value(metadata.get("plugin_id"))
+            if plugin_id:
+                dims["plugin_id"] = plugin_id
+        else:
+            local_ref = self._local_mod_ref(metadata.get("id"), metadata.get("name"))
+            if local_ref and str(getattr(record, "target_kind", "")).lower() == "mod":
+                dims["local_ref"] = local_ref
         return dims
 
     def _download_detail_dims(self, record) -> dict[str, str]:
@@ -1108,6 +1181,9 @@ class AnalyticsService(QObject):
             category = self._clean_value(metadata.get("category"))
             if category:
                 dims["category"] = category
+            version = self._clean_value(metadata.get("version"))
+            if version:
+                dims["mod_version"] = version
         elif metadata.get("plugin_id"):
             dims.update(
                 self._plugin_payload_dims(

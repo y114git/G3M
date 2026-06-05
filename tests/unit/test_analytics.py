@@ -186,6 +186,83 @@ def test_bundle_view_exposes_mod_names_from_detail_events():
     assert any(item["key"] == "roaring_patch" for item in bundle["stories"]["mod_names_installed"])
 
 
+def test_bundle_view_exposes_mod_refs_from_always_events_without_opt_in():
+    analytics = _analytics()
+    analytics.ingest_analytics_payload(
+        {
+            "schema": 1,
+            "batch_id": "bundle-mod-refs",
+            "client": {"app_version": "3.1.0", "os_family": "Windows"},
+            "session": {"id": "session-mod-refs", "opt_in": False},
+            "always": [
+                {
+                    "name": "mod_opened",
+                    "ts": 1_700_000_000,
+                    "dims": {
+                        "game": "deltarune",
+                        "area": "library",
+                        "ref": "gb_mod_123",
+                        "source": "gamebanana",
+                    },
+                },
+                {
+                    "name": "mod_install_completed",
+                    "ts": 1_700_000_001,
+                    "dims": {
+                        "game": "deltarune",
+                        "mode": "one_click",
+                        "ref": "gb_mod_123",
+                        "mod_version": "2_0",
+                    },
+                },
+                {
+                    "name": "download_completed",
+                    "ts": 1_700_000_002,
+                    "dims": {"target": "mod", "ref": "gb_mod_123"},
+                },
+                {
+                    "name": "use_completed",
+                    "ts": 1_700_000_003,
+                    "dims": {"target": "mod", "local_ref": "local_abcdef123456"},
+                },
+                {
+                    "name": "launch_mod_selected",
+                    "ts": 1_700_000_004,
+                    "dims": {"game": "deltarune", "ref": "gb_mod_123"},
+                },
+            ],
+            "opt_in": [],
+        }
+    )
+
+    bundle = analytics.query_analytics({"view": "bundle", "day": "2023-11-14"})
+
+    assert any(
+        item["key"] == "gb_mod_123"
+        for item in bundle["stories"]["mod_refs_opened_always"]
+    )
+    assert any(
+        item["key"] == "gb_mod_123"
+        for item in bundle["stories"]["mod_refs_installed_always"]
+    )
+    assert any(
+        item["key"] == "2_0"
+        for item in bundle["stories"]["mod_versions_installed"]
+    )
+    assert any(
+        item["key"] == "gb_mod_123"
+        for item in bundle["stories"]["download_mod_refs_always"]
+    )
+    assert any(
+        item["key"] == "local_abcdef123456"
+        for item in bundle["stories"]["used_local_mods_always"]
+    )
+    assert any(
+        item["key"] == "gb_mod_123"
+        for item in bundle["stories"]["launch_mod_refs_always"]
+    )
+
+
 def test_range_query_merges_multiple_days_and_archives():
     analytics = _analytics()
     analytics.ingest_analytics_payload(
