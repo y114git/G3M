@@ -32,6 +32,7 @@ from ui.common.styling import (
     update_mod_widget_style,
 )
 from ui.dialogs.plugin_details_dialog import PluginDetailsDialog
+from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
 
@@ -558,7 +559,9 @@ QPushButton#cardButtonUninstall:disabled {{
                 imported = True
             except Exception as e:
                 logger.error("PluginsController: import failed for %s: %s", path, e, exc_info=True)
-                self.feedback_service.show_message("error", "errors.error", str(e))
+                self.feedback_service.show_message(
+                    "error", "errors.error", format_filesystem_error(e, path=path)
+                )
         if imported:
             self.plugin_runtime_service.scan_installed_plugins(
                 resolve_catalog=self.plugin_catalog_service.is_loaded()
@@ -666,7 +669,10 @@ QPushButton#cardButtonUninstall:disabled {{
                 )
         except Exception as e:
             logger.error("PluginsController: delete failed for %s: %s", plugin_id, e, exc_info=True)
-            self.feedback_service.show_message("error", "errors.error", str(e))
+            plugin_path = str(getattr(plugin, "path", "") or "")
+            self.feedback_service.show_message(
+                "error", "errors.error", format_filesystem_error(e, path=plugin_path)
+            )
         self.refresh_main_tabs()
         self.render()
 

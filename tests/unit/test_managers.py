@@ -2,6 +2,8 @@ import json
 import os
 from unittest.mock import Mock, patch
 
+import requests
+
 
 class TestModManager:
     """Tests for managers."""
@@ -238,6 +240,47 @@ class TestSettingsManager:
         assert settings_emitted == [True]
         manager.feedback_service.show_message.assert_called()
 
+    def test_install_theme_from_file_reports_localized_error_for_source_path(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import localization_service, tr
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        manager.feedback_service.show_message = Mock()
+        manager.parent_widget = Mock()
+        manager.parent_widget.do_not_save_theme_checkbox = Mock(isChecked=Mock(return_value=True))
+
+        archive_path = tmp_path / "broken_theme.zip"
+        with patch("zipfile.ZipFile") as zip_cls:
+            zip_obj = Mock()
+            zip_obj.__enter__ = Mock(return_value=zip_obj)
+            zip_obj.__exit__ = Mock(return_value=False)
+            zip_obj.namelist.return_value = ["theme.json"]
+            zip_cls.return_value = zip_obj
+            monkeypatch.setattr(
+                "utils.archive_utils.extract_any_archive",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    PermissionError(13, "Permission denied", str(archive_path))
+                ),
+            )
+
+            manager._install_theme_from_file(str(archive_path))
+
+        manager.feedback_service.show_message.assert_called_once_with(
+            "error",
+            "dialogs.error",
+            tr(
+                "dialogs.theme_import_failed",
+                error=tr("errors.permission_denied", path=str(archive_path)),
+            ),
+        )
+
     def test_validate_executable_path_accepts_unix_script_signature(
         self, app_state, feedback_service, qapp, monkeypatch, tmp_path
     ):
@@ -342,10 +385,81 @@ class TestSettingsManager:
             "services.settings_service.QFileDialog.getOpenFileName",
             lambda *args, **kwargs: ("C:/bad.bin", ""),
         )
-        monkeypatch.setattr(manager, "validate_executable_path", lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(
+            manager,
+            "get_executable_path_error",
+            lambda *_args, **_kwargs: "Configured launch executable was not found: C:/bad.bin",
+        )
 
         assert manager.select_executable_path("Select binary") is None
         manager.feedback_service.show_message.assert_called_once()
+        assert (
+            manager.feedback_service.show_message.call_args.args[2]
+            == "Configured launch executable was not found: C:/bad.bin"
+        )
+
+    def test_get_executable_path_error_reports_missing_file(
+        self, app_state, feedback_service, qapp
+    ):
+        from services.localization_service import localization_service, tr
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+
+        assert (
+            manager.get_executable_path_error("C:/missing/tool.exe")
+            == tr("errors.launch_command_missing_path", path="C:/missing/tool.exe")
+        )
+
+    def test_get_executable_path_error_reports_windows_permission_denied(
+        self, app_state, feedback_service, qapp, monkeypatch, tmp_path
+    ):
+        from services.localization_service import localization_service, tr
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        exe_path = tmp_path / "tool.exe"
+        exe_path.write_bytes(b"MZ")
+        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "services.settings_service.subprocess.Popen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                PermissionError(13, "Permission denied", str(exe_path))
+            ),
+        )
+
+        assert (
+            manager.get_executable_path_error(str(exe_path))
+            == tr("errors.launch_permission_denied", path=str(exe_path))
+        )
+
+    def test_describe_fs_error_reports_missing_file(self, app_state, feedback_service, qapp):
+        from services.localization_service import localization_service, tr
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+
+        assert (
+            manager._describe_fs_error(
+                FileNotFoundError(2, "No such file", "C:/missing/file.png")
+            )
+            == tr("errors.file_not_found", path="C:/missing/file.png")
+        )
 
     def test_validate_selected_game_path_requires_supported_executable_without_custom_exe(
         self, app_state, feedback_service, qapp, tmp_path, monkeypatch
@@ -650,6 +764,115 @@ class TestLaunchManager:
         assert popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/usr/lib:/usr/local/lib"
         assert popen.call_args.args[0] == ["wine", "/games/DELTARUNE.exe"]
 
+    def test_execute_game_uses_wine64_when_wine_missing(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        fake_process = Mock()
+        launcher.app_state.local_config["custom_wine_path"] = ""
+
+        with (
+            patch("services.launch_service.platform.system", return_value="Linux"),
+            patch("services.launch_service.os.path.isdir", return_value=True),
+            patch("utils.process_utils.shutil.which", side_effect=lambda name: None if name == "wine" else "/usr/bin/wine64"),
+            patch("services.launch_service.subprocess.Popen", return_value=fake_process) as popen,
+            patch("services.launch_service.QThread", return_value=Mock()),
+            patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
+        ):
+            launcher._execute_game(
+                {
+                    "target": "/games/DELTARUNE.exe",
+                    "cwd": "/games",
+                    "type": "subprocess",
+                }
+            )
+
+        assert popen.call_args.args[0] == ["wine64", "/games/DELTARUNE.exe"]
+
+    def test_execute_game_reports_missing_wine_command_precisely(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+        from services.localization_service import tr
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        emitted = []
+        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+
+        with (
+            patch("services.launch_service.platform.system", return_value="Linux"),
+            patch("services.launch_service.os.path.isdir", return_value=True),
+            patch(
+                "services.launch_service.subprocess.Popen",
+                side_effect=FileNotFoundError(2, "No such file or directory", "wine"),
+            ),
+        ):
+            launcher._execute_game(
+                {"target": "/games/DELTARUNE.exe", "cwd": "/games", "type": "subprocess"}
+            )
+
+        assert emitted[-1][0] == tr("errors.wine_not_found")
+
+    def test_execute_game_reports_missing_target_precisely(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+        from services.localization_service import tr
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        emitted = []
+        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+
+        missing_target = "/games/missing.exe"
+        with (
+            patch("services.launch_service.platform.system", return_value="Windows"),
+            patch("services.launch_service.os.path.isdir", return_value=True),
+            patch(
+                "services.launch_service.subprocess.Popen",
+                side_effect=FileNotFoundError(2, "No such file or directory", missing_target),
+            ),
+        ):
+            launcher._execute_game(
+                {"target": missing_target, "cwd": "/games", "type": "subprocess"}
+            )
+
+        assert emitted[-1][0] == tr("errors.launch_target_missing", path=missing_target)
+
+    def test_execute_game_reports_permission_denied_precisely(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+        from services.localization_service import tr
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        emitted = []
+        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+
+        denied_path = "/games/DELTARUNE.exe"
+        with (
+            patch("services.launch_service.platform.system", return_value="Windows"),
+            patch("services.launch_service.os.path.isdir", return_value=True),
+            patch(
+                "services.launch_service.subprocess.Popen",
+                side_effect=PermissionError(13, "Permission denied", denied_path),
+            ),
+        ):
+            launcher._execute_game(
+                {"target": denied_path, "cwd": "/games", "type": "subprocess"}
+            )
+
+        assert emitted[-1][0] == tr("errors.launch_permission_denied", path=denied_path)
+
 
 class TestUpdateCheckManager:
     """Tests for managers."""
@@ -664,6 +887,52 @@ class TestUpdateCheckManager:
         mock_get.return_value = mock_response
         checker = UpdateChecker(app_state=app_state, feedback_service=feedback_service)
         assert checker is not None
+
+    def test_update_extract_archive_reports_missing_archive_as_app_error(
+        self, app_state, feedback_service
+    ):
+        from models.exceptions import AppError
+        from services.localization_service import tr
+        from services.updatecheck_service import UpdateChecker
+
+        checker = UpdateChecker(app_state=app_state, feedback_service=feedback_service)
+
+        with patch(
+            "utils.archive_utils.extract_archive",
+            side_effect=FileNotFoundError(2, "No such file", "missing.zip"),
+        ):
+            try:
+                checker._extract_archive("Linux", "missing.zip", "out")
+            except AppError as exc:
+                assert str(exc) == tr("errors.archive_not_found")
+            else:
+                raise AssertionError("Expected AppError")
+
+    def test_update_worker_error_formats_request_failures_precisely(
+        self, app_state, feedback_service
+    ):
+        from services.localization_service import tr
+        from services.updatecheck_service import UpdateChecker
+
+        checker = UpdateChecker(app_state=app_state, feedback_service=feedback_service)
+        error = requests.exceptions.ConnectionError("Connection refused")
+
+        assert checker._format_update_worker_error(error) == tr(
+            "errors.network_connection_refused"
+        )
+
+    def test_update_worker_error_formats_filesystem_failures_precisely(
+        self, app_state, feedback_service
+    ):
+        from services.localization_service import tr
+        from services.updatecheck_service import UpdateChecker
+
+        checker = UpdateChecker(app_state=app_state, feedback_service=feedback_service)
+        error = PermissionError(13, "Permission denied", "/opt/G3M")
+
+        assert checker._format_update_worker_error(error) == tr(
+            "errors.permission_denied", path="/opt/G3M"
+        )
 
 
 class TestCustomizationManager:

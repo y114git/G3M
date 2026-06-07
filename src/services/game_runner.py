@@ -32,7 +32,12 @@ from utils.path_utils import (
     get_user_data_root,
     resolve_game_executable,
 )
-from utils.process_utils import build_external_process_env
+from utils.process_utils import (
+    build_external_process_env,
+    format_external_process_error,
+    resolve_portproton_command,
+    resolve_wine_command,
+)
 
 logger = logging.getLogger("shortcut_runner")
 
@@ -496,23 +501,38 @@ def _launch_game(
     launch_env = build_external_process_env(system=system)
 
     if system == "Darwin":
-        process = subprocess.Popen(["open", "-W", launch_target])
+        command = ["open", "-W", launch_target]
+        try:
+            process = subprocess.Popen(command)
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            friendly_error = format_external_process_error(
+                e, command=command, target_path=launch_target
+            )
+            logger.error("Launch failed: %s | raw=%s", friendly_error, e, exc_info=True)
+            raise RuntimeError(friendly_error) from e
     else:
         if system == "Linux" and launch_target.lower().endswith(".exe"):
             use_portproton = shortcut_config.get("use_portproton", False)
             if use_portproton:
-                portproton_path = local_config.get("portproton_path", "")
-                if portproton_path:
-                    command = [portproton_path, "run", launch_target]
-                else:
-                    command = ["portproton", "run", launch_target]
+                command = [
+                    resolve_portproton_command(local_config),
+                    "run",
+                    launch_target,
+                ]
             else:
-                command.insert(0, "wine")
+                command.insert(0, resolve_wine_command(local_config))
         if system == "Windows":
             creationflags = subprocess.DETACHED_PROCESS
-        process = subprocess.Popen(
-            command, cwd=working_dir, creationflags=creationflags, env=launch_env
-        )
+        try:
+            process = subprocess.Popen(
+                command, cwd=working_dir, creationflags=creationflags, env=launch_env
+            )
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            friendly_error = format_external_process_error(
+                e, command=command, target_path=launch_target
+            )
+            logger.error("Launch failed: %s | raw=%s", friendly_error, e, exc_info=True)
+            raise RuntimeError(friendly_error) from e
 
     logger.info(
         f"Game launched: {launch_target} (pid={process.pid if process else '?'})"
@@ -638,7 +658,11 @@ def run_shortcut(shortcut_arg: str):
         sys.exit(1)
 
     logger.info("Launching game...")
-    _launch_game(shortcut_config, game_mode, local_config, game_path)
+    try:
+        _launch_game(shortcut_config, game_mode, local_config, game_path)
+    except Exception as e:
+        logger.error("Shortcut launch failed: %s", e, exc_info=True)
+        sys.exit(1)
 
     logger.info("Game exited")
 

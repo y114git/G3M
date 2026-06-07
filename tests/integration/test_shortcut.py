@@ -169,6 +169,73 @@ class TestShortcutLaunch:
         assert popen.call_args.kwargs["cwd"] == game_path
         assert popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/usr/lib:/usr/local/lib"
 
+    def test_launch_game_uses_custom_wine_path(self, game_mode, shortcut_temp_dir):
+        game_path = os.path.join(shortcut_temp_dir, "game")
+        os.makedirs(game_path, exist_ok=True)
+
+        shortcut_config = {
+            "launch_via_steam": False,
+            "use_portproton": False,
+            "direct_launch_chapter": "",
+            "chapter_mode": False,
+        }
+        local_config = {
+            "custom_wine_path": "/opt/wine-staging/bin/wine",
+            "custom_portproton_path": "",
+        }
+        fake_process = MagicMock()
+
+        with (
+            patch("services.game_runner.platform.system", return_value="Linux"),
+            patch(
+                "services.game_runner._get_executable_path",
+                return_value=os.path.join(game_path, "DELTARUNE.exe"),
+            ),
+            patch("services.game_runner.subprocess.Popen", return_value=fake_process) as popen,
+            patch("services.game_runner._wait_for_game_exit"),
+        ):
+            process = _launch_game(shortcut_config, game_mode, local_config, game_path)
+
+        assert process is fake_process
+        assert popen.call_args.args[0] == [
+            "/opt/wine-staging/bin/wine",
+            os.path.join(game_path, "DELTARUNE.exe"),
+        ]
+
+    def test_launch_game_uses_wine64_when_wine_missing(self, game_mode, shortcut_temp_dir):
+        game_path = os.path.join(shortcut_temp_dir, "game")
+        os.makedirs(game_path, exist_ok=True)
+
+        shortcut_config = {
+            "launch_via_steam": False,
+            "use_portproton": False,
+            "direct_launch_chapter": "",
+            "chapter_mode": False,
+        }
+        local_config = {"custom_wine_path": "", "custom_portproton_path": ""}
+        fake_process = MagicMock()
+
+        with (
+            patch("services.game_runner.platform.system", return_value="Linux"),
+            patch(
+                "services.game_runner._get_executable_path",
+                return_value=os.path.join(game_path, "DELTARUNE.exe"),
+            ),
+            patch(
+                "utils.process_utils.shutil.which",
+                side_effect=lambda name: None if name == "wine" else "/usr/bin/wine64",
+            ),
+            patch("services.game_runner.subprocess.Popen", return_value=fake_process) as popen,
+            patch("services.game_runner._wait_for_game_exit"),
+        ):
+            process = _launch_game(shortcut_config, game_mode, local_config, game_path)
+
+        assert process is fake_process
+        assert popen.call_args.args[0] == [
+            "wine64",
+            os.path.join(game_path, "DELTARUNE.exe"),
+        ]
+
     def test_base64_roundtrip_unicode(self):
         """Checks that base64ing roundtrip unicode."""
         cfg = {"game_id": "deltarune", "chapter_mods": {"deltarune_2": "мод_тест"}}
@@ -375,6 +442,9 @@ class TestValidatePrerequisites:
         """Checks that mod with g3mtool unavailable."""
         with patch("adapters.g3mtool_adapter.G3MToolManager") as mock_g3m:
             mock_g3m.return_value.is_available.return_value = False
+            mock_g3m.return_value.get_unavailable_reason.return_value = (
+                "G3MTool executable was not found."
+            )
             error = _validate_shortcut_prerequisites(mock_app_state, True)
             assert error is not None
             assert "g3mtool" in error.lower()

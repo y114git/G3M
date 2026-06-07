@@ -1,4 +1,5 @@
 import json
+import os
 import zipfile
 from types import SimpleNamespace
 
@@ -431,6 +432,37 @@ def test_data_convert_preserves_chapter_relative_path_in_converted_config(
         converted_config["files"]["deltarune_3"]["data_file_path"]
         == "chapter_3/data.g3mpatch"
     )
+
+
+def test_data_convert_reports_localized_filesystem_error(tmp_path, monkeypatch):
+    """Checks that data convert surfaces localized filesystem errors."""
+    mod_folder = tmp_path / "mod"
+    mod_folder.mkdir()
+    missing_path = os.path.join(str(mod_folder), "data.win")
+    monkeypatch.setattr(
+        "utils.mod_config_parser.resolve_mod_file_path",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            FileNotFoundError(2, "No such file", missing_path)
+        ),
+    )
+
+    worker = _DataConvertWorkerThread(
+        _FakeG3M(),
+        str(mod_folder),
+        {
+            "version": "1.2.3",
+            "game": "deltarune",
+            "files": {"deltarune_1": {"data_file_path": "data.win"}},
+        },
+        str(tmp_path / "game_root"),
+        "xdelta",
+    )
+    result = []
+    worker.finished.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert result == [(False, tr("errors.file_not_found", path=missing_path))]
 
 
 def test_convert_worker_keeps_generated_patch_even_if_roundtrip_would_fail(tmp_path):

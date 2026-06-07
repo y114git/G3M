@@ -957,26 +957,6 @@ class SettingsViewBuilder:
         if not is_linux:
             use_portproton_checkbox.setVisible(False)
         cl.addWidget(use_portproton_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        (
-            portproton_row,
-            portproton_label,
-            portproton_path_edit,
-            select_portproton_path_button,
-            portproton_reset_button,
-        ) = self._create_path_input_row(
-            object_prefix="settings_portproton_path",
-            label_text=tr("ui.settings_portproton_path_label"),
-            browse_tooltip=tr("buttons.select_portproton_path"),
-            reset_action="portproton_path",
-        )
-        if not is_linux:
-            portproton_row.setVisible(False)
-        portproton_frame = QFrame(page)
-        portproton_layout = QVBoxLayout(portproton_frame)
-        portproton_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        portproton_layout.addWidget(portproton_row, alignment=Qt.AlignmentFlag.AlignCenter)
-        portproton_frame.setVisible(False)
-        cl.addWidget(portproton_frame, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         sec, cl = self._collapsible_section(
@@ -1048,6 +1028,36 @@ class SettingsViewBuilder:
             reset_config_key="custom_xdelta_path",
         )
         cl_adv.addWidget(xdelta_row, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        (
+            wine_row,
+            wine_label,
+            wine_path_edit,
+            custom_wine_button,
+            reset_wine_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_custom_wine",
+            label_text=tr("ui.settings_custom_wine_path_label"),
+            browse_tooltip=tr("tooltips.custom_wine_binary"),
+            reset_config_key="custom_wine_path",
+        )
+        wine_row.setVisible(is_linux)
+        cl_adv.addWidget(wine_row, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        (
+            portproton_row,
+            portproton_label,
+            portproton_path_edit,
+            select_portproton_path_button,
+            portproton_reset_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_custom_portproton",
+            label_text=tr("ui.settings_custom_portproton_path_label"),
+            browse_tooltip=tr("tooltips.custom_portproton_binary"),
+            reset_config_key="custom_portproton_path",
+        )
+        portproton_row.setVisible(is_linux)
+        cl_adv.addWidget(portproton_row, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec_adv)
 
         layout.addStretch()
@@ -1064,11 +1074,6 @@ class SettingsViewBuilder:
         self.widgets["clear_g3mtool_cache_button"] = clear_g3mtool_cache_button
         self.widgets["launch_via_steam_checkbox"] = launch_via_steam_checkbox
         self.widgets["use_portproton_checkbox"] = use_portproton_checkbox
-        self.widgets["select_portproton_path_button"] = select_portproton_path_button
-        self.widgets["settings_portproton_path_label"] = portproton_label
-        self.widgets["portproton_path_edit"] = portproton_path_edit
-        self.widgets["settings_portproton_path_reset_button"] = portproton_reset_button
-        self.widgets["portproton_frame"] = portproton_frame
         self.widgets["settings_custom_executable_label"] = custom_executable_label
         self.widgets["settings_custom_executable_edit"] = custom_executable_edit
         self.widgets["settings_custom_executable_button"] = custom_executable_button
@@ -1081,6 +1086,14 @@ class SettingsViewBuilder:
         self.widgets["settings_custom_xdelta_edit"] = xdelta_path_edit
         self.widgets["settings_custom_xdelta_button"] = custom_xdelta_button
         self.widgets["settings_reset_xdelta_button"] = reset_xdelta_button
+        self.widgets["settings_custom_wine_label"] = wine_label
+        self.widgets["settings_custom_wine_edit"] = wine_path_edit
+        self.widgets["settings_custom_wine_button"] = custom_wine_button
+        self.widgets["settings_reset_wine_button"] = reset_wine_button
+        self.widgets["settings_custom_portproton_label"] = portproton_label
+        self.widgets["settings_custom_portproton_edit"] = portproton_path_edit
+        self.widgets["settings_custom_portproton_button"] = select_portproton_path_button
+        self.widgets["settings_reset_portproton_button"] = portproton_reset_button
         return self._wrap_in_scroll(page, parent)
 
     def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:

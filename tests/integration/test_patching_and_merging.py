@@ -151,6 +151,39 @@ class TestG3MToolAdapter:
         assert g3mtool.get_version() == "1.0.2"
         assert calls == [["g3mtool", "--version"]]
 
+    def test_run_returns_localized_message_when_g3mtool_binary_missing(self, monkeypatch):
+        from services.localization_service import tr
+
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "g3mtool"
+        monkeypatch.setattr("adapters.g3mtool_adapter.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.subprocess.Popen",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                FileNotFoundError(2, "No such file or directory", "g3mtool")
+            ),
+        )
+
+        result = g3mtool._run(["g3mtool", "info", "target"])
+
+        assert result == (-1, "", tr("errors.g3mtool_command_not_found"))
+
+    def test_unavailable_reason_reports_missing_custom_g3mtool_path(self, monkeypatch):
+        from services.localization_service import tr
+
+        g3mtool = G3MToolManager()
+        monkeypatch.setattr(
+            g3mtool,
+            "_get_local_config",
+            lambda: {"custom_g3mtool_path": "/tools/G3MTool.exe"},
+        )
+        monkeypatch.setattr("adapters.g3mtool_adapter.os.path.exists", lambda _path: False)
+
+        assert (
+            g3mtool.get_unavailable_reason()
+            == tr("errors.custom_g3mtool_not_found", path="/tools/G3MTool.exe")
+        )
+
     @pytest.mark.parametrize(
         ("caller", "expected_args"),
         [
@@ -396,11 +429,13 @@ class TestG3MToolAdapter:
     )
     def test_public_commands_share_unavailable_contract(self, caller):
         """Checks that public commands share unavailable contract."""
+        from services.localization_service import tr
+
         g3mtool = G3MToolManager()
         g3mtool.g3mtool_path = None
         g3mtool._find_executable = lambda: None
 
-        assert caller(g3mtool) == (-1, "", "G3MTool is not available")
+        assert caller(g3mtool) == (-1, "", tr("errors.g3mtool_not_available"))
 
 
 class TestModClassification:

@@ -1,6 +1,7 @@
 """Game launch and mod patching management."""
 
 import contextlib
+import errno
 import logging
 import os
 import platform
@@ -28,7 +29,11 @@ from utils.path_utils import (
     is_path_in_steam_common,
     resolve_game_executable,
 )
-from utils.process_utils import build_external_process_env
+from utils.process_utils import (
+    build_external_process_env,
+    resolve_portproton_command,
+    resolve_wine_command,
+)
 from workers.game_monitor_worker import GameMonitorWorker
 from workers.plugin_hook_worker import PluginHookThread
 
@@ -80,6 +85,83 @@ class GameLauncher(QObject):
 
     def _launch_status_color(self) -> str:
         return get_launch_status_color(getattr(self.app_state, "local_config", None))
+
+    @staticmethod
+    def _is_path_like_command(command_name: str) -> bool:
+        return bool(command_name) and (
+            os.path.isabs(command_name)
+            or "/" in command_name
+            or "\\" in command_name
+        )
+
+    def _translate_missing_launch_command(self, command_name: str) -> str:
+        base_name = os.path.basename(command_name).lower()
+        if "portproton" in base_name:
+            if self._is_path_like_command(command_name):
+                return tr("errors.custom_portproton_not_found", path=command_name)
+            return tr("errors.portproton_not_found")
+        if base_name.startswith("wine"):
+            if self._is_path_like_command(command_name):
+                return tr("errors.custom_wine_not_found", path=command_name)
+            return tr("errors.wine_not_found")
+        if self._is_path_like_command(command_name):
+            return tr("errors.launch_command_missing_path", path=command_name)
+        return tr("errors.launch_command_not_found", command=command_name)
+
+    def _format_launch_error(
+        self,
+        launch_error: Exception,
+        *,
+        command: list[str] | None,
+        target_path: str,
+    ) -> str:
+        command = command or []
+        command_name = str(command[0]) if command else ""
+        error_path = str(getattr(launch_error, "filename", "") or "")
+        error_errno = getattr(launch_error, "errno", None)
+        error_text = str(launch_error).lower()
+
+        if isinstance(launch_error, IsADirectoryError) or error_errno == errno.EISDIR:
+            return tr(
+                "errors.launch_target_is_directory",
+                path=error_path or target_path or command_name,
+            )
+
+        if isinstance(launch_error, FileNotFoundError) or error_errno == errno.ENOENT:
+            if error_path and target_path and os.path.abspath(error_path) == os.path.abspath(target_path):
+                return tr("errors.launch_target_missing", path=target_path)
+            if error_path and command_name and error_path == command_name:
+                return self._translate_missing_launch_command(command_name)
+            if command_name:
+                return self._translate_missing_launch_command(command_name)
+            return tr("errors.launch_target_missing", path=target_path)
+
+        if isinstance(launch_error, PermissionError) or error_errno in (
+            errno.EACCES,
+            errno.EPERM,
+        ):
+            return tr(
+                "errors.launch_permission_denied",
+                path=error_path or target_path or command_name,
+            )
+
+        invalid_exe_keywords = [
+            "not a valid",
+            "invalid",
+            "cannot execute",
+            "exec format error",
+            "bad executable",
+            "invalid executable",
+        ]
+        if error_errno == errno.ENOEXEC or any(
+            keyword in error_text for keyword in invalid_exe_keywords
+        ):
+            return tr(
+                "errors.invalid_executable_file",
+                file=os.path.basename(target_path or command_name),
+            )
+
+        return tr("errors.game_launch_error", error=str(launch_error))
 
     def _plugin_runtime_service(self):
         parent = self.parent()
@@ -201,6 +283,7 @@ class GameLauncher(QObject):
         target_path = launch_config.get("target")
         working_directory = launch_config.get("cwd")
         launch_type = launch_config.get("type")
+        command: list[str] | None = None
         if not target_path:
             self.status_changed.emit(tr("errors.launch_target_not_defined"), "red")
             self._handle_launch_failure()
@@ -248,14 +331,16 @@ class GameLauncher(QObject):
                     and (os.path.abspath(custom_path) == os.path.abspath(target_path))
                 )
                 if use_custom_exe:
-                    subprocess.Popen(["open", target_path])
+                    command = ["open", target_path]
+                    subprocess.Popen(command)
                     self.status_changed.emit(
                         tr("status.macos_file_opened"), self._launch_status_color()
                     )
                     if self.restore_window_callback:
                         self.restore_window_callback()
                     return
-                process = subprocess.Popen(["open", "-W", target_path])
+                command = ["open", "-W", target_path]
+                process = subprocess.Popen(command)
             else:
                 command = [target_path]
                 launch_env = build_external_process_env(system=system)
@@ -268,15 +353,17 @@ class GameLauncher(QObject):
                     )
                     if not is_steam_launch:
                         if use_portproton:
-                            portproton_path = self.app_state.local_config.get(
-                                "portproton_path", ""
-                            )
-                            if portproton_path:
-                                command = [portproton_path, "run", target_path]
-                            else:
-                                command = ["portproton", "run", target_path]
+                            command = [
+                                resolve_portproton_command(
+                                    self.app_state.local_config
+                                ),
+                                "run",
+                                target_path,
+                            ]
                         else:
-                            command.insert(0, "wine")
+                            command.insert(
+                                0, resolve_wine_command(self.app_state.local_config)
+                            )
                 creationflags = 0
                 if system == "Windows":
                     creationflags = 8
@@ -292,31 +379,12 @@ class GameLauncher(QObject):
                     ValueError,
                     subprocess.SubprocessError,
                 ) as launch_error:
-                    error_msg = str(launch_error).lower()
-                    invalid_exe_keywords = [
-                        "not a valid",
-                        "invalid",
-                        "cannot execute",
-                        "exec format error",
-                        "bad executable",
-                        "invalid executable",
-                    ]
-                    is_invalid_exe = any(
-                        keyword in error_msg for keyword in invalid_exe_keywords
+                    self.status_changed.emit(
+                        self._format_launch_error(
+                            launch_error, command=command, target_path=target_path
+                        ),
+                        UI_COLORS["status_error"],
                     )
-                    if is_invalid_exe:
-                        self.status_changed.emit(
-                            tr(
-                                "errors.invalid_executable_file",
-                                file=os.path.basename(target_path),
-                            ),
-                            UI_COLORS["status_error"],
-                        )
-                    else:
-                        self.status_changed.emit(
-                            tr("errors.game_launch_error", error=str(launch_error)),
-                            UI_COLORS["status_error"],
-                        )
                     self._handle_launch_failure()
                     return
             self.status_changed.emit(
@@ -331,7 +399,10 @@ class GameLauncher(QObject):
             self._execute_plugin_hook("after_game_started", vanilla_mode)
         except Exception as e:
             self.status_changed.emit(
-                tr("errors.game_launch_error", error=str(e)), "red"
+                self._format_launch_error(
+                    e, command=command, target_path=target_path
+                ),
+                "red",
             )
             self._handle_launch_failure()
 

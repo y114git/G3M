@@ -20,6 +20,7 @@ from utils.mod_utils import (
     get_mod_name,
     sort_gamebanana_files_by_priority,
 )
+from utils.process_utils import format_filesystem_error
 from workers.install.batch_install_worker import InstallModsThread
 
 
@@ -668,10 +669,16 @@ class ModOperationsController:
             logging.error(
                 f"ModOperationsController: Failed to uninstall mod: {e}", exc_info=True
             )
+            mod_path = ""
+            with contextlib.suppress(Exception):
+                mod_path = self.mod_service.get_mod_folder_path(get_mod_id(mod)) or ""
             self.feedback_service.show_message(
                 "error",
                 tr("errors.error"),
-                tr("errors.mod_uninstall_failed", error=str(e)),
+                tr(
+                    "errors.mod_uninstall_failed",
+                    error=format_filesystem_error(e, path=mod_path),
+                ),
             )
             return
 

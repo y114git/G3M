@@ -20,6 +20,7 @@ from config.config import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
 from utils.mod_utils import get_mod_id
+from utils.process_utils import format_filesystem_error
 from workers.install.full_install_worker import FullInstallThread
 
 
@@ -313,7 +314,7 @@ class GameLaunchController(QObject):
             self.feedback_service.show_message(
                 "error",
                 "errors.error",
-                tr("errors.folder_creation_failed", error=str(e)),
+                format_filesystem_error(e, path=target_dir),
             )
             self.app_state.action_button_enabled = True
             return

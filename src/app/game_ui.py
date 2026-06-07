@@ -83,7 +83,8 @@ def update_path_input_localizations(w) -> None:
         "settings_custom_executable_edit",
         "settings_custom_g3mtool_edit",
         "settings_custom_xdelta_edit",
-        "portproton_path_edit",
+        "settings_custom_wine_edit",
+        "settings_custom_portproton_edit",
     ):
         edit = getattr(w, attr_name, None)
         if edit and hasattr(edit, "setPlaceholderText"):
@@ -405,6 +406,24 @@ def save_custom_xdelta_text(w, path: str):
     )
 
 
+def save_custom_wine_text(w, path: str):
+    _commit_validated_executable_text(
+        w,
+        str(path or "").strip(),
+        lambda value: _save_binary_override(w, "custom_wine_path", value),
+        lambda: update_custom_binary_ui(w),
+    )
+
+
+def save_custom_portproton_text(w, path: str):
+    _commit_validated_executable_text(
+        w,
+        str(path or "").strip(),
+        lambda value: _save_portproton_override(w, value),
+        lambda: update_custom_binary_ui(w),
+    )
+
+
 def _commit_validated_executable_text(w, path: str, save_callback, refresh_callback):
     cleaned_path = str(path or "").strip()
     if cleaned_path and not w.settings_service.validate_executable_path(cleaned_path):
@@ -425,6 +444,13 @@ def _clear_active_path_focus(w):
     focus_widget = getattr(w, "focusWidget", lambda: None)()
     if focus_widget is not None and hasattr(focus_widget, "clearFocus"):
         focus_widget.clearFocus()
+
+
+def _save_portproton_override(w, path: str):
+    cleaned_path = str(path or "").strip()
+    w.app_state.local_config["custom_portproton_path"] = cleaned_path
+    w.settings_service.write_local_config()
+    w.settings_service.settings_changed.emit()
 
 
 def commit_game_path_text(w, path: str):
@@ -467,6 +493,32 @@ def reset_custom_xdelta_path(w):
     save_custom_xdelta_text(w, "")
 
 
+def select_custom_wine_file(w):
+    filepath = w.settings_service.select_executable_path(
+        tr("buttons.select_wine_binary")
+    )
+    if filepath:
+        _save_binary_override(w, "custom_wine_path", filepath)
+        update_custom_binary_ui(w)
+
+
+def reset_custom_wine_path(w):
+    save_custom_wine_text(w, "")
+
+
+def select_custom_portproton_file(w):
+    filepath = w.settings_service.select_executable_path(
+        tr("buttons.select_portproton_path")
+    )
+    if filepath:
+        _save_portproton_override(w, filepath)
+        update_custom_binary_ui(w)
+
+
+def reset_custom_portproton_path(w):
+    save_custom_portproton_text(w, "")
+
+
 def update_custom_binary_ui(w):
     items = (
         (
@@ -479,11 +531,23 @@ def update_custom_binary_ui(w):
             getattr(w, "settings_custom_xdelta_edit", None),
             getattr(w, "settings_reset_xdelta_button", None),
         ),
+        (
+            "custom_wine_path",
+            getattr(w, "settings_custom_wine_edit", None),
+            getattr(w, "settings_reset_wine_button", None),
+        ),
+        (
+            "custom_portproton_path",
+            getattr(w, "settings_custom_portproton_edit", None),
+            getattr(w, "settings_reset_portproton_button", None),
+        ),
     )
     for config_key, edit, reset_button in items:
         if not edit:
             continue
         path = str(w.app_state.local_config.get(config_key, "") or "").strip()
+        if config_key == "custom_portproton_path" and not path:
+            path = str(w.app_state.local_config.get("portproton_path", "") or "").strip()
         edit.set_full_text(path) if hasattr(edit, "set_full_text") else edit.setText(path)
         edit.setToolTip(path)
         if reset_button:
@@ -518,14 +582,6 @@ def update_custom_executable_ui(w, game_id=None):
         w.settings_reset_custom_exe_button.setVisible(has_custom_exe)
 
 
-def save_portproton_path_text(w, path: str):
-    w.app_state.local_config["portproton_path"] = str(path or "").strip()
-    w.settings_service.write_local_config()
-    w.settings_service.settings_changed.emit()
-    update_portproton_ui(w)
-    _clear_active_path_focus(w)
-
-
 def update_path_inputs_ui(w):
     game_path_label = getattr(w, "settings_game_path_label", None)
     if game_path_label:
@@ -544,17 +600,7 @@ def update_path_inputs_ui(w):
     update_custom_executable_ui(w)
 
 
-def select_portproton_path(w):
-    if not w.select_portproton_path_button:
-        return
-    filepath = w.settings_service.select_portproton_path()
-    if filepath:
-        update_portproton_ui(w)
-
-
 def update_portproton_ui(w):
-    if not w.portproton_frame:
-        return
     is_steam_launch = w.app_state.local_config.get("launch_via_steam", False)
     if w.use_portproton_checkbox:
         w.use_portproton_checkbox.setEnabled(not is_steam_launch)
@@ -568,26 +614,7 @@ def update_portproton_ui(w):
                 + tr("tooltips.portproton")
                 + "</body></html>"
             )
-    use_portproton = w.app_state.local_config.get("use_portproton", False)
-    path = w.app_state.local_config.get("portproton_path", "")
-    show_frame = (
-        use_portproton
-        and not is_steam_launch
-        and (
-            w.use_portproton_checkbox.isEnabled()
-            if w.use_portproton_checkbox
-            else False
-        )
-    )
-    w.portproton_frame.setVisible(show_frame)
-    path_edit = getattr(w, "portproton_path_edit", None)
-    reset_button = getattr(w, "settings_portproton_path_reset_button", None)
-    if w.portproton_frame.isVisible():
-        if path_edit:
-            path_edit.set_full_text(path) if hasattr(path_edit, "set_full_text") else path_edit.setText(path)
-            path_edit.setToolTip(path)
-        if reset_button:
-            reset_button.setVisible(bool(path))
+    update_custom_binary_ui(w)
 
 
 def on_used_mods_updated(w):

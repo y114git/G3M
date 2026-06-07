@@ -21,6 +21,7 @@ from services.localization_service import tr
 from ui.common.feedback import FeedbackManager
 from utils.network_utils import get_session
 from utils.path_utils import fix_macos_python_symlink, version_sort_key
+from utils.process_utils import format_filesystem_error, format_network_error
 
 
 class UpdateChecker(QObject):
@@ -93,7 +94,15 @@ class UpdateChecker(QObject):
                 else "errors.update_check_general_error"
             )
             self.feedback_service.update_status(
-                tr(key, error=str(e)), UI_COLORS["status_error"]
+                tr(
+                    key,
+                    error=(
+                        format_network_error(e)
+                        if isinstance(e, requests.RequestException)
+                        else str(e)
+                    ),
+                ),
+                UI_COLORS["status_error"],
             )
             self._record_update_check(
                 "network_error" if isinstance(e, requests.RequestException) else "error"
@@ -209,11 +218,21 @@ class UpdateChecker(QObject):
             system,
         )
         if system == "Darwin" and archive_path.lower().endswith(".zip"):
-            run(["/usr/bin/ditto", "-x", "-k", archive_path, extraction_dir], check=True)
+            try:
+                run(["/usr/bin/ditto", "-x", "-k", archive_path, extraction_dir], check=True)
+            except FileNotFoundError as exc:
+                raise AppError("errors.archive_not_found") from exc
+            except PermissionError as exc:
+                raise AppError("errors.permission_denied", path=archive_path) from exc
             return
         from utils.archive_utils import extract_archive
 
-        extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
+        try:
+            extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
+        except FileNotFoundError as exc:
+            raise AppError("errors.archive_not_found") from exc
+        except PermissionError as exc:
+            raise AppError("errors.permission_denied", path=archive_path) from exc
 
     def _find_windows_installer(self, extraction_dir: str) -> str | None:
         return next(
@@ -411,15 +430,35 @@ fi
                 tr("errors.update_permission_error"), UI_COLORS["status_error"]
             )
             self.update_error.emit(tr("dialogs.update_permission_error_details"))
+        except AppError as e:
+            logging.error("[UPDATE] Update failed with app error: %s", e, exc_info=True)
+            self.status_changed.emit(str(e), UI_COLORS["status_error"])
+            self.update_error.emit(str(e))
         except Exception as e:
             logging.error("[UPDATE] Update failed with error: %s", e, exc_info=True)
+            formatted_error = self._format_update_worker_error(e)
             self.status_changed.emit(
-                tr("errors.update_failed", error=str(e)), UI_COLORS["status_error"]
+                tr("errors.update_failed", error=formatted_error), UI_COLORS["status_error"]
             )
-            self.update_error.emit(tr("errors.update_could_not_complete", error=str(e)))
+            self.update_error.emit(
+                tr("errors.update_could_not_complete", error=formatted_error)
+            )
         finally:
             if not installer_launched:
                 logging.info("[UPDATE] Update process finished")
                 self.update_finished.emit()
             else:
                 logging.info("[UPDATE] Installer launched, launcher closing")
+
+    @staticmethod
+    def _format_update_worker_error(error: Exception) -> str:
+        try:
+            import requests
+        except Exception:
+            requests = None
+
+        if requests is not None and isinstance(error, requests.RequestException):
+            return format_network_error(error)
+        if isinstance(error, (FileNotFoundError, PermissionError)):
+            return format_filesystem_error(error)
+        return str(error)

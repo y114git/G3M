@@ -8,6 +8,7 @@ from models.download_models import (
     UseStatus,
 )
 from services.downloads_manager import DownloadsManager, _safe_filename
+from services.localization_service import tr
 
 
 class TestDownloadsManagerEdgeCases:
@@ -427,4 +428,38 @@ class TestDownloadsManagerEdgeCases:
 
         assert resolved_parent is a
         assert resolved_presenter is None
+        manager.deleteLater()
+
+    def test_manual_install_dialog_records_localized_filesystem_error(self, temp_dir):
+        """Checks that manual install dialog stores localized filesystem errors."""
+        manager = DownloadsManager(temp_dir, Mock(return_value={}))
+        manager.startup()
+
+        archive_path = os.path.join(temp_dir, "broken.zip")
+        with open(archive_path, "wb") as handle:
+            handle.write(b"zip")
+
+        record = DownloadRecord(
+            id="manual1",
+            display_name="Broken Mod",
+            download_status=DownloadStatus.DOWNLOADED,
+            use_status=UseStatus.NEEDS_MANUAL,
+            file_exists=True,
+            file_path=archive_path,
+        )
+        manager._store.add(record)
+
+        with patch(
+            "utils.archive_utils.extract_archive",
+            side_effect=PermissionError(13, "Permission denied", archive_path),
+        ):
+            manager._open_manual_install_dialog(record)
+
+        updated = manager._store.find("manual1")
+        assert updated is not None
+        assert updated.use_status == UseStatus.NEEDS_MANUAL
+        assert updated.error_message == tr(
+            "errors.permission_denied", path=archive_path
+        )
+
         manager.deleteLater()

@@ -9,7 +9,9 @@ import zipfile
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from config.config import GAME_VERSION_MANIFEST_FILENAME
+from services.localization_service import tr
 from utils.network_utils import get_session
+from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,12 @@ class CreateVersionWorker(QThread):
         except Exception as e:
             logger.error("CreateVersionWorker failed: %s", e, exc_info=True)
             self._cleanup()
-            self.finished.emit(False, str(e), 0, 0)
+            self.finished.emit(
+                False,
+                format_filesystem_error(e, path=self._archive_path),
+                0,
+                0,
+            )
 
     def _cleanup(self):
         try:
@@ -162,7 +169,13 @@ class CreatePatchedVersionWorker(QThread):
         except Exception as e:
             logger.error("CreatePatchedVersionWorker failed: %s", e, exc_info=True)
             self._cleanup()
-            self.finished.emit(False, str(e), 0, 0, "")
+            self.finished.emit(
+                False,
+                format_filesystem_error(e, path=self._archive_path),
+                0,
+                0,
+                "",
+            )
         finally:
             if self._temp_copy and os.path.isdir(self._temp_copy):
                 shutil.rmtree(self._temp_copy, ignore_errors=True)
@@ -198,7 +211,9 @@ class ApplyVersionWorker(QThread):
     def run(self):
         try:
             if not os.path.isfile(self._archive_path):
-                self.finished.emit(False, "Archive file not found")
+                self.finished.emit(
+                    False, tr("errors.file_not_found", path=self._archive_path)
+                )
                 return
             with zipfile.ZipFile(self._archive_path, "r") as zf:
                 bad = zf.testzip()
@@ -230,7 +245,9 @@ class ApplyVersionWorker(QThread):
             self.finished.emit(True, "")
         except Exception as e:
             logger.error("ApplyVersionWorker failed: %s", e, exc_info=True)
-            self.finished.emit(False, str(e))
+            self.finished.emit(
+                False, format_filesystem_error(e, path=self._archive_path)
+            )
 
     def _delete_extra_files(self, archive_entries: set[str]):
         archive_norm = {e.replace("\\", "/") for e in archive_entries}
@@ -271,7 +288,9 @@ class GameExportVersionWorker(QThread):
     def run(self):
         try:
             if not os.path.isfile(self._source):
-                self.finished.emit(False, "Source archive not found")
+                self.finished.emit(
+                    False, tr("errors.file_not_found", path=self._source)
+                )
                 return
             with zipfile.ZipFile(self._source, "r") as src_zf:
                 entries = [info for info in src_zf.infolist() if not info.is_dir()]
@@ -298,7 +317,7 @@ class GameExportVersionWorker(QThread):
             self.finished.emit(False, "cancelled")
         except Exception as e:
             logger.error("GameExportVersionWorker failed: %s", e, exc_info=True)
-            self.finished.emit(False, str(e))
+            self.finished.emit(False, format_filesystem_error(e, path=self._dest))
 
 
 class GameImportVersionWorker(QThread):
@@ -315,7 +334,9 @@ class GameImportVersionWorker(QThread):
     def run(self):
         try:
             if not os.path.isfile(self._source):
-                self.finished.emit(False, "Source file not found", {})
+                self.finished.emit(
+                    False, tr("errors.file_not_found", path=self._source), {}
+                )
                 return
             with zipfile.ZipFile(self._source, "r") as zf:
                 if GAME_VERSION_MANIFEST_FILENAME not in zf.namelist():
@@ -355,7 +376,9 @@ class GameImportVersionWorker(QThread):
             self.finished.emit(False, "Invalid game_version_data.json manifest", {})
         except Exception as e:
             logger.error("GameImportVersionWorker failed: %s", e, exc_info=True)
-            self.finished.emit(False, str(e), {})
+            self.finished.emit(
+                False, format_filesystem_error(e, path=self._source), {}
+            )
 
 
 class UrlDownloadWorker(QThread):
@@ -394,4 +417,4 @@ class UrlDownloadWorker(QThread):
                     os.remove(self._dest)
             except OSError:
                 pass
-            self.finished.emit(False, str(e))
+            self.finished.emit(False, format_network_error(e, url=self._url))

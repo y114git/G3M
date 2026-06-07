@@ -353,8 +353,9 @@ class G3MToolPatchingService(QObject):
         self._last_report_path = None
 
         if not self.g3mtool.is_available():
-            self.status_update.emit(tr("errors.g3mtool_not_available"), "error")
-            self.patching_logger.error("G3MTool not available")
+            reason = self.g3mtool.get_unavailable_reason()
+            self.status_update.emit(reason, "error")
+            self.patching_logger.error("G3MTool not available: %s", reason)
             return False
 
         try:

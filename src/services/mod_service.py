@@ -41,6 +41,7 @@ from utils.mod_utils import (
     resolve_mod_icon,
     sort_gamebanana_files_by_priority,
 )
+from utils.process_utils import format_filesystem_error
 from workers.install.url_install_worker import UrlInstallThread
 from workers.mod_scan_worker import ModScanThread
 
@@ -671,6 +672,10 @@ class ModManager(QObject):
         AttributeError: ("missing_data", "Missing required data"),
     }
 
+    @staticmethod
+    def _describe_uninstall_error(error: Exception) -> str:
+        return format_filesystem_error(error)
+
     def uninstall_mod(self, mod):
         try:
             self.delete_mod_files(mod)
@@ -698,13 +703,11 @@ class ModManager(QObject):
                 exc_info=True,
                 extra={"mod_id": mod_id, "mod_name": mod_name},
             )
-            if reason == "permission_error":
+            if reason == "permission_error" or reason not in ("missing_data",):
                 self.feedback_service.show_message(
-                    "error", "errors.uninstall_failed", tr("errors.permission_denied")
-                )
-            elif reason not in ("missing_data",):
-                self.feedback_service.show_message(
-                    "error", "errors.uninstall_failed", str(e)
+                    "error",
+                    "errors.uninstall_failed",
+                    self._describe_uninstall_error(e),
                 )
             raise error from e
 

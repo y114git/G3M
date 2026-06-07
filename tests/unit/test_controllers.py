@@ -54,6 +54,36 @@ class TestModOperationsController:
             mod
         )
 
+    def test_uninstall_mod_reports_localized_filesystem_error(self, app_state):
+        from controllers.mod_operations_controller import ModOperationsController
+        from services.localization_service import tr
+
+        mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = "C:/mods/ghost_mod"
+        mod_service.delete_mod_files.side_effect = PermissionError(
+            13, "Permission denied", "C:/mods/ghost_mod"
+        )
+        app_window = Mock()
+        feedback_service = Mock()
+        controller = ModOperationsController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            app_window=app_window,
+        )
+
+        controller.uninstall_mod(mod)
+
+        feedback_service.show_message.assert_called_once_with(
+            "error",
+            tr("errors.error"),
+            tr(
+                "errors.mod_uninstall_failed",
+                error=tr("errors.permission_denied", path="C:/mods/ghost_mod"),
+            ),
+        )
+
 
 class TestGameLaunchControllerRefresh:
     def test_refresh_mods_in_use_replaces_mod_objects_inside_lists(
@@ -366,6 +396,61 @@ class TestLibraryDisplayController:
 
 class TestModImportExportController:
     """Tests for controllers."""
+
+    def test_format_import_exception_reports_archive_not_found(self, temp_dir):
+        from controllers.mod_import_export_controller import ModImportExportController
+        from services.localization_service import tr
+
+        controller = ModImportExportController(
+            Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock()
+        )
+
+        assert (
+            controller._format_import_exception(
+                FileNotFoundError(2, "No such file", os.path.join(temp_dir, "missing.zip")),
+                file_path=os.path.join(temp_dir, "missing.zip"),
+            )
+            == tr("errors.archive_not_found")
+        )
+
+    def test_materialize_local_import_raises_localized_permission_error(self, temp_dir):
+        from controllers.mod_import_export_controller import ModImportExportController
+        from services.localization_service import tr
+
+        source_file = os.path.join(temp_dir, "sample.zip")
+        with open(source_file, "wb") as handle:
+            handle.write(b"zip")
+
+        controller = ModImportExportController(
+            Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock()
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as extract_dir,
+            patch(
+                "controllers.mod_import_export_controller.extract_archive",
+                side_effect=PermissionError(13, "Permission denied", source_file),
+            ),
+        ):
+            try:
+                controller._materialize_local_import(source_file, extract_dir)
+            except ValueError as exc:
+                assert str(exc) == tr("errors.permission_denied", path=source_file)
+            else:
+                raise AssertionError("Expected ValueError")
+
+
+class TestModManagerErrorFormatting:
+    def test_describe_uninstall_error_reports_missing_file(self):
+        from services.localization_service import tr
+        from services.mod_service import ModManager
+
+        assert (
+            ModManager._describe_uninstall_error(
+                FileNotFoundError(2, "No such file", "C:/mods/missing")
+            )
+            == tr("errors.file_not_found", path="C:/mods/missing")
+        )
 
     def test_materialize_local_import_keeps_plain_files(self, temp_dir):
         """Checks that materializeing local import keeps plain files."""

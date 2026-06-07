@@ -229,6 +229,18 @@ WIDGET_LOCALIZATIONS = [
         "tooltips.custom_xdelta_binary",
     ),
     ("settings_reset_xdelta_button", "setToolTip", "buttons.reset_settings"),
+    (
+        "settings_custom_wine_button",
+        "setToolTip",
+        "tooltips.custom_wine_binary",
+    ),
+    ("settings_reset_wine_button", "setToolTip", "buttons.reset_settings"),
+    (
+        "settings_custom_portproton_button",
+        "setToolTip",
+        "tooltips.custom_portproton_binary",
+    ),
+    ("settings_reset_portproton_button", "setToolTip", "buttons.reset_settings"),
     ("settings_game_selector_label", "setText", "ui.mod_type_label"),
     (
         "settings_custom_executable_label",
@@ -246,9 +258,14 @@ WIDGET_LOCALIZATIONS = [
         "ui.settings_custom_xdelta_path_label",
     ),
     (
-        "settings_portproton_path_label",
+        "settings_custom_wine_label",
         "setText",
-        "ui.settings_portproton_path_label",
+        "ui.settings_custom_wine_path_label",
+    ),
+    (
+        "settings_custom_portproton_label",
+        "setText",
+        "ui.settings_custom_portproton_path_label",
     ),
     ("theme_apply_btn", "setToolTip", "ui.apply_theme"),
     ("theme_save_btn", "setToolTip", "buttons.save_theme"),

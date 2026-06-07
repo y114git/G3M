@@ -26,6 +26,8 @@ DEFAULT_APP_SETTINGS = {
     "demo_game_path": "",
     "launch_via_steam": False,
     "use_portproton": False,
+    "custom_wine_path": "",
+    "custom_portproton_path": "",
     "portproton_path": "",
     "demo_mode_enabled": False,
     "custom_background_path": "",

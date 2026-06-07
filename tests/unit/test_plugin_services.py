@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from services.localization_service import localization_service
+from services.localization_service import localization_service, tr
 from services.plugin_catalog_service import PluginCatalogService
 from services.plugin_install_service import PluginInstallService
 from services.plugin_runtime_service import PluginRuntimeService
@@ -243,6 +243,52 @@ def test_plugin_runtime_loads_dataclass_plugin(temp_dir):
 
     assert "dataclass_plugin" in installed
     assert installed["dataclass_plugin"].status != "broken"
+
+
+def test_plugin_runtime_scan_formats_validation_errors(temp_dir):
+    """Checks that broken plugin scan errors are localized for the UI."""
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    plugin_dir = os.path.join(temp_dir, "broken_plugin")
+    os.makedirs(plugin_dir, exist_ok=True)
+    with open(
+        os.path.join(plugin_dir, "plugin_config.json"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(
+            {
+                "config_version": 1,
+                "id": "broken_plugin",
+                "name": "Broken Plugin",
+                "description": "Desc",
+                "author": "Tester",
+                "version": "1.0.0",
+                "api_version": ">=1.0.0",
+                "entry": "missing.py",
+            },
+            handle,
+        )
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+
+    installed = runtime.scan_installed_plugins()
+
+    assert installed["broken_plugin"].error == tr(
+        "plugins.error_missing_entry", path=plugin_dir
+    )
 
 
 def test_plugin_install_accepts_newer_plugin_api_requirement(temp_dir):

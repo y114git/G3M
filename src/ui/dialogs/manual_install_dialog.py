@@ -38,6 +38,7 @@ from utils.file_utils import (
 )
 from utils.mod_config_parser import build_mod_config_data
 from utils.path_utils import colored_icon, find_chapter_resource_dir
+from utils.process_utils import format_filesystem_error
 
 
 class ManualModInstallDialog(QDialog):
@@ -467,7 +468,9 @@ class ManualModInstallDialog(QDialog):
             return
         if not file_path or not os.path.exists(file_path):
             QMessageBox.warning(
-                self, tr("errors.error"), file_path or tr("errors.error")
+                self,
+                tr("errors.error"),
+                tr("errors.file_not_found", path=file_path or "?"),
             )
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(file_path)):
@@ -1117,7 +1120,7 @@ class ManualModInstallDialog(QDialog):
             QMessageBox.critical(
                 self,
                 tr("errors.error"),
-                tr("errors.manual_install_failed", error=str(e)),
+                tr("errors.manual_install_failed", error=format_filesystem_error(e)),
             )
 
     @staticmethod

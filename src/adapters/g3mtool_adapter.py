@@ -9,7 +9,9 @@ import subprocess
 import threading
 from collections.abc import Callable
 
+from services.localization_service import tr
 from utils.path_utils import get_g3mtool_cache_dir, get_user_data_root, resource_path
+from utils.process_utils import format_external_process_error
 
 
 class G3MToolManager:
@@ -89,6 +91,12 @@ class G3MToolManager:
     def is_available(self) -> bool:
         return self.refresh_executable() is not None
 
+    def get_unavailable_reason(self) -> str:
+        custom_path = self._get_configured_g3mtool_path()
+        if custom_path and not os.path.exists(custom_path):
+            return tr("errors.custom_g3mtool_not_found", path=custom_path)
+        return tr("errors.g3mtool_not_available")
+
     def get_version(self) -> str | None:
         """Return the bundled G3MTool version string."""
         g3mtool_path = self.refresh_executable()
@@ -103,8 +111,8 @@ class G3MToolManager:
         return version[0].strip() if version else None
 
     @staticmethod
-    def _unavailable_result() -> tuple[int, str, str]:
-        return (-1, "", "G3MTool is not available")
+    def _unavailable_result(message: str | None = None) -> tuple[int, str, str]:
+        return (-1, "", message or tr("errors.g3mtool_not_available"))
 
     @staticmethod
     def _supports_cache(args: list[str]) -> bool:
@@ -126,7 +134,7 @@ class G3MToolManager:
     ) -> tuple[int, str, str]:
         g3mtool_path = self.refresh_executable()
         if not g3mtool_path:
-            return self._unavailable_result()
+            return self._unavailable_result(self.get_unavailable_reason())
         full_args = [*args]
         if self._supports_cache(full_args):
             cache_dir = get_g3mtool_cache_dir()
@@ -423,5 +431,13 @@ class G3MToolManager:
                 logging.debug(f"G3MTool stderr (non-fatal): {stderr_text[:500]}")
             return (returncode, stdout, stderr)
         except Exception as e:
-            logging.error(f"Error executing G3MTool: {e}", exc_info=True)
-            return (-1, "", str(e))
+            friendly_error = format_external_process_error(
+                e, command=cmd, target_path=cmd[0] if cmd else ""
+            )
+            logging.error(
+                "Error executing G3MTool: %s | raw=%s",
+                friendly_error,
+                e,
+                exc_info=True,
+            )
+            return (-1, "", friendly_error)

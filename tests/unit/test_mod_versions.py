@@ -7,6 +7,8 @@ import zipfile
 
 import pytest
 
+from services.localization_service import tr
+
 
 @pytest.fixture
 def mod_folder(tmp_path):
@@ -263,6 +265,9 @@ class TestDownloadFromGameBanana:
         dialog._on_download_from_gb()
 
         assert warnings
+        assert warnings[0][2] == tr(
+            "errors.network_request_failed", error="gb down"
+        )
 
 
 class TestZipDirToVersion:

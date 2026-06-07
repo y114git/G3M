@@ -21,6 +21,7 @@ from services.migration_service import normalize_theme_settings
 from utils.file_utils import check_filename_is_deltamod_info, has_deltamod_info_file
 from utils.network_utils import download_file, get_session
 from utils.path_utils import find_theme_config_path
+from utils.process_utils import format_filesystem_error, format_network_error
 from workers.base_install_worker import BaseInstallWorker
 from workers.install.helpers_install import (
     find_mod_config,
@@ -89,7 +90,12 @@ class UrlInstallThread(BaseInstallWorker):
                 else:
                     self._prepare_for_manual_install(archive_path)
         except Exception as e:
-            self.finished.emit(False, str(e))
+            self.finished.emit(
+                False,
+                format_network_error(e, url=download_url)
+                if self._looks_like_network_error(e)
+                else format_filesystem_error(e),
+            )
 
     def _process_deltamod_archive(self, url: str):
         with tempfile.TemporaryDirectory(prefix="g3m-redirect-dl-") as temp_dir:
@@ -318,7 +324,13 @@ class UrlInstallThread(BaseInstallWorker):
                 f"UrlInstallThread: Error preparing for manual install: {e}",
                 exc_info=True,
             )
-            self.finished.emit(False, tr("errors.manual_install_failed", error=str(e)))
+            self.finished.emit(
+                False,
+                tr(
+                    "errors.manual_install_failed",
+                    error=format_filesystem_error(e, path=archive_path),
+                ),
+            )
 
     def _install_theme_from_dir(self, theme_dir: str):
         try:
@@ -353,7 +365,13 @@ class UrlInstallThread(BaseInstallWorker):
             logging.error(
                 f"UrlInstallThread: Error installing theme from dir: {e}", exc_info=True
             )
-            self.finished.emit(False, tr("themes.installation_error", error=str(e)))
+            self.finished.emit(
+                False,
+                tr(
+                    "themes.installation_error",
+                    error=format_filesystem_error(e, path=theme_dir),
+                ),
+            )
 
     def _extract_and_install_theme(self, archive_path: str, temp_dir: str):
         with tempfile.TemporaryDirectory(prefix="g3m-theme-extract-") as unpack_dir:
@@ -367,7 +385,13 @@ class UrlInstallThread(BaseInstallWorker):
                 logging.error(
                     f"UrlInstallThread: Error extracting theme: {e}", exc_info=True
                 )
-                self.finished.emit(False, tr("themes.installation_error", error=str(e)))
+                self.finished.emit(
+                    False,
+                    tr(
+                        "themes.installation_error",
+                        error=format_filesystem_error(e, path=archive_path),
+                    ),
+                )
 
     def _check_redirect(self, archive_path: str, temp_dir: str) -> bool:
         try:
@@ -450,4 +474,17 @@ class UrlInstallThread(BaseInstallWorker):
                 )
         except Exception as e:
             logging.error(f"UrlInstallThread: Error installing mod: {e}", exc_info=True)
-            self.finished.emit(False, str(e))
+            self.finished.emit(
+                False,
+                format_network_error(e, url=self.url)
+                if self._looks_like_network_error(e)
+                else format_filesystem_error(e, path=archive_path),
+            )
+
+    @staticmethod
+    def _looks_like_network_error(error: Exception) -> bool:
+        try:
+            import requests
+        except Exception:
+            return False
+        return isinstance(error, requests.RequestException)

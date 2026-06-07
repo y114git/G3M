@@ -39,6 +39,7 @@ from utils.mod_version_utils import (
     create_version_zip,
 )
 from utils.path_utils import colored_icon
+from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +244,7 @@ class _ModVersionWorker(QThread):
             self.finished.emit(ok, "" if ok else "convert_failed")
         except Exception as e:
             logger.error("_ModVersionWorker: %s", e, exc_info=True)
-            self.finished.emit(False, str(e))
+            self.finished.emit(False, format_network_error(e, url=self._url))
         finally:
             if tmp_path:
                 with contextlib.suppress(OSError):
@@ -516,7 +517,11 @@ class ModVersionsDialog(QDialog):
             self._populate()
         except Exception as e:
             logger.error("mod_versions: snapshot failed: %s", e, exc_info=True)
-            QMessageBox.warning(self, tr("errors.error"), str(e))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                format_filesystem_error(e, path=self._mod_folder),
+            )
 
     def _do_import(self):
         from ui.common.feedback import FeedbackManager
@@ -553,7 +558,11 @@ class ModVersionsDialog(QDialog):
             self._populate()
         except Exception as e:
             logger.error("mod_versions: import failed: %s", e, exc_info=True)
-            QMessageBox.warning(self, tr("errors.error"), str(e))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                format_filesystem_error(e, path=archive_path),
+            )
         finally:
             self._set_busy(False)
             self._process_next_import()
@@ -629,7 +638,9 @@ class ModVersionsDialog(QDialog):
             )
         except Exception as e:
             logger.error("mod_versions: GameBanana files failed: %s", e, exc_info=True)
-            QMessageBox.warning(self, tr("errors.error"), str(e))
+            QMessageBox.warning(
+                self, tr("errors.error"), format_network_error(e)
+            )
             return
         if not all_files:
             QMessageBox.information(
@@ -745,7 +756,11 @@ class ModVersionsDialog(QDialog):
             )
         except Exception as e:
             logger.error("mod_versions: switch failed: %s", e, exc_info=True)
-            QMessageBox.warning(self, tr("errors.error"), str(e))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                format_filesystem_error(e, path=version_info["path"]),
+            )
         finally:
             self.unsetCursor()
 
@@ -763,7 +778,11 @@ class ModVersionsDialog(QDialog):
             self._populate()
         except Exception as e:
             logger.error("mod_versions: delete failed: %s", e, exc_info=True)
-            QMessageBox.warning(self, tr("errors.error"), str(e))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                format_filesystem_error(e, path=version_info["path"]),
+            )
 
     def dragEnterEvent(self, event):
         if getattr(event, "source", lambda: None)() is not None:

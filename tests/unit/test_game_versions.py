@@ -5,6 +5,7 @@ import zipfile
 
 from models.game_version_models import GameVersionRecord
 from services.game_versions_store import GameVersionsStore
+from services.localization_service import tr
 from utils.game_version_utils import (
     get_base_game_folder,
     safe_archive_name,
@@ -336,6 +337,7 @@ class TestApplyVersionWorker:
         worker.finished.connect(lambda *args: results.append(args))
         worker.run()
         assert results[0][0] is False
+        assert results[0][1] == tr("errors.file_not_found", path="/nonexistent.zip")
 
 
 class TestExportImportWorkers:

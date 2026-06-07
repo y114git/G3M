@@ -39,6 +39,11 @@ from utils.path_utils import (
     get_g3mtool_cache_dir,
     resolve_game_executable,
 )
+from utils.process_utils import (
+    format_external_process_error,
+    format_filesystem_error,
+    format_network_error,
+)
 
 
 class SettingsManager(QObject):
@@ -174,6 +179,10 @@ class SettingsManager(QObject):
                     f"SettingsManager: failed to remove file {file_path}: {e}",
                     exc_info=True,
                 )
+
+    @staticmethod
+    def _describe_fs_error(error: Exception, path: str = "") -> str:
+        return format_filesystem_error(error, path=path)
 
     def write_local_config(self):
         ps = getattr(self, "profile_service", None)
@@ -311,11 +320,12 @@ class SettingsManager(QObject):
         )
         if not filepath:
             return None
-        if not self.validate_executable_path(filepath):
+        error_message = self.get_executable_path_error(filepath)
+        if error_message is not None:
             self.feedback_service.show_message(
                 "warning",
-                "errors.invalid_executable_file",
-                file=os.path.basename(filepath),
+                "errors.error",
+                error_message,
             )
             return None
         return filepath
@@ -378,7 +388,7 @@ class SettingsManager(QObject):
             b"\xbe\xba\xfe\xca",
         }
 
-    def _validate_windows_executable_path(self, filepath: str) -> bool:
+    def _validate_windows_executable_path(self, filepath: str) -> str | None:
         command = [filepath]
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
             subprocess, "CREATE_SUSPENDED", 0
@@ -395,24 +405,31 @@ class SettingsManager(QObject):
             OSError,
             ValueError,
             subprocess.SubprocessError,
-        ):
-            return False
+        ) as error:
+            return format_external_process_error(
+                error, command=command, target_path=filepath
+            )
         finally:
             if process is not None:
                 with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
                     process.kill()
                 with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
                     process.wait(timeout=0.2)
-        return True
+        return None
 
-    def validate_executable_path(self, filepath: str) -> bool:
+    def get_executable_path_error(self, filepath: str) -> str | None:
         if not os.path.isfile(filepath):
-            return False
+            return tr("errors.launch_command_missing_path", path=filepath)
         if platform.system() == "Windows":
             return self._validate_windows_executable_path(filepath)
         if not os.access(filepath, os.X_OK):
-            return False
-        return self._has_unix_executable_signature(filepath)
+            return tr("errors.launch_permission_denied", path=filepath)
+        if not self._has_unix_executable_signature(filepath):
+            return tr("errors.invalid_executable_file", file=os.path.basename(filepath))
+        return None
+
+    def validate_executable_path(self, filepath: str) -> bool:
+        return self.get_executable_path_error(filepath) is None
 
     def pick_directory(self, title: str, start_dir: str = "") -> str:
         return QFileDialog.getExistingDirectory(
@@ -509,10 +526,16 @@ class SettingsManager(QObject):
                 self.app_state.local_config["custom_background_path"] = dest
                 self._record_action("background_set", ext=ext.lstrip("."))
             except Exception as e:
-                logging.error(f"Failed to copy background: {e}", exc_info=True)
+                friendly_error = self._describe_fs_error(e, filepath)
+                logging.error(
+                    "Failed to copy background: %s | raw=%s",
+                    friendly_error,
+                    e,
+                    exc_info=True,
+                )
                 self._record_action("background_set_failed")
                 self.feedback_service.show_message(
-                    "warning", "errors.error", tr("errors.copy_logo_failed")
+                    "warning", "errors.error", friendly_error
                 )
                 return
         self.write_local_config()
@@ -572,9 +595,17 @@ class SettingsManager(QObject):
                     "info", "dialogs.success", tr(removed_msg_key)
                 )
                 self.theme_changed.emit()
-            except Exception:
+            except Exception as e:
+                friendly_error = self._describe_fs_error(e, existing)
+                logging.error(
+                    "[SettingsManager] Failed to remove %s: %s | raw=%s",
+                    base_name,
+                    friendly_error,
+                    e,
+                    exc_info=True,
+                )
                 self.feedback_service.show_message(
-                    "warning", "errors.error", tr(remove_fail_key)
+                    "warning", "errors.error", friendly_error
                 )
         else:
             audio_filter = (
@@ -602,12 +633,16 @@ class SettingsManager(QObject):
                     shutil.copy2(file_path, dest)
                     self.theme_changed.emit()
                 except Exception as e:
+                    friendly_error = self._describe_fs_error(e, file_path)
                     logging.error(
-                        f"[SettingsManager] Failed to copy {base_name}: {e}",
+                        "[SettingsManager] Failed to copy %s: %s | raw=%s",
+                        base_name,
+                        friendly_error,
+                        e,
                         exc_info=True,
                     )
                     self.feedback_service.show_message(
-                        "warning", "errors.error", tr(copy_fail_key)
+                        "warning", "errors.error", friendly_error
                     )
 
     def on_background_music_button_click(self):
@@ -648,9 +683,16 @@ class SettingsManager(QObject):
                     "info", "dialogs.success", tr("dialogs.logo_removed")
                 )
                 self.theme_changed.emit()
-            except Exception:
+            except Exception as e:
+                friendly_error = self._describe_fs_error(e, existing_logo)
+                logging.error(
+                    "Failed to remove logo: %s | raw=%s",
+                    friendly_error,
+                    e,
+                    exc_info=True,
+                )
                 self.feedback_service.show_message(
-                    "warning", "errors.error", tr("errors.remove_logo_failed")
+                    "warning", "errors.error", friendly_error
                 )
         else:
             file_path, _ = QFileDialog.getOpenFileName(
@@ -674,9 +716,16 @@ class SettingsManager(QObject):
                         os.path.join(self.app_state.config_dir, f"custom_logo{ext}"),
                     )
                     self.theme_changed.emit()
-                except Exception:
+                except Exception as e:
+                    friendly_error = self._describe_fs_error(e, file_path)
+                    logging.error(
+                        "Failed to copy logo: %s | raw=%s",
+                        friendly_error,
+                        e,
+                        exc_info=True,
+                    )
                     self.feedback_service.show_message(
-                        "warning", "errors.error", tr("errors.copy_logo_failed")
+                        "warning", "errors.error", friendly_error
                     )
 
     def _remove_font_files(self):
@@ -696,9 +745,19 @@ class SettingsManager(QObject):
                     )
                 self._update_font_button_text()
                 self.theme_changed.emit()
-            except Exception:
+            except Exception as e:
+                friendly_error = self._describe_fs_error(
+                    e,
+                    getattr(cs, "get_custom_font_path", lambda: "")() if cs else "",
+                )
+                logging.error(
+                    "Failed to remove font: %s | raw=%s",
+                    friendly_error,
+                    e,
+                    exc_info=True,
+                )
                 self.feedback_service.show_message(
-                    "warning", "errors.error", tr("errors.remove_font_failed")
+                    "warning", "errors.error", friendly_error
                 )
         else:
             file_path, _ = QFileDialog.getOpenFileName(
@@ -755,11 +814,15 @@ class SettingsManager(QObject):
                 self._update_font_button_text()
                 self.theme_changed.emit()
             except Exception as e:
-                logging.error(f"Failed to copy font: {e}", exc_info=True)
+                friendly_error = self._describe_fs_error(e, file_path)
+                logging.error(
+                    "Failed to copy font: %s | raw=%s",
+                    friendly_error,
+                    e,
+                    exc_info=True,
+                )
                 self.feedback_service.show_message(
-                    "warning",
-                    "errors.error",
-                    tr("errors.copy_font_failed", "Failed to copy font"),
+                    "warning", "errors.error", friendly_error
                 )
 
     def _update_font_button_text(self):
@@ -972,7 +1035,10 @@ class SettingsManager(QObject):
             self.feedback_service.show_message(
                 "error",
                 "dialogs.error",
-                tr("dialogs.theme_import_failed", error=str(e)),
+                tr(
+                    "dialogs.theme_import_failed",
+                    error=format_filesystem_error(e, path=theme_file_path),
+                ),
             )
 
     def _install_theme_from_url(self, url: str):
@@ -1000,7 +1066,12 @@ class SettingsManager(QObject):
             )
             self._record_action("theme_url_install_failed")
             self.feedback_service.show_message(
-                "error", "errors.error", tr("themes.installation_error", error=str(e))
+                "error",
+                "errors.error",
+                tr(
+                    "themes.installation_error",
+                    error=format_network_error(e, url=url),
+                ),
             )
 
     def _on_theme_install_finished(self, success: bool, message: str):

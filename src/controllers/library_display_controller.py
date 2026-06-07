@@ -17,6 +17,7 @@ from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.dialogs.mod_priority_dialog import ModPriorityDialog
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod_utils import get_mod_id
+from utils.process_utils import format_filesystem_error
 
 
 def _bound_checkbox_is_checked(owner, attr_name: str) -> bool:
@@ -1053,7 +1054,9 @@ class LibraryDisplayController:
             thread.start()
         except Exception as e:
             logging.error(f"Error creating modpack: {e}", exc_info=True)
-            self.feedback_service.show_message("error", "errors.error", str(e))
+            self.feedback_service.show_message(
+                "error", "errors.error", format_filesystem_error(e)
+            )
 
     def _on_modpack_progress(self, progress: int, message: str):
         self.app_state.progress_bar_value = progress

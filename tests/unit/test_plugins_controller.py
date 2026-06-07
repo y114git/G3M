@@ -272,3 +272,27 @@ def test_window_download_record_callback_leaves_plugin_refresh_to_controller():
     on_downloads_record_updated(window, record)
 
     window.plugins_ui.handle_external_refresh.assert_not_called()
+
+
+def test_delete_plugin_reports_filesystem_error_with_plugin_path(temp_dir):
+    """Checks that plugin delete errors use the plugin folder path in UI messages."""
+    controller, _downloads_manager, _catalog = _make_controller(temp_dir)
+    plugin = SimpleNamespace(
+        manifest=SimpleNamespace(name="Sample Plugin", version="1.0.0"),
+        path="C:/plugins/sample_plugin",
+    )
+    controller.plugin_runtime_service.get_plugin.return_value = plugin
+    controller.plugin_install_service.delete_plugin.side_effect = PermissionError(
+        13, "Permission denied", "C:/plugins/sample_plugin"
+    )
+    controller.feedback_service.show_message = Mock()
+    controller.refresh_main_tabs = Mock()
+    controller.render = Mock()
+
+    controller.delete_plugin("sample_plugin")
+
+    controller.feedback_service.show_message.assert_called_once_with(
+        "error",
+        "errors.error",
+        tr("errors.permission_denied", path="C:/plugins/sample_plugin"),
+    )

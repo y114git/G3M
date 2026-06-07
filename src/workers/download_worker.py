@@ -7,6 +7,8 @@ import shutil
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from utils.process_utils import format_filesystem_error, format_network_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,11 +89,15 @@ class DownloadWorker(QThread):
                 self.download_finished.emit(self._record_id, False, "cancelled", "")
             else:
                 logger.error("DownloadWorker: %s", e, exc_info=True)
-                self.download_finished.emit(self._record_id, False, str(e), "")
+                self.download_finished.emit(
+                    self._record_id, False, format_network_error(e, url=self._url), ""
+                )
         except Exception as e:
             _cleanup_file(self._target_path)
             logger.error("DownloadWorker: %s", e, exc_info=True)
-            self.download_finished.emit(self._record_id, False, str(e), "")
+            self.download_finished.emit(
+                self._record_id, False, format_network_error(e, url=self._url), ""
+            )
 
 
 class LocalFileCopyWorker(QThread):
@@ -133,4 +139,9 @@ class LocalFileCopyWorker(QThread):
         except Exception as e:
             _cleanup_file(self._target_path)
             logger.error("LocalFileCopyWorker: %s", e, exc_info=True)
-            self.download_finished.emit(self._record_id, False, str(e), "")
+            self.download_finished.emit(
+                self._record_id,
+                False,
+                format_filesystem_error(e, path=self._source_path),
+                "",
+            )

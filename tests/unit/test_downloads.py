@@ -1,5 +1,6 @@
 """Tests for the Downloads system: models, store, and manager."""
 import os
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,6 +13,7 @@ from models.download_models import (
 )
 from services.downloads_manager import DownloadsManager, _safe_filename
 from services.downloads_store import DownloadsStore
+from services.localization_service import tr
 from workers.use_worker import UseWorker
 
 
@@ -271,6 +273,30 @@ def test_use_worker_build_gb_metadata_includes_file_name(tmp_path):
     )
 
     assert worker._build_gb_metadata()['file_name'] == 'vase1_1_0.zip'
+
+
+def test_use_worker_reports_localized_missing_file_for_plugin(tmp_path):
+    """Checks that use worker reports localized missing plugin archive errors."""
+    missing_path = os.path.join(tmp_path, "missing-plugin.zip")
+    results = []
+    worker = UseWorker(
+        record_id="plugin1",
+        file_path=missing_path,
+        target_kind=TargetKind.PLUGIN,
+        mods_dir=str(tmp_path),
+        metadata={},
+        plugin_install_service=Mock(),
+    )
+    worker.use_finished.connect(lambda *args: results.append(args))
+
+    worker.run()
+
+    assert results[-1] == (
+        "plugin1",
+        False,
+        False,
+        tr("errors.file_not_found", path=missing_path),
+    )
 
 
 class TestSafeFilename:

@@ -22,6 +22,7 @@ from services.plugin_support import (
     load_plugin_langs,
     resolve_plugin_path,
 )
+from utils.process_utils import format_plugin_error
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class PluginRuntimeService:
                     ),
                     path=plugin_dir,
                     status="broken",
-                    error=str(e),
+                    error=format_plugin_error(e, plugin_id=plugin_id, details=plugin_dir),
                     compatible=False,
                 )
         self._installed = installed
@@ -213,7 +214,7 @@ class PluginRuntimeService:
                 record = self._installed.get(plugin_id)
                 if record:
                     record.status = "broken"
-                    record.error = str(e)
+                    record.error = format_plugin_error(e, plugin_id=plugin_id, details=record.path)
         self._enabled_instances = {
             plugin_id for plugin_id in desired_ids
             if plugin_id in self._instances
@@ -246,14 +247,14 @@ class PluginRuntimeService:
     def enable_plugin(self, plugin_id: str, *, disable_conflicts: bool = True) -> tuple[bool, str]:
         record = self._installed.get(plugin_id)
         if not record:
-            return False, "plugin_not_found"
+            return False, format_plugin_error("plugin_not_found", plugin_id=plugin_id)
         if not record.compatible:
-            return False, "plugin_incompatible"
+            return False, format_plugin_error("plugin_incompatible", plugin_id=plugin_id)
         missing, conflicts = self._relation_errors(plugin_id)
         if missing:
-            return False, "missing_dependencies"
+            return False, format_plugin_error("missing_dependencies", plugin_id=plugin_id)
         if conflicts and not disable_conflicts:
-            return False, "conflicts_present"
+            return False, format_plugin_error("conflicts_present", plugin_id=plugin_id)
         for conflict_id in conflicts:
             self.disable_plugin(conflict_id)
         self.plugin_state_service.set_enabled(plugin_id, True)
@@ -265,10 +266,10 @@ class PluginRuntimeService:
             return True, ""
         except Exception as e:
             record.status = "broken"
-            record.error = str(e)
+            record.error = format_plugin_error(e, plugin_id=plugin_id, details=record.path)
             self.plugin_state_service.set_enabled(plugin_id, False)
             record.enabled = False
-            return False, str(e)
+            return False, record.error
 
     def disable_plugin(self, plugin_id: str, *, persist: bool = True) -> None:
         record = self._installed.get(plugin_id)
@@ -322,7 +323,7 @@ class PluginRuntimeService:
             except Exception as e:
                 logger.error("PluginRuntimeService: hook %s failed for %s: %s", hook_name, plugin_id, e, exc_info=True)
                 if record:
-                    record.error = str(e)
+                    record.error = format_plugin_error(e, plugin_id=plugin_id, details=record.path)
                     record.status = "broken"
         return results
 

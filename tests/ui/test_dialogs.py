@@ -85,6 +85,27 @@ class TestConflictsDialog:
         assert dialog is not None
         assert isinstance(dialog, QDialog)
 
+    def test_conflicts_dialog_missing_report_uses_localized_message(
+        self, qapp, temp_dir, monkeypatch
+    ):
+        from services.localization_service import tr
+        from ui.dialogs.conflicts_dialog import ConflictsDialog
+
+        report_path = os.path.join(temp_dir, "missing_report.md")
+        dialog = ConflictsDialog(report_path, None)
+        calls = []
+        monkeypatch.setattr(
+            "ui.dialogs.conflicts_dialog.QMessageBox.information",
+            lambda *args: calls.append(args),
+        )
+
+        dialog._open_report_file()
+
+        assert calls
+        assert calls[0][1] == tr("dialogs.conflicts.title")
+        assert calls[0][2] == tr("errors.file_not_found", path=report_path)
+        _close_dialog(qapp, dialog)
+
 
 class TestModPriorityDialog:
     """Tests for dialogs."""
@@ -1919,3 +1940,65 @@ class TestManualInstallDialog:
             == "lang_es/file.txt"
         )
         dialog.close()
+
+    def test_manual_install_dialog_missing_doc_uses_localized_file_not_found(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import tr
+        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        dialog = ManualModInstallDialog(None, str(prepared))
+        missing_file = str(prepared / "missing_readme.md")
+        calls = []
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install_dialog.QMessageBox.warning",
+            lambda *args: calls.append(args),
+        )
+
+        dialog._open_local_file(missing_file)
+
+        assert calls
+        assert calls[0][2] == tr("errors.file_not_found", path=missing_file)
+        dialog.close()
+
+    def test_profile_manager_import_failure_uses_localized_filesystem_error(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import tr
+        from ui.dialogs.profile_manager_dialog import ProfileManagerDialog
+
+        archive_path = tmp_path / "profile.zip"
+        archive_path.write_bytes(b"zip")
+        profile_service = Mock()
+        profile_service.active_name = "Default"
+        profile_service.list_profiles.return_value = ["Default"]
+        profile_service.get_profile_summary.return_value = {
+            "name": "Default",
+            "game": "deltarune",
+            "game_display_name": "DELTARUNE",
+            "game_mod_count": 0,
+            "total_mod_count": 0,
+            "chapter_mode": False,
+            "direct_launch": "",
+        }
+        profile_service.import_profile.side_effect = PermissionError(
+            13, "Permission denied", str(archive_path)
+        )
+        app_state = Mock(local_config={})
+        dialog = ProfileManagerDialog(profile_service, app_state)
+        calls = []
+        monkeypatch.setattr(
+            "ui.dialogs.profile_manager_dialog.QMessageBox.critical",
+            lambda *args: calls.append(args),
+        )
+
+        dialog.import_profiles_from_paths([str(archive_path)])
+
+        assert calls
+        assert calls[0][2] == tr(
+            "profiles.import_failed",
+            error=tr("errors.permission_denied", path=str(archive_path)),
+        )
+        _close_dialog(qapp, dialog)

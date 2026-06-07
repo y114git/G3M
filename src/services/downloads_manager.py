@@ -19,6 +19,7 @@ from models.download_models import (
 )
 from services.downloads_store import DownloadsStore
 from services.localization_service import tr
+from utils.process_utils import format_filesystem_error
 from utils.time_utils import utc_now_iso
 
 logger = logging.getLogger(__name__)
@@ -501,7 +502,7 @@ class DownloadsManager(QObject):
             with contextlib.suppress(Exception):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             record.use_status = UseStatus.NEEDS_MANUAL
-            record.error_message = str(e)
+            record.error_message = format_filesystem_error(e, path=record.file_path)
             self._store.update(record)
             self.record_updated.emit(record)
 

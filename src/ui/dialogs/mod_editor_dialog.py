@@ -54,6 +54,7 @@ from utils.mod_config_parser import (
 )
 from utils.mod_readme_utils import find_mod_info_candidates
 from utils.path_utils import colored_icon, resource_path
+from utils.process_utils import format_filesystem_error
 
 
 class ModEditorDialog(QDialog):
@@ -1643,7 +1644,10 @@ class ModEditorDialog(QDialog):
             QMessageBox.critical(
                 self,
                 tr("errors.mod_creation_error"),
-                tr("errors.mod_creation_failed", error=str(e)),
+                tr(
+                    "errors.mod_creation_failed",
+                    error=format_filesystem_error(e, path=mod_dir),
+                ),
             )
             if os.path.exists(mod_dir):
                 shutil.rmtree(mod_dir)
@@ -1724,7 +1728,10 @@ class ModEditorDialog(QDialog):
             QMessageBox.critical(
                 self,
                 tr("errors.update_error"),
-                tr("errors.local_mod_update_failed", error=str(e)),
+                tr(
+                    "errors.local_mod_update_failed",
+                    error=format_filesystem_error(e),
+                ),
             )
 
     def _delete_mod(self):
@@ -1756,7 +1763,10 @@ class ModEditorDialog(QDialog):
             QMessageBox.critical(
                 self,
                 tr("errors.deletion_error"),
-                tr("errors.local_mod_deletion_failed", error=str(e)),
+                tr(
+                    "errors.local_mod_deletion_failed",
+                    error=format_filesystem_error(e, path=mod_folder),
+                ),
             )
 
     def _export_mod(self):
@@ -1792,7 +1802,12 @@ class ModEditorDialog(QDialog):
             )
         except Exception as e:
             QMessageBox.critical(
-                self, tr("errors.error"), tr("errors.mod_export_failed", error=str(e))
+                self,
+                tr("errors.error"),
+                tr(
+                    "errors.mod_export_failed",
+                    error=format_filesystem_error(e, path=export_path),
+                ),
             )
 
     def _open_mod_folder(self):

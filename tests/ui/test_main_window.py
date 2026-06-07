@@ -529,6 +529,8 @@ class TestAppWindow:
                     window.settings_custom_xdelta_edit.placeholderText()
                     == "Specify path..."
                 )
+                assert window.settings_custom_wine_label.text() == "Custom Wine:"
+                assert window.settings_custom_portproton_label.text() == "Custom PortProton:"
                 assert window.manage_warnings_button.text() == "Manage Warnings"
                 assert window.clear_g3mtool_cache_button.text() == "Clear G3MTool Cache"
                 assert window.settings_custom_g3mtool_label.text() == "Custom G3MTool:"
@@ -546,6 +548,11 @@ class TestAppWindow:
                 assert (
                     window.settings_custom_xdelta_edit.placeholderText()
                     == "Укажите путь..."
+                )
+                assert window.settings_custom_wine_label.text() == "Кастомный Wine:"
+                assert (
+                    window.settings_custom_portproton_label.text()
+                    == "Кастомный PortProton:"
                 )
                 assert window.manage_warnings_button.text() == "Управление предупреждениями"
                 assert (
@@ -693,6 +700,26 @@ class TestAppWindow:
         for btn in window.chapter_tab_buttons:
             btn.deleteLater()
         window.deleteLater()
+
+    def test_save_portproton_override_keeps_legacy_base_path_when_custom_is_cleared(
+        self,
+    ):
+        from app.game_ui import _save_portproton_override
+
+        window = Mock()
+        window.app_state.local_config = {
+            "custom_portproton_path": "/custom/portproton",
+            "portproton_path": "/legacy/portproton",
+        }
+        window.settings_service.write_local_config = Mock()
+        window.settings_service.settings_changed = Mock()
+
+        _save_portproton_override(window, "   ")
+
+        assert window.app_state.local_config["custom_portproton_path"] == ""
+        assert window.app_state.local_config["portproton_path"] == "/legacy/portproton"
+        window.settings_service.write_local_config.assert_called_once_with()
+        window.settings_service.settings_changed.emit.assert_called_once_with()
 
     def test_background_audio_pause_detection_accepts_child_windows(
         self, qapp, temp_dir
@@ -1012,6 +1039,16 @@ class TestTabBuilders:
             assert widgets["settings_custom_xdelta_button"].text() == "..."
             assert widgets["settings_custom_xdelta_button"].toolTip() == tr(
                 "tooltips.custom_xdelta_binary"
+            )
+            assert (
+                widgets["settings_custom_wine_edit"].placeholderText()
+                == tr("ui.path_field_placeholder")
+            )
+            assert widgets["settings_custom_wine_button"].toolTip() == tr(
+                "tooltips.custom_wine_binary"
+            )
+            assert widgets["settings_custom_portproton_button"].toolTip() == tr(
+                "tooltips.custom_portproton_binary"
             )
         finally:
             widget.deleteLater()

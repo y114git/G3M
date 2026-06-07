@@ -24,6 +24,7 @@ from services.profile_service import DEFAULT_PROFILE
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 from ui.common.styling import build_button_style, clamp_border_radius, get_border_radius
 from utils.path_utils import colored_icon
+from utils.process_utils import format_filesystem_error
 
 _ITEM_HEIGHT = 84
 
@@ -315,7 +316,12 @@ class ProfileManagerDialog(QDialog):
                 name = self.profile_service.import_profile(import_path)
             except Exception as e:
                 QMessageBox.critical(
-                    self, tr("errors.error"), tr("profiles.import_failed", error=str(e))
+                    self,
+                    tr("errors.error"),
+                    tr(
+                        "profiles.import_failed",
+                        error=format_filesystem_error(e, path=import_path),
+                    ),
                 )
                 continue
             imported_names.append(name)

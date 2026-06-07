@@ -8,6 +8,7 @@ import tempfile
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from models.download_models import TargetKind
+from utils.process_utils import format_filesystem_error, format_plugin_error
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,23 @@ class UseWorker(QThread):
                 )
         except Exception as e:
             logger.error("UseWorker: %s", e, exc_info=True)
-            self.use_finished.emit(self._record_id, False, False, str(e))
+            self.use_finished.emit(
+                self._record_id,
+                False,
+                False,
+                format_filesystem_error(e, path=self._file_path),
+            )
 
     def _use_mod(self):
         if not os.path.exists(self._file_path):
-            self.use_finished.emit(self._record_id, False, False, "File not found")
+            self.use_finished.emit(
+                self._record_id,
+                False,
+                False,
+                format_filesystem_error(
+                    FileNotFoundError(self._file_path), path=self._file_path
+                ),
+            )
             return
 
         extract_dir = tempfile.mkdtemp(prefix="g3m_use_")
@@ -100,7 +113,14 @@ class UseWorker(QThread):
             )
             return
         if not os.path.exists(self._file_path):
-            self.use_finished.emit(self._record_id, False, False, "File not found")
+            self.use_finished.emit(
+                self._record_id,
+                False,
+                False,
+                format_filesystem_error(
+                    FileNotFoundError(self._file_path), path=self._file_path
+                ),
+            )
             return
         if self._cancelled:
             self.use_finished.emit(self._record_id, False, True, "")
@@ -133,7 +153,16 @@ class UseWorker(QThread):
             self.use_finished.emit(self._record_id, True, False, "")
         except Exception as e:
             logger.error("UseWorker: plugin install failed: %s", e, exc_info=True)
-            self.use_finished.emit(self._record_id, False, False, str(e))
+            self.use_finished.emit(
+                self._record_id,
+                False,
+                False,
+                format_plugin_error(
+                    e,
+                    plugin_id=str(self._metadata.get("plugin_id", "") or ""),
+                    details=self._file_path,
+                ),
+            )
 
     def _extract(self, target_dir: str):
         from utils.archive_utils import extract_archive

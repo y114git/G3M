@@ -33,6 +33,7 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
+from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
 
@@ -871,7 +872,10 @@ class _DataConvertWorkerThread(QThread):
                 ),
             )
         except Exception as e:
-            self.finished.emit(False, str(e))
+            self.finished.emit(
+                False,
+                format_filesystem_error(e, path=self._mod_folder),
+            )
 
 
 class _DataConvertTab(QWidget):

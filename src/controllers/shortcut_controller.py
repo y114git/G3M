@@ -28,6 +28,7 @@ from services.shortcut_plugin_service import (
 )
 from ui.common.styling import get_border_radius
 from utils.mod_utils import get_mod_id, get_mod_name
+from utils.process_utils import format_filesystem_error
 
 
 def _get_platform_extension() -> str:
@@ -408,8 +409,9 @@ def _validate_shortcut_prerequisites(app_state, has_any_mod: bool) -> str | None
     if has_any_mod:
         from adapters.g3mtool_adapter import G3MToolManager
 
-        if not G3MToolManager(app_state).is_available():
-            return tr("shortcut.error_g3mtool_unavailable")
+        g3mtool = G3MToolManager(app_state)
+        if not g3mtool.is_available():
+            return g3mtool.get_unavailable_reason()
     return None
 
 
@@ -523,5 +525,7 @@ def on_shortcut_button_click(
             )
         logging.error(f"Failed to create shortcut: {e}", exc_info=True)
         feedback_service.show_message(
-            "error", "errors.error", tr("shortcut.creation_failed", error=str(e))
+            "error",
+            "errors.error",
+            tr("shortcut.creation_failed", error=format_filesystem_error(e, path=filepath)),
         )

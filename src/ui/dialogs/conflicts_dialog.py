@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
+from utils.process_utils import format_filesystem_error
 
 
 class ConflictsDialog(QDialog):
@@ -78,10 +79,18 @@ class ConflictsDialog(QDialog):
 
     def _open_report_file(self):
         if not os.path.exists(self.report_md_path):
-            QMessageBox.information(self, "Report", "Report file not found.")
+            QMessageBox.information(
+                self,
+                tr("dialogs.conflicts.title"),
+                tr("errors.file_not_found", path=self.report_md_path),
+            )
             return
         try:
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(self.report_md_path)):
                 raise RuntimeError(f"Failed to open report: {self.report_md_path}")
         except Exception as e:
-            QMessageBox.warning(self, tr("errors.error"), str(e))
+            QMessageBox.warning(
+                self,
+                tr("errors.error"),
+                format_filesystem_error(e, path=self.report_md_path),
+            )

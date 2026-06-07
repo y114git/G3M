@@ -13,6 +13,7 @@ from config.config import THEME_CONFIG_FILENAME, UI_COLORS
 from services.localization_service import tr
 from services.migration_service import normalize_theme_settings
 from utils.path_utils import find_theme_config_path
+from utils.process_utils import format_filesystem_error, format_network_error
 from workers.base_install_worker import BaseInstallWorker
 
 
@@ -136,7 +137,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                             return
                     except Exception as e:
                         self.finished.emit(
-                            False, tr("themes.download_error", error=str(e))
+                            False, tr("themes.download_error", error=format_network_error(e, url=url))
                         )
                         return
                     if self._cancelled:
@@ -166,4 +167,10 @@ class ThemeInstallWorker(BaseInstallWorker):
             logging.error(
                 f"ThemeInstallWorker: Installation failed: {e}", exc_info=True
             )
-            self.finished.emit(False, tr("themes.installation_error", error=str(e)))
+            self.finished.emit(
+                False,
+                tr(
+                    "themes.installation_error",
+                    error=format_filesystem_error(e, path=self.archive_path),
+                ),
+            )

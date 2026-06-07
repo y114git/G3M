@@ -33,6 +33,14 @@ class ModImportExportController:
         self.mod_service.load_local_mods()
         self.mod_service.mod_list_updated.emit()
 
+    @staticmethod
+    def _format_import_exception(exc: Exception, *, file_path: str = "") -> str:
+        if isinstance(exc, FileNotFoundError):
+            return tr("errors.archive_not_found")
+        if isinstance(exc, PermissionError):
+            return tr("errors.permission_denied", path=file_path or getattr(exc, "filename", "") or "?")
+        return str(exc)
+
     def _record_import_analytics(
         self,
         *,
@@ -262,7 +270,11 @@ class ModImportExportController:
                 file_path=file_path,
             )
             self._show_import_error_with_manual_install(
-                file_path, tr("errors.mod_import_failed", error=str(e))
+                file_path,
+                tr(
+                    "errors.mod_import_failed",
+                    error=self._format_import_exception(e, file_path=file_path),
+                ),
             )
 
     def _merge_into_existing_mod(
@@ -323,7 +335,10 @@ class ModImportExportController:
             QMessageBox.critical(
                 self.app_window,
                 tr("errors.error"),
-                tr("errors.mod_import_failed", error=str(e)),
+                tr(
+                    "errors.mod_import_failed",
+                    error=self._format_import_exception(e, file_path=file_path),
+                ),
             )
 
     def _find_mod_dir_by_id(self, mod_id: str):
@@ -376,7 +391,12 @@ class ModImportExportController:
             )
             self._record_import_analytics(source="url", outcome="failed")
             self.app_window.feedback_service.show_message(
-                "error", "errors.error", tr("mods.installation_error", error=str(e))
+                "error",
+                "errors.error",
+                tr(
+                    "mods.installation_error",
+                    error=self._format_import_exception(e, file_path=url),
+                ),
             )
 
     def _on_manual_install_required(
@@ -418,7 +438,10 @@ class ModImportExportController:
             self.app_window.feedback_service.show_message(
                 "error",
                 tr("errors.error"),
-                tr("errors.manual_install_failed", error=str(e)),
+                tr(
+                    "errors.manual_install_failed",
+                    error=self._format_import_exception(e, file_path=archive_path),
+                ),
             )
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -451,7 +474,10 @@ class ModImportExportController:
             QMessageBox.critical(
                 self.app_window,
                 tr("errors.error"),
-                tr("errors.manual_install_failed", error=str(e)),
+                tr(
+                    "errors.manual_install_failed",
+                    error=self._format_import_exception(e, file_path=file_path),
+                ),
             )
 
     def _prepare_local_files_for_manual_install(
@@ -474,9 +500,7 @@ class ModImportExportController:
         except shutil.ReadError:
             return file_path
         except Exception as exc:
-            raise ValueError(
-                f"_materialize_local_import failed to extract archive '{file_path}': {exc}"
-            ) from exc
+            raise ValueError(self._format_import_exception(exc, file_path=file_path)) from exc
         return unwrap_single_directory_chain(temp_dir)
 
     def _on_mod_install_finished(self, success: bool, message: str):

@@ -22,15 +22,19 @@ from app.game_ui import (
     refresh_game_lists,
     reset_custom_executable,
     reset_custom_g3mtool_path,
+    reset_custom_portproton_path,
+    reset_custom_wine_path,
     reset_custom_xdelta_path,
     save_custom_executable_text,
     save_custom_g3mtool_text,
+    save_custom_portproton_text,
+    save_custom_wine_text,
     save_custom_xdelta_text,
-    save_portproton_path_text,
     select_custom_executable_file,
     select_custom_g3mtool_file,
+    select_custom_portproton_file,
+    select_custom_wine_file,
     select_custom_xdelta_file,
-    select_portproton_path,
     update_custom_binary_ui,
     update_portproton_ui,
     update_settings_library_tab,
@@ -309,6 +313,14 @@ def setup_settings_tab(w):
             "settings_custom_xdelta_edit",
             "settings_custom_xdelta_button",
             "settings_reset_xdelta_button",
+            "settings_custom_wine_label",
+            "settings_custom_wine_edit",
+            "settings_custom_wine_button",
+            "settings_reset_wine_button",
+            "settings_custom_portproton_label",
+            "settings_custom_portproton_edit",
+            "settings_custom_portproton_button",
+            "settings_reset_portproton_button",
             "manage_warnings_button",
             "clear_g3mtool_cache_button",
             "launch_via_steam_checkbox",
@@ -614,6 +626,58 @@ def setup_settings_tab(w):
             lambda: reset_custom_xdelta_path(w),
         )
     )
+    if hasattr(w, "settings_custom_wine_button") and w.settings_custom_wine_button:
+        w.settings_custom_wine_button.clicked.connect(
+            lambda: _guarded_trigger(
+                w.settings_custom_wine_button,
+                lambda: select_custom_wine_file(w),
+            )
+        )
+    if hasattr(w, "settings_custom_wine_edit") and w.settings_custom_wine_edit:
+        w.settings_custom_wine_edit.editingFinished.connect(
+            lambda: save_custom_wine_text(
+                w,
+                w.settings_custom_wine_edit.full_text()
+                if hasattr(w.settings_custom_wine_edit, "full_text")
+                else w.settings_custom_wine_edit.text(),
+            )
+        )
+    if hasattr(w, "settings_reset_wine_button") and w.settings_reset_wine_button:
+        w.settings_reset_wine_button.clicked.connect(
+            lambda: _guarded_trigger(
+                w.settings_reset_wine_button,
+                lambda: reset_custom_wine_path(w),
+            )
+        )
+    if (
+        hasattr(w, "settings_custom_portproton_button")
+        and w.settings_custom_portproton_button
+    ):
+        w.settings_custom_portproton_button.clicked.connect(
+            lambda: _guarded_trigger(
+                w.settings_custom_portproton_button,
+                lambda: select_custom_portproton_file(w),
+            )
+        )
+    if hasattr(w, "settings_custom_portproton_edit") and w.settings_custom_portproton_edit:
+        w.settings_custom_portproton_edit.editingFinished.connect(
+            lambda: save_custom_portproton_text(
+                w,
+                w.settings_custom_portproton_edit.full_text()
+                if hasattr(w.settings_custom_portproton_edit, "full_text")
+                else w.settings_custom_portproton_edit.text(),
+            )
+        )
+    if (
+        hasattr(w, "settings_reset_portproton_button")
+        and w.settings_reset_portproton_button
+    ):
+        w.settings_reset_portproton_button.clicked.connect(
+            lambda: _guarded_trigger(
+                w.settings_reset_portproton_button,
+                lambda: reset_custom_portproton_path(w),
+            )
+        )
     update_settings_library_tab(w)
     update_custom_binary_ui(w)
     w.manage_warnings_button.clicked.connect(
@@ -657,28 +721,6 @@ def setup_settings_tab(w):
                     lambda: update_portproton_ui(w),
                     lambda: _record_setting_change(w, "use_portproton", bool(state)),
                 ),
-            )
-        )
-    if w.select_portproton_path_button:
-        w.select_portproton_path_button.clicked.connect(
-            lambda: _guarded_trigger(
-                w.select_portproton_path_button, lambda: select_portproton_path(w)
-            )
-        )
-    if w.portproton_path_edit:
-        w.portproton_path_edit.editingFinished.connect(
-            lambda: save_portproton_path_text(
-                w,
-                w.portproton_path_edit.full_text()
-                if hasattr(w.portproton_path_edit, "full_text")
-                else w.portproton_path_edit.text(),
-            )
-        )
-    if w.settings_portproton_path_reset_button:
-        w.settings_portproton_path_reset_button.clicked.connect(
-            lambda: _guarded_trigger(
-                w.settings_portproton_path_reset_button,
-                lambda: save_portproton_path_text(w, ""),
             )
         )
     w.hide_mods_browser_tab_checkbox.stateChanged.connect(
