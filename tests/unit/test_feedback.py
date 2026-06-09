@@ -1,3 +1,5 @@
+"""Unit tests for test feedback."""
+
 import html
 from types import SimpleNamespace
 from unittest.mock import Mock

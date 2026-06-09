@@ -1,4 +1,4 @@
-"Dialog for managing mod blocklist entries."
+"""Dialog for managing blocked mod entries."""
 
 from collections.abc import Sequence
 from typing import Protocol

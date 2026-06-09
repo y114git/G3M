@@ -8,7 +8,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from models.game_modes import DeltaruneGame, GameDefinition
 from models.mod_models import AnyModInfo
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 
 
 class AppState(QObject):

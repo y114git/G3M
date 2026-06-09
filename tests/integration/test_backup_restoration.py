@@ -1,3 +1,5 @@
+"""Integration tests for test backup restoration."""
+
 import logging
 import os
 
@@ -9,7 +11,7 @@ class TestBackupRestoration:
     """Tests for backup restoration."""
     def test_complete_backup_restoration_flow(self, temp_dir, app_state, feedback_service):
         """Checks that complete backup restoration flow."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         patcher = G3MToolPatchingService(app_state, mod_service)
         backup_dir = os.path.join(temp_dir, 'backups')

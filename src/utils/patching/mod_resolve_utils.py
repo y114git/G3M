@@ -5,8 +5,8 @@ import os
 from typing import Any
 
 from utils.file_utils import get_chapter_folder_name, load_json, normalize_chapter_id
-from utils.mod_config_parser import normalize_mod_config_data, resolve_mod_file_path
-from utils.mod_utils import get_mod_id, get_mod_name
+from utils.mod.config_parser import normalize_mod_config_data, resolve_mod_file_path
+from utils.mod.utils import get_mod_id, get_mod_name
 from utils.patching import mod_content_utils as mod_content
 from utils.path_utils import find_chapter_resource_dir
 

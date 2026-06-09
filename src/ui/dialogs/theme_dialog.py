@@ -1,3 +1,5 @@
+"""Dialog for theme management and import actions."""
+
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from config.settings_schema import DEFAULT_APP_SETTINGS

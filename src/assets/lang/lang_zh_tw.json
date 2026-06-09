@@ -683,6 +683,7 @@
     "mod_import_failed": "匯入模組失敗：{error}",
     "mod_export_failed": "匯出模組失敗：{error}",
     "file_not_found": "找不到檔案：{path}",
+    "archive_not_found": "未找到歸檔",
     "file_operation_failed": "檔案操作失敗：{error}",
     "network_timeout": "要求逾時。",
     "network_ssl_error": "安全連線失敗。請檢查憑證或系統時間設定。",

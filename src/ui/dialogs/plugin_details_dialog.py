@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QPixmap
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -23,12 +23,13 @@ from PyQt6.QtWidgets import (
 
 from models.plugin_models import CatalogPluginEntry, InstalledPluginRecord
 from services.localization_service import localization_service, tr
-from services.plugin_support import resolve_plugin_path
+from services.plugins.support import resolve_plugin_path
 from ui.common.styling import (
     get_border_radius,
     get_theme_color,
     load_mod_icon_universal,
 )
+from utils.native_integration import open_url_native
 
 
 def _resolve_text(value: str) -> str:
@@ -131,7 +132,7 @@ class PluginDetailsDialog(QDialog):
             external_button = QPushButton(tr("plugins.details_homepage"), icon_column)
             external_button.setToolTip(tr("tooltips.open_homepage"))
             external_button.clicked.connect(
-                lambda: QDesktopServices.openUrl(QUrl(homepage))
+                lambda: open_url_native(homepage)
             )
             icon_column_layout.addWidget(external_button)
 

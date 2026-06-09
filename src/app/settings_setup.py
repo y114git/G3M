@@ -95,7 +95,6 @@ def _run_actions(*actions: Callable[[], None]) -> None:
 def prepare_color_dialog(w, dialog: QColorDialog):
     zoom_factor = w.app_state.local_config.get("ui_scale", 1.0)
     dialog.setWindowTitle(tr("ui.select_color"))
-    dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
     dialog.setOption(QColorDialog.ColorDialogOption.ShowAlphaChannel, True)
     dialog.ensurePolished()
     dialog.setMinimumWidth(max(dialog.minimumWidth(), int(760 * zoom_factor)))

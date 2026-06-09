@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 
+import requests
 from PyQt6.QtCore import pyqtSignal
 
 from config.config import (
@@ -483,8 +484,4 @@ class UrlInstallThread(BaseInstallWorker):
 
     @staticmethod
     def _looks_like_network_error(error: Exception) -> bool:
-        try:
-            import requests
-        except Exception:
-            return False
         return isinstance(error, requests.RequestException)

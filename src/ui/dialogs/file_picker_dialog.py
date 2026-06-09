@@ -1,4 +1,5 @@
-import webbrowser
+"""Dialog for choosing files from curated lists."""
+
 from datetime import datetime
 
 from PyQt6.QtCore import Qt
@@ -14,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services.localization_service import tr
+from utils.native_integration import open_url_native
 
 
 class GameBananaFilePickerDialog(QDialog):
@@ -138,7 +140,7 @@ class GameBananaFilePickerDialog(QDialog):
 
     def _open_homepage(self):
         if self.homepage:
-            webbrowser.open(self.homepage)
+            open_url_native(self.homepage)
 
     def _accept_if_selection(self):
         if self.selected_file:

@@ -1,7 +1,8 @@
+"""Dialog for application announcements."""
+
 import logging
 
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
 from services.announce_service import AnnounceService
 from services.localization_service import tr
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
+from utils.native_integration import open_url_native
 
 
 class AnnouncePanel(QWidget):
@@ -134,7 +136,7 @@ class AnnouncePanel(QWidget):
         link = str(self._announce.get("link", "") or "").strip()
         if link:
             try:
-                QDesktopServices.openUrl(QUrl(link))
+                open_url_native(link)
             except Exception as e:
                 logging.error(f"Failed to open announce link: {e}")
 

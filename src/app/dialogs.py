@@ -93,7 +93,7 @@ def open_log_viewer_dialog(w):
 
 
 def open_game_versions_dialog(w):
-    from ui.dialogs.game_versions_dialog import GameVersionsDialog
+    from ui.dialogs.game.versions_dialog import GameVersionsDialog
 
     if w._game_versions_dialog is None:
         analytics = getattr(w, "analytics_service", None)
@@ -158,7 +158,7 @@ def open_profile_manager(w):
 
 
 def open_game_manager(w):
-    from ui.dialogs.game_manager_dialog import GameManagerDialog
+    from ui.dialogs.game.manager_dialog import GameManagerDialog
 
     analytics = getattr(w, "analytics_service", None)
     if analytics:

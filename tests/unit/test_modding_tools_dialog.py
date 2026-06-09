@@ -1,3 +1,5 @@
+"""Unit tests for test modding tools dialog."""
+
 import json
 import os
 import zipfile
@@ -191,7 +193,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
         ),
     )
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_mod_file_path",
+        "utils.mod.config_parser.resolve_mod_file_path",
         lambda folder, stored_path: str(mod_folder / stored_path),
     )
     monkeypatch.setattr(
@@ -265,7 +267,7 @@ def test_data_convert_accepts_g3mpatch_zip_as_source(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_mod_file_path",
+        "utils.mod.config_parser.resolve_mod_file_path",
         lambda folder, stored_path: str(mod_folder / stored_path),
     )
     monkeypatch.setattr(
@@ -330,7 +332,7 @@ def test_data_convert_accepts_csx_source(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_mod_file_path",
+        "utils.mod.config_parser.resolve_mod_file_path",
         lambda folder, stored_path: str(mod_folder / stored_path),
     )
     monkeypatch.setattr(
@@ -397,7 +399,7 @@ def test_data_convert_preserves_chapter_relative_path_in_converted_config(
         ),
     )
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_mod_file_path",
+        "utils.mod.config_parser.resolve_mod_file_path",
         lambda folder, stored_path: str(mod_folder / stored_path),
     )
     monkeypatch.setattr(
@@ -440,7 +442,7 @@ def test_data_convert_reports_localized_filesystem_error(tmp_path, monkeypatch):
     mod_folder.mkdir()
     missing_path = os.path.join(str(mod_folder), "data.win")
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_mod_file_path",
+        "utils.mod.config_parser.resolve_mod_file_path",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             FileNotFoundError(2, "No such file", missing_path)
         ),
@@ -543,7 +545,7 @@ def test_data_convert_allows_generated_patch_without_roundtrip_check(tmp_path, m
         ),
     )
     monkeypatch.setattr(
-        "utils.mod_config_parser.resolve_mod_file_path",
+        "utils.mod.config_parser.resolve_mod_file_path",
         lambda folder, stored_path: str(mod_folder / stored_path),
     )
     monkeypatch.setattr(

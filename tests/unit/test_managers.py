@@ -1,7 +1,10 @@
+"""Unit tests for test managers."""
+
 import json
 import os
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 
 
@@ -9,7 +12,7 @@ class TestModManager:
     """Tests for managers."""
     def test_mod_service_initialization(self, app_state, feedback_service):
         """Checks that mod service initialization."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
         assert mod_service is not None
@@ -18,7 +21,7 @@ class TestModManager:
 
     def test_mod_service_cache_invalidation(self, app_state, feedback_service):
         """Checks that mod service cache invalidation."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
         mod_service.invalidate_mods_cache()
@@ -26,7 +29,7 @@ class TestModManager:
 
     def test_mod_service_scan_empty_directory(self, app_state, feedback_service):
         """Checks that mod service scan empty directory."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
         cache = mod_service._get_mods_cache(use_async=False)
@@ -37,7 +40,7 @@ class TestModManager:
         self, app_state, feedback_service, sample_mod_folder
     ):
         """Checks that mod service scan with mod."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state=app_state, feedback_service=feedback_service)
         cache = mod_service._get_mods_cache(use_async=False)
@@ -46,7 +49,7 @@ class TestModManager:
 
     def test_mod_service_validate_config_valid(self, app_state, feedback_service):
         """Checks that mod service validate config valid."""
-        from utils.mod_scan_utils import validate_mod_config
+        from utils.mod.scan_utils import validate_mod_config
 
         valid_config = {
             "config_version": "1.0.0",
@@ -64,7 +67,7 @@ class TestModManager:
         self, app_state, feedback_service
     ):
         """Checks that mod service validate config missing fields."""
-        from utils.mod_scan_utils import validate_mod_config
+        from utils.mod.scan_utils import validate_mod_config
 
         invalid_config = {"version": "1.0.0"}
         result = validate_mod_config(invalid_config, "/fake/path", "test_mod")
@@ -74,7 +77,7 @@ class TestModManager:
         self, app_state, feedback_service
     ):
         """Checks that mod service validate config invalid types."""
-        from utils.mod_scan_utils import validate_mod_config
+        from utils.mod.scan_utils import validate_mod_config
 
         invalid_config = {"id": "test", "name": 123}
         result = validate_mod_config(invalid_config, "/fake/path", "test_mod")
@@ -382,7 +385,7 @@ class TestSettingsManager:
         )
         manager.feedback_service.show_message = Mock()
         monkeypatch.setattr(
-            "services.settings_service.QFileDialog.getOpenFileName",
+            "services.settings_service.get_open_file_name",
             lambda *args, **kwargs: ("C:/bad.bin", ""),
         )
         monkeypatch.setattr(
@@ -515,11 +518,11 @@ class TestSettingsManager:
         invalid_dir = tmp_path / "invalid_game"
         invalid_dir.mkdir()
         monkeypatch.setattr(
-            "services.settings_service.QFileDialog.getOpenFileName",
+            "services.settings_service.get_open_file_name",
             lambda *args, **kwargs: ("", ""),
         )
         monkeypatch.setattr(
-            "services.settings_service.QFileDialog.getExistingDirectory",
+            "services.settings_service.get_existing_directory",
             lambda *args, **kwargs: str(invalid_dir),
         )
         monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
@@ -553,11 +556,11 @@ class TestSettingsManager:
 
         monkeypatch.setattr("services.settings_service.platform.system", lambda: "Darwin")
         monkeypatch.setattr(
-            "services.settings_service.QFileDialog.getOpenFileName",
+            "services.settings_service.get_open_file_name",
             fake_get_open_file_name,
         )
         monkeypatch.setattr(
-            "services.settings_service.QFileDialog.getExistingDirectory",
+            "services.settings_service.get_existing_directory",
             fake_get_existing_directory,
         )
 
@@ -589,7 +592,7 @@ class TestLaunchManager:
     def test_launch_service_initialization(self, app_state, feedback_service):
         """Checks that launch service initialization."""
         from services.launch_service import GameLauncher
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         launcher = GameLauncher(
@@ -684,10 +687,10 @@ class TestLaunchManager:
             patch.object(
                 launcher, "_start_detached_command", return_value=True
             ) as start_detached,
-            patch("services.launch_service.webbrowser.open") as web_open,
+            patch("services.launch_service.open_url_native") as web_open,
         ):
             launcher._execute_game(
-                {"target": "steam://rungameid/1690940", "cwd": None, "type": "webbrowser"}
+                {"target": "steam://rungameid/1690940", "cwd": None, "type": "url"}
             )
 
         start_detached.assert_called_once_with(
@@ -715,7 +718,7 @@ class TestLaunchManager:
             ) as start_detached,
         ):
             launcher._execute_game(
-                {"target": "steam://rungameid/1690940", "cwd": None, "type": "webbrowser"}
+                {"target": "steam://rungameid/1690940", "cwd": None, "type": "url"}
             )
 
         assert start_detached.call_args_list == [
@@ -901,12 +904,9 @@ class TestUpdateCheckManager:
             "utils.archive_utils.extract_archive",
             side_effect=FileNotFoundError(2, "No such file", "missing.zip"),
         ):
-            try:
+            with pytest.raises(AppError) as exc_info:
                 checker._extract_archive("Linux", "missing.zip", "out")
-            except AppError as exc:
-                assert str(exc) == tr("errors.archive_not_found")
-            else:
-                raise AssertionError("Expected AppError")
+            assert str(exc_info.value) == tr("errors.archive_not_found")
 
     def test_update_worker_error_formats_request_failures_precisely(
         self, app_state, feedback_service
@@ -1234,7 +1234,7 @@ class TestExpandedFormats:
         manager.write_local_config = Mock()
 
         monkeypatch.setattr(
-            "services.settings_service.QFileDialog.getOpenFileName",
+            "services.settings_service.get_open_file_name",
             lambda *args, **kwargs: (str(external_bg), ""),
         )
 

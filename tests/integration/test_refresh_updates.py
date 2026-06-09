@@ -1,3 +1,5 @@
+"""Integration tests for test refresh updates."""
+
 from unittest.mock import Mock, patch
 
 

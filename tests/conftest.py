@@ -1,3 +1,5 @@
+"""Shared pytest fixtures and test configuration."""
+
 import logging
 import os
 import sys

@@ -6,7 +6,6 @@ from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -23,6 +22,7 @@ from services.localization_service import tr
 from services.profile_service import DEFAULT_PROFILE
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 from ui.common.styling import build_button_style, clamp_border_radius, get_border_radius
+from utils.native_integration import get_open_file_name, get_save_file_name
 from utils.path_utils import colored_icon
 from utils.process_utils import format_filesystem_error
 
@@ -279,7 +279,7 @@ class ProfileManagerDialog(QDialog):
         name = self._selected_name()
         if not name:
             return
-        export_path, _ = QFileDialog.getSaveFileName(
+        export_path, _ = get_save_file_name(
             self,
             tr("ui.select_export_location"),
             f"{name}.zip",
@@ -297,7 +297,7 @@ class ProfileManagerDialog(QDialog):
             )
 
     def _on_import(self):
-        import_path, _ = QFileDialog.getOpenFileName(
+        import_path, _ = get_open_file_name(
             self,
             tr("profiles.select_import_archive"),
             "",

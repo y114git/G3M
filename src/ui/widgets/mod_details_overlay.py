@@ -8,7 +8,6 @@ import json
 import logging
 import threading
 import time
-import webbrowser
 from typing import override
 
 from PyQt6 import sip as _sip
@@ -45,7 +44,8 @@ from ui.common.styling import (
 )
 from ui.utils.image_loader import ImageLoaderRunnable
 from ui.utils.ui_utils import UIAnimator
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
+from utils.native_integration import open_url_native
 from workers import WorkerSignals
 
 _MOD_DETAILS_CACHE: collections.OrderedDict[tuple[int, str], tuple[float, dict]] = (
@@ -116,7 +116,7 @@ class LoadModDetailsThread(QThread):
         self.mod_data = mod_data
 
     def _get_mod_id(self):
-        from utils.mod_utils import parse_gamebanana_mod_id
+        from utils.mod.utils import parse_gamebanana_mod_id
 
         gb_id = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")[1]
         if not gb_id:
@@ -127,7 +127,7 @@ class LoadModDetailsThread(QThread):
             return None
 
     def _is_wip(self):
-        from utils.mod_utils import parse_gamebanana_mod_id
+        from utils.mod.utils import parse_gamebanana_mod_id
 
         gb_type = parse_gamebanana_mod_id(get_mod_id(self.mod_data) or "")[0]
         return gb_type == "wip"
@@ -299,7 +299,7 @@ class ScreenshotViewerDialog(QDialog):
             menu.setStyle(fusion_style)
         menu.setObjectName("screenshotContextMenu")
         url = self._urls[self._index]
-        menu.addAction(tr("ui.open_image_in_browser"), lambda: webbrowser.open(url))
+        menu.addAction(tr("ui.open_image_in_browser"), lambda: open_url_native(url))
         menu.addAction(
             tr("ui.copy_image"),
             lambda: QGuiApplication.clipboard().setPixmap(
@@ -804,7 +804,7 @@ class ModDetailsOverlay(QWidget):
                         width=self.EXTERNAL_BUTTON_WIDTH,
                         font_size=15,
                     ),
-                    clicked=lambda: webbrowser.open(homepage),
+                    clicked=lambda: open_url_native(homepage),
                     fixed_width=self.EXTERNAL_BUTTON_WIDTH,
                 ),
                 0,

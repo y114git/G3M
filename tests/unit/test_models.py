@@ -1,3 +1,5 @@
+"""Unit tests for test models."""
+
 import pytest
 
 from models.game_modes import (

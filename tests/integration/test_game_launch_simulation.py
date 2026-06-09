@@ -1,3 +1,5 @@
+"""Integration tests for test game launch simulation."""
+
 import os
 import platform
 from unittest.mock import MagicMock, patch

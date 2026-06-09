@@ -1,3 +1,5 @@
+"""Dialog for the integrated chat view."""
+
 import contextlib
 import logging
 import time

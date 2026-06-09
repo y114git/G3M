@@ -17,7 +17,7 @@ from adapters.g3mtool_adapter import G3MToolManager
 from config.config import MOD_CONFIG_FILENAME, MOD_DOCUMENTATION_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import get_unique_mod_dir, remove_archive_extension, save_json
-from utils.mod_config_parser import build_mod_config_data
+from utils.mod.config_parser import build_mod_config_data
 from utils.patching.patch_verification_utils import files_match, verify_generated_patch
 
 logger = logging.getLogger(__name__)

@@ -683,6 +683,7 @@
     "mod_import_failed": "MODのインポートに失敗しました: {error}",
     "mod_export_failed": "モジュールのエクスポートに失敗しました: {error}",
     "file_not_found": "ファイルが見つかりません: {path}",
+    "archive_not_found": "アーカイブが見つかりません",
     "file_operation_failed": "ファイル操作エラー: {error}",
     "network_timeout": "要求がタイムアウトしました。",
     "network_ssl_error": "安全な接続に失敗しました。証明書またはシステム時刻を確認してください。",

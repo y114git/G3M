@@ -1,9 +1,4 @@
-#!/usr/bin/env python3
-"""
-Startup test script for G3M builds.
-Extracts archive and verifies the binary can start successfully.
-Can be used both as a standalone script and as pytest tests.
-"""
+"""Integration tests for startup flows and packaged-launch validation."""
 
 import faulthandler
 import importlib.util

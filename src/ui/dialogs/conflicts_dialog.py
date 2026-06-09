@@ -1,7 +1,9 @@
+"""Dialog for viewing mod conflict results."""
+
 import os
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QFont
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -14,6 +16,7 @@ from PyQt6.QtWidgets import (
 
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
+from utils.native_integration import open_path_native
 from utils.process_utils import format_filesystem_error
 
 
@@ -86,7 +89,7 @@ class ConflictsDialog(QDialog):
             )
             return
         try:
-            if not QDesktopServices.openUrl(QUrl.fromLocalFile(self.report_md_path)):
+            if not open_path_native(self.report_md_path):
                 raise RuntimeError(f"Failed to open report: {self.report_md_path}")
         except Exception as e:
             QMessageBox.warning(

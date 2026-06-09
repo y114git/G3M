@@ -1,3 +1,5 @@
+"""Unit tests for test app context."""
+
 import os
 from unittest.mock import Mock, patch
 

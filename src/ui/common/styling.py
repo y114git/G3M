@@ -17,7 +17,7 @@ from config.config import (
     UI_COLORS,
 )
 from config.settings_schema import get_theme_color_key
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 from utils.path_utils import colored_icon
 
 

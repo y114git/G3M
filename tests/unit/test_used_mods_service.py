@@ -1,3 +1,5 @@
+"""Unit tests for test used mods service."""
+
 from types import SimpleNamespace
 from unittest.mock import Mock
 

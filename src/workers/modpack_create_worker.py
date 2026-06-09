@@ -15,7 +15,7 @@ from adapters.g3mtool_adapter import G3MToolManager
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
 from utils.file_utils import get_chapter_folder_name, normalize_chapter_id
-from utils.mod_config_parser import build_mod_config_data
+from utils.mod.config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
 from utils.patching.mod_resolve_utils import get_mod_configured_extra_files
 

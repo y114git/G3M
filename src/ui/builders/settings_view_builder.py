@@ -1,3 +1,5 @@
+"""Builds the Settings view UI."""
+
 import platform
 from typing import Any
 

@@ -1,3 +1,5 @@
+"""Prepares user-data paths needed during bootstrap."""
+
 from __future__ import annotations
 
 import logging

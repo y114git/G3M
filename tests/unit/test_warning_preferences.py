@@ -1,3 +1,5 @@
+"""Unit tests for test warning preferences."""
+
 from services.warning_service import (
     WarningSeverity,
     create_warning_event,

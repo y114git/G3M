@@ -1,3 +1,5 @@
+"""Tracks application session state and identifiers."""
+
 from __future__ import annotations
 
 import logging

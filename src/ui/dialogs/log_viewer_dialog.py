@@ -6,8 +6,8 @@ import logging
 import os
 from typing import override
 
-from PyQt6.QtCore import QSize, Qt, QTimer, QUrl
-from PyQt6.QtGui import QDesktopServices, QTextCursor
+from PyQt6.QtCore import QSize, Qt, QTimer
+from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -27,6 +27,7 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from ui.widgets.shared.custom_controls import NoScrollComboBox
+from utils.native_integration import open_path_native
 from utils.path_utils import colored_icon
 
 logger = logging.getLogger(__name__)
@@ -242,7 +243,7 @@ class LogViewerDialog(QDialog):
     def _open_logs_folder(self) -> None:
         logs_dir = self._service.logs_dir
         os.makedirs(logs_dir, exist_ok=True)
-        if not QDesktopServices.openUrl(QUrl.fromLocalFile(logs_dir)):
+        if not open_path_native(logs_dir):
             logger.warning("Failed to open logs folder: %s", logs_dir)
 
     @override

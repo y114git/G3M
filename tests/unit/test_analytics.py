@@ -1,3 +1,5 @@
+"""Unit tests for test analytics."""
+
 import importlib
 import os
 import sys

@@ -1,3 +1,5 @@
+"""Worker for batch mod installation flows."""
+
 import contextlib
 import logging
 import os
@@ -17,8 +19,8 @@ from config.config import (
 from services.localization_service import tr
 from ui.utils.ui_utils import format_size_mb
 from utils.file_utils import get_unique_mod_dir, normalize_chapter_id
-from utils.mod_config_parser import build_mod_config_data
-from utils.mod_utils import get_mod_id
+from utils.mod.config_parser import build_mod_config_data
+from utils.mod.utils import get_mod_id
 from utils.network_utils import download_file, get_session
 
 

@@ -1,3 +1,5 @@
+"""Builds the Mods Browser tab UI."""
+
 from typing import Any
 
 from PyQt6.QtCore import QObject, Qt

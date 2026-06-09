@@ -1,3 +1,5 @@
+"""Base widget helpers shared by mod card widgets."""
+
 import contextlib
 import logging
 
@@ -14,7 +16,7 @@ from ui.common.styling import (
     load_mod_icon_universal,
     update_mod_widget_style,
 )
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 
 
 class BaseModWidget(QFrame):
@@ -184,7 +186,7 @@ class BaseModWidget(QFrame):
             config = app.mod_service.get_mod_config(key)
             if not config:
                 return None
-            from utils.mod_utils import resolve_mod_icon
+            from utils.mod.utils import resolve_mod_icon
 
             return resolve_mod_icon(config, folder)
         except Exception:

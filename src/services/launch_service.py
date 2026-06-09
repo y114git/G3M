@@ -8,7 +8,6 @@ import platform
 import shutil
 import subprocess
 import time
-import webbrowser
 from typing import Any
 
 from PyQt6.QtCore import QObject, QProcess, QThread, pyqtSignal
@@ -24,6 +23,7 @@ from services.localization_service import tr
 from services.warning_service import create_warning_event, is_warning_enabled
 from ui.common.styling import get_launch_status_color
 from utils.file_utils import ensure_writable
+from utils.native_integration import open_url_native
 from utils.path_utils import (
     find_chapter_resource_dir,
     is_path_in_steam_common,
@@ -290,7 +290,7 @@ class GameLauncher(QObject):
             return
         try:
             self._stop_monitor_thread()
-            if launch_type == "webbrowser":
+            if launch_type == "url":
                 self.monitor_thread = QThread(self)
                 self.monitor_worker = GameMonitorWorker(None, vanilla_mode)
                 self.monitor_worker.moveToThread(self.monitor_thread)
@@ -304,7 +304,7 @@ class GameLauncher(QObject):
                 elif system == "Darwin":
                     self._start_detached_command("open", [target_path])
                 else:
-                    webbrowser.open(target_path)
+                    open_url_native(target_path)
                 self.status_changed.emit(
                     tr("status.launching_via_steam"), self._launch_status_color()
                 )
@@ -474,7 +474,7 @@ class GameLauncher(QObject):
 
     @staticmethod
     def _collect_launch_mod_ids(selections: dict[str, Any]) -> list[str]:
-        from utils.mod_utils import get_mod_id
+        from utils.mod.utils import get_mod_id
 
         seen = set()
         result = []
@@ -490,7 +490,7 @@ class GameLauncher(QObject):
 
     @staticmethod
     def _collect_launch_mod_refs(selections: dict[str, Any]) -> list[dict[str, str]]:
-        from utils.mod_utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
+        from utils.mod.utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
 
         seen = set()
         result: list[dict[str, str]] = []
@@ -539,7 +539,7 @@ class GameLauncher(QObject):
             return {
                 "target": f"steam://rungameid/{self.app_state.game_mode.steam_app_id}",
                 "cwd": None,
-                "type": "webbrowser",
+                "type": "url",
             }
         if direct_launch:
             return self._handle_direct_launch(direct_launch_id)
@@ -653,7 +653,7 @@ class GameLauncher(QObject):
     def _prepare_game_files_multi_mod_async(
         self, selections: dict[int, list[Any]]
     ) -> bool:
-        from workers.mod_patching_worker import ModPatchingThread
+        from workers.mod.patching_worker import ModPatchingThread
 
         logging.info("Starting multi-mod patching in background thread")
         chapter_mods = {

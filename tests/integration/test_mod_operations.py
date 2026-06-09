@@ -1,3 +1,5 @@
+"""Integration tests for test mod operations."""
+
 import json
 import os
 import tempfile
@@ -11,7 +13,7 @@ class TestModInstallation:
     """Tests for mod operations."""
     def test_install_mod_from_archive(self, app_state, feedback_service, temp_mods_dir):
         """Checks that installing mod from archive."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         _ = ModManager(app_state, feedback_service)
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_archive:
@@ -34,7 +36,7 @@ class TestModInstallation:
 
     def test_install_mod_with_files(self, app_state, feedback_service, temp_mods_dir):
         """Checks that installing mod with files."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         _ = ModManager(app_state, feedback_service)
         key = "test_mod_files"
@@ -64,7 +66,7 @@ class TestModRemoval:
     """Tests for mod operations."""
     def test_remove_mod(self, app_state, feedback_service, sample_mod_folder):
         """Checks that removing mod."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         cache = mod_service._get_mods_cache(use_async=False)
@@ -88,7 +90,7 @@ class TestModMerge:
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(mod_config, f)
             mods.append(key)
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         patcher = G3MToolPatchingService(app_state, mod_service)
@@ -101,8 +103,8 @@ class TestModImportExport:
         """Checks that exporting mod."""
         from unittest.mock import Mock
 
-        from controllers.mod_import_export_controller import ModImportExportController
-        from services.mod_service import ModManager
+        from controllers.mod.import_export_controller import ModImportExportController
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
@@ -115,8 +117,8 @@ class TestModImportExport:
         """Checks that importing mod from url."""
         from unittest.mock import Mock
 
-        from controllers.mod_import_export_controller import ModImportExportController
-        from services.mod_service import ModManager
+        from controllers.mod.import_export_controller import ModImportExportController
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         mock_app_window = Mock()
@@ -132,7 +134,7 @@ class TestManualInstall:
         """Checks that chaptering display name."""
         from unittest.mock import MagicMock, patch
 
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         with patch.object(
             ManualModInstallDialog, "__init__", lambda self, *a, **kw: None
@@ -169,7 +171,7 @@ class TestManualInstall:
 
     def test_instruction_file_detection(self):
         """Checks that instructioning file detection."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         assert ManualModInstallDialog._is_openable_doc("README.md") is True
         assert ManualModInstallDialog._is_openable_doc("guide.txt") is True
@@ -179,7 +181,7 @@ class TestManualInstall:
         """Checks that opening local file uses native open."""
         from unittest.mock import patch
 
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         file_path = tmp_path / "README.md"
         file_path.write_text("# test", encoding="utf-8")
@@ -188,18 +190,16 @@ class TestManualInstall:
         ):
             dialog = ManualModInstallDialog.__new__(ManualModInstallDialog)
             with patch(
-                "ui.dialogs.manual_install_dialog.QDesktopServices.openUrl",
+                "ui.dialogs.manual_install.dialog.open_path_native",
                 return_value=True,
             ) as open_url:
                 dialog._open_local_file(str(file_path))
                 open_url.assert_called_once()
-                called_url = open_url.call_args[0][0]
-                assert called_url.isLocalFile()
-                assert Path(called_url.toLocalFile()) == file_path
+                assert Path(open_url.call_args[0][0]) == file_path
 
     def test_create_mod_from_files_uses_chapter_ids_as_file_keys(self, tmp_path):
         """Checks that creating mod from files uses chapter ids as file keys."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         source_dir = tmp_path / "prepared"
         source_dir.mkdir()
@@ -233,7 +233,7 @@ class TestManualInstall:
 
     def test_create_mod_from_files_accepts_csx_as_data_file(self, tmp_path):
         """Checks that manual install stores csx scripts as chapter data files."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         source_dir = tmp_path / "prepared"
         source_dir.mkdir()
@@ -264,7 +264,7 @@ class TestManualInstall:
 
     def test_create_mod_from_files_persists_gamebanana_metadata(self, tmp_path):
         """Checks that manual install stores available GameBanana metadata locally."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         source_dir = tmp_path / "prepared"
         source_dir.mkdir()
@@ -311,7 +311,7 @@ class TestManualInstall:
 
     def test_create_mod_from_files_uses_extra_path_prefix_to_bind_chapter(self, tmp_path):
         """Checks that chapter-prefixed extra paths bind files to that DELTARUNE chapter."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         source_dir = tmp_path / "prepared"
         source_dir.mkdir()

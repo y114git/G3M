@@ -1,3 +1,5 @@
+"""Dialog for viewing changelog entries."""
+
 from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import QDialog, QPushButton, QTextBrowser, QVBoxLayout
 

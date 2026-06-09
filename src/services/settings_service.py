@@ -8,18 +8,16 @@ import platform
 import re
 import shutil
 import subprocess
-import tempfile
 import zipfile
 
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
-from PyQt6.QtWidgets import QFileDialog, QWidget
+from PyQt6.QtWidgets import QWidget
 
 from config.config import (
     APP_VERSION,
     THEME_CONFIG_FILENAME,
-    THEME_CONFIG_FILENAMES,
     THEME_CONFIG_VERSION,
     UI_COLORS,
 )
@@ -28,22 +26,28 @@ from config.settings_schema import (
 )
 from models.game_modes import get_all_games
 from services.localization_service import LocalizationManager, localization_service, tr
-from services.migration_service import (
-    migrate_settings_payload,
-    normalize_theme_settings,
+from services.migration_service import migrate_settings_payload
+from services.settings_themes import (
+    apply_theme_archive,
+    maybe_copy_theme_archive,
+    theme_archive_contains_config,
+)
+from services.settings_validation import (
+    has_unix_executable_signature,
+    validate_windows_executable_path,
 )
 from ui.common.styling import display_hex_to_qt_hex, get_border_radius
 from utils.file_utils import get_file_filter
+from utils.native_integration import (
+    get_existing_directory,
+    get_open_file_name,
+    get_save_file_name,
+)
 from utils.path_utils import (
-    find_theme_config_path,
     get_g3mtool_cache_dir,
     resolve_game_executable,
 )
-from utils.process_utils import (
-    format_external_process_error,
-    format_filesystem_error,
-    format_network_error,
-)
+from utils.process_utils import format_filesystem_error, format_network_error
 
 
 class SettingsManager(QObject):
@@ -184,6 +188,13 @@ class SettingsManager(QObject):
     def _describe_fs_error(error: Exception, path: str = "") -> str:
         return format_filesystem_error(error, path=path)
 
+    @staticmethod
+    def _has_unix_executable_signature(filepath: str) -> bool:
+        return has_unix_executable_signature(filepath)
+
+    def _validate_windows_executable_path(self, filepath: str) -> str | None:
+        return validate_windows_executable_path(filepath, subprocess_module=subprocess)
+
     def write_local_config(self):
         ps = getattr(self, "profile_service", None)
         if ps:
@@ -302,7 +313,7 @@ class SettingsManager(QObject):
             return False
 
     def select_portproton_path(self) -> str | None:
-        filepath, _ = QFileDialog.getOpenFileName(
+        filepath, _ = get_open_file_name(
             self._dialog_parent(), tr("ui.select_portproton_path")
         )
         if filepath:
@@ -312,7 +323,7 @@ class SettingsManager(QObject):
         return None
 
     def select_executable_path(self, title: str) -> str | None:
-        filepath, _ = QFileDialog.getOpenFileName(
+        filepath, _ = get_open_file_name(
             self._dialog_parent(),
             title,
             os.path.expanduser("~"),
@@ -368,55 +379,6 @@ class SettingsManager(QObject):
             ),
         )
 
-    @staticmethod
-    def _has_unix_executable_signature(filepath: str) -> bool:
-        try:
-            with open(filepath, "rb") as handle:
-                header = handle.read(4)
-        except OSError:
-            return False
-        if header.startswith(b"#!"):
-            return True
-        if header == b"\x7fELF":
-            return True
-        return header in {
-            b"\xfe\xed\xfa\xce",
-            b"\xce\xfa\xed\xfe",
-            b"\xfe\xed\xfa\xcf",
-            b"\xcf\xfa\xed\xfe",
-            b"\xca\xfe\xba\xbe",
-            b"\xbe\xba\xfe\xca",
-        }
-
-    def _validate_windows_executable_path(self, filepath: str) -> str | None:
-        command = [filepath]
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
-            subprocess, "CREATE_SUSPENDED", 0
-        )
-        popen_kwargs = {
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
-            "creationflags": creationflags,
-        }
-        process = None
-        try:
-            process = subprocess.Popen(command, **popen_kwargs)
-        except (
-            OSError,
-            ValueError,
-            subprocess.SubprocessError,
-        ) as error:
-            return format_external_process_error(
-                error, command=command, target_path=filepath
-            )
-        finally:
-            if process is not None:
-                with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
-                    process.kill()
-                with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
-                    process.wait(timeout=0.2)
-        return None
-
     def get_executable_path_error(self, filepath: str) -> str | None:
         if not os.path.isfile(filepath):
             return tr("errors.launch_command_missing_path", path=filepath)
@@ -432,7 +394,7 @@ class SettingsManager(QObject):
         return self.get_executable_path_error(filepath) is None
 
     def pick_directory(self, title: str, start_dir: str = "") -> str:
-        return QFileDialog.getExistingDirectory(
+        return get_existing_directory(
             self._dialog_parent(),
             title,
             start_dir or os.path.expanduser("~"),
@@ -451,18 +413,18 @@ class SettingsManager(QObject):
                 tr("dialogs.game_path_instruction", message=message),
             )
         if platform.system() == "Darwin":
-            path, _ = QFileDialog.getOpenFileName(
+            path, _ = get_open_file_name(
                 self._dialog_parent(),
                 title,
                 os.path.expanduser("~"),
                 "Application bundle (*.app);;All files (*)",
             )
             if not path:
-                path = QFileDialog.getExistingDirectory(
+                path = get_existing_directory(
                     self._dialog_parent(), title, os.path.expanduser("~")
                 )
         else:
-            path = QFileDialog.getExistingDirectory(
+            path = get_existing_directory(
                 self._dialog_parent(), title, os.path.expanduser("~")
             )
         if path:
@@ -503,7 +465,7 @@ class SettingsManager(QObject):
             self.app_state.local_config["custom_background_path"] = ""
             self._record_action("background_removed")
         else:
-            filepath, _ = QFileDialog.getOpenFileName(
+            filepath, _ = get_open_file_name(
                 self._dialog_parent(),
                 tr("ui.select_background_image"),
                 "",
@@ -611,7 +573,7 @@ class SettingsManager(QObject):
             audio_filter = (
                 "Audio Files (*.mp3 *.wav *.ogg *.flac *.m4a *.aac);;All Files (*)"
             )
-            file_path, _ = QFileDialog.getOpenFileName(
+            file_path, _ = get_open_file_name(
                 self._dialog_parent(), tr(select_dialog_key), "", audio_filter
             )
             if file_path:
@@ -695,7 +657,7 @@ class SettingsManager(QObject):
                     "warning", "errors.error", friendly_error
                 )
         else:
-            file_path, _ = QFileDialog.getOpenFileName(
+            file_path, _ = get_open_file_name(
                 self._dialog_parent(),
                 tr("dialogs.select_logo"),
                 "",
@@ -760,7 +722,7 @@ class SettingsManager(QObject):
                     "warning", "errors.error", friendly_error
                 )
         else:
-            file_path, _ = QFileDialog.getOpenFileName(
+            file_path, _ = get_open_file_name(
                 self._dialog_parent(),
                 tr("dialogs.select_font_file"),
                 "",
@@ -901,7 +863,7 @@ class SettingsManager(QObject):
                 zipf.write(path, f"{name}{os.path.splitext(path)[1]}")
 
     def export_theme(self):
-        theme_file_path, _ = QFileDialog.getSaveFileName(
+        theme_file_path, _ = get_save_file_name(
             self._dialog_parent(),
             tr("dialogs.export_theme_title"),
             "",
@@ -932,15 +894,8 @@ class SettingsManager(QObject):
 
     def _install_theme_from_file(self, theme_file_path: str):
         try:
-            with zipfile.ZipFile(theme_file_path, "r") as zipf:
-                archive_names = set(zipf.namelist())
-                if not any(
-                    name in archive_names or any(
-                        archived_name.endswith(f"/{name}") for archived_name in archive_names
-                    )
-                    for name in THEME_CONFIG_FILENAMES
-                ):
-                    raise ValueError
+            if not theme_archive_contains_config(theme_file_path):
+                raise ValueError
         except Exception:
             self._record_action("theme_import_rejected", reason="invalid_archive")
             self.feedback_service.show_message(
@@ -948,81 +903,17 @@ class SettingsManager(QObject):
             )
             return
 
-        import shutil
-
-        from utils.path_utils import get_user_themes_dir, resource_path
-
-        theme_dir_abs = os.path.normcase(
-            os.path.normpath(os.path.dirname(os.path.abspath(theme_file_path)))
-        )
-
-        if theme_dir_abs not in (
-            os.path.normcase(os.path.normpath(os.path.abspath(d)))
-            for d in (resource_path("assets/themes"), get_user_themes_dir())
-        ):
-            cb = getattr(self.parent_widget, "do_not_save_theme_checkbox", None)
-            if not (cb and cb.isChecked()):
-                dest = os.path.join(
-                    get_user_themes_dir(), os.path.basename(theme_file_path)
-                )
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                shutil.copy2(theme_file_path, dest)
-                if hasattr(self.parent_widget, "theme"):
-                    self.parent_widget.theme.init_theme_list()
+        maybe_copy_theme_archive(theme_file_path, self.parent_widget)
 
         try:
-            from utils.archive_utils import (
-                extract_any_archive,
-                unwrap_single_directory_chain,
+            apply_theme_archive(
+                app_state=self.app_state,
+                theme_file_path=theme_file_path,
+                remove_files=self._remove_files,
+                get_audio_paths=self._get_audio_paths,
+                remove_logo_files=self._remove_logo_files,
+                remove_font_files=self._remove_font_files,
             )
-
-            with tempfile.TemporaryDirectory() as temp_dir:
-                extract_any_archive(theme_file_path, temp_dir)
-                content_root = unwrap_single_directory_chain(temp_dir)
-                theme_json_path = find_theme_config_path(content_root)
-                if not theme_json_path:
-                    raise FileNotFoundError(
-                        f"{THEME_CONFIG_FILENAME} not found in extracted archive"
-                    )
-                with open(theme_json_path, encoding="utf-8") as f:
-                    theme_settings = normalize_theme_settings(json.load(f))
-                for key, value in theme_settings.items():
-                    if key != "config_version":
-                        self.app_state.local_config[key] = value
-                self.app_state.local_config["active_theme_name"] = os.path.splitext(
-                    os.path.basename(theme_file_path)
-                )[0]
-
-                for base in ("background_music", "startup_sound"):
-                    self._remove_files(self._get_audio_paths(base))
-                self._remove_logo_files()
-                self._remove_font_files()
-                self.app_state.local_config["custom_background_path"] = ""
-
-                asset_prefixes = {
-                    "background.": "custom_background",
-                    "background_music.": "custom_background_music",
-                    "startup_sound.": "custom_startup_sound",
-                    "custom_logo.": "custom_logo",
-                    "custom_font.": "custom_font",
-                }
-
-                for filename in os.listdir(content_root):
-                    for prefix, dest_name in asset_prefixes.items():
-                        if filename.startswith(prefix):
-                            ext = os.path.splitext(filename)[1]
-                            dest_path = os.path.join(
-                                self.app_state.config_dir, f"{dest_name}{ext}"
-                            )
-                            shutil.copy2(
-                                os.path.join(content_root, filename), dest_path
-                            )
-                            if prefix == "background.":
-                                self.app_state.local_config[
-                                    "custom_background_path"
-                                ] = dest_path
-                            break
-
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()

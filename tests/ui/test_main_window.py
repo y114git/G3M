@@ -1,3 +1,5 @@
+"""UI tests for test main window."""
+
 import os
 from unittest.mock import Mock, patch
 

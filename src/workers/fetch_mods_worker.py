@@ -11,7 +11,7 @@ from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_game_ids
 from models.mod_models import AnyModInfo, BrowserModInfo
 from services.localization_service import tr
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 
 logger = logging.getLogger(__name__)
 

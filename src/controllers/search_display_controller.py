@@ -17,7 +17,7 @@ from models.game_modes import (
 )
 from services.blocklist_service import BlocklistManager
 from services.localization_service import tr
-from services.mod_filter_service import filter_and_sort_mods
+from services.mod.filter_service import filter_and_sort_mods
 from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import get_theme_color
 from ui.dialogs.blocklist_dialog import BlocklistDialog
@@ -25,7 +25,7 @@ from ui.utils.ui_utils import DebounceTimer, safe_stop_thread
 from ui.widgets.mod.mod_card_widget import ModCardWidget
 from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
 from ui.widgets.mod_details_overlay import show_mod_details_overlay
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 from utils.path_utils import colored_icon
 from workers.gamebanana.load_more_worker import LoadMoreGameBananaModsThread
 from workers.gamebanana.search_worker import SearchGameBananaModsThread

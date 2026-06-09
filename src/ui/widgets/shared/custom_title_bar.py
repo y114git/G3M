@@ -1,3 +1,5 @@
+"""Custom title bar widgets for the main window."""
+
 import logging
 
 from PyQt6.QtCore import QEvent, QPoint, QSize, Qt, pyqtSignal

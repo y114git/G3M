@@ -1,3 +1,5 @@
+"""Unit tests for test app cleanup."""
+
 from unittest.mock import Mock, patch
 
 from PyQt6.QtCore import QObject, QThread

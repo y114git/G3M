@@ -9,7 +9,6 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QLabel,
     QVBoxLayout,
     QWidget,
@@ -19,7 +18,8 @@ from app.game_ui import full_install_tooltip
 from config.config import UI_COLORS
 from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
+from utils.native_integration import get_existing_directory
 from utils.process_utils import format_filesystem_error
 from workers.install.full_install_worker import FullInstallThread
 
@@ -300,7 +300,7 @@ class GameLaunchController(QObject):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             self.app_state.action_button_enabled = True
             return
-        base_dir = QFileDialog.getExistingDirectory(
+        base_dir = get_existing_directory(
             cast(QWidget, self.app),
             tr("dialogs.install_game_location", game_name=game_name),
         )

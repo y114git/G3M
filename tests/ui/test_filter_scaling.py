@@ -1,3 +1,5 @@
+"""UI tests for test filter scaling."""
+
 from PyQt6.QtCore import QEvent
 from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 

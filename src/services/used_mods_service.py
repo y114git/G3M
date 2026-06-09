@@ -15,11 +15,11 @@ from models.app_state import AppState
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
 from services.migration_service import migrate_legacy_chapter_id
-from services.mod_service import ModManager
+from services.mod.service import ModManager
 from services.settings_service import SettingsManager
 from ui.common.feedback import FeedbackManager
 from utils.file_utils import sanitize_filename
-from utils.mod_utils import get_mod_id, get_mod_name
+from utils.mod.utils import get_mod_id, get_mod_name
 
 
 class UsedModsManager(QObject):

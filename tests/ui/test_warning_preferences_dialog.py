@@ -1,3 +1,5 @@
+"""UI tests for test warning preferences dialog."""
+
 from PyQt6.QtCore import Qt
 
 from services.warning_service import WarningSeverity

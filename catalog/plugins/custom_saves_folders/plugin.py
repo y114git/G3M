@@ -11,8 +11,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -45,8 +44,9 @@ from ui.common.styling import (
     get_theme_colors,
     get_widget_border_radius,
 )
-from utils.mod_config_parser import normalize_mod_config_data
-from utils.mod_utils import get_mod_id, get_mod_name
+from utils.mod.config_parser import normalize_mod_config_data
+from utils.mod.utils import get_mod_id, get_mod_name
+from utils.native_integration import open_path_native
 from utils.path_utils import (
     colored_icon,
     find_chapter_resource_dir,
@@ -1157,7 +1157,7 @@ class _CustomSavesFoldersWidget(QWidget):
         if not path:
             return
         os.makedirs(path, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        open_path_native(path)
 
     def _show_help(self) -> None:
         _HelpDialog(self._ui_context.app_state, self._tr, self).exec()

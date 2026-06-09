@@ -1,3 +1,5 @@
+"""Unit tests for test localization files."""
+
 import json
 import re
 import zipfile

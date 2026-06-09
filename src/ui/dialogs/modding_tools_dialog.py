@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -33,6 +32,11 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
+from utils.native_integration import (
+    get_open_file_name,
+    get_open_file_names,
+    get_save_file_name,
+)
 from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
@@ -273,11 +277,11 @@ class _PathRow(QWidget):
             if callable(self._save_path_getter):
                 with suppress(Exception):
                     start_path = self._save_path_getter() or start_path
-            path, _ = QFileDialog.getSaveFileName(
+            path, _ = get_save_file_name(
                 self, tr("ui.save_file"), start_path, self._filter
             )
         else:
-            path, _ = QFileDialog.getOpenFileName(
+            path, _ = get_open_file_name(
                 self, tr("ui.select_file"), "", self._filter
             )
         if path:
@@ -709,8 +713,8 @@ class _DataConvertWorkerThread(QThread):
     def run(self):
         try:
             from models.game_modes import get_game
-            from utils.mod_config_parser import resolve_mod_file_path
-            from utils.mod_version_utils import (
+            from utils.mod.config_parser import resolve_mod_file_path
+            from utils.mod.version_utils import (
                 create_version_zip,
                 get_unique_version_name,
             )
@@ -847,7 +851,7 @@ class _DataConvertWorkerThread(QThread):
                     ).replace("\\", "/")
                     converted += 1
 
-                from utils.mod_config_parser import build_mod_config_data
+                from utils.mod.config_parser import build_mod_config_data
 
                 config_path = os.path.join(converted_mod_folder, "mod_config.json")
                 with open(config_path, "w", encoding="utf-8") as f:
@@ -994,7 +998,7 @@ class _DataConvertTab(QWidget):
             try:
                 with open(config_path, encoding="utf-8") as f:
                     config_data = json.load(f)
-                from utils.mod_config_parser import normalize_mod_config_data
+                from utils.mod.config_parser import normalize_mod_config_data
 
                 normalize_mod_config_data(config_data, mod_root_path=folder_path)
             except Exception:
@@ -1010,7 +1014,7 @@ class _DataConvertTab(QWidget):
                 url = ch.get("data_file_path") or ch.get("data_file_url", "")
                 if not url:
                     continue
-                from utils.mod_config_parser import resolve_mod_file_path
+                from utils.mod.config_parser import resolve_mod_file_path
 
                 source_path = resolve_mod_file_path(folder_path, url)
                 if _should_convert_source_to_target(source_path, target_mode):
@@ -1050,7 +1054,7 @@ class _DataConvertTab(QWidget):
         try:
             with open(config_path, encoding="utf-8") as f:
                 config_data = json.load(f)
-            from utils.mod_config_parser import normalize_mod_config_data
+            from utils.mod.config_parser import normalize_mod_config_data
 
             normalize_mod_config_data(config_data, mod_root_path=mod_folder)
         except Exception as e:
@@ -1178,7 +1182,7 @@ class _MergeTab(QWidget):
         lay.addWidget(self._status_label)
 
     def _on_add(self):
-        paths, _ = QFileDialog.getOpenFileNames(
+        paths, _ = get_open_file_names(
             self, tr("ui.select_file"), "", _DATA_PATCH_FILTER
         )
         for p in paths:

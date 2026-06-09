@@ -1,3 +1,5 @@
+"""Widget for mod cards in search results."""
+
 import contextlib
 import logging
 
@@ -20,7 +22,7 @@ from ui.common.styling import (
     get_theme_color,
     load_mod_icon_universal,
 )
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 from utils.path_utils import colored_icon
 
 from .mod_card_widget import ModCardWidget

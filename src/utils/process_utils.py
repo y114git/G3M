@@ -80,8 +80,6 @@ def format_external_process_error(
         )
 
     if isinstance(process_error, FileNotFoundError) or error_errno == errno.ENOENT:
-        if error_path and target_path and os.path.abspath(error_path) == os.path.abspath(target_path):
-            return tr("errors.launch_target_missing", path=target_path)
         if "g3mtool" in base_name:
             if is_path_like_command(command_name):
                 return tr("errors.custom_g3mtool_not_found", path=command_name)
@@ -94,6 +92,8 @@ def format_external_process_error(
             if is_path_like_command(command_name):
                 return tr("errors.custom_wine_not_found", path=command_name)
             return tr("errors.wine_not_found")
+        if error_path and target_path and os.path.abspath(error_path) == os.path.abspath(target_path):
+            return tr("errors.launch_target_missing", path=target_path)
         if error_path and command_name and error_path == command_name:
             if is_path_like_command(command_name):
                 return tr("errors.launch_command_missing_path", path=command_name)

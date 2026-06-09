@@ -1,3 +1,5 @@
+"""Unit tests for test session manager."""
+
 from unittest.mock import Mock, patch
 
 

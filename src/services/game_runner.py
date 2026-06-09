@@ -14,18 +14,18 @@ import subprocess
 import sys
 import tempfile
 import time
-import webbrowser
 
 from models.game_modes import get_game
 from services.game_detection_service import (
     get_executable_name_for_game,
     is_game_running,
 )
-from services.shortcut_plugin_service import (
+from services.plugins.shortcut_service import (
     ShortcutPluginContext,
     build_headless_plugin_runtime,
     execute_shortcut_plugin_hook,
 )
+from utils.native_integration import open_url_native
 from utils.path_utils import (
     find_chapter_resource_dir,
     get_profile_mods_root,
@@ -86,7 +86,7 @@ def _find_mod_source_dir(mod_id: str, local_config: dict) -> str | None:
                 with open(config_path, encoding="utf-8") as f:
                     cfg = json.load(f)
                 if isinstance(cfg, dict):
-                    from utils.mod_config_parser import normalize_mod_config_data
+                    from utils.mod.config_parser import normalize_mod_config_data
 
                     normalize_mod_config_data(cfg, mod_root_path=folder_path)
                 if isinstance(cfg, dict) and cfg.get("id") == mod_id:
@@ -125,7 +125,7 @@ def _load_chapter_config_entry(mod_root_dir: str, chapter_id: str) -> dict:
     try:
         with open(config_path, encoding="utf-8") as handle:
             config_data = json.load(handle)
-        from utils.mod_config_parser import normalize_mod_config_data
+        from utils.mod.config_parser import normalize_mod_config_data
 
         normalize_mod_config_data(config_data, mod_root_path=mod_root_dir)
         files_data = config_data.get("files", {})
@@ -452,11 +452,9 @@ def _launch_game(
             try:
                 subprocess.Popen(["steam", steam_url])
             except FileNotFoundError:
-                subprocess.Popen(["xdg-open", steam_url])
-        elif system == "Darwin":
-            subprocess.Popen(["open", steam_url])
+                open_url_native(steam_url)
         else:
-            webbrowser.open(steam_url)
+            open_url_native(steam_url)
         logger.info(f"Launched via Steam: {steam_url}")
         _wait_for_game_exit(wait_for_start=True)
         return None

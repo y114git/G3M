@@ -14,7 +14,7 @@ from utils.file_utils import (
     find_deltamod_info_file,
     normalize_mod_package,
 )
-from utils.mod_config_parser import build_mod_config_data, normalize_mod_config_data
+from utils.mod.config_parser import build_mod_config_data, normalize_mod_config_data
 
 logger = logging.getLogger(__name__)
 

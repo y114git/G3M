@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 from models.download_models import SourceKind, TargetKind
 from models.plugin_models import PLUGIN_API_VERSION
 from services.localization_service import localization_service, tr
-from services.plugin_support import is_version_compatible, resolve_plugin_path
+from services.plugins.support import is_version_compatible, resolve_plugin_path
 from ui.common.styling import (
     clear_layout_widgets,
     get_border_radius,

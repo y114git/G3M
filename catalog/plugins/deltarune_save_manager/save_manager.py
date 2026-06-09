@@ -6,18 +6,17 @@ import shutil
 import tempfile
 import time
 
-from PyQt6.QtCore import QObject, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QInputDialog,
     QLineEdit,
     QVBoxLayout,
 )
 
 from config.config import UI_COLORS
+from utils.native_integration import get_open_file_name, open_path_native
 
 
 def tr(k, **kw):
@@ -432,7 +431,7 @@ class SaveManager(QObject):
     def action_show_save(self, chapter: int, slot: int):
         idx = self.current_collection_idx
         path = self.get_collection_path(idx)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        open_path_native(path)
 
     def action_delete_save(self, chapter: int, slot: int) -> bool:
         idx = self.current_collection_idx
@@ -462,7 +461,7 @@ class SaveManager(QObject):
             return False
         if choice in [tr('dialogs.external_file'), tr('dialogs.external_folder')]:
             if is_import:
-                fp, _ = QFileDialog.getOpenFileName(self.parent_widget, tr('ui.select_save_file'), self._last_browse_dir, f'Save Files (filech{chapter}_*)')
+                fp, _ = get_open_file_name(self.parent_widget, tr('ui.select_save_file'), self._last_browse_dir, f'Save Files (filech{chapter}_*)')
                 if not fp:
                     return False
                 self._last_browse_dir = os.path.dirname(fp)

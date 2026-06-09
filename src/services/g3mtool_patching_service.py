@@ -1336,7 +1336,7 @@ class G3MToolPatchingService(QObject):
         mod_name: str,
         mod_data=None,
     ) -> bool:
-        from utils.mod_utils import get_mod_id
+        from utils.mod.utils import get_mod_id
         from utils.patching.file_override_utils import apply_file_overrides
 
         has_config_entry = (

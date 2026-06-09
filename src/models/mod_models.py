@@ -130,7 +130,7 @@ class BaseModInfo:
         )
 
     def get_gamebanana_mod_id(self) -> str | None:
-        from utils.mod_utils import parse_gamebanana_mod_id
+        from utils.mod.utils import parse_gamebanana_mod_id
 
         _, mod_id = parse_gamebanana_mod_id(self.id)
         return mod_id

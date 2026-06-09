@@ -1,3 +1,5 @@
+"""Integration tests for test mod system."""
+
 import json
 import os
 from pathlib import Path
@@ -49,7 +51,7 @@ class TestModManagerIntegration:
     """Tests for mod system."""
     def test_mod_scanning(self, app_state, feedback_service, mods_dir):
         """Checks that mod scanning."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         app_state.mods_dir = mods_dir
         mod_service = ModManager(app_state, feedback_service)
         cache = mod_service._get_mods_cache(use_async=False)
@@ -60,7 +62,7 @@ class TestModManagerIntegration:
         import shutil
         import tempfile
 
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         temp_mods_dir = tempfile.mkdtemp()
         try:
             for _mod_name, mod_path in all_test_mods_dirs.items():
@@ -81,7 +83,7 @@ class TestModManagerIntegration:
         import shutil
         import tempfile
 
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         temp_mods_dir = tempfile.mkdtemp()
         mod_name = Path(full_mod_structure_dir).name
         target_mod_dir = os.path.join(temp_mods_dir, mod_name)
@@ -106,7 +108,7 @@ class TestModInstallation:
     """Tests for mod system."""
     def test_mod_installation_structure(self, app_state, feedback_service, full_mod_structure_dir):
         """Checks that mod installation structure."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         _ = ModManager(app_state, feedback_service)
         mod_path = Path(full_mod_structure_dir)
         config_path = mod_path / 'mod_config.json'
@@ -179,7 +181,7 @@ class TestModMetadata:
         """Checks that metadata read write."""
         import time
 
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         metadata = mod_service._read_metadata()
         assert isinstance(metadata, dict), "_read_metadata should return a dict, even if file doesn't exist"
@@ -202,7 +204,7 @@ class TestModMetadata:
         import json
         import os
 
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         if os.path.exists(app_state.mods_metadata_path):
             os.remove(app_state.mods_metadata_path)
@@ -224,7 +226,7 @@ class TestModMetadata:
         import shutil
         import tempfile
 
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         temp_mods_dir = tempfile.mkdtemp()
         mod_name = Path(full_mod_structure_dir).name
         target_mod_dir = os.path.join(temp_mods_dir, mod_name)
@@ -249,7 +251,7 @@ class TestModMetadata:
 
     def test_metadata_preserved_after_load_local_mods_cleanup(self, app_state, feedback_service):
         """Checks that metadata preserved after load local mods cleanup."""
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         mod_service = ModManager(app_state, feedback_service)
         original_date = '2024-06-15 12:30:00'
         seed_metadata = {

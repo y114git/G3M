@@ -1,3 +1,5 @@
+"""Widget for mod cards in browser-style views."""
+
 import contextlib
 import logging
 import threading
@@ -20,7 +22,7 @@ from ui.common.styling import (
     get_widget_dimensions,
 )
 from ui.utils.ui_utils import UIAnimator
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 
 from .base_mod_widget import BaseModWidget
 
@@ -39,7 +41,7 @@ class CompatibilityCheckThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            from utils.mod_utils import parse_gamebanana_mod_id
+            from utils.mod.utils import parse_gamebanana_mod_id
 
             key = get_mod_id(self.mod_data)
             gb_type, gb_id = parse_gamebanana_mod_id(key)
@@ -275,7 +277,7 @@ class ModCardWidget(BaseModWidget):
         key = get_mod_id(self.mod_data)
         if key and key.startswith("gb_"):
             try:
-                from utils.mod_utils import parse_gamebanana_mod_id
+                from utils.mod.utils import parse_gamebanana_mod_id
 
                 _, gb_id = parse_gamebanana_mod_id(key)
                 if gb_id:

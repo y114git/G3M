@@ -7,7 +7,7 @@ from app.game_ui import on_games_registry_changed, on_used_mods_updated
 from app.localization_utils import relocalize_texts, relocalize_ui
 from controllers.game_launch_controller import GameLaunchController
 from controllers.library_display_controller import LibraryDisplayController
-from controllers.mod_operations_controller import ModOperationsController
+from controllers.mod.operations_controller import ModOperationsController
 from controllers.plugins_controller import PluginsController
 from controllers.refresh_controller import RefreshController
 from controllers.search_display_controller import SearchDisplayController

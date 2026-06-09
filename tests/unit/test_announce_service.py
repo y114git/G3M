@@ -1,3 +1,5 @@
+"""Unit tests for test announce service."""
+
 from unittest.mock import Mock, patch
 
 

@@ -1,3 +1,5 @@
+"""Integration tests for test localization updates."""
+
 import json
 import re
 from pathlib import Path

@@ -1,3 +1,5 @@
+"""Builds the Library tab UI."""
+
 import logging
 from typing import Any
 

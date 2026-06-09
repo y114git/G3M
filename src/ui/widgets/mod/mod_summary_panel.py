@@ -29,7 +29,7 @@ from ui.common.styling import (
     load_mod_icon_universal,
     rgba_from_color,
 )
-from utils.mod_readme_utils import find_mod_readme_files
+from utils.mod.readme_utils import find_mod_readme_files
 from utils.path_utils import colored_icon
 
 logger = logging.getLogger(__name__)
@@ -577,7 +577,7 @@ class ModSummaryPanel(QFrame):
         if not mod_folder or not os.path.isdir(mod_folder):
             return ""
         try:
-            from utils.mod_config_parser import resolve_mod_file_path
+            from utils.mod.config_parser import resolve_mod_file_path
 
             resolved = resolve_mod_file_path(mod_folder, data_file_str)
             if resolved and os.path.isfile(resolved):

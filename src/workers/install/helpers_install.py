@@ -5,7 +5,7 @@ import os
 
 from config.config import MOD_CONFIG_FILENAME
 from utils.file_utils import load_json, sanitize_filename, save_json
-from utils.mod_config_parser import (
+from utils.mod.config_parser import (
     MOD_FIELD_LIMITS,
     build_mod_config_data,
     normalize_mod_config_data,

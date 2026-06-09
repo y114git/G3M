@@ -27,7 +27,7 @@ from services.game_runner import (
     _parse_shortcut_arg,
     _resolve_chapter_source_dir,
 )
-from services.shortcut_plugin_service import (
+from services.plugins.shortcut_service import (
     ShortcutPluginContext,
     execute_shortcut_plugin_hook,
 )
@@ -773,7 +773,7 @@ class TestShortcutButtonFlow:
                 ],
             ),
             patch(
-                "controllers.shortcut_controller.QFileDialog.getSaveFileName",
+                "controllers.shortcut_controller.get_save_file_name",
                 return_value=("C:/tmp/test.vbs", "VBScript (*.vbs)"),
             ),
             patch("controllers.shortcut_controller._write_shortcut_file") as write_shortcut,

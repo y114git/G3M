@@ -1,3 +1,5 @@
+"""Dialog for Pizza Oven conversion options and progress."""
+
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt

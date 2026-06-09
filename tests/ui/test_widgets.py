@@ -1,3 +1,5 @@
+"""UI tests for test widgets."""
+
 import contextlib
 from types import SimpleNamespace
 

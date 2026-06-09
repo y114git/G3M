@@ -1,9 +1,11 @@
+"""Dialog for application about and version details."""
+
 import os
 import platform
 import sys
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QFont
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -16,6 +18,7 @@ from PyQt6.QtWidgets import (
 from config.config import APP_DISPLAY_NAME, APP_VERSION, SOCIAL_LINKS
 from models.plugin_models import PLUGIN_API_VERSION
 from services.localization_service import localization_service, tr
+from utils.native_integration import open_path_native, open_url_native
 from utils.path_utils import get_user_data_root
 
 
@@ -176,11 +179,11 @@ class AboutDialog(QDialog):
         layout.addLayout(actions_layout)
 
     def _open_url(self, url: str):
-        QDesktopServices.openUrl(QUrl(url))
+        open_url_native(url)
 
     def _open_data_folder(self):
         if self.data_root and os.path.exists(self.data_root):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(self.data_root))
+            open_path_native(self.data_root)
 
     def _wiki_url(self) -> str:
         return str((self.app_state.global_settings or {}).get("wiki_url", "https://github.com/y114git/G3M/")).strip()

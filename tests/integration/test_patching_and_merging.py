@@ -1,3 +1,5 @@
+"""Integration tests for test patching and merging."""
+
 import io
 import json
 import logging

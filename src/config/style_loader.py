@@ -1,3 +1,5 @@
+"""Builds application stylesheets from theme and UI settings."""
+
 import contextlib
 import logging
 import os

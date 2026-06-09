@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import QApplication
 
 from config.config import APP_VERSION, CLOUD_FUNCTIONS_BASE_URL, NETWORK_TIMEOUT_SHORT
 from ui.utils.ui_utils import safe_stop_thread
-from utils.mod_utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
+from utils.mod.utils import get_mod_id, get_mod_name, parse_gamebanana_mod_id
 from utils.network_utils import cloud_function_request
 
 logger = logging.getLogger(__name__)

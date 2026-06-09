@@ -1,3 +1,5 @@
+"""Coordinates refresh operations for mod data and related UI."""
+
 import contextlib
 import logging
 import os

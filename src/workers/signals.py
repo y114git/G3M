@@ -1,3 +1,5 @@
+"""Shared signal helpers for worker classes."""
+
 from PyQt6.QtCore import QObject, pyqtSignal
 
 

@@ -5,18 +5,22 @@ import logging
 import os
 import shutil
 
-from PyQt6.QtCore import QEventLoop, QObject, QThread, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QEventLoop, QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from app.game_ui import show_chapter_mode_instruction
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
-from services.mod_filter_service import filter_and_sort_mods
+from services.mod.filter_service import filter_and_sort_mods
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
-from ui.dialogs.mod_priority_dialog import ModPriorityDialog
+from ui.dialogs.mod.priority_dialog import ModPriorityDialog
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
+from utils.native_integration import (
+    get_save_file_name,
+    open_path_native,
+    open_url_native,
+)
 from utils.process_utils import format_filesystem_error
 
 
@@ -646,13 +650,11 @@ class LibraryDisplayController:
             controller = getattr(self.app, "mod_import_export_controller", None)
             if not controller:
                 return
-            from PyQt6.QtWidgets import QFileDialog
-
             mod_name = getattr(mod_data, "name", "mod") or "mod"
             safe_name = "".join(
                 c if c.isalnum() or c in " _-" else "_" for c in mod_name
             ).strip()
-            path, _ = QFileDialog.getSaveFileName(
+            path, _ = get_save_file_name(
                 self.app,
                 tr("ui.select_export_location"),
                 f"{safe_name}.zip",
@@ -672,7 +674,7 @@ class LibraryDisplayController:
             if mod_folder and os.path.isdir(mod_folder):
                 if analytics := getattr(self.app, "analytics_service", None):
                     analytics.record_mod_folder_opened(mod_data)
-                QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.normpath(mod_folder)))
+                open_path_native(os.path.normpath(mod_folder))
         except Exception as e:
             logging.error(f"Failed to open mod folder: {e}", exc_info=True)
 
@@ -682,7 +684,7 @@ class LibraryDisplayController:
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if not mod_folder or not os.path.isdir(mod_folder):
                 return
-            from ui.dialogs.mod_versions_dialog import ModVersionsDialog
+            from ui.dialogs.mod.versions_dialog import ModVersionsDialog
 
             if analytics := getattr(self.app, "analytics_service", None):
                 analytics.record_dialog_opened("mod_versions")
@@ -719,11 +721,9 @@ class LibraryDisplayController:
                 mod_data, "description_url", None
             )
             if url:
-                import webbrowser
-
                 if analytics := getattr(self.app, "analytics_service", None):
                     analytics.record_mod_homepage_opened(mod_data)
-                webbrowser.open(url)
+                open_url_native(url)
         except Exception as e:
             logging.error(f"Failed to open homepage: {e}", exc_info=True)
 
@@ -735,7 +735,7 @@ class LibraryDisplayController:
                 return
             from PyQt6.QtWidgets import QMessageBox
 
-            from utils.mod_readme_utils import find_mod_readme_files
+            from utils.mod.readme_utils import find_mod_readme_files
 
             readme_files = find_mod_readme_files(mod_folder)
             if not readme_files:
@@ -746,7 +746,7 @@ class LibraryDisplayController:
                     tr("dialogs.no_readme_files", mod_name=mod_name),
                 )
                 return
-            from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+            from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
             if analytics := getattr(self.app, "analytics_service", None):
                 analytics.record_dialog_opened("mod_readme")
@@ -984,7 +984,7 @@ class LibraryDisplayController:
             return
         from PyQt6.QtWidgets import QDialog
 
-        from ui.dialogs.modpack_create_dialog import CreateModpackDialog
+        from ui.dialogs.mod.pack_create_dialog import CreateModpackDialog
         from utils.file_utils import get_unique_mod_dir
 
         is_chapter_mode = self.app_state.current_mode == "chapter"

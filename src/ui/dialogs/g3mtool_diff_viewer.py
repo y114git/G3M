@@ -7,7 +7,6 @@ import shutil
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -25,6 +24,7 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from ui.common.styling import get_theme_color, rgba_from_color
+from utils.native_integration import get_save_file_name
 
 logger = logging.getLogger(__name__)
 
@@ -371,7 +371,7 @@ class DiffViewerDialog(QDialog):
         main.addWidget(scroll, 1)
 
     def _on_export(self):
-        path, _ = QFileDialog.getSaveFileName(
+        path, _ = get_save_file_name(
             self,
             tr("modding_tools.export_report"),
             "",

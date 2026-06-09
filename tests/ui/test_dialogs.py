@@ -1,3 +1,5 @@
+"""UI tests for test dialogs."""
+
 import os
 from unittest.mock import Mock, patch
 
@@ -65,7 +67,7 @@ class TestCreateModpackDialog:
     """Tests for dialogs."""
     def test_create_modpack_dialog_creation(self, qapp, app_state):
         """Checks that creating modpack dialog creation."""
-        from ui.dialogs.modpack_create_dialog import CreateModpackDialog
+        from ui.dialogs.mod.pack_create_dialog import CreateModpackDialog
         dialog = CreateModpackDialog(app_state, None)
         assert dialog is not None
         assert isinstance(dialog, QDialog)
@@ -112,7 +114,7 @@ class TestModPriorityDialog:
     def test_mod_priority_dialog_creation(self, qapp, app_state):
         """Checks that mod priority dialog creation."""
         from models.mod_models import ModInfo
-        from ui.dialogs.mod_priority_dialog import ModPriorityDialog
+        from ui.dialogs.mod.priority_dialog import ModPriorityDialog
         mods_list = [ModInfo(id='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune')]
         dialog = ModPriorityDialog(mods_list, 1, app_state, None)
         assert dialog is not None
@@ -139,10 +141,13 @@ class TestAboutDialog:
         """Checks that abouting dialog actions."""
         from ui.dialogs.about_dialog import AboutDialog
         dialog = AboutDialog(None, app_state)
-        with patch('ui.dialogs.about_dialog.QDesktopServices.openUrl') as open_url:
+        with patch('ui.dialogs.about_dialog.open_url_native') as open_url, patch(
+            'ui.dialogs.about_dialog.open_path_native'
+        ) as open_path:
             dialog.wiki_button.click()
             dialog.open_folder_button.click()
-            assert open_url.call_count == 2
+            open_url.assert_called_once()
+            open_path.assert_called_once()
         assert dialog.result() == QDialog.DialogCode.Rejected
 
 
@@ -230,7 +235,7 @@ class TestReadmeUi:
     """Tests for dialogs."""
     def test_mod_readme_dialog_creation(self, qapp, app_state, tmp_path):
         """Checks that mod readme dialog creation."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text("# Guide\n\n[Link](https://example.com)", encoding="utf-8")
@@ -248,7 +253,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that heading inline markup keeps the heading font size."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text(
@@ -282,7 +287,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that copied docs with indented heading marks still render headings."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text(
@@ -300,7 +305,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that editor-escaped heading marks still render headings."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text("\\### Sigma\n\n\\### another sigma", encoding="utf-8")
@@ -315,7 +320,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that all heading levels render while fenced code stays literal."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text(
@@ -353,7 +358,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that common Markdown inline formatting survives rendering."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.md"
         readme_path.write_text(
@@ -374,7 +379,7 @@ class TestReadmeUi:
 
     def test_mod_readme_html_renders_as_html(self, qapp, app_state, tmp_path):
         """Checks that HTML INFO files render instead of showing raw tags."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.html"
         readme_path.write_text("<h1>Guide</h1><p>Rendered <b>HTML</b></p>", encoding="utf-8")
@@ -391,7 +396,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that common HTML formatting survives rendering."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.html"
         readme_path.write_text(
@@ -415,7 +420,7 @@ class TestReadmeUi:
         self, qapp, app_state, tmp_path
     ):
         """Checks that HTML tabs keep their own default styling in mixed readme sets."""
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         md_path = tmp_path / "README.md"
         html_path = tmp_path / "README.html"
@@ -434,7 +439,7 @@ class TestReadmeUi:
         """Checks that PDF INFO files load through Qt PDF support."""
         from PyQt6.QtPdfWidgets import QPdfView
 
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.pdf"
         readme_path.write_bytes(
@@ -461,7 +466,7 @@ class TestReadmeUi:
     def test_mod_readme_pdf_error_shows_loading_error(self, qapp, app_state, tmp_path):
         """Checks that unreadable PDF INFO files show an error state."""
         from services.localization_service import tr
-        from ui.dialogs.mod_readme_dialog import ModReadmeDialog
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
         readme_path = tmp_path / "README.pdf"
         readme_path.write_bytes(b"not a pdf")
@@ -577,7 +582,7 @@ class TestReadmeUi:
         """Checks that game versions dialog drop imports multiple files and urls."""
         import os
 
-        from ui.dialogs.game_versions_dialog import GameVersionsDialog
+        from ui.dialogs.game.versions_dialog import GameVersionsDialog
 
         first = os.path.join(temp_dir, "one.zip")
         second = os.path.join(temp_dir, "two.zip")
@@ -637,7 +642,7 @@ class TestReadmeUi:
         """Checks that mod versions dialog drop queues multiple imports."""
         import os
 
-        from ui.dialogs.mod_versions_dialog import ModVersionsDialog
+        from ui.dialogs.mod.versions_dialog import ModVersionsDialog
 
         mod_folder = tmp_path / "mod"
         mod_folder.mkdir()
@@ -806,7 +811,7 @@ class TestModEditorDialog:
         """Checks that create mod defaults to the current library game."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         parent = QWidget()
         parent.app_state = SimpleNamespace(
@@ -827,7 +832,7 @@ class TestModEditorDialog:
         """Checks that mod editor reads canonical metadata configs."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "metadata_mod"
         mod_folder.mkdir()
@@ -870,7 +875,7 @@ class TestModEditorDialog:
         """Checks that editing a mod does not lock normal metadata fields."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "metadata_mod"
         mod_folder.mkdir()
@@ -912,7 +917,7 @@ class TestModEditorDialog:
         """Checks that mod editor populates saved files as relative paths."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / 'bossrush_mod'
         chapter_folder = mod_folder / 'chapter_4'
@@ -964,7 +969,7 @@ class TestModEditorDialog:
 
         from PyQt6.QtWidgets import QPushButton
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         parent = QWidget()
         parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
@@ -1017,7 +1022,7 @@ class TestModEditorDialog:
         """Checks that mod editor file container has larger minimum height."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         parent = QWidget()
         parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
@@ -1036,7 +1041,7 @@ class TestModEditorDialog:
         """Checks that mod editor saves folder targets with trailing slash."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         folder_source = tmp_path / "sprites"
         folder_source.mkdir()
@@ -1071,7 +1076,7 @@ class TestModEditorDialog:
         """Checks that mod editor extra path fields are editable."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         parent = QWidget()
         parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
@@ -1102,7 +1107,7 @@ class TestModEditorDialog:
         """Checks that mod editor populates extra file paths in visible inputs."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "bossrush_mod"
         chapter_folder = mod_folder / "chapter_4"
@@ -1151,7 +1156,7 @@ class TestModEditorDialog:
         """Checks that mod editor saves info file order and visibility."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         doc_a = tmp_path / "A.txt"
         doc_b = tmp_path / "B.txt"
@@ -1180,7 +1185,7 @@ class TestModEditorDialog:
         """Checks that mod editor shows saved info_files and discovered root docs together."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "info_mod"
         mod_folder.mkdir()
@@ -1228,7 +1233,7 @@ class TestModEditorDialog:
         from types import SimpleNamespace
 
         from services.localization_service import tr
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "renamed_info_mod"
         mod_folder.mkdir()
@@ -1287,7 +1292,7 @@ class TestModEditorDialog:
         """Checks that deleting a missing INFO file removes only its config entry."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "missing_info_mod"
         mod_folder.mkdir()
@@ -1327,7 +1332,7 @@ class TestModEditorDialog:
         """Checks that entry-only deletion survives future auto-discovery."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "entry_only_info_mod"
         mod_folder.mkdir()
@@ -1369,7 +1374,7 @@ class TestModEditorDialog:
         """Checks that INFO deletion can remove both the entry and physical file."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "delete_info_mod"
         mod_folder.mkdir()
@@ -1414,7 +1419,7 @@ class TestModEditorDialog:
 
         from PyQt6.QtWidgets import QMessageBox
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "delete_info_mod"
         mod_folder.mkdir()
@@ -1458,7 +1463,7 @@ class TestModEditorDialog:
         """Checks that reset proceeds when a previously missing file now exists."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "stale_missing_info_mod"
         mod_folder.mkdir()
@@ -1504,7 +1509,7 @@ class TestModEditorDialog:
         """Checks that info widgets are created inside the info section, not on the dialog root."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         parent = QWidget()
         parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
@@ -1524,7 +1529,7 @@ class TestModEditorDialog:
         """Checks that the outer layout keeps collapsed sections packed at the top."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         parent = QWidget()
         parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
@@ -1547,7 +1552,7 @@ class TestModEditorDialog:
         """Checks that mod editor removes stale managed files after replace or delete."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_folder = tmp_path / "managed_mod"
         chapter_folder = mod_folder / "chapter_4"
@@ -1593,7 +1598,7 @@ class TestModEditorDialog:
 
         from PyQt6.QtWidgets import QMessageBox
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
         from utils.file_utils import save_json
 
         source_file = tmp_path / "source.xdelta"
@@ -1650,7 +1655,7 @@ class TestModEditorDialog:
 
         from PyQt6.QtWidgets import QMessageBox
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
         from utils.file_utils import load_json, save_json
 
         mod_dir = tmp_path / "mods" / "editable"
@@ -1724,7 +1729,7 @@ class TestModEditorDialog:
 
         from PyQt6.QtWidgets import QMessageBox
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
         from utils.file_utils import save_json
 
         source_file = tmp_path / "source.xdelta"
@@ -1772,7 +1777,7 @@ class TestModEditorDialog:
         """Checks that editing keeps stored chapter-relative paths intact."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         mod_dir = tmp_path / "mod"
         (mod_dir / "chapter3" / "lang").mkdir(parents=True)
@@ -1810,7 +1815,7 @@ class TestModEditorDialog:
         """Checks that chapter-specific external files are stored under the chapter folder."""
         from types import SimpleNamespace
 
-        from ui.dialogs.mod_editor_dialog import ModEditorDialog
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
 
         source_dir = tmp_path / "source"
         source_dir.mkdir()
@@ -1845,7 +1850,7 @@ class TestManualInstallDialog:
     def test_manual_install_dialog_shows_summary_for_found_files(self, qapp, tmp_path):
         """Checks that manualing install dialog shows summary for found files."""
         from services.localization_service import tr
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         prepared = tmp_path / 'prepared'
         prepared.mkdir()
@@ -1864,7 +1869,7 @@ class TestManualInstallDialog:
         self, qapp, tmp_path
     ):
         """Checks that manualing install dialog ignores gamebanana game for default selection."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         prepared = tmp_path / "prepared"
         prepared.mkdir()
@@ -1882,7 +1887,7 @@ class TestManualInstallDialog:
     def test_manual_install_dialog_shows_deltarune_extra_hint(self, qapp, tmp_path):
         """Checks that DELTARUNE extra files hint mentions chapter prefixes."""
         from services.localization_service import tr
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         prepared = tmp_path / "prepared"
         prepared.mkdir()
@@ -1906,7 +1911,7 @@ class TestManualInstallDialog:
         self, qapp, tmp_path
     ):
         """Checks that manual install strips chapter root prefixes from targets."""
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         prepared = tmp_path / "prepared"
         prepared.mkdir()
@@ -1945,7 +1950,7 @@ class TestManualInstallDialog:
         self, qapp, tmp_path, monkeypatch
     ):
         from services.localization_service import tr
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         prepared = tmp_path / "prepared"
         prepared.mkdir()
@@ -1953,7 +1958,7 @@ class TestManualInstallDialog:
         missing_file = str(prepared / "missing_readme.md")
         calls = []
         monkeypatch.setattr(
-            "ui.dialogs.manual_install_dialog.QMessageBox.warning",
+            "ui.dialogs.manual_install.dialog.QMessageBox.warning",
             lambda *args: calls.append(args),
         )
 

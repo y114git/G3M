@@ -1,9 +1,10 @@
+"""Dialog for importing files from disk or URL."""
+
 import os
 
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -12,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services.localization_service import tr
+from utils.native_integration import get_open_file_name
 
 
 class ImportDialog(QDialog):
@@ -67,7 +69,7 @@ class ImportDialog(QDialog):
         file_filter_text = self._get_file_filter_text()
         parent = self.parent()
         start_dir = getattr(parent, "_last_open_dir", None) or os.path.expanduser("~")
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_path, _ = get_open_file_name(
             self, tr(self.select_archive_key), start_dir, file_filter_text
         )
         if file_path:

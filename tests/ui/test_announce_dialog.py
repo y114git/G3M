@@ -1,3 +1,5 @@
+"""UI tests for test announce dialog."""
+
 from types import SimpleNamespace
 
 from PyQt6.QtWidgets import QWidget

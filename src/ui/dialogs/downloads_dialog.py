@@ -3,8 +3,7 @@
 import logging
 import os
 
-from PyQt6.QtCore import QSize, Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -26,6 +25,7 @@ from ui.common.dialog_theme import (
     get_dialog_text_color,
     get_dialog_theme_values,
 )
+from utils.native_integration import open_path_native
 from utils.path_utils import colored_icon
 
 logger = logging.getLogger(__name__)
@@ -318,9 +318,7 @@ class DownloadsDialog(QDialog):
 
     def _on_open_folder(self):
         downloads_dir = self._manager.store.downloads_dir
-        if os.path.isdir(downloads_dir) and not QDesktopServices.openUrl(
-            QUrl.fromLocalFile(downloads_dir)
-        ):
+        if os.path.isdir(downloads_dir) and not open_path_native(downloads_dir):
             logger.warning(f"Failed to open downloads folder: {downloads_dir}")
 
     def _on_clear(self):

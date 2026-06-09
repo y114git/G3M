@@ -1,3 +1,5 @@
+"""Widget for installed mods in the library view."""
+
 import logging
 import os
 
@@ -22,7 +24,7 @@ from ui.common.styling import (
     get_theme_color,
 )
 from ui.utils.ui_utils import UIAnimator
-from utils.mod_utils import get_mod_id
+from utils.mod.utils import get_mod_id
 from utils.path_utils import colored_icon, resource_path
 
 from .base_mod_widget import BaseModWidget
@@ -255,7 +257,7 @@ class InstalledModWidget(BaseModWidget):
             if not files or not isinstance(files, dict):
                 self._is_broken_cache = True
                 return True
-            from utils.mod_config_parser import resolve_mod_file_path
+            from utils.mod.config_parser import resolve_mod_file_path
 
             for chapter_data in files.values():
                 if chapter_data is None:

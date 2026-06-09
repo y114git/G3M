@@ -1,3 +1,5 @@
+"""Unit tests for test log viewer service."""
+
 from services.log_viewer_service import LogViewerService
 
 

@@ -1,3 +1,5 @@
+"""Integration tests for test gamebanana."""
+
 import os
 from unittest.mock import MagicMock, Mock, patch
 

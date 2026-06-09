@@ -11,7 +11,7 @@ from typing import Any
 
 from config.config import CYOP_AFOM_TAG
 from utils.file_utils import get_unique_mod_dir, remove_archive_extension, save_json
-from utils.mod_config_parser import build_mod_config_data
+from utils.mod.config_parser import build_mod_config_data
 
 
 @dataclass(slots=True)

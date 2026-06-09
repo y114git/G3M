@@ -1,10 +1,12 @@
+"""Unit tests for test utils."""
+
 import os
 from unittest.mock import Mock, patch
 
 import pytest
 
 from utils.file_utils import has_deltamod_info_file, sanitize_filename
-from utils.mod_utils import get_mod_id, get_mod_name
+from utils.mod.utils import get_mod_id, get_mod_name
 
 
 class TestUiUtils:

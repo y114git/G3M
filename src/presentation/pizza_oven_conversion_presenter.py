@@ -1,3 +1,5 @@
+"""Presents Pizza Oven conversion workflows."""
+
 from __future__ import annotations
 
 import logging
@@ -121,7 +123,7 @@ class PizzaOvenConversionPresenter:
         gamebanana_metadata: dict,
         on_success=None,
     ) -> bool:
-        from ui.dialogs.manual_install_dialog import ManualModInstallDialog
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
 
         dialog = ManualModInstallDialog(
             parent,

@@ -683,6 +683,7 @@
     "mod_import_failed": "Failed to import mod: {error}",
     "mod_export_failed": "Failed to export mod: {error}",
     "file_not_found": "File not found: {path}",
+    "archive_not_found": "Archive not found",
     "file_operation_failed": "File operation failed: {error}",
     "network_timeout": "The request timed out.",
     "network_ssl_error": "Secure connection failed. Check your certificate or system time settings.",

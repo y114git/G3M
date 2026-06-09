@@ -1,3 +1,5 @@
+"""Coordinates application bootstrap and startup flow."""
+
 from __future__ import annotations
 
 import contextlib
@@ -331,7 +333,7 @@ class BootstrapCoordinator:
             "undertale_game_path", ""
         )
         try:
-            from workers.mod_scan_worker import ModScanThread
+            from workers.mod.scan_worker import ModScanThread
 
             for path in (
                 window.app_state.config_dir,

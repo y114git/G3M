@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -23,11 +22,12 @@ from PyQt6.QtWidgets import (
 
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
-from services.shortcut_plugin_service import (
+from services.plugins.shortcut_service import (
     ShortcutPluginContext,
 )
 from ui.common.styling import get_border_radius
-from utils.mod_utils import get_mod_id, get_mod_name
+from utils.mod.utils import get_mod_id, get_mod_name
+from utils.native_integration import get_save_file_name
 from utils.process_utils import format_filesystem_error
 
 
@@ -484,7 +484,7 @@ def on_shortcut_button_click(
         ext.lstrip("."), "Script"
     )
 
-    filepath, _ = QFileDialog.getSaveFileName(
+    filepath, _ = get_save_file_name(
         parent_widget,
         tr("shortcut.select_folder"),
         default_name,

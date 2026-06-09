@@ -1,8 +1,12 @@
+"""Unit tests for test controllers."""
+
 import os
 import tempfile
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+import pytest
 
 from utils.file_utils import save_json
 
@@ -14,8 +18,8 @@ class TestModOperationsController:
         self, app_state, feedback_service
     ):
         """Checks that mod operations controller initialization."""
-        from controllers.mod_operations_controller import ModOperationsController
-        from services.mod_service import ModManager
+        from controllers.mod.operations_controller import ModOperationsController
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         app_window = Mock()
@@ -33,7 +37,7 @@ class TestModOperationsController:
         self, app_state, feedback_service
     ):
         """Checks that uninstalling mod clears it from used mods immediately."""
-        from controllers.mod_operations_controller import ModOperationsController
+        from controllers.mod.operations_controller import ModOperationsController
 
         mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
         mod_service = Mock()
@@ -55,7 +59,7 @@ class TestModOperationsController:
         )
 
     def test_uninstall_mod_reports_localized_filesystem_error(self, app_state):
-        from controllers.mod_operations_controller import ModOperationsController
+        from controllers.mod.operations_controller import ModOperationsController
         from services.localization_service import tr
 
         mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
@@ -145,7 +149,7 @@ class TestGameLaunchControllerRefresh:
 
 class TestTabHandler:
     def test_handle_tab_changed_clears_search_selection_on_switch(self):
-        from app.tab_handler import handle_tab_changed
+        from app.tab.handler import handle_tab_changed
 
         w = Mock()
         w._suppress_tab_handlers = False
@@ -167,7 +171,7 @@ class TestLibraryDisplayController:
         """Checks that library display controller initialization."""
         from controllers.library_display_controller import LibraryDisplayController
         from services.localization_service import localization_service
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         from services.settings_service import SettingsManager
         from services.used_mods_service import UsedModsManager
 
@@ -398,7 +402,7 @@ class TestModImportExportController:
     """Tests for controllers."""
 
     def test_format_import_exception_reports_archive_not_found(self, temp_dir):
-        from controllers.mod_import_export_controller import ModImportExportController
+        from controllers.mod.import_export_controller import ModImportExportController
         from services.localization_service import tr
 
         controller = ModImportExportController(
@@ -414,7 +418,7 @@ class TestModImportExportController:
         )
 
     def test_materialize_local_import_raises_localized_permission_error(self, temp_dir):
-        from controllers.mod_import_export_controller import ModImportExportController
+        from controllers.mod.import_export_controller import ModImportExportController
         from services.localization_service import tr
 
         source_file = os.path.join(temp_dir, "sample.zip")
@@ -428,22 +432,19 @@ class TestModImportExportController:
         with (
             tempfile.TemporaryDirectory() as extract_dir,
             patch(
-                "controllers.mod_import_export_controller.extract_archive",
+                "controllers.mod.import_export_controller.extract_archive",
                 side_effect=PermissionError(13, "Permission denied", source_file),
             ),
         ):
-            try:
+            with pytest.raises(ValueError) as exc_info:
                 controller._materialize_local_import(source_file, extract_dir)
-            except ValueError as exc:
-                assert str(exc) == tr("errors.permission_denied", path=source_file)
-            else:
-                raise AssertionError("Expected ValueError")
+            assert str(exc_info.value) == tr("errors.permission_denied", path=source_file)
 
 
 class TestModManagerErrorFormatting:
     def test_describe_uninstall_error_reports_missing_file(self):
         from services.localization_service import tr
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         assert (
             ModManager._describe_uninstall_error(
@@ -454,7 +455,7 @@ class TestModManagerErrorFormatting:
 
     def test_materialize_local_import_keeps_plain_files(self, temp_dir):
         """Checks that materializeing local import keeps plain files."""
-        from controllers.mod_import_export_controller import ModImportExportController
+        from controllers.mod.import_export_controller import ModImportExportController
 
         source_file = os.path.join(temp_dir, "sample.png")
         with open(source_file, "wb") as handle:
@@ -473,7 +474,7 @@ class TestModManagerErrorFormatting:
 
     def test_install_mod_from_file_uses_config_name_for_target_folder(self, temp_dir):
         """Checks that installing mod from file uses config name for target folder."""
-        from controllers.mod_import_export_controller import ModImportExportController
+        from controllers.mod.import_export_controller import ModImportExportController
 
         app_state = Mock(mods_dir=temp_dir, all_mods=[])
         mod_service = Mock()
@@ -501,9 +502,9 @@ class TestModManagerErrorFormatting:
         controller._refresh_mod_list = Mock()
 
         with (
-            patch("controllers.mod_import_export_controller.QMessageBox.information"),
+            patch("controllers.mod.import_export_controller.QMessageBox.information"),
             patch(
-                "controllers.mod_import_export_controller.find_deltamod_info_file",
+                "controllers.mod.import_export_controller.find_deltamod_info_file",
                 return_value=False,
             ),
         ):
@@ -516,7 +517,7 @@ class TestModManagerErrorFormatting:
 
     def test_install_mod_from_file_uses_metadata_name_for_target_folder(self, temp_dir):
         """Checks that nested metadata configs import with the normalized mod name."""
-        from controllers.mod_import_export_controller import ModImportExportController
+        from controllers.mod.import_export_controller import ModImportExportController
 
         app_state = Mock(mods_dir=temp_dir, all_mods=[])
         mod_service = Mock()
@@ -547,9 +548,9 @@ class TestModManagerErrorFormatting:
         controller._refresh_mod_list = Mock()
 
         with (
-            patch("controllers.mod_import_export_controller.QMessageBox.information"),
+            patch("controllers.mod.import_export_controller.QMessageBox.information"),
             patch(
-                "controllers.mod_import_export_controller.find_deltamod_info_file",
+                "controllers.mod.import_export_controller.find_deltamod_info_file",
                 return_value=False,
             ),
         ):
@@ -665,9 +666,9 @@ class TestSearchDisplayController:
         self, app_state, feedback_service
     ):
         """Checks that searching display controller initialization."""
-        from controllers.mod_operations_controller import ModOperationsController
+        from controllers.mod.operations_controller import ModOperationsController
         from controllers.search_display_controller import SearchDisplayController
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
 
         mod_service = ModManager(app_state, feedback_service)
         mod_ops = ModOperationsController(
@@ -1036,7 +1037,7 @@ class TestSettingsUiController:
             parent=qapp,
         )
         from services.customization_service import CustomizationManager
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         from services.used_mods_service import UsedModsManager
 
         mod_service = ModManager(app_state, feedback_service)
@@ -1524,7 +1525,7 @@ class TestGameLaunchController:
         from services.customization_service import CustomizationManager
         from services.launch_service import GameLauncher
         from services.localization_service import localization_service
-        from services.mod_service import ModManager
+        from services.mod.service import ModManager
         from services.settings_service import SettingsManager
         from services.used_mods_service import UsedModsManager
 

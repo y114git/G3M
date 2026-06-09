@@ -13,7 +13,7 @@ from defusedxml import ElementTree
 from config.config import MOD_DOCUMENTATION_EXTENSIONS
 from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file, get_unique_mod_dir
-from utils.mod_config_parser import build_mod_config_data
+from utils.mod.config_parser import build_mod_config_data
 
 DELTAMOD_GAME_MAP: dict[str, str] = {
     "toby.deltarune": "deltarune",
