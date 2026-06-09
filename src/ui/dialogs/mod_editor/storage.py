@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 from contextlib import suppress
+from pathlib import PureWindowsPath
 
 from utils.file_utils import get_chapter_folder_name
 from utils.mod.config_parser import parse_extra_files_raw, resolve_mod_file_path
@@ -14,7 +15,11 @@ def resolve_managed_mod_path(file_folder: str, stored_path) -> str | None:
     if not isinstance(stored_path, str):
         return None
     cleaned_path = stored_path.strip().replace("\\", "/").rstrip("/")
-    if not cleaned_path or os.path.isabs(cleaned_path):
+    if (
+        not cleaned_path
+        or os.path.isabs(cleaned_path)
+        or PureWindowsPath(cleaned_path).is_absolute()
+    ):
         return None
     candidate = resolve_mod_file_path(file_folder, cleaned_path)
     try:
