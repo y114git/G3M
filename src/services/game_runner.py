@@ -271,7 +271,7 @@ def _patch_chapter(
             logger.info(f"Chapter {chapter_id}: overrides only (no patch file)")
         elif not data_win_path:
             logger.warning(
-                f"Chapter {chapter_id}: no data.win found, applying overrides only"
+                f"Chapter {chapter_id}: no game data file found, applying overrides only"
             )
         _apply_file_overrides(
             mod_root_dir, mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
@@ -334,7 +334,7 @@ def _patch_chapter(
     if success:
         try:
             shutil.move(temp_output, data_win_path)
-            logger.info(f"Patched data.win placed at {data_win_path}")
+            logger.info(f"Patched game data file placed at {data_win_path}")
         except Exception as e:
             logger.error(f"Failed to move patched file: {e}")
             return False

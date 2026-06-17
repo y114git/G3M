@@ -327,4 +327,8 @@ class GameRegistryService(QObject):
         if value:
             return value
         primary_executable = str(item.get("primary_executable", "")).strip().lower()
-        return "game.ios" if primary_executable.endswith(".app") else "data.win"
+        if primary_executable.endswith(".app"):
+            return "game.ios"
+        if primary_executable and not primary_executable.endswith(".exe"):
+            return "game.unx"
+        return "data.win"

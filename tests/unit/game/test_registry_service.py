@@ -90,3 +90,41 @@ def test_custom_game_uses_explicit_executable_and_data_file(registry_service):
     assert game.get_executable_candidates("linux")[0] == "platform_game.exe"
     assert game.get_executable_candidates("mac")[0] == "platform_game.exe"
     assert game.data_file_name == "game.unx"
+
+
+def test_custom_game_load_defaults_linux_native_data_file_name(registry_service):
+    """Checks that Linux-native custom games default to game.unx."""
+    registry_service.settings_service.read_json = lambda _path: {
+        "custom_games": [
+            {
+                "id": "custom_native",
+                "display_name": "Native GameMaker Game",
+                "primary_executable": "runner",
+            }
+        ]
+    }
+
+    registry_service.load()
+
+    game = get_game("custom_native")
+    assert game is not None
+    assert game.data_file_name == "game.unx"
+
+
+def test_custom_game_load_keeps_windows_exe_default_data_win(registry_service):
+    """Checks that Windows custom games keep data.win as the default data file."""
+    registry_service.settings_service.read_json = lambda _path: {
+        "custom_games": [
+            {
+                "id": "custom_windows",
+                "display_name": "Windows GameMaker Game",
+                "primary_executable": "game.exe",
+            }
+        ]
+    }
+
+    registry_service.load()
+
+    game = get_game("custom_windows")
+    assert game is not None
+    assert game.data_file_name == "data.win"
