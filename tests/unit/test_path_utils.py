@@ -243,6 +243,18 @@ class TestPathUtils:
         resolved = find_supported_game_data_file(game_dir)
         assert resolved == fallback
 
+    def test_find_supported_game_data_file_accepts_game_win(self, temp_dir):
+        """Checks that game.win is treated as a standard DATA file name."""
+        game_dir = os.path.join(temp_dir, "game")
+        os.makedirs(game_dir, exist_ok=True)
+        game_win = os.path.join(game_dir, "game.win")
+        with open(game_win, "w") as f:
+            f.write("data")
+
+        resolved = find_supported_game_data_file(game_dir, "missing.win")
+
+        assert resolved == game_win
+
     def test_path_handling_special_characters(self, temp_dir):
         """Checks that path handling special characters."""
         special_dir = os.path.join(temp_dir, "test dir with spaces & symbols!")

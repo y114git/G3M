@@ -9,7 +9,6 @@ import re
 
 SAVE_SLOT_FINISH_MAP = {0: 3, 1: 4, 2: 5}
 
-
 def get_default_save_path() -> str:
     """
     Get the default save path for Deltarune based on the operating system.
@@ -24,7 +23,6 @@ def get_default_save_path() -> str:
         return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'DELTARUNE')
     else:
         return os.path.join(os.path.expanduser('~'), '.config', 'DELTARUNE')
-
 
 def is_valid_save_path(path: str) -> bool:
     """

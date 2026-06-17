@@ -12,6 +12,8 @@ from services.localization_service import tr
 from ui.utils.ui_utils import format_size_mb
 from utils.network_utils import get_session
 
+logger = logging.getLogger(__name__)
+
 
 class FullInstallThread(QThread):
     progress = pyqtSignal(int)
@@ -26,6 +28,17 @@ class FullInstallThread(QThread):
         self._session = None
         self._active_response = None
 
+    def _safe_emit(self, signal, *args) -> None:
+        try:
+            signal.emit(*args)
+        except Exception as e:
+            logger.warning(
+                "FullInstallThread: failed to emit %s: %s",
+                getattr(signal, "signal", signal.__class__.__name__),
+                e,
+                exc_info=True,
+            )
+
     def cancel(self):
         self._cancelled = True
         try:
@@ -33,7 +46,7 @@ class FullInstallThread(QThread):
                 try:
                     self._session.close()
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"FullInstallThread.cancel: session close error: {e}",
                         exc_info=True,
                     )
@@ -41,40 +54,39 @@ class FullInstallThread(QThread):
                 try:
                     self._active_response.close()
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"FullInstallThread.cancel: response close error: {e}",
                         exc_info=True,
                     )
         finally:
-            self.status.emit(
+            self._safe_emit(
+                self.status,
                 tr("status.operation_cancelled"), UI_COLORS["status_error"]
             )
 
     def run(self):
-        if self.main_window.app_state.game_mode.game_id == "sugaryspire":
-            full_install_url = self.main_window.app_state.global_settings.get(
-                "full_spire_install_url"
-            )
-        elif self.main_window.app_state.game_mode.game_id == "frickbears3":
-            full_install_url = self.main_window.app_state.global_settings.get(
-                "full_frickbears3_install_url"
-            )
-        elif self.main_window.app_state.game_mode.game_id == "undertaleyellow":
-            full_install_url = self.main_window.app_state.global_settings.get(
-                "full_yellow_install_url"
-            )
-        else:
-            full_install_url = self.main_window.app_state.global_settings.get(
-                "full_install_url"
-            )
-        if not full_install_url:
-            self.status.emit(tr("errors.files_not_found"), UI_COLORS["status_error"])
-            self.finished.emit(False, self.target_dir)
-            return
-        self.status.emit(
-            tr("status.installing_game_files"), UI_COLORS["status_warning"]
-        )
         try:
+            app_state = self.main_window.app_state
+            game_id = app_state.game_mode.game_id
+            global_settings = app_state.global_settings
+            if game_id == "sugaryspire":
+                full_install_url = global_settings.get("full_spire_install_url")
+            elif game_id == "frickbears3":
+                full_install_url = global_settings.get("full_frickbears3_install_url")
+            elif game_id == "undertaleyellow":
+                full_install_url = global_settings.get("full_yellow_install_url")
+            else:
+                full_install_url = global_settings.get("full_install_url")
+            if not full_install_url:
+                self._safe_emit(
+                    self.status, tr("errors.files_not_found"), UI_COLORS["status_error"]
+                )
+                self._safe_emit(self.finished, False, self.target_dir)
+                return
+            self._safe_emit(
+                self.status,
+                tr("status.installing_game_files"), UI_COLORS["status_warning"]
+            )
             session = get_session()
             self._session = session
             resp = session.head(
@@ -85,11 +97,12 @@ class FullInstallThread(QThread):
             from utils.file_utils import download_and_extract_archive
 
             def progress_callback(progress):
-                self.progress.emit(progress)
+                self._safe_emit(self.progress, progress)
                 if total_size > 0:
                     downloaded_mb = format_size_mb(downloaded_ref[0])
                     total_mb = format_size_mb(total_size)
-                    self.status.emit(
+                    self._safe_emit(
+                        self.status,
                         f"{tr('status.installing_game_files')} ({downloaded_mb} / {total_mb})",
                         UI_COLORS["status_warning"],
                     )
@@ -109,24 +122,27 @@ class FullInstallThread(QThread):
                 on_response=on_response,
             )
             if self._cancelled:
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("status.operation_cancelled"), UI_COLORS["status_error"]
                 )
-                self.finished.emit(False, self.target_dir)
+                self._safe_emit(self.finished, False, self.target_dir)
                 return
-            self.status.emit(
+            self._safe_emit(
+                self.status,
                 tr("status.demo_installation_complete"), UI_COLORS["status_success"]
             )
-            self.finished.emit(True, self.target_dir)
+            self._safe_emit(self.finished, True, self.target_dir)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"FullInstallThread.run: installation error: {e}", exc_info=True
             )
-            self.status.emit(
+            self._safe_emit(
+                self.status,
                 tr("errors.full_installation_error").format(str(e)),
                 UI_COLORS["status_error"],
             )
-            self.finished.emit(False, self.target_dir)
+            self._safe_emit(self.finished, False, self.target_dir)
         finally:
             self._session = None
             self._active_response = None

@@ -18,6 +18,8 @@ from ui.common.styling import (
 )
 from utils.mod.utils import get_mod_id
 
+logger = logging.getLogger(__name__)
+
 
 class BaseModWidget(QFrame):
     clicked = pyqtSignal(object)
@@ -154,7 +156,7 @@ class BaseModWidget(QFrame):
                     placeholder = tr("ui.loading_placeholder")
                     description_text = placeholder
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"BaseModWidget: failed to resolve description placeholder state: {e}",
                 exc_info=True,
             )

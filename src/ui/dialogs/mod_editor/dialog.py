@@ -86,6 +86,8 @@ from utils.native_integration import (
 from utils.path_utils import colored_icon, resource_path
 from utils.process_utils import format_filesystem_error
 
+logger = logging.getLogger(__name__)
+
 
 class ModEditorDialog(QDialog):
     """Native dialog for creating/editing local mods."""
@@ -675,8 +677,7 @@ class ModEditorDialog(QDialog):
             return
         if action == "entry_and_file":
             if not self._is_info_file_inside_mod_folder(source_path):
-                QMessageBox.critical(
-                    self,
+                self._safe_critical(
                     tr("errors.error"),
                     tr("errors.delete_info_file_failed", error="path_outside_mod_folder"),
                 )
@@ -684,8 +685,7 @@ class ModEditorDialog(QDialog):
             try:
                 os.remove(source_path)
             except OSError as exc:
-                QMessageBox.critical(
-                    self,
+                self._safe_critical(
                     tr("errors.error"),
                     tr("errors.delete_info_file_failed", error=str(exc)),
                 )
@@ -718,7 +718,7 @@ class ModEditorDialog(QDialog):
         if not can_delete_file:
             return (
                 "entry"
-                if QMessageBox.question(
+                if self._safe_question(
                     self,
                     tr("dialogs.delete_info_file_entry_title"),
                     tr(
@@ -1016,7 +1016,7 @@ class ModEditorDialog(QDialog):
                     )
                     return
         except Exception as e:
-            logging.warning(f"Load default icon failed: {e}")
+            logger.warning(f"Load default icon failed: {e}")
         self.icon_preview.setText(tr("ui.icon_preview"))
 
     def _load_icon_from_url(self, url):
@@ -1138,7 +1138,7 @@ class ModEditorDialog(QDialog):
 
     def _on_cancel(self):
         if (
-            QMessageBox.question(
+            self._safe_question(
                 self, tr("dialogs.cancel_changes"), tr("dialogs.unsaved_changes_lost")
             )
             == QMessageBox.StandardButton.Yes
@@ -1147,7 +1147,7 @@ class ModEditorDialog(QDialog):
 
     def _validate(self):
         if not self.name_edit.text().strip():
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_name_empty"))
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_name_empty"))
             return False
         url = self.homepage_edit.text().strip()
         if url:
@@ -1174,39 +1174,36 @@ class ModEditorDialog(QDialog):
                         ".gz",
                     ]
                 ):
-                    QMessageBox.warning(
-                        self,
+                    self._safe_warning(
                         tr("errors.error"),
                         tr("dialogs.invalid_homepage_direct_download"),
                     )
                     return False
             except Exception:
-                QMessageBox.warning(
-                    self, tr("errors.error"), tr("dialogs.invalid_homepage")
-                )
+                self._safe_warning(tr("errors.error"), tr("dialogs.invalid_homepage"))
                 return False
         if len(self.name_edit.text().strip()) > MOD_FIELD_LIMITS["name"]:
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_name_too_long"))
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_name_too_long"))
             return False
         if len(self.author_edit.text().strip()) > MOD_FIELD_LIMITS["author"]:
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_author_too_long"))
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_author_too_long"))
             return False
         if len(self.version_edit.text().strip()) > MOD_FIELD_LIMITS["version"]:
-            QMessageBox.warning(
-                self, tr("errors.error"), tr("dialogs.mod_version_too_long")
-            )
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_version_too_long"))
             return False
         if len((self.game_combo.currentData() or "").strip()) > MOD_FIELD_LIMITS["game"]:
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_game_too_long"))
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_game_too_long"))
             return False
         if len(self.homepage_edit.text().strip()) > MOD_FIELD_LIMITS["homepage"]:
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_homepage_too_long"))
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_homepage_too_long"))
             return False
         if len(self.icon_edit.text().strip()) > MOD_FIELD_LIMITS["icon"]:
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_icon_too_long"))
+            self._safe_warning(tr("errors.error"), tr("dialogs.mod_icon_too_long"))
             return False
         if len(self.game_version_edit.text().strip()) > MOD_FIELD_LIMITS["game_version"]:
-            QMessageBox.warning(self, tr("errors.error"), tr("dialogs.mod_game_version_too_long"))
+            self._safe_warning(
+                tr("errors.error"), tr("dialogs.mod_game_version_too_long")
+            )
             return False
         if not any(
             [
@@ -1218,8 +1215,8 @@ class ModEditorDialog(QDialog):
         ):
             self.tag_other.setChecked(True)
         if self.is_creating and not self._has_any_mod_files():
-            QMessageBox.warning(
-                self, tr("errors.error"), tr("dialogs.mod_needs_at_least_one_file")
+            self._safe_warning(
+                tr("errors.error"), tr("dialogs.mod_needs_at_least_one_file")
             )
             return False
         return self._validate_local_files()
@@ -1268,8 +1265,7 @@ class ModEditorDialog(QDialog):
         if missing:
             kind, tab_name, path = missing
             key = "dialogs.tab_file_not_found" if kind == "data" else "dialogs.tab_extra_file_not_found"
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("dialogs.validation_error"),
                 tr(key, tab_name=tab_name, path=path),
             )
@@ -1417,8 +1413,36 @@ class ModEditorDialog(QDialog):
         try:
             self._refresh_after_save()
         except Exception:
-            logging.exception("ModEditorDialog: failed to refresh UI after saving mod")
-        QMessageBox.information(self.parent_app, title, message)
+            logger.exception("ModEditorDialog: failed to refresh UI after saving mod")
+        try:
+            QMessageBox.information(self.parent_app, title, message)
+        except Exception:
+            logger.exception("ModEditorDialog: failed to show save success message")
+
+    def _safe_critical(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.critical(self, title, message)
+        except Exception:
+            logger.exception("ModEditorDialog: failed to show critical message")
+
+    def _safe_information(self, parent, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(parent, title, message)
+        except Exception:
+            logger.exception("ModEditorDialog: failed to show information message")
+
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("ModEditorDialog: failed to show warning message")
+
+    def _safe_question(self, *args, **kwargs):
+        try:
+            return QMessageBox.question(*args, **kwargs)
+        except Exception:
+            logger.exception("ModEditorDialog: failed to show question message")
+            return QMessageBox.StandardButton.No
 
     def _create_local_mod(self):
         mod_id = f"local_{uuid.uuid4().hex[:12]}"
@@ -1447,8 +1471,7 @@ class ModEditorDialog(QDialog):
             self._is_saving = False
             if hasattr(self, "_save_button"):
                 self._save_button.setEnabled(True)
-            QMessageBox.critical(
-                self,
+            self._safe_critical(
                 tr("errors.mod_creation_error"),
                 tr(
                     "errors.mod_creation_failed",
@@ -1477,14 +1500,12 @@ class ModEditorDialog(QDialog):
 
     def _update_local_mod(self):
         if not self.mod_id:
-            QMessageBox.critical(
-                self, tr("errors.error"), tr("errors.id_not_found_update")
-            )
+            self._safe_critical(tr("errors.error"), tr("errors.id_not_found_update"))
             return
         mod_folder = self._find_mod_folder()
         if not mod_folder:
-            QMessageBox.critical(
-                self, tr("errors.error"), tr("errors.mod_folder_not_found_update")
+            self._safe_critical(
+                tr("errors.error"), tr("errors.mod_folder_not_found_update")
             )
             return
         try:
@@ -1517,8 +1538,7 @@ class ModEditorDialog(QDialog):
             self._is_saving = False
             if hasattr(self, "_save_button"):
                 self._save_button.setEnabled(True)
-            QMessageBox.critical(
-                self,
+            self._safe_critical(
                 tr("errors.update_error"),
                 tr(
                     "errors.local_mod_update_failed",
@@ -1528,7 +1548,7 @@ class ModEditorDialog(QDialog):
 
     def _delete_mod(self):
         if (
-            QMessageBox.question(
+            self._safe_question(
                 self,
                 tr("dialogs.are_you_sure"),
                 tr("dialogs.local_mod_deletion_confirmation"),
@@ -1537,14 +1557,14 @@ class ModEditorDialog(QDialog):
         ):
             return
         if not self.mod_id:
-            QMessageBox.critical(
-                self, tr("errors.error"), tr("errors.id_not_found_for_deletion")
+            self._safe_critical(
+                tr("errors.error"), tr("errors.id_not_found_for_deletion")
             )
             return
         mod_folder = self._find_mod_folder()
         if not mod_folder:
-            QMessageBox.critical(
-                self, tr("errors.error"), tr("errors.mod_folder_not_found_for_deletion")
+            self._safe_critical(
+                tr("errors.error"), tr("errors.mod_folder_not_found_for_deletion")
             )
             return
         try:
@@ -1552,8 +1572,7 @@ class ModEditorDialog(QDialog):
             self._refresh_after_save()
             self.accept()
         except Exception as e:
-            QMessageBox.critical(
-                self,
+            self._safe_critical(
                 tr("errors.deletion_error"),
                 tr(
                     "errors.local_mod_deletion_failed",
@@ -1566,8 +1585,7 @@ class ModEditorDialog(QDialog):
             return
         mod_folder = self._find_mod_folder()
         if not mod_folder or not os.path.exists(mod_folder):
-            QMessageBox.critical(
-                self,
+            self._safe_critical(
                 tr("errors.error"),
                 tr("errors.mod_folder_not_found_simple", path=mod_folder or ""),
             )
@@ -1589,12 +1607,11 @@ class ModEditorDialog(QDialog):
                     for f in files:
                         fp = os.path.join(root, f)
                         zf.write(fp, os.path.relpath(fp, mod_folder))
-            QMessageBox.information(
+            self._safe_information(
                 self, tr("dialogs.success"), tr("status.mod_exported_success")
             )
         except Exception as e:
-            QMessageBox.critical(
-                self,
+            self._safe_critical(
                 tr("errors.error"),
                 tr(
                     "errors.mod_export_failed",
@@ -1607,8 +1624,7 @@ class ModEditorDialog(QDialog):
         if mod_folder and os.path.exists(mod_folder):
             open_path_native(mod_folder)
         else:
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 tr("errors.mod_folder_not_found_simple", path=mod_folder or ""),
             )
@@ -1616,8 +1632,7 @@ class ModEditorDialog(QDialog):
     def _open_mod_versions(self):
         mod_folder = self._find_mod_folder()
         if not mod_folder or not os.path.exists(mod_folder):
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 tr("errors.mod_folder_not_found_simple", path=mod_folder or ""),
             )
@@ -1626,7 +1641,7 @@ class ModEditorDialog(QDialog):
 
         app_state = getattr(self.parent_app, "app_state", None)
         if not app_state:
-            logging.warning(
+            logger.warning(
                 "ModEditorDialog: Cannot open mod versions - app_state not available"
             )
             return
@@ -1738,7 +1753,7 @@ class ModEditorDialog(QDialog):
     def _populate_file_tabs(self, files_data, game):
         game_def = get_game(game)
         if not game_def:
-            logging.warning(
+            logger.warning(
                 "Unknown game '%s' in _populate_file_tabs, using first tab", game
             )
             fi = next(iter(files_data.values()), None)

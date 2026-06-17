@@ -20,6 +20,8 @@ from config.settings_schema import get_theme_color_key
 from utils.mod.utils import get_mod_id
 from utils.path_utils import colored_icon
 
+logger = logging.getLogger(__name__)
+
 
 class _WidgetUpdateFilter(QObject):
     def __init__(self, widget, callback) -> None:
@@ -164,7 +166,7 @@ def apply_rounded_mask(widget, radius, inset=0):
         widget._rounded_mask_applied = True
         widget._rounded_mask_cache_key = cache_key
     except (RuntimeError, AttributeError):
-        logging.debug("Failed to apply rounded mask to widget")
+        logger.debug("Failed to apply rounded mask to widget")
 
 
 def install_size_hint_height_sync(
@@ -184,7 +186,7 @@ def set_layout_stretch_factors(layout, *factors):
         for index, factor in enumerate(factors):
             layout.setStretch(index, factor)
     except Exception as e:
-        logging.debug(f"set_layout_stretch_factors: Error setting stretch: {e}")
+        logger.debug(f"set_layout_stretch_factors: Error setting stretch: {e}")
 
 
 def get_widget_dimensions(widget):
@@ -944,7 +946,7 @@ def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
                 widget.setParent(None)
                 widget.deleteLater()
         except (RuntimeError, AttributeError) as e:
-            logging.debug(f"clear_layout_widgets: Error removing widget: {e}")
+            logger.debug(f"clear_layout_widgets: Error removing widget: {e}")
 
 
 def round_pixmap(pixmap, radius, border_width=0, border_color=None):
@@ -1104,7 +1106,7 @@ def load_mod_icon_universal(
                 if default_pixmap is not None:
                     break
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"load_mod_icon_universal: Error loading default icon from {default_icon_path}: {e}"
                 )
                 default_pixmap = None
@@ -1136,7 +1138,7 @@ def load_mod_icon_universal(
                         if hasattr(mod_data, "folder_path"):
                             mod_folder_path = mod_data.folder_path
                     except Exception as e:
-                        logging.debug(
+                        logger.debug(
                             f"load_mod_icon_universal: Error getting folder_path from mod_data: {e}"
                         )
                     if mod_folder_path and os.path.isdir(mod_folder_path):
@@ -1160,7 +1162,7 @@ def load_mod_icon_universal(
                     icon_label.setPixmap(pixmap)
                     return
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"load_mod_icon_universal: Error loading pixmap from {local_icon_to_load}: {e}"
                 )
         if (
@@ -1192,7 +1194,7 @@ def load_mod_icon_universal(
                                 and lbl.parent() is None
                                 and (not hasattr(lbl, "window"))
                             ):
-                                logging.debug(
+                                logger.debug(
                                     "Widget has no parent or window, but continuing"
                                 )
                         except (RuntimeError, AttributeError):
@@ -1218,11 +1220,11 @@ def load_mod_icon_universal(
                         else:
                             _try_local_fallback()
                     except (RuntimeError, AttributeError) as e:
-                        logging.debug(
+                        logger.debug(
                             f"load_mod_icon_universal: Widget deleted during image load: {e}"
                         )
                     except Exception as e:
-                        logging.debug(
+                        logger.debug(
                             f"load_mod_icon_universal: Error setting pixmap: {e}"
                         )
 
@@ -1255,7 +1257,7 @@ def load_mod_icon_universal(
                             return
 
                 def _on_error(url, err):
-                    logging.debug(
+                    logger.debug(
                         f"load_mod_icon_universal: Failed to load image from URL {url}: {err}"
                     )
                     _try_local_fallback()
@@ -1271,7 +1273,7 @@ def load_mod_icon_universal(
                         signals.result.disconnect(_on_loaded_image)
                         signals.error.disconnect(_on_error)
                     except (TypeError, RuntimeError) as e:
-                        logging.debug(
+                        logger.debug(
                             f"load_mod_icon_universal: Error disconnecting signals in cleanup: {e}"
                         )
                     try:
@@ -1280,20 +1282,20 @@ def load_mod_icon_universal(
                         if hasattr(icon_label, "_icon_loader_runnable"):
                             del icon_label._icon_loader_runnable
                     except Exception as e:
-                        logging.debug(
+                        logger.debug(
                             f"load_mod_icon_universal: Error cleaning up icon loader attributes: {e}"
                         )
                 try:
                     icon_label.destroyed.connect(_cleanup_refs)
                 except Exception as e:
-                    logging.debug(
+                    logger.debug(
                         f"load_mod_icon_universal: Error connecting destroyed signal: {e}"
                     )
                 if pool is not None:
                     pool.start(runnable)
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"load_mod_icon_universal: Error setting up async icon loader for {icon_source}: {e}"
                 )
     except Exception as e:
-        logging.debug(f"load_mod_icon_universal: Unexpected error: {e}")
+        logger.debug(f"load_mod_icon_universal: Unexpected error: {e}")

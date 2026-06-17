@@ -49,6 +49,8 @@ from utils.path_utils import (
 )
 from utils.process_utils import format_filesystem_error, format_network_error
 
+logger = logging.getLogger(__name__)
+
 
 class SettingsManager(QObject):
     """Manages application settings and configuration."""
@@ -118,6 +120,22 @@ class SettingsManager(QObject):
         parent = self.parent_widget
         return getattr(parent, "analytics_service", None) if parent else None
 
+    def _safe_update_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception as e:
+            logger.debug(
+                "SettingsManager: status update failed: %s", e, exc_info=True
+            )
+
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        try:
+            self.feedback_service.show_message(*args, **kwargs)
+        except Exception as e:
+            logger.debug(
+                "SettingsManager: feedback message failed: %s", e, exc_info=True
+            )
+
     def _record_action(self, event: str, **dims) -> None:
         analytics = self._analytics()
         if analytics:
@@ -130,7 +148,7 @@ class SettingsManager(QObject):
         if not data and os.path.exists(path):
             backup_path = f"{path}.invalid.bak"
             if os.path.exists(backup_path):
-                self.feedback_service.update_status(
+                self._safe_update_status(
                     tr("dialogs.corrupted_files_found"), UI_COLORS["status_warning"]
                 )
         return data
@@ -143,15 +161,15 @@ class SettingsManager(QObject):
         except (PermissionError, OSError):
             self._handle_permission_error(os.path.dirname(path))
         except (ValueError, TypeError) as e:
-            logging.error(
+            logger.error(
                 f"[SettingsManager] JSON serialization error for {path}: {e}",
                 exc_info=True,
             )
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("errors.file_write_error", error=str(e)), UI_COLORS["status_error"]
             )
         except Exception as e:
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("errors.file_write_error", error=str(e)), UI_COLORS["status_error"]
             )
 
@@ -162,10 +180,18 @@ class SettingsManager(QObject):
                 parent_handler(directory)
                 return
             except Exception as e:
-                logging.debug(f"Parent permission error handler failed: {e}")
-        self.feedback_service.show_message(
-            "error", "errors.no_write_permission_for", path=directory
-        )
+                logger.debug(f"Parent permission error handler failed: {e}")
+        try:
+            self.feedback_service.show_message(
+                "error", "errors.no_write_permission_for", path=directory
+            )
+        except Exception as e:
+            logger.debug(
+                "SettingsManager: permission error dialog failed for %s: %s",
+                directory,
+                e,
+                exc_info=True,
+            )
 
     def _get_audio_paths(self, base_name: str) -> list[str]:
         return [
@@ -179,7 +205,7 @@ class SettingsManager(QObject):
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"SettingsManager: failed to remove file {file_path}: {e}",
                     exc_info=True,
                 )
@@ -295,7 +321,7 @@ class SettingsManager(QObject):
                     shutil.rmtree(path)
                 else:
                     os.remove(path)
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "info",
                 "dialogs.success",
                 tr("status.g3mtool_cache_cleared"),
@@ -303,9 +329,9 @@ class SettingsManager(QObject):
             self._record_action("g3mtool_cache_cleared")
             return True
         except Exception as e:
-            logging.error("Failed to clear G3MTool cache: %s", e, exc_info=True)
+            logger.error("Failed to clear G3MTool cache: %s", e, exc_info=True)
             self._record_action("g3mtool_cache_clear_failed")
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error",
                 "errors.error",
                 tr("errors.g3mtool_cache_clear_failed", error=str(e)),
@@ -333,7 +359,7 @@ class SettingsManager(QObject):
             return None
         error_message = self.get_executable_path_error(filepath)
         if error_message is not None:
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "warning",
                 "errors.error",
                 error_message,
@@ -368,7 +394,7 @@ class SettingsManager(QObject):
             for name in getattr(game, "executables", {}).get(platform_key, ()):
                 if name not in candidates:
                     candidates.append(name)
-        self.feedback_service.show_message(
+        self._safe_show_message(
             "warning",
             "dialogs.path_not_found",
             tr(
@@ -407,7 +433,7 @@ class SettingsManager(QObject):
             tr(game.path_not_found_dialog_key),
         )
         if is_initial:
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "info",
                 "dialogs.path_not_found",
                 tr("dialogs.game_path_instruction", message=message),
@@ -451,7 +477,7 @@ class SettingsManager(QObject):
                 "game_path_set",
                 game=getattr(game, "game_id", "unknown"),
             )
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.game_path_set", path=corrected_path),
                 UI_COLORS["status_success"],
             )
@@ -478,7 +504,7 @@ class SettingsManager(QObject):
                 ext = os.path.splitext(filepath)[1].lower()
                 if ext not in self._IMAGE_EXTENSIONS:
                     self._record_action("background_rejected", reason="invalid_format")
-                    self.feedback_service.show_message(
+                    self._safe_show_message(
                         "warning", "errors.error", tr("errors.invalid_image_format")
                     )
                     return
@@ -489,14 +515,14 @@ class SettingsManager(QObject):
                 self._record_action("background_set", ext=ext.lstrip("."))
             except Exception as e:
                 friendly_error = self._describe_fs_error(e, filepath)
-                logging.error(
+                logger.error(
                     "Failed to copy background: %s | raw=%s",
                     friendly_error,
                     e,
                     exc_info=True,
                 )
                 self._record_action("background_set_failed")
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.error", friendly_error
                 )
                 return
@@ -553,20 +579,20 @@ class SettingsManager(QObject):
         if existing:
             try:
                 self._remove_files(paths)
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "info", "dialogs.success", tr(removed_msg_key)
                 )
                 self.theme_changed.emit()
             except Exception as e:
                 friendly_error = self._describe_fs_error(e, existing)
-                logging.error(
+                logger.error(
                     "[SettingsManager] Failed to remove %s: %s | raw=%s",
                     base_name,
                     friendly_error,
                     e,
                     exc_info=True,
                 )
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.error", friendly_error
                 )
         else:
@@ -580,10 +606,10 @@ class SettingsManager(QObject):
                 lower = file_path.lower()
                 valid_exts = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
                 if not lower.endswith(valid_exts):
-                    self.feedback_service.show_message(
+                    self._safe_show_message(
                         "warning",
                         "errors.error",
-                        tr("errors.invalid_audio_format", "Unsupported audio format."),
+                        tr("errors.invalid_audio_format"),
                     )
                     return
                 try:
@@ -596,14 +622,14 @@ class SettingsManager(QObject):
                     self.theme_changed.emit()
                 except Exception as e:
                     friendly_error = self._describe_fs_error(e, file_path)
-                    logging.error(
+                    logger.error(
                         "[SettingsManager] Failed to copy %s: %s | raw=%s",
                         base_name,
                         friendly_error,
                         e,
                         exc_info=True,
                     )
-                    self.feedback_service.show_message(
+                    self._safe_show_message(
                         "warning", "errors.error", friendly_error
                     )
 
@@ -641,19 +667,19 @@ class SettingsManager(QObject):
         if existing_logo:
             try:
                 self._remove_logo_files()
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "info", "dialogs.success", tr("dialogs.logo_removed")
                 )
                 self.theme_changed.emit()
             except Exception as e:
                 friendly_error = self._describe_fs_error(e, existing_logo)
-                logging.error(
+                logger.error(
                     "Failed to remove logo: %s | raw=%s",
                     friendly_error,
                     e,
                     exc_info=True,
                 )
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.error", friendly_error
                 )
         else:
@@ -668,7 +694,7 @@ class SettingsManager(QObject):
                     os.makedirs(self.app_state.config_dir, exist_ok=True)
                     ext = os.path.splitext(file_path)[1].lower()
                     if ext not in self._IMAGE_EXTENSIONS:
-                        self.feedback_service.show_message(
+                        self._safe_show_message(
                             "warning", "errors.error", tr("errors.invalid_image_format")
                         )
                         return
@@ -680,13 +706,13 @@ class SettingsManager(QObject):
                     self.theme_changed.emit()
                 except Exception as e:
                     friendly_error = self._describe_fs_error(e, file_path)
-                    logging.error(
+                    logger.error(
                         "Failed to copy logo: %s | raw=%s",
                         friendly_error,
                         e,
                         exc_info=True,
                     )
-                    self.feedback_service.show_message(
+                    self._safe_show_message(
                         "warning", "errors.error", friendly_error
                     )
 
@@ -712,13 +738,13 @@ class SettingsManager(QObject):
                     e,
                     getattr(cs, "get_custom_font_path", lambda: "")() if cs else "",
                 )
-                logging.error(
+                logger.error(
                     "Failed to remove font: %s | raw=%s",
                     friendly_error,
                     e,
                     exc_info=True,
                 )
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.error", friendly_error
                 )
         else:
@@ -732,7 +758,7 @@ class SettingsManager(QObject):
                 return
             ext = os.path.splitext(file_path)[1].lower()
             if ext not in self._FONT_EXTENSIONS:
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.error", tr("errors.invalid_font_file")
                 )
                 return
@@ -754,8 +780,8 @@ class SettingsManager(QObject):
 
                 font_id = QFontDatabase.addApplicationFont(target_path)
                 if font_id == -1:
-                    logging.error(f"Failed to load font from {target_path}")
-                    self.feedback_service.show_message(
+                    logger.error(f"Failed to load font from {target_path}")
+                    self._safe_show_message(
                         "warning", "errors.error", tr("errors.invalid_font_file")
                     )
                     with contextlib.suppress(OSError):
@@ -767,23 +793,23 @@ class SettingsManager(QObject):
                     families = QFontDatabase.applicationFontFamilies(font_id)
                     if families:
                         self.parent_widget.custom_font_family = families[0]
-                        logging.info(
+                        logger.info(
                             f"Font loaded successfully: {families[0]} from {target_path}"
                         )
                     else:
-                        logging.warning(f"No font families found in {target_path}")
+                        logger.warning(f"No font families found in {target_path}")
 
                 self._update_font_button_text()
                 self.theme_changed.emit()
             except Exception as e:
                 friendly_error = self._describe_fs_error(e, file_path)
-                logging.error(
+                logger.error(
                     "Failed to copy font: %s | raw=%s",
                     friendly_error,
                     e,
                     exc_info=True,
                 )
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.error", friendly_error
                 )
 
@@ -874,7 +900,7 @@ class SettingsManager(QObject):
             return
         self.write_theme_archive(theme_file_path)
         self._record_action("theme_exported")
-        self.feedback_service.show_message(
+        self._safe_show_message(
             "info", "dialogs.success", tr("dialogs.theme_exported_success")
         )
 
@@ -898,7 +924,7 @@ class SettingsManager(QObject):
                 raise ValueError
         except Exception:
             self._record_action("theme_import_rejected", reason="invalid_archive")
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error", "dialogs.error", tr("dialogs.theme_invalid_archive")
             )
             return
@@ -918,12 +944,12 @@ class SettingsManager(QObject):
             self.theme_changed.emit()
             self.settings_changed.emit()
             self._record_action("theme_imported")
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "info", "dialogs.success", tr("dialogs.theme_imported_success")
             )
         except Exception as e:
             self._record_action("theme_import_failed")
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error",
                 "dialogs.error",
                 tr(
@@ -940,7 +966,7 @@ class SettingsManager(QObject):
                 url, self.app_state.config_dir, self.app_state, self, self.parent_widget
             )
             worker.status.connect(
-                lambda msg, color: self.feedback_service.update_status(msg, color)
+                lambda msg, color: self._safe_update_status(msg, color)
             )
             worker.progress.connect(
                 lambda p: setattr(self.app_state, "progress_bar_value", p)
@@ -952,11 +978,11 @@ class SettingsManager(QObject):
             self.app_state.current_task = worker
             worker.start()
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"SettingsManager: Error installing theme from URL: {e}", exc_info=True
             )
             self._record_action("theme_url_install_failed")
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error",
                 "errors.error",
                 tr(
@@ -971,13 +997,13 @@ class SettingsManager(QObject):
             self.theme_changed.emit()
             self.settings_changed.emit()
             self._record_action("theme_url_installed")
-            self.feedback_service.update_status(message, "green")
-            self.feedback_service.show_message("info", "dialogs.success", message)
+            self._safe_update_status(message, "green")
+            self._safe_show_message("info", "dialogs.success", message)
         else:
-            logging.warning(f"Theme installation failed: {message}")
+            logger.warning(f"Theme installation failed: {message}")
             self._record_action("theme_url_install_failed")
-            self.feedback_service.update_status(message or tr("errors.error"), "red")
-            self.feedback_service.show_message("error", "errors.error", message)
+            self._safe_update_status(message or tr("errors.error"), "red")
+            self._safe_show_message("error", "errors.error", message)
 
     def reset_section(
         self,
@@ -1042,7 +1068,7 @@ class SettingsManager(QObject):
         self.settings_changed.emit()
         if language_code:
             self.language_changed.emit(language_code)
-        self.feedback_service.show_message(
+        self._safe_show_message(
             "info",
             "dialogs.success",
             tr("status.settings_reset_success", section=section),
@@ -1111,7 +1137,7 @@ class SettingsManager(QObject):
                     widget.windowState() | Qt.WindowState.WindowMaximized
                 )
         except (TypeError, ValueError, AttributeError) as e:
-            logging.debug(f"load_window_geometry: failed: {e}")
+            logger.debug(f"load_window_geometry: failed: {e}")
             return False
         else:
             return True
@@ -1139,7 +1165,7 @@ class SettingsManager(QObject):
             self.app_state.local_config.pop("window_geometry", None)
             self.write_local_config()
         except RuntimeError as e:
-            logging.debug(f"save_window_geometry: skipped deleted widget: {e}")
+            logger.debug(f"save_window_geometry: skipped deleted widget: {e}")
 
     def schedule_geometry_save(self, widget: QWidget, timeout_ms: int = 500):
         self._geometry_save_widget = widget
@@ -1161,11 +1187,11 @@ class SettingsManager(QObject):
             widget.setMinimumSize(sz)
             widget.setMaximumSize(sz)
         except (AttributeError, ValueError) as e:
-            logging.debug(f"lock_window_size: failed: {e}")
+            logger.debug(f"lock_window_size: failed: {e}")
 
     def unlock_window_size(self, widget: QWidget):
         try:
             widget.setMinimumSize(0, 0)
             widget.setMaximumSize(16777215, 16777215)
         except (AttributeError, ValueError) as e:
-            logging.debug(f"unlock_window_size: failed: {e}")
+            logger.debug(f"unlock_window_size: failed: {e}")

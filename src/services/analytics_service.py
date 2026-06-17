@@ -72,8 +72,14 @@ class _AnalyticsUploadWorker(QObject):
             with contextlib.suppress(Exception):
                 if session is not None:
                     session.close()
-        with contextlib.suppress(RuntimeError):
+        try:
             self.finished.emit(success, len(self._batch))
+        except Exception as e:
+            logger.warning(
+                "Analytics upload worker failed to emit finished: %s",
+                e,
+                exc_info=True,
+            )
 
     @staticmethod
     def _merge_batch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -171,7 +177,7 @@ class AnalyticsService(QObject):
             "app_launch_detail",
             scope="opt_in",
             os=self._os_key(),
-            locale=self._clean_value(self.app_state.local_config.get("language", "en")),
+            locale=self._clean_value(self._local_config().get("language", "en")),
             py=self._clean_value(
                 f"{sys.version_info.major}.{sys.version_info.minor}"
             ),
@@ -179,11 +185,11 @@ class AnalyticsService(QObject):
 
     @property
     def opt_in_enabled(self) -> bool:
-        return bool(self.app_state.local_config.get("analytics_opt_in_enabled", False))
+        return bool(self._local_config().get("analytics_opt_in_enabled", False))
 
     def set_opt_in_enabled(self, enabled: bool) -> None:
         previous = self.opt_in_enabled
-        self.app_state.local_config["analytics_opt_in_enabled"] = bool(enabled)
+        self._local_config()["analytics_opt_in_enabled"] = bool(enabled)
         if enabled and not previous:
             self.count("opt_in_enabled")
         if not enabled:
@@ -617,20 +623,21 @@ class AnalyticsService(QObject):
         self._state_timer.start(self._STATE_SAVE_DELAY_MS)
 
     def _record_session_end(self) -> None:
+        config = self._local_config()
         duration = time.monotonic() - self._session_started_at
         self.count("session_end", duration=self._bucket_seconds(duration))
         self.count(
             "session_end_detail",
             scope="opt_in",
             duration=self._bucket_seconds(duration),
-            locale=self._clean_value(self.app_state.local_config.get("language", "en")),
+            locale=self._clean_value(config.get("language", "en")),
             scale=self._clean_value(
-                int(float(self.app_state.local_config.get("ui_scale", 1.0)) * 100)
+                int(float(config.get("ui_scale", 1.0)) * 100)
             ),
             theme=self._clean_value(
                 "custom"
                 if any(
-                    self.app_state.local_config.get(k)
+                    config.get(k)
                     for k in (
                         "custom_background_color",
                         "custom_elements_color",
@@ -766,6 +773,15 @@ class AnalyticsService(QObject):
                 os.makedirs(config_dir, exist_ok=True)
         return os.path.join(config_dir, "analytics_pending.json")
 
+    def _local_config(self) -> dict[str, Any]:
+        config = getattr(self.app_state, "local_config", None)
+        if isinstance(config, dict):
+            return config
+        config = {}
+        with contextlib.suppress(Exception):
+            self.app_state.local_config = config
+        return config
+
     def _event_key(self, event: str, dims: dict[str, Any]) -> str:
         parts = [self._clean_value(event)]
         for key, value in sorted(dims.items()):
@@ -797,7 +813,7 @@ class AnalyticsService(QObject):
             "os_family": self._os_key(),
             "os_version": self._clean_value(platform.release()),
             "arch": self._clean_value(platform.machine()),
-            "locale": self._clean_value(self.app_state.local_config.get("language", "en")),
+            "locale": self._clean_value(self._local_config().get("language", "en")),
             "timezone": self._timezone_bucket(),
             "python": self._clean_value(f"{sys.version_info.major}.{sys.version_info.minor}"),
         }

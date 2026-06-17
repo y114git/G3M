@@ -15,6 +15,8 @@ from services.localization_service import tr
 from utils.file_utils import find_deltamod_info_file, get_unique_mod_dir
 from utils.mod.config_parser import build_mod_config_data
 
+logger = logging.getLogger(__name__)
+
 DELTAMOD_GAME_MAP: dict[str, str] = {
     "toby.deltarune": "deltarune",
     "toby.deltarune.demo": "deltarunedemo",
@@ -63,7 +65,7 @@ class DeltamodConverter:
                         try:
                             shutil.rmtree(item_path)
                         except OSError as e:
-                            logging.error(
+                            logger.error(
                                 f"Failed to remove directory {item_path} in {target_mod_dir}: {e}"
                             )
                             raise
@@ -71,7 +73,7 @@ class DeltamodConverter:
                         try:
                             os.remove(item_path)
                         except OSError as e:
-                            logging.error(
+                            logger.error(
                                 f"Failed to remove file {item_path} in {target_mod_dir}: {e}"
                             )
                             raise
@@ -89,12 +91,12 @@ class DeltamodConverter:
             config_path = os.path.join(target_mod_dir, "mod_config.json")
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(build_mod_config_data(config_data), f, indent=4, ensure_ascii=False)
-            logging.info(
+            logger.info(
                 f"Deltamod converted: {config_data.get('name')} → {target_mod_dir}"
             )
             return target_mod_dir
         except Exception as e:
-            logging.error(f"Deltamod conversion failed: {e}")
+            logger.error(f"Deltamod conversion failed: {e}")
             return None
 
     def _find_file_case_insensitive(
@@ -138,7 +140,7 @@ class DeltamodConverter:
                     if file.lower() == filename_lower:
                         return os.path.join(root, file)
         except Exception as e:
-            logging.debug(f"Error in recursive file search: {e}")
+            logger.debug(f"Error in recursive file search: {e}")
         return None
 
     def _parse_to_path(self, to_path: str) -> tuple[str | None, str | None, str]:
@@ -182,7 +184,7 @@ class DeltamodConverter:
             with open(info_path, encoding="utf-8") as f:
                 self.deltamod_info = json.load(f)
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"DeltamodConverter._validate_source: failed to read {info_path}: {e}"
             )
             return False
@@ -205,12 +207,12 @@ class DeltamodConverter:
                     )
                 self.modding_xml = ElementTree.fromstring(xml_content)
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"DeltamodConverter._validate_source: failed to parse XML fallback: {e}"
                 )
                 self.modding_xml = None
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"DeltamodConverter._validate_source: failed to parse XML: {e}"
             )
             self.modding_xml = None
@@ -334,13 +336,13 @@ class DeltamodConverter:
             patch_file = patch.get("patch", "")
             patch_type = patch.get("type", "")
             if not to_path or not patch_file or (not patch_type):
-                logging.warning(
+                logger.warning(
                     f"DeltamodConverter: skipping patch with missing fields (to={to_path}, patch={patch_file}, type={patch_type})"
                 )
                 continue
             chapter_key, relative_path, filename = self._parse_to_path(to_path)
             if not chapter_key:
-                logging.warning(
+                logger.warning(
                     f"DeltamodConverter: could not determine chapter for path: {to_path}"
                 )
                 continue
@@ -397,13 +399,13 @@ class DeltamodConverter:
             patch_file_rel = patch.get("patch", "").lstrip("./")
             patch_type = patch.get("type", "")
             if not to_path or not patch_type:
-                logging.warning(
+                logger.warning(
                     f"DeltamodConverter: skipping patch with missing to or type: {to_path}, {patch_type}"
                 )
                 continue
             chapter_key, relative_path, filename = self._parse_to_path(to_path)
             if not chapter_key:
-                logging.warning(
+                logger.warning(
                     f"DeltamodConverter: could not determine chapter for path: {to_path}"
                 )
                 continue
@@ -416,7 +418,7 @@ class DeltamodConverter:
             if patch_type == "override":
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
-                    logging.error(
+                    logger.error(
                         f"DeltamodConverter: override patch file not found: {patch_file_rel}"
                     )
                     continue
@@ -428,7 +430,7 @@ class DeltamodConverter:
                 if parent_dir:
                     os.makedirs(parent_dir, exist_ok=True)
                 shutil.copy2(patch_file_abs, target_override_path)
-                logging.info(
+                logger.info(
                     "Copied override file: %s for chapter %s into %s",
                     stored_path,
                     chapter_key,
@@ -437,7 +439,7 @@ class DeltamodConverter:
             elif patch_type == "xdelta":
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
-                    logging.warning(
+                    logger.warning(
                         f"DeltamodConverter: xdelta patch file not found: {patch_file_rel}"
                     )
                     continue
@@ -445,14 +447,14 @@ class DeltamodConverter:
                     target_chapter_dir, os.path.basename(patch_file_abs)
                 )
                 shutil.copy2(patch_file_abs, target_patch_path)
-                logging.info(
+                logger.info(
                     "Copied xdelta patch: %s for chapter %s into %s",
                     os.path.basename(patch_file_abs),
                     chapter_key,
                     chapter_dir_name,
                 )
             else:
-                logging.warning(f"DeltamodConverter: unknown patch type: {patch_type}")
+                logger.warning(f"DeltamodConverter: unknown patch type: {patch_type}")
 
     def _copy_root_docs(self, target_mod_dir: str) -> None:
         try:
@@ -464,7 +466,7 @@ class DeltamodConverter:
                     continue
                 shutil.copy2(source_path, os.path.join(target_mod_dir, item))
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 "DeltamodConverter: failed to copy root docs from %s: %s",
                 self.source_path,
                 e,

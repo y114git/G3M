@@ -25,6 +25,7 @@ from ui.common.dialog_theme import (
     get_dialog_text_color,
     get_dialog_theme_values,
 )
+from ui.common.dialog_utils import safe_question
 from utils.native_integration import open_path_native
 from utils.path_utils import colored_icon
 
@@ -153,11 +154,13 @@ class _RecordWidget(QFrame):
             btn.setVisible(key in visible)
 
     def _on_delete(self):
-        reply = QMessageBox.question(
+        reply = safe_question(
             self.window(),
             tr("downloads.confirm_delete_title"),
             tr("downloads.confirm_delete_text", name=self._record.display_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+            log_message="Downloads confirmation dialog failed",
         )
         if reply != QMessageBox.StandardButton.Yes:
             return

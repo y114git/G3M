@@ -298,3 +298,26 @@ def test_delete_plugin_reports_filesystem_error_with_plugin_path(temp_dir):
         "errors.error",
         tr("errors.permission_denied", path="C:/plugins/sample_plugin"),
     )
+
+
+def test_delete_plugin_error_does_not_crash_if_feedback_fails(temp_dir):
+    """Checks that plugin delete error handling survives feedback UI failures."""
+    controller, _downloads_manager, _catalog = _make_controller(temp_dir)
+    plugin = SimpleNamespace(
+        manifest=SimpleNamespace(name="Sample Plugin", version="1.0.0"),
+        path="C:/plugins/sample_plugin",
+    )
+    controller.plugin_runtime_service.get_plugin.return_value = plugin
+    controller.plugin_install_service.delete_plugin.side_effect = PermissionError(
+        13, "Permission denied", "C:/plugins/sample_plugin"
+    )
+    controller.feedback_service.show_message.side_effect = RuntimeError(
+        "feedback failed"
+    )
+    controller.refresh_main_tabs = Mock()
+    controller.render = Mock()
+
+    controller.delete_plugin("sample_plugin")
+
+    controller.refresh_main_tabs.assert_called_once()
+    controller.render.assert_called_once()

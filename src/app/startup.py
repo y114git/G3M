@@ -1,6 +1,7 @@
 """Application startup and initialization."""
 
 import argparse
+import atexit
 import contextlib
 import faulthandler
 import logging
@@ -43,6 +44,8 @@ from models.game_modes import get_all_process_names
 from services.localization_service import localization_service, tr
 from utils.path_utils import get_launcher_dir, resource_path
 
+logger = logging.getLogger(__name__)
+
 if platform.system() == "Windows":
     import winreg
 _translator = QTranslator()
@@ -76,23 +79,58 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
             )
             shutil.copy2(log_path, archive_path)
         except Exception:
-            logging.debug("Failed to archive previous log file", exc_info=True)
+            logger.debug("Failed to archive previous log file", exc_info=True)
     root = logging.getLogger()
-    if not root.handlers:
-        root.setLevel(logging.INFO)
-        fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    had_handlers = bool(root.handlers)
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    has_log_file_handler = any(
+        isinstance(handler, logging.FileHandler)
+        and os.path.abspath(getattr(handler, "baseFilename", ""))
+        == os.path.abspath(log_path)
+        for handler in root.handlers
+    )
+    if not has_log_file_handler:
         file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
         file_handler.setFormatter(fmt)
         root.addHandler(file_handler)
+    if not had_handlers:
         console = logging.StreamHandler()
         console.setLevel(logging.WARNING)
         console.setFormatter(fmt)
         root.addHandler(console)
-        urllib3_logger = logging.getLogger("urllib3")
-        urllib3_logger.setLevel(logging.WARNING)
-        requests_logger = logging.getLogger("requests")
-        requests_logger.setLevel(logging.WARNING)
+    urllib3_logger = logging.getLogger("urllib3")
+    urllib3_logger.setLevel(logging.WARNING)
+    requests_logger = logging.getLogger("requests")
+    requests_logger.setLevel(logging.WARNING)
     return log_path
+
+
+def install_process_exit_logging(app_name: str) -> None:
+    started_at = time.monotonic()
+
+    def _log_process_exit() -> None:
+        uptime = max(0.0, time.monotonic() - started_at)
+        logger.info("%s process exiting after %.2fs", app_name, uptime)
+        for handler in logging.getLogger().handlers:
+            with contextlib.suppress(Exception):
+                handler.flush()
+
+    atexit.register(_log_process_exit)
+
+
+def _safe_warning(title: str, message: str) -> None:
+    try:
+        QMessageBox.warning(None, title, message)
+    except Exception:
+        logger.exception("Failed to show startup warning dialog")
+
+
+def _safe_critical(title: str, message: str) -> None:
+    try:
+        QMessageBox.critical(None, title, message)
+    except Exception:
+        logger.exception("Failed to show startup critical dialog")
 
 
 def install_crash_diagnostics(app_name: str, log_path: str) -> str:
@@ -115,16 +153,29 @@ def install_crash_diagnostics(app_name: str, log_path: str) -> str:
         _fault_log_handle.flush()
         faulthandler.enable(file=_fault_log_handle, all_threads=True)
     except Exception:
-        logging.debug("Failed to enable faulthandler diagnostics", exc_info=True)
+        logger.debug("Failed to enable faulthandler diagnostics", exc_info=True)
 
     def _thread_hook(args):
-        logging.critical(
+        logger.critical(
             "Uncaught thread exception in %s",
             getattr(args.thread, "name", "<unknown>"),
             exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
         )
 
     threading.excepthook = _thread_hook
+
+    def _unraisable_hook(args):
+        logger.critical(
+            "Unraisable exception in %r",
+            getattr(args, "object", None),
+            exc_info=(
+                getattr(args, "exc_type", None),
+                getattr(args, "exc_value", None),
+                getattr(args, "exc_traceback", None),
+            ),
+        )
+
+    sys.unraisablehook = _unraisable_hook
 
     def _qt_message_handler(msg_type, context, message):
         level = logging.INFO
@@ -134,7 +185,7 @@ def install_crash_diagnostics(app_name: str, log_path: str) -> str:
             level = logging.ERROR
         elif msg_type == QtMsgType.QtFatalMsg:
             level = logging.CRITICAL
-        logging.log(
+        logger.log(
             level,
             "Qt message: %s (%s:%s, %s)",
             message,
@@ -155,7 +206,7 @@ def install_crash_diagnostics(app_name: str, log_path: str) -> str:
 def install_excepthook(show_message_callback=None):
     def _hook(exctype, value, tb):
         try:
-            logging.critical("Uncaught exception", exc_info=(exctype, value, tb))
+            logger.critical("Uncaught exception", exc_info=(exctype, value, tb))
         except Exception:
             with contextlib.suppress(Exception):
                 pass
@@ -164,7 +215,7 @@ def install_excepthook(show_message_callback=None):
                 msg = "".join(traceback.format_exception(exctype, value, tb))
                 show_message_callback(msg)
         except Exception as e:
-            logging.error("Failed to show exception message: %s", e)
+            logger.error("Failed to show exception message: %s", e)
 
     sys.excepthook = _hook
 
@@ -216,7 +267,7 @@ def register_url_protocol():
                         ],
                     )
     except Exception as e:
-        logging.warning(f"Failed to register URL protocol handler: {e}", exc_info=True)
+        logger.warning(f"Failed to register URL protocol handler: {e}", exc_info=True)
 
 
 class SingleInstanceServer(QLocalServer):
@@ -237,7 +288,7 @@ class SingleInstanceServer(QLocalServer):
                 try:
                     payload = data.decode("utf-8")
                 except UnicodeDecodeError as e:
-                    logging.warning(
+                    logger.warning(
                         f"SingleInstanceServer: failed to decode incoming data: {e}"
                     )
                     return
@@ -298,15 +349,15 @@ def cleanup_old_temp_directories():
                         mtime = os.path.getmtime(temp_dir)
                         if time.time() - mtime > 3600 and safe_rmtree(temp_dir):
                             cleaned_count += 1
-                            logging.debug(f"Cleaned up old temp directory: {temp_dir}")
+                            logger.debug(f"Cleaned up old temp directory: {temp_dir}")
                     except OSError as e:
-                        logging.debug(
+                        logger.debug(
                             f"Failed to check/remove temp directory {temp_dir}: {e}"
                         )
         except Exception as e:
-            logging.debug(f"Failed to cleanup temp directories matching {pattern}: {e}")
+            logger.debug(f"Failed to cleanup temp directories matching {pattern}: {e}")
     if cleaned_count > 0:
-        logging.info(
+        logger.info(
             f"Cleaned up {cleaned_count} old temporary directory(ies) from previous sessions"
         )
 
@@ -316,15 +367,18 @@ def run_app(argv: list[str] | None = None) -> int:
     user_root = ""
     if platform.system() == "Linux":
         os.environ.setdefault("NO_AT_BRIDGE", "1")
-    app = setup_app()
     try:
         user_root = resolve_user_data_root_with_migration()
         log_path = configure_logging(APP_DISPLAY_NAME, user_root)
+        install_process_exit_logging(APP_DISPLAY_NAME)
         install_crash_diagnostics(APP_DISPLAY_NAME, log_path)
         install_excepthook()
         cleanup_old_temp_directories()
-    except Exception:
+        app = setup_app()
+    except Exception as e:
+        logger.exception("STARTUP ERROR: failed to initialize process: %s", e)
         traceback.print_exc(file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(description=APP_DISPLAY_NAME)
     parser.add_argument(
         "--force-start",
@@ -343,22 +397,20 @@ def run_app(argv: list[str] | None = None) -> int:
             socket.waitForBytesWritten(1000)
         socket.disconnectFromServer()
         if not url_arg:
-            QMessageBox.warning(
-                None, tr("errors.error"), tr("errors.single_instance_error")
-            )
+            _safe_warning(tr("errors.error"), tr("errors.single_instance_error"))
         return 0
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     if not args.force_start:
         running_game = check_game_processes()
         if running_game:
             error_msg = tr("errors.game_running_message", game_name=running_game)
-            logging.error(f"STARTUP ERROR: {error_msg}")
-            QMessageBox.critical(None, tr("errors.game_running_title"), error_msg)
+            logger.error(f"STARTUP ERROR: {error_msg}")
+            _safe_critical(tr("errors.game_running_title"), error_msg)
             return 1
     try:
         register_url_protocol()
     except Exception as e:
-        logging.warning(
+        logger.warning(
             f"Failed to register URL protocol during startup: {e}", exc_info=True
         )
     from app.window import AppWindow
@@ -376,6 +428,6 @@ def run_app(argv: list[str] | None = None) -> int:
         return app.exec()
     except Exception as e:
         error_msg = tr("errors.unexpected_startup_error", details=str(e))
-        logging.exception(f"STARTUP ERROR: {error_msg}")
-        QMessageBox.critical(None, tr("errors.startup_error_title"), error_msg)
+        logger.exception(f"STARTUP ERROR: {error_msg}")
+        _safe_critical(tr("errors.startup_error_title"), error_msg)
         return 1

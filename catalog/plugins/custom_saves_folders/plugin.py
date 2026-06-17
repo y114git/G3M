@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -57,7 +58,6 @@ from utils.path_utils import (
 
 logger = logging.getLogger(__name__)
 
-
 def _show_translated_feedback_message(context, level: str, title_key: str, message: str) -> None:
     title = context.localization_service.get_text(title_key)
     feedback = getattr(context, "feedback_service", None)
@@ -109,13 +109,16 @@ _WINDOWS_RESERVED_NAMES = {
     "LPT9",
 }
 
+def _canonical_mod_id(mod_id: object) -> str:
+    value = str(mod_id or "").strip()
+    match = re.match(r"^(gb_(?:mod|wip)_\d+)", value)
+    return match.group(1) if match else value
 
 @dataclass
 class _ActiveSession:
     game_id: str
     work_dir: str
     backup_manager: BackupManager
-
 
 class _InteractiveRow(QFrame):
     clicked = pyqtSignal()
@@ -183,7 +186,6 @@ class _InteractiveRow(QFrame):
             """,
             cache_attr="_row_stylesheet_cache",
         )
-
 
 class _FolderRow(_InteractiveRow):
     enabled_changed = pyqtSignal(bool)
@@ -262,7 +264,6 @@ class _FolderRow(_InteractiveRow):
     def update_subtitle(self, subtitle: str) -> None:
         self._subtitle_text = subtitle
         self._subtitle.setText(subtitle)
-
 
 class _RuleRow(_InteractiveRow):
     enabled_changed = pyqtSignal(bool)
@@ -346,7 +347,6 @@ class _RuleRow(_InteractiveRow):
             """,
             cache_attr="_delete_btn_ss_cache",
         )
-
 
 class _StateStore:
     def __init__(
@@ -504,7 +504,7 @@ class _StateStore:
                 continue
             profile = str(item.get("profile", "") or "").strip()
             game_id = str(item.get("game_id", "") or "").strip()
-            mod_id = str(item.get("mod_id", "") or "").strip()
+            mod_id = _canonical_mod_id(item.get("mod_id", ""))
             folder_id = str(item.get("folder_id", "") or "").strip()
             if not profile or not game_id or not mod_id or not folder_id:
                 continue
@@ -632,7 +632,7 @@ class _StateStore:
     ) -> str | None:
         profile = str(profile or "").strip()
         game_id = str(game_id or "").strip()
-        mod_id = str(mod_id or "").strip()
+        mod_id = _canonical_mod_id(mod_id)
         folder_id = str(folder_id or "").strip()
         folder = self.get_folder(folder_id)
         if not profile or not game_id or not mod_id or not folder:
@@ -706,7 +706,7 @@ class _StateStore:
                 continue
             if str(config_data.get("game", "") or "").strip() != game_id:
                 continue
-            mod_id = get_mod_id(config_data) or folder_name
+            mod_id = _canonical_mod_id(get_mod_id(config_data) or folder_name)
             if not mod_id or mod_id in seen_ids:
                 continue
             seen_ids.add(mod_id)
@@ -729,8 +729,8 @@ class _StateStore:
             or folder["profile"] not in {_GLOBAL_PROFILE, profile}
         ):
             return "missing_folder"
-        mod_id = str(rule.get("mod_id", "") or "")
-        if not any(mod["id"] == mod_id for mod in self.list_profile_mods(profile, rule["game_id"])):
+        mod_id = _canonical_mod_id(rule.get("mod_id", ""))
+        if not any(_canonical_mod_id(mod["id"]) == mod_id for mod in self.list_profile_mods(profile, rule["game_id"])):
             return "missing_mod"
         return "ok"
 
@@ -743,7 +743,7 @@ class _StateStore:
         for value in values:
             mods = value if isinstance(value, list) else [value]
             for mod in mods:
-                mod_id = get_mod_id(mod)
+                mod_id = _canonical_mod_id(get_mod_id(mod))
                 if mod_id:
                     selected.add(mod_id)
         return selected
@@ -756,7 +756,7 @@ class _StateStore:
                 continue
             for raw in value.values():
                 items = [raw] if isinstance(raw, str) else raw if isinstance(raw, list) else []
-                selected.update(str(item) for item in items if item)
+                selected.update(_canonical_mod_id(item) for item in items if item)
         return selected
 
     def resolve_launch_folder(
@@ -771,15 +771,16 @@ class _StateStore:
             selected_mod_ids = self._collect_config_mod_ids(game_id)
         folders_by_id = {folder["id"]: folder for folder in self.get_folders()}
         available_mod_ids = {
-            mod["id"] for mod in self.list_profile_mods(profile, game_id)
+            _canonical_mod_id(mod["id"]) for mod in self.list_profile_mods(profile, game_id)
         }
         for rule in self.get_rules(game_id):
+            rule_mod_id = _canonical_mod_id(rule["mod_id"])
             folder = folders_by_id.get(rule["folder_id"])
             if (
                 rule["enabled"]
                 and rule["profile"] == profile
-                and rule["mod_id"] in selected_mod_ids
-                and rule["mod_id"] in available_mod_ids
+                and rule_mod_id in selected_mod_ids
+                and rule_mod_id in available_mod_ids
                 and folder
                 and folder["game_id"] == game_id
                 and folder["profile"] in {_GLOBAL_PROFILE, profile}
@@ -789,7 +790,6 @@ class _StateStore:
             if folder.get("enabled", True) and folder["profile"] in {_GLOBAL_PROFILE, profile}:
                 return folder
         return None
-
 
 class _FolderDialog(QDialog):
     def __init__(self, app_state, state: _StateStore, tr_func, parent=None) -> None:
@@ -848,7 +848,6 @@ class _FolderDialog(QDialog):
             str(self.profile_combo.currentData() or ""),
             self.name_edit.text().strip(),
         )
-
 
 class _RuleDialog(QDialog):
     def __init__(self, app_state, state: _StateStore, tr_func, parent=None) -> None:
@@ -937,7 +936,6 @@ class _RuleDialog(QDialog):
             str(self.folder_combo.currentData() or ""),
         )
 
-
 class _HelpDialog(QDialog):
     def __init__(self, app_state, tr_func, parent=None) -> None:
         super().__init__(parent)
@@ -959,7 +957,6 @@ class _HelpDialog(QDialog):
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
         apply_dialog_theme(self, self._app_state)
-
 
 class _CustomSavesFoldersWidget(QWidget):
     selection_changed = pyqtSignal()
@@ -1365,7 +1362,6 @@ class _CustomSavesFoldersWidget(QWidget):
     def refresh_theme(self) -> None:
         self._apply_theme()
 
-
 class CustomSavesFoldersPlugin:
     def __init__(self) -> None:
         self._context = None
@@ -1620,7 +1616,6 @@ class CustomSavesFoldersPlugin:
 
     def on_before_restore_after_exit_shortcut(self, context, shortcut_context, *_args):
         return self.on_before_restore_after_exit(context)
-
 
 def create_plugin():
     return CustomSavesFoldersPlugin()

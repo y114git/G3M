@@ -3,7 +3,7 @@
 import contextlib
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from PyQt6.QtCore import QObject, QThread, QThreadPool
 from PyQt6.QtWidgets import QApplication
@@ -11,12 +11,16 @@ from PyQt6.QtWidgets import QApplication
 from config.config import THREAD_WAIT_TIMEOUT
 from ui.utils.ui_utils import safe_stop_thread
 
+logger = logging.getLogger(__name__)
+
 _THREAD_ATTRS = (
     "_compatibility_thread",
     "_mod_scan_thread",
+    "_scan_thread",
     "_bg_loader",
     "_catalog_worker",
     "_worker",
+    "_post_fetch_worker",
     "thread",
     "_thread",
     "worker_thread",
@@ -32,6 +36,15 @@ _THREAD_ATTRS = (
     "presence_thread",
 )
 _THREAD_CONTAINER_ATTRS = ("_workers", "_load_more_threads")
+_THREAD_OWNER_ATTRS = (
+    "downloads_manager",
+    "game_launcher",
+    "library_display",
+    "mod_service",
+    "refresh_controller",
+    "search_display",
+    "update_checker",
+)
 
 
 def _is_managed_shutdown_thread(w, thread, owner) -> bool:
@@ -57,6 +70,7 @@ def _thread_running_state(thread):
 
 def _iter_shutdown_threads(w):
     seen = set()
+    seen_owners = set()
 
     def emit(thread, owner=None, source=None):
         if isinstance(thread, QThread) and id(thread) not in seen:
@@ -64,9 +78,20 @@ def _iter_shutdown_threads(w):
             return thread, owner, source
         return None
 
-    owners = [w]
+    def append_owner(owners, owner):
+        if owner is None or id(owner) in seen_owners:
+            return
+        seen_owners.add(id(owner))
+        owners.append(owner)
+
+    owners = []
+    append_owner(owners, w)
     with contextlib.suppress(Exception):
-        owners.extend(w.findChildren(QObject))
+        for child in w.findChildren(QObject):
+            append_owner(owners, child)
+    for attr in _THREAD_OWNER_ATTRS:
+        with contextlib.suppress(Exception):
+            append_owner(owners, getattr(w, attr, None))
     for owner in owners:
         if owner is None:
             continue
@@ -78,7 +103,7 @@ def _iter_shutdown_threads(w):
         for attr in _THREAD_CONTAINER_ATTRS:
             container = getattr(owner, attr, None)
             values = container.values() if isinstance(container, Mapping) else container
-            if not values:
+            if not values or not isinstance(values, Iterable):
                 continue
             for candidate in values:
                 if payload := emit(candidate, owner=owner, source=attr):
@@ -98,14 +123,14 @@ def perform_close_cleanup(w):
                 w.search_display.cleanup()
         for thread, owner, source in _iter_shutdown_threads(w):
             if _is_managed_shutdown_thread(w, thread, owner):
-                logging.debug(
+                logger.debug(
                     "Cleanup skipping managed thread source=%s owner=%s object=%r",
                     source,
                     type(owner).__name__ if owner is not None else None,
                     thread,
                 )
                 continue
-            logging.debug(
+            logger.debug(
                 "Cleanup stopping thread source=%s owner=%s running=%s object=%r",
                 source,
                 type(owner).__name__ if owner is not None else None,
@@ -114,7 +139,7 @@ def perform_close_cleanup(w):
             )
             w._safe_set_parent_none(thread)
             safe_stop_thread(thread, timeout=THREAD_WAIT_TIMEOUT, blocking=True)
-            logging.debug(
+            logger.debug(
                 "Cleanup stopped thread source=%s owner=%s running=%s object=%r",
                 source,
                 type(owner).__name__ if owner is not None else None,
@@ -139,7 +164,7 @@ def perform_close_cleanup(w):
                     child.terminate()
             terminated_children, alive_children = psutil.wait_procs(children, timeout=1)
             if terminated_children:
-                logging.debug(
+                logger.debug(
                     "Cleanup terminated %s child process(es) gracefully",
                     len(terminated_children),
                 )
@@ -147,7 +172,7 @@ def perform_close_cleanup(w):
                 with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
                     proc.kill()
         except Exception as e:
-            logging.debug(f"Error cleaning up child processes: {e}")
+            logger.debug(f"Error cleaning up child processes: {e}")
         if getattr(w, "main_tab_widget", None):
             w.app_state.local_config["last_active_tab"] = (
                 w.main_tab_widget.currentIndex()
@@ -157,4 +182,4 @@ def perform_close_cleanup(w):
         QApplication.processEvents()
         w.hide()
     except Exception as e:
-        logging.error(f"closeEvent: error during cleanup: {e}", exc_info=True)
+        logger.error(f"closeEvent: error during cleanup: {e}", exc_info=True)

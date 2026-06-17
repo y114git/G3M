@@ -13,6 +13,8 @@ from services.localization_service import tr
 from utils.path_utils import get_g3mtool_cache_dir, get_user_data_root, resource_path
 from utils.process_utils import format_external_process_error
 
+logger = logging.getLogger(__name__)
+
 
 class G3MToolManager:
     """Manages G3MTool CLI execution for patching operations."""
@@ -43,7 +45,7 @@ class G3MToolManager:
                 if isinstance(data, dict):
                     return data
         except Exception as e:
-            logging.debug("Failed to load local config for G3MToolManager: %s", e)
+            logger.debug("Failed to load local config for G3MToolManager: %s", e)
         return {}
 
     def _get_configured_g3mtool_path(self) -> str | None:
@@ -59,7 +61,7 @@ class G3MToolManager:
         if custom_path:
             if os.path.exists(custom_path):
                 return custom_path
-            logging.warning(
+            logger.warning(
                 f"Custom G3MTool path not found, falling back to bundled: {custom_path}"
             )
         if self.platform in self._cached_executable_paths:
@@ -72,15 +74,15 @@ class G3MToolManager:
                 try:
                     os.chmod(exe_path, 0o700)
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Could not set executable permission on {exe_path}: {e}"
                     )
             if exe_path not in self._logged_executable_paths:
-                logging.info(f"Found G3MTool: {exe_path}")
+                logger.info(f"Found G3MTool: {exe_path}")
                 self._logged_executable_paths.add(exe_path)
             self._cached_executable_paths[self.platform] = exe_path
             return exe_path
-        logging.warning(f"G3MTool not found at {exe_path}")
+        logger.warning(f"G3MTool not found at {exe_path}")
         self._cached_executable_paths[self.platform] = None
         return None
 
@@ -105,7 +107,7 @@ class G3MToolManager:
         returncode, stdout, stderr = self._run([g3mtool_path, "--version"])
         if returncode != 0:
             if stderr:
-                logging.debug("G3MTool version command failed: %s", stderr.strip())
+                logger.debug("G3MTool version command failed: %s", stderr.strip())
             return None
         version = (stdout or "").strip().splitlines()
         return version[0].strip() if version else None
@@ -331,7 +333,7 @@ class G3MToolManager:
                     process.kill()
                     process.wait()
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"G3MToolManager.cancel_active_processes: failed to stop process: {e}",
                     exc_info=True,
                 )
@@ -374,7 +376,7 @@ class G3MToolManager:
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         cmd = [str(c) for c in cmd if c is not None]
-        logging.info(f"G3MTool command: {' '.join(cmd)}")
+        logger.info(f"G3MTool command: {' '.join(cmd)}")
         startupinfo = None
         creationflags = 0
         if platform.system() == "Windows":
@@ -422,19 +424,19 @@ class G3MToolManager:
                 with self._active_processes_lock:
                     if process in self._active_processes:
                         self._active_processes.remove(process)
-            logging.info(f"G3MTool completed with return code {returncode}")
+            logger.info(f"G3MTool completed with return code {returncode}")
             stderr_text = stderr.strip()
             if returncode != 0:
                 if stderr_text:
-                    logging.warning(f"G3MTool stderr: {stderr_text[:500]}")
+                    logger.warning(f"G3MTool stderr: {stderr_text[:500]}")
             elif stderr_text:
-                logging.debug(f"G3MTool stderr (non-fatal): {stderr_text[:500]}")
+                logger.debug(f"G3MTool stderr (non-fatal): {stderr_text[:500]}")
             return (returncode, stdout, stderr)
         except Exception as e:
             friendly_error = format_external_process_error(
                 e, command=cmd, target_path=cmd[0] if cmd else ""
             )
-            logging.error(
+            logger.error(
                 "Error executing G3MTool: %s | raw=%s",
                 friendly_error,
                 e,

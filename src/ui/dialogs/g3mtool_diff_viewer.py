@@ -23,6 +23,7 @@ from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
+from ui.common.dialog_utils import safe_question
 from ui.common.styling import get_theme_color, rgba_from_color
 from utils.native_integration import get_save_file_name
 
@@ -432,12 +433,13 @@ class DiffViewerDialog(QDialog):
         self.setStyleSheet(base + extra)
 
     def closeEvent(self, event):
-        reply = QMessageBox.question(
+        reply = safe_question(
             self,
             tr("modding_tools.diff_viewer_title"),
             tr("modding_tools.confirm_close"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
+            log_message="Diff viewer confirmation dialog failed",
         )
         if reply == QMessageBox.StandardButton.Yes:
             event.accept()

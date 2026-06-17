@@ -18,10 +18,10 @@ from PyQt6.QtWidgets import (
 from config.config import UI_COLORS
 from utils.native_integration import get_open_file_name, open_path_native
 
+logger = logging.getLogger(__name__)
 
 def tr(k, **kw):
     return k
-
 
 def _load_save_utils():
     """Helper function to load save_utils module dynamically."""
@@ -33,7 +33,6 @@ def _load_save_utils():
     save_utils = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(save_utils)
     return save_utils
-
 
 class SaveManager(QObject):
     slots_updated = pyqtSignal()
@@ -218,7 +217,7 @@ class SaveManager(QObject):
                     shutil.rmtree(old_path)
                 migrated_count += 1
             except Exception as e:
-                logging.warning('SaveManager._migrate_old_collections: migration failed for %s: %s', name, e)
+                logger.warning('SaveManager._migrate_old_collections: migration failed for %s: %s', name, e)
         if migrated_count > 0:
             self._reindex_collections()
 
@@ -248,7 +247,7 @@ class SaveManager(QObject):
             os.symlink(proton_save_path, native_save_path)
             self.feedback_manager.show_message('info', 'dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
         except Exception as e:
-            logging.error(f'Steam Deck setup error: {e}')
+            logger.error(f'Steam Deck setup error: {e}')
 
     def _reindex_collections(self):
         cols = []
@@ -269,7 +268,7 @@ class SaveManager(QObject):
                     new_path = os.path.join(self.save_path, new_folder)
                     os.rename(old_path, new_path)
                 except Exception as e:
-                    logging.debug(f'SaveManager._reindex_collections: rename {old_folder} to {new_folder} failed: {e}')
+                    logger.debug(f'SaveManager._reindex_collections: rename {old_folder} to {new_folder} failed: {e}')
 
     def get_slot_data(self, chapter: int, slot: int, base_path: str) -> tuple[bool, str]:
         save_utils = _load_save_utils()
@@ -284,7 +283,7 @@ class SaveManager(QObject):
                 nickname = lines[0] if len(lines) > 0 else '???'
                 currency = lines[10] if len(lines) > 10 else '0'
             except Exception as e:
-                logging.debug(f'SaveManager.get_slot_data: failed to read {fp}: {e}')
+                logger.debug(f'SaveManager.get_slot_data: failed to read {fp}: {e}')
                 nickname, currency = ('???', '0')
             fin_idx = save_slot_finish_map.get(slot, -1)
             fin_fp = os.path.join(base_path, f'filech{chapter}_{fin_idx}')
@@ -727,7 +726,7 @@ class SaveManager(QObject):
                     shutil.copy2(main_file, col_file)
                     os.remove(main_file)
                 except Exception as e:
-                    logging.warning(f'SaveManager: failed to capture new save {main_file} to collection: {e}')
+                    logger.warning(f'SaveManager: failed to capture new save {main_file} to collection: {e}')
         for original_file, backup_file in backup_info.items():
             if os.path.exists(backup_file):
                 if os.path.exists(original_file):

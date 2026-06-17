@@ -5,6 +5,8 @@ import logging
 from config.config import UI_COLORS
 from services.localization_service import localization_service, tr
 
+logger = logging.getLogger(__name__)
+
 
 def get_update_widgets(window):
     return [window.action_button, window.chat_button, window.change_background_button]
@@ -31,7 +33,7 @@ def on_update_cleanup(window) -> None:
     try:
         window.progress_bar.setVisible(False)
     except Exception as e:
-        logging.debug(f"Update cleanup - progress bar: {e}")
+        logger.debug(f"Update cleanup - progress bar: {e}")
     window.app_state.update_in_progress = False
     try:
         if not window.app_state.is_settings_view:
@@ -39,7 +41,7 @@ def on_update_cleanup(window) -> None:
         set_update_ui_enabled(window, True)
         window.game_launch.update_button_state()
     except Exception as e:
-        logging.debug(f"Update cleanup - UI restore: {e}")
+        logger.debug(f"Update cleanup - UI restore: {e}")
 
 
 def on_progress_update(window, value: int) -> None:

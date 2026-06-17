@@ -1,5 +1,6 @@
 """Dialog for importing files from disk or URL."""
 
+import logging
 import os
 
 from PyQt6.QtWidgets import (
@@ -15,6 +16,8 @@ from PyQt6.QtWidgets import (
 from services.localization_service import tr
 from utils.native_integration import get_open_file_name
 
+logger = logging.getLogger(__name__)
+
 
 class ImportDialog(QDialog):
     def __init__(
@@ -28,6 +31,15 @@ class ImportDialog(QDialog):
         self.selected_url = None
         self.import_method = None
         self.init_ui()
+
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        show_message = getattr(self.feedback_service, "show_message", None)
+        if not callable(show_message):
+            return
+        try:
+            show_message(*args, **kwargs)
+        except Exception as e:
+            logger.warning("ImportDialog feedback message failed: %s", e, exc_info=True)
 
     def init_ui(self):
         keys = self._get_import_keys()
@@ -114,7 +126,7 @@ class ImportDialog(QDialog):
     def _import_from_url(self):
         url = self.url_input.text().strip()
         if not url:
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "warning", "errors.error", tr(self.url_required_key)
             )
             return

@@ -11,6 +11,8 @@ import psutil
 from models.game_modes import get_all_process_names, get_game
 from utils.path_utils import find_supported_game_data_file
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from models.game_modes import GameDefinition
 
@@ -33,7 +35,7 @@ def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> 
 
     gm = get_game(game_type)
     if not gm:
-        logging.warning("Unknown game_type '%s' in is_valid_mac_game_path", game_type)
+        logger.warning("Unknown game_type '%s' in is_valid_mac_game_path", game_type)
         return False
     app_names = gm.macos_app_names
     data_file_name = getattr(gm, "data_file_name", "")
@@ -79,7 +81,7 @@ def is_valid_game_path(
     platform_key = "windows" if platform.system() == "Windows" else "linux"
     game = get_game(game_type)
     if not game:
-        logging.warning("Unknown game_type '%s' in is_valid_game_path", game_type)
+        logger.warning("Unknown game_type '%s' in is_valid_game_path", game_type)
         return False
     executables = game.get_executable_candidates(platform_key)
     return any(os.path.isfile(os.path.join(path, exe)) for exe in executables)
@@ -110,7 +112,7 @@ def get_executable_name_for_game(
         )
     game = get_game(game_type)
     if not game:
-        logging.warning(
+        logger.warning(
             "Unknown game_type '%s' in get_executable_name_for_game", game_type
         )
         return None

@@ -11,6 +11,8 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 from services.game_detection_service import is_game_running
 
+logger = logging.getLogger(__name__)
+
 
 class GameMonitorWorker(QObject):
     finished = pyqtSignal(bool)
@@ -31,29 +33,35 @@ class GameMonitorWorker(QObject):
         except Exception:
             return False
 
+    def _safe_finished(self) -> None:
+        try:
+            self.finished.emit(self.vanilla_mode)
+        except Exception as e:
+            logger.warning("GameMonitorWorker: failed to emit finished: %s", e, exc_info=True)
+
     @pyqtSlot()
     def run(self):
         try:
-            logging.info("[GAME_MONITOR] Starting game monitoring")
+            logger.info("[GAME_MONITOR] Starting game monitoring")
             if self.process:
                 try:
-                    logging.info(
+                    logger.info(
                         f"[GAME_MONITOR] Monitoring process: {(self.process.pid if hasattr(self.process, 'pid') else 'unknown')}"
                     )
                     self.process.wait()
-                    logging.info("[GAME_MONITOR] Launched process finished")
+                    logger.info("[GAME_MONITOR] Launched process finished")
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"[GAME_MONITOR] process.wait() failed: {e}", exc_info=True
                     )
-                logging.info(
+                logger.info(
                     "[GAME_MONITOR] Checking if game is still running after process exit"
                 )
                 game_appeared = False
                 consecutive_checks = 0
-                for _ in range(10):
+                for _ in range(45):
                     if self._is_interruption_requested():
-                        logging.debug(
+                        logger.debug(
                             "GameMonitorWorker.run: interruption requested, stopping"
                         )
                         return
@@ -61,7 +69,7 @@ class GameMonitorWorker(QObject):
                         consecutive_checks += 1
                         if consecutive_checks >= 2:
                             game_appeared = True
-                            logging.info(
+                            logger.info(
                                 "[GAME_MONITOR] Game process detected, continuing to monitor"
                             )
                             break
@@ -71,29 +79,29 @@ class GameMonitorWorker(QObject):
                 if game_appeared:
                     while is_game_running():
                         if self._is_interruption_requested():
-                            logging.debug(
+                            logger.debug(
                                 "GameMonitorWorker.run: interruption requested during game monitoring"
                             )
                             return
                         time.sleep(1)
                     time.sleep(2)
                     if not is_game_running():
-                        logging.info(
+                        logger.info(
                             "[GAME_MONITOR] Game is no longer running, emitting finished signal"
                         )
-                        self.finished.emit(self.vanilla_mode)
+                        self._safe_finished()
                         return
                 else:
-                    logging.info(
+                    logger.info(
                         "[GAME_MONITOR] Game process not found after launch, emitting finished signal"
                     )
-                    self.finished.emit(self.vanilla_mode)
+                    self._safe_finished()
                     return
             game_appeared = False
             consecutive_checks = 0
             for _ in range(45):
                 if self._is_interruption_requested():
-                    logging.debug(
+                    logger.debug(
                         "GameMonitorWorker.run: interruption requested, stopping"
                     )
                     return
@@ -106,22 +114,22 @@ class GameMonitorWorker(QObject):
                     consecutive_checks = 0
                 time.sleep(1)
             if not game_appeared:
-                self.finished.emit(self.vanilla_mode)
+                self._safe_finished()
                 return
             time.sleep(3)
             while is_game_running(self.game_pid):
                 if self._is_interruption_requested():
-                    logging.debug(
+                    logger.debug(
                         "GameMonitorWorker.run: interruption requested during game monitoring"
                     )
                     return
                 time.sleep(1)
             time.sleep(2)
             if not is_game_running(self.game_pid):
-                logging.info(
+                logger.info(
                     "[GAME_MONITOR] Game is no longer running, emitting finished signal"
                 )
-                self.finished.emit(self.vanilla_mode)
+                self._safe_finished()
         except Exception as e:
-            logging.error(f"[GAME_MONITOR] Unexpected error: {e}", exc_info=True)
-            self.finished.emit(self.vanilla_mode)
+            logger.error(f"[GAME_MONITOR] Unexpected error: {e}", exc_info=True)
+            self._safe_finished()

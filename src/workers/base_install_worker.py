@@ -37,6 +37,18 @@ class BaseInstallWorker(QThread):
                 f"{self.__class__.__name__}.cancel: Error closing {label}: {e}"
             )
 
+    def _safe_emit(self, signal, *args) -> None:
+        try:
+            signal.emit(*args)
+        except Exception as e:
+            logger.warning(
+                "%s: failed to emit %s: %s",
+                self.__class__.__name__,
+                getattr(signal, "signal", signal.__class__.__name__),
+                e,
+                exc_info=True,
+            )
+
     def cancel(self):
         self._cancelled = True
         try:
@@ -45,14 +57,9 @@ class BaseInstallWorker(QThread):
         except Exception as e:
             logger.debug(f"{self.__class__.__name__}.cancel: Error during cleanup: {e}")
         finally:
-            try:
-                self.status.emit(
-                    tr("status.operation_cancelled"), UI_COLORS["status_error"]
-                )
-            except Exception as e:
-                logger.debug(
-                    f"{self.__class__.__name__}.cancel: Error emitting status: {e}"
-                )
+            self._safe_emit(
+                self.status, tr("status.operation_cancelled"), UI_COLORS["status_error"]
+            )
 
     def _cleanup_temp_files(
         self, archive_path: str | None = None, archive_dir: str | None = None
@@ -96,11 +103,12 @@ class BaseInstallWorker(QThread):
 
         def progress_callback(progress: int):
             if not self._cancelled:
-                self.progress.emit(progress)
+                self._safe_emit(self.progress, progress)
                 if total_size > 0:
                     downloaded_mb = format_size_mb(downloaded_ref[0])
                     total_mb = format_size_mb(total_size)
-                    self.status.emit(
+                    self._safe_emit(
+                        self.status,
                         f"{status_text} ({downloaded_mb} / {total_mb})", status_color
                     )
 
@@ -112,7 +120,7 @@ class BaseInstallWorker(QThread):
         from utils.file_utils import download_file_with_progress
 
         try:
-            self.status.emit(status_msg, UI_COLORS["status_warning"])
+            self._safe_emit(self.status, status_msg, UI_COLORS["status_warning"])
             from utils.network_utils import get_session
 
             session = get_session()
@@ -122,11 +130,12 @@ class BaseInstallWorker(QThread):
 
             def progress_callback(progress):
                 if not self._cancelled:
-                    self.progress.emit(progress)
+                    self._safe_emit(self.progress, progress)
                     if total_size > 0:
                         downloaded_mb = format_size_mb(downloaded_ref[0])
                         total_mb = format_size_mb(total_size)
-                        self.status.emit(
+                        self._safe_emit(
+                            self.status,
                             f"{status_msg} ({downloaded_mb} / {total_mb})",
                             UI_COLORS["status_warning"],
                         )
@@ -145,7 +154,7 @@ class BaseInstallWorker(QThread):
             )
             if not success:
                 raise RuntimeError("download_failed")
-            self.progress.emit(100)
+            self._safe_emit(self.progress, 100)
             return True
         except RuntimeError as e:
             if str(e) == "download_cancelled" or self._cancelled:

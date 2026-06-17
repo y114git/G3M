@@ -8,6 +8,8 @@ import subprocess
 import sys
 from collections.abc import Callable
 
+logger = logging.getLogger(__name__)
+
 
 def _split_qt_filter_entry(filter_entry: str) -> tuple[str, list[str]]:
     filter_entry = filter_entry.strip()
@@ -56,7 +58,7 @@ def _run_tk_dialog(dialog_runner: Callable[[], object], default):
             root.attributes("-topmost", True)
         return dialog_runner()
     except Exception as error:
-        logging.error("Native dialog failed: %s", error, exc_info=True)
+        logger.error("Native dialog failed: %s", error, exc_info=True)
         return default
     finally:
         if root is not None:
@@ -166,7 +168,7 @@ def open_url_native(url: str) -> bool:
         subprocess.Popen(command)
         return True
     except Exception as error:
-        logging.error("Failed to open URL %s: %s", url, error, exc_info=True)
+        logger.error("Failed to open URL %s: %s", url, error, exc_info=True)
         return False
 
 
@@ -183,7 +185,7 @@ def open_path_native(path: str) -> bool:
         subprocess.Popen(command)
         return True
     except Exception as error:
-        logging.error("Failed to open path %s: %s", path, error, exc_info=True)
+        logger.error("Failed to open path %s: %s", path, error, exc_info=True)
         return False
 
 

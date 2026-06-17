@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import shutil
@@ -10,6 +9,15 @@ import shutil
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from models.plugin_models import PluginTaskRuntime
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class PluginHookThread(QThread):
@@ -44,8 +52,7 @@ class PluginHookThread(QThread):
     def cancel(self) -> None:
         self._cancelled = True
         self.requestInterruption()
-        with contextlib.suppress(RuntimeError):
-            self.status_update.emit("Operation cancelled", "error")
+        _safe_emit(self.__class__.__name__, self.status_update, "Operation cancelled", "error")
 
     def _is_cancelled(self) -> bool:
         return self._cancelled or self.isInterruptionRequested()
@@ -53,10 +60,15 @@ class PluginHookThread(QThread):
     def _emit_progress(self, progress: int, message: str = "") -> None:
         bounded = max(0, min(int(progress), 100))
         mapped = self.base_progress + round((self.progress_span * bounded) / 100)
-        self.progress_update.emit(max(0, min(mapped, 100)), message)
+        _safe_emit(
+            self.__class__.__name__,
+            self.progress_update,
+            max(0, min(mapped, 100)),
+            message,
+        )
 
     def _emit_status(self, message: str, status_type: str = "info") -> None:
-        self.status_update.emit(message, status_type)
+        _safe_emit(self.__class__.__name__, self.status_update, message, status_type)
 
     def _copy_backups(self, destination_dir: str) -> list[str]:
         backup_manager = (
@@ -119,10 +131,13 @@ class PluginHookThread(QThread):
             )
             success = False
         except Exception as error:
-            logging.error("PluginHookThread failed: %s", error, exc_info=True)
-            with contextlib.suppress(RuntimeError):
-                self.status_update.emit(f"Plugin hook failed: {error}", "error")
+            logger.error("PluginHookThread failed: %s", error, exc_info=True)
+            _safe_emit(
+                self.__class__.__name__,
+                self.status_update,
+                f"Plugin hook failed: {error}",
+                "error",
+            )
             success = False
         finally:
-            with contextlib.suppress(RuntimeError):
-                self.finished.emit(success)
+            _safe_emit(self.__class__.__name__, self.finished, success)

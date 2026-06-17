@@ -35,6 +35,19 @@ class UseWorker(QThread):
         self._plugin_install_service = plugin_install_service
         self._cancelled = False
 
+    def _safe_finish(
+        self, success: bool, needs_manual: bool, message: str
+    ) -> None:
+        try:
+            self.use_finished.emit(
+                self._record_id,
+                success,
+                needs_manual,
+                message,
+            )
+        except Exception as e:
+            logger.warning("UseWorker: failed to emit use_finished: %s", e, exc_info=True)
+
     def cancel(self):
         self._cancelled = True
 
@@ -45,25 +58,14 @@ class UseWorker(QThread):
             elif self._target_kind == TargetKind.PLUGIN:
                 self._use_plugin()
             else:
-                self.use_finished.emit(
-                    self._record_id,
-                    False,
-                    False,
-                    f"Unsupported target_kind: {self._target_kind}",
-                )
+                self._safe_finish(False, False, f"Unsupported target_kind: {self._target_kind}")
         except Exception as e:
             logger.error("UseWorker: %s", e, exc_info=True)
-            self.use_finished.emit(
-                self._record_id,
-                False,
-                False,
-                format_filesystem_error(e, path=self._file_path),
-            )
+            self._safe_finish(False, False, format_filesystem_error(e, path=self._file_path))
 
     def _use_mod(self):
         if not os.path.exists(self._file_path):
-            self.use_finished.emit(
-                self._record_id,
+            self._safe_finish(
                 False,
                 False,
                 format_filesystem_error(
@@ -76,7 +78,7 @@ class UseWorker(QThread):
         try:
             self._extract(extract_dir)
             if self._cancelled:
-                self.use_finished.emit(self._record_id, False, False, "cancelled")
+                self._safe_finish(False, False, "cancelled")
                 return
 
             content_path = self._resolve_content_root(extract_dir)
@@ -100,21 +102,18 @@ class UseWorker(QThread):
                 success = False
 
             if not success:
-                self.use_finished.emit(self._record_id, False, True, "")
+                self._safe_finish(False, True, "")
                 return
-            self.use_finished.emit(self._record_id, True, False, "")
+            self._safe_finish(True, False, "")
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
     def _use_plugin(self):
         if not self._plugin_install_service:
-            self.use_finished.emit(
-                self._record_id, False, False, "Plugin installer is not available"
-            )
+            self._safe_finish(False, False, "Plugin installer is not available")
             return
         if not os.path.exists(self._file_path):
-            self.use_finished.emit(
-                self._record_id,
+            self._safe_finish(
                 False,
                 False,
                 format_filesystem_error(
@@ -123,10 +122,10 @@ class UseWorker(QThread):
             )
             return
         if self._cancelled:
-            self.use_finished.emit(self._record_id, False, True, "")
+            self._safe_finish(False, True, "")
             return
         try:
-            plugin_id = self._plugin_install_service.install_archive(
+            self._plugin_install_service.install_archive(
                 self._file_path,
                 source=str(self._metadata.get("source", "catalog")),
                 catalog_plugin_version=str(
@@ -143,18 +142,10 @@ class UseWorker(QThread):
                     cleanup_error,
                     exc_info=True,
                 )
-            if self._cancelled:
-                try:
-                    self._plugin_install_service.delete_plugin(plugin_id)
-                except Exception as rollback_error:
-                    logger.error("UseWorker: failed to rollback cancelled install: %s", rollback_error, exc_info=True)
-                self.use_finished.emit(self._record_id, False, True, "")
-                return
-            self.use_finished.emit(self._record_id, True, False, "")
+            self._safe_finish(True, False, "")
         except Exception as e:
             logger.error("UseWorker: plugin install failed: %s", e, exc_info=True)
-            self.use_finished.emit(
-                self._record_id,
+            self._safe_finish(
                 False,
                 False,
                 format_plugin_error(

@@ -15,6 +15,8 @@ from utils.mod.config_parser import (
     normalize_mod_config_data,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class ModFolderInfo:
@@ -56,7 +58,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
     for field_name, expected_value, max_len in required_string_fields:
         value = config_data.get(field_name)
         if not isinstance(value, str) or not value.strip():
-            logging.warning(
+            logger.warning(
                 "validate_mod_config: Missing required string field %s in %s, skipping mod",
                 field_name,
                 config_path,
@@ -64,7 +66,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
             )
             return False
         if expected_value is not None and value != expected_value:
-            logging.warning(
+            logger.warning(
                 "validate_mod_config: Invalid %s=%s in %s, skipping mod",
                 field_name,
                 value,
@@ -73,7 +75,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
             )
             return False
         if max_len is not None and len(value) > max_len:
-            logging.warning(
+            logger.warning(
                 "validate_mod_config: Field %s exceeds limit in %s, skipping mod",
                 field_name,
                 config_path,
@@ -81,7 +83,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
             )
             return False
     if len(str(config_data.get("description", ""))) > MOD_FIELD_LIMITS["description"]:
-        logging.warning(
+        logger.warning(
             'validate_mod_config: Config field "description" exceeds max length in %s',
             config_path,
             extra={"mod_folder": folder_name, "config_path": config_path},
@@ -91,7 +93,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         not isinstance(config_data["homepage"], str)
         or len(config_data["homepage"]) > MOD_FIELD_LIMITS["homepage"]
     ):
-        logging.warning(
+        logger.warning(
             'validate_mod_config: Config field "homepage" is invalid in %s',
             config_path,
             extra={
@@ -101,7 +103,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         )
         return False
     if "files" in config_data and (not isinstance(config_data["files"], dict)):
-        logging.warning(
+        logger.warning(
             f'validate_mod_config: Config field "files" has invalid type in {config_path}, expected dict',
             extra={
                 "mod_folder": folder_name,
@@ -113,7 +115,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
     if "tags" in config_data and (
         not isinstance(config_data["tags"], (list, type(None)))
     ):
-        logging.warning(
+        logger.warning(
             f'validate_mod_config: Config field "tags" has invalid type in {config_path}, expected list or None',
             extra={
                 "mod_folder": folder_name,
@@ -125,7 +127,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
     if isinstance(config_data.get("tags"), list) and any(
         tag not in MOD_ALLOWED_TAGS for tag in config_data["tags"]
     ):
-        logging.warning(
+        logger.warning(
             'validate_mod_config: Config field "tags" contains invalid values in %s',
             config_path,
             extra={"mod_folder": folder_name, "config_path": config_path},
@@ -135,7 +137,7 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         if len(str(file_key)) > MOD_FIELD_LIMITS["file_value"] or not isinstance(
             file_info, dict
         ):
-            logging.warning(
+            logger.warning(
                 "validate_mod_config: Invalid file entry %s in %s",
                 file_key,
                 config_path,
@@ -209,7 +211,7 @@ def scan_mods_directory(
                 try:
                     st = os.stat(config_path)
                     if st.st_size == 0:
-                        logging.warning(
+                        logger.warning(
                             f"scan_mods_directory: Corrupted config detected (0 bytes) in {config_path}, skipping mod",
                             extra={
                                 "mod_folder": folder_name,
@@ -233,7 +235,7 @@ def scan_mods_directory(
                             config_path, persist_normalized=False
                         )
                         if not config_data or not isinstance(config_data, dict):
-                            logging.warning(
+                            logger.warning(
                                 f"scan_mods_directory: Empty config data in {config_path}, skipping mod",
                                 extra={
                                     "mod_folder": folder_name,
@@ -254,7 +256,7 @@ def scan_mods_directory(
                         ValueError,
                         AttributeError,
                     ) as e:
-                        logging.warning(
+                        logger.warning(
                             f"scan_mods_directory: Config error in {config_path}: {e}",
                             extra={
                                 "mod_folder": folder_name,
@@ -264,7 +266,7 @@ def scan_mods_directory(
                         continue
                     mod_id = (config_data.get("id") or "").strip()
                     if not mod_id:
-                        logging.warning(
+                        logger.warning(
                             f"scan_mods_directory: Config missing usable id in {config_path}, skipping mod",
                             extra={
                                 "mod_folder": folder_name,
@@ -285,14 +287,14 @@ def scan_mods_directory(
                     if mod_name:
                         mods_by_name[mod_name.lower()] = cache_key
                 except (OSError, PermissionError) as e:
-                    logging.warning(
+                    logger.warning(
                         f"scan_mods_directory: Corrupted config detected (failed to access) in {config_path}: {e}",
                         exc_info=True,
                         extra={"mod_folder": folder_name, "config_path": config_path},
                     )
                     continue
                 except json.JSONDecodeError as e:
-                    logging.warning(
+                    logger.warning(
                         f"scan_mods_directory: Corrupted config detected (invalid JSON) in {config_path}: {e}",
                         exc_info=True,
                         extra={
@@ -304,7 +306,7 @@ def scan_mods_directory(
                     )
                     continue
                 except KeyError as e:
-                    logging.debug(
+                    logger.debug(
                         f"scan_mods_directory: missing id in {config_path}: {e}",
                         extra={
                             "mod_folder": folder_name,
@@ -314,7 +316,7 @@ def scan_mods_directory(
                     )
                     continue
     except OSError as e:
-        logging.error(
+        logger.error(
             f"scan_mods_directory: failed to list directory {mods_dir}: {e}",
             exc_info=True,
             extra={"mods_dir": mods_dir},
@@ -354,7 +356,7 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
                         config_path = nested_config_path
                     else:
                         is_corrupted = True
-                        logging.warning(
+                        logger.warning(
                             f"cleanup_corrupted_mods: Missing mod_config.json in {folder_name}, marking as corrupted"
                         )
                 else:
@@ -362,7 +364,7 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
                         config_size = os.path.getsize(config_path)
                         if config_size == 0:
                             is_corrupted = True
-                            logging.warning(
+                            logger.warning(
                                 f"cleanup_corrupted_mods: mod_config.json is 0 bytes in {folder_name}, marking as corrupted"
                             )
                         else:
@@ -374,12 +376,12 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
                                 PermissionError,
                             ) as e:
                                 is_corrupted = True
-                                logging.warning(
+                                logger.warning(
                                     f"cleanup_corrupted_mods: Invalid JSON in mod_config.json for {folder_name}: {e}, marking as corrupted"
                                 )
                     except (OSError, PermissionError) as e:
                         is_corrupted = True
-                        logging.warning(
+                        logger.warning(
                             f"cleanup_corrupted_mods: Cannot access mod_config.json in {folder_name}: {e}, marking as corrupted"
                         )
                 if is_corrupted:
@@ -388,24 +390,24 @@ def cleanup_corrupted_mods(mods_dir: str) -> int:
 
                         if safe_rmtree(folder_path):
                             removed_count += 1
-                            logging.info(
+                            logger.info(
                                 f"cleanup_corrupted_mods: Removed corrupted mod folder: {folder_name}"
                             )
                         else:
-                            logging.warning(
+                            logger.warning(
                                 f"cleanup_corrupted_mods: Failed to remove corrupted mod folder: {folder_name}"
                             )
                     except Exception as e:
-                        logging.error(
+                        logger.error(
                             f"cleanup_corrupted_mods: Error removing corrupted mod folder {folder_name}: {e}",
                             exc_info=True,
                         )
     except OSError as e:
-        logging.error(
+        logger.error(
             f"cleanup_corrupted_mods: Failed to scan mods directory: {e}", exc_info=True
         )
     if removed_count > 0:
-        logging.info(
+        logger.info(
             f"cleanup_corrupted_mods: Removed {removed_count} corrupted mod(s) during startup cleanup"
         )
     return removed_count

@@ -1,6 +1,5 @@
 """Worker thread for multi-mod patching operations."""
 
-import contextlib
 import logging
 import threading
 from typing import Any
@@ -8,6 +7,15 @@ from typing import Any
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from services.g3mtool_patching_service import G3MToolPatchingService
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class ModPatchingThread(QThread):
@@ -42,8 +50,7 @@ class ModPatchingThread(QThread):
         self._warning_event.set()
         if self.patcher:
             self.patcher.cancel()
-        with contextlib.suppress(RuntimeError):
-            self.status_update.emit("Operation cancelled", "error")
+        _safe_emit(self.__class__.__name__, self.status_update, "Operation cancelled", "error")
 
     def confirm_warning(self, accepted: bool):
         self._warning_result = accepted
@@ -54,7 +61,13 @@ class ModPatchingThread(QThread):
     ) -> bool:
         self._warning_result = True
         self._warning_event.clear()
-        self.warning_confirmation_needed.emit(message, details, report_path)
+        _safe_emit(
+            self.__class__.__name__,
+            self.warning_confirmation_needed,
+            message,
+            details,
+            report_path,
+        )
         while not self._warning_event.wait(0.1):
             if self.isInterruptionRequested() or self._cancelled:
                 return False
@@ -77,20 +90,34 @@ class ModPatchingThread(QThread):
         success = False
         try:
             if self.isInterruptionRequested() or self._cancelled:
-                self.finished.emit(False)
+                _safe_emit(self.__class__.__name__, self.finished, False)
                 return
             self.patcher = G3MToolPatchingService(
                 self.app_state, self.mod_service, None
             )
             try:
-                self.patcher.progress_update.connect(self.progress_update.emit)
-                self.patcher.status_update.connect(self.status_update.emit)
+                self.patcher.progress_update.connect(
+                    lambda progress, message: _safe_emit(
+                        self.__class__.__name__,
+                        self.progress_update,
+                        progress,
+                        message,
+                    )
+                )
+                self.patcher.status_update.connect(
+                    lambda message, status_type: _safe_emit(
+                        self.__class__.__name__,
+                        self.status_update,
+                        message,
+                        status_type,
+                    )
+                )
             except RuntimeError:
-                logging.debug("Failed to connect patcher signals")
+                logger.debug("Failed to connect patcher signals")
             self.patcher._session_manifest_path = self.session_manifest_path
             self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
-                self.finished.emit(False)
+                _safe_emit(self.__class__.__name__, self.finished, False)
                 return
             success = self.patcher.process_mod_patch(
                 self.chapter_mods, is_modpack=False
@@ -100,15 +127,16 @@ class ModPatchingThread(QThread):
                 if self.patcher:
                     self._restore_backups()
                 success = False
-            with contextlib.suppress(RuntimeError):
-                self.finished.emit(success)
+            _safe_emit(self.__class__.__name__, self.finished, success)
         except Exception as e:
-            logging.error(f"ModPatchingThread failed: {e}", exc_info=True)
-            try:
-                self.status_update.emit(f"Patching failed: {e!s}", "error")
-                self.finished.emit(False)
-            except RuntimeError:
-                logging.debug("Failed to emit patching status after failure")
+            logger.error(f"ModPatchingThread failed: {e}", exc_info=True)
+            _safe_emit(
+                self.__class__.__name__,
+                self.status_update,
+                f"Patching failed: {e!s}",
+                "error",
+            )
+            _safe_emit(self.__class__.__name__, self.finished, False)
         finally:
             if self.patcher:
                 failed = (

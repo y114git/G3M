@@ -5,6 +5,8 @@ QApplication is needed. Supports multi-chapter mod selections via the
 ``chapter_mods`` dict embedded in the shortcut config.
 """
 
+import atexit
+import contextlib
 import json
 import logging
 import os
@@ -39,7 +41,22 @@ from utils.process_utils import (
     resolve_wine_command,
 )
 
+logger = logging.getLogger(__name__)
+
 logger = logging.getLogger("shortcut_runner")
+
+
+def _install_process_exit_logging() -> None:
+    started_at = time.monotonic()
+
+    def _log_process_exit() -> None:
+        uptime = max(0.0, time.monotonic() - started_at)
+        logger.info("Shortcut runner process exiting after %.2fs", uptime)
+        for handler in logging.getLogger().handlers:
+            with contextlib.suppress(Exception):
+                handler.flush()
+
+    atexit.register(_log_process_exit)
 
 
 def _configure_logging():
@@ -57,6 +74,7 @@ def _configure_logging():
     ch.setLevel(logging.WARNING)
     ch.setFormatter(fmt)
     root.addHandler(ch)
+    _install_process_exit_logging()
 
 
 def _load_config() -> dict:
@@ -432,9 +450,7 @@ def _wait_for_game_exit(
                 logger.info("Game process detected")
                 break
             time.sleep(2)
-    for _ in range(300):
-        if not is_game_running():
-            return
+    while is_game_running():
         time.sleep(2)
 
 

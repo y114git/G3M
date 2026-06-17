@@ -60,3 +60,27 @@ def test_plugin_hook_worker_calls_cancel_hook_when_cancelled():
 
     assert finished == [False]
     assert runtime_service.execute_hook_with_runtime.call_args_list[-1].args[0] == "mod_apply_cancelled"
+
+
+def test_plugin_hook_worker_logs_failed_emit_after_hook_error(caplog):
+    runtime_service = Mock()
+    runtime_service.execute_hook_with_runtime.side_effect = RuntimeError("hook failed")
+    thread = PluginHookThread(
+        runtime_service,
+        "after_mod_apply_before_launch",
+        ({}, False),
+        base_progress=0,
+        progress_span=100,
+    )
+
+    class _FailingSignal:
+        def emit(self, *_args, **_kwargs):
+            raise RuntimeError("receiver deleted")
+
+    thread.status_update = _FailingSignal()
+    thread.finished = _FailingSignal()
+
+    thread.run()
+
+    assert "PluginHookThread failed" in caplog.text
+    assert "PluginHookThread: failed to emit" in caplog.text

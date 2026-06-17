@@ -23,6 +23,8 @@ from utils.native_integration import get_existing_directory
 from utils.process_utils import format_filesystem_error
 from workers.install.full_install_worker import FullInstallThread
 
+logger = logging.getLogger(__name__)
+
 
 class GameLaunchController(QObject):
     """Manages game launch operations, installations, and related UI state."""
@@ -68,6 +70,26 @@ class GameLaunchController(QObject):
 
     def _launch_status_color(self) -> str:
         return get_launch_status_color(getattr(self.app_state, "local_config", None))
+
+    def _safe_update_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception as e:
+            logger.warning(
+                "GameLaunchController: status update failed: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _safe_show_message(self, level: str, title: str, message: str) -> None:
+        try:
+            self.feedback_service.show_message(level, title, message)
+        except Exception as e:
+            logger.warning(
+                "GameLaunchController: feedback message failed: %s",
+                e,
+                exc_info=True,
+            )
 
     def update_button_state(self):
         if getattr(self.app_state, "game_is_running", False):
@@ -139,14 +161,14 @@ class GameLaunchController(QObject):
                             patching_thread.patcher.backup_service.restore_backups(
                                 chapter_id
                             )
-                            logging.info(
+                            logger.info(
                                 f"[CANCEL] Restored backups for chapter {chapter_id}"
                             )
                     patching_thread.patcher.cleanup(force=True)
                 if not patching_thread.isRunning():
                     patching_thread.deleteLater()
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"Error cleaning up cancelled patching thread: {e}", exc_info=True
                 )
             finally:
@@ -177,11 +199,11 @@ class GameLaunchController(QObject):
                 import shutil
 
                 shutil.rmtree(modpack_dir, ignore_errors=True)
-                logging.info(
+                logger.info(
                     f"Cancelled modpack creation, removed directory: {modpack_dir}"
                 )
             except Exception as e:
-                logging.error(f"Failed to remove cancelled modpack directory: {e}")
+                logger.error(f"Failed to remove cancelled modpack directory: {e}")
             if library_display:
                 library_display._modpack_thread = None
                 library_display._modpack_dir = None
@@ -192,13 +214,13 @@ class GameLaunchController(QObject):
 
     def _cancel_operation(self, operation_type: str):
         if operation_type == "install":
-            logging.info(
+            logger.info(
                 "GameLaunchController: Cancel button clicked during installation"
             )
             self.app_state.cancel_current_operation()
         elif operation_type == "patching":
             self._cancel_patching_operation()
-        self.feedback_service.update_status(
+        self._safe_update_status(
             tr("status.operation_cancelled"), UI_COLORS["status_info"]
         )
         self._reset_progress_bar()
@@ -236,7 +258,7 @@ class GameLaunchController(QObject):
         if runtime_service and any(
             result is False for result in runtime_service.execute_hook("before_mod_apply")
         ):
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("plugins.launch_blocked"), UI_COLORS["status_warning"]
             )
             self.update_button_state()
@@ -257,7 +279,7 @@ class GameLaunchController(QObject):
         self._window_hidden_for_launch = False
         if self._dont_hide:
             self.update_button_state()
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.game_launched_waiting_for_exit"), self._launch_status_color()
             )
         else:
@@ -311,7 +333,7 @@ class GameLaunchController(QObject):
         try:
             os.makedirs(target_dir, exist_ok=True)
         except (OSError, PermissionError) as e:
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error",
                 "errors.error",
                 format_filesystem_error(e, path=target_dir),
@@ -348,11 +370,11 @@ class GameLaunchController(QObject):
                 self.app_state.game_path = self.app_state.local_config["game_path"] = (
                     target_dir
                 )
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.game_files_install_complete"), UI_COLORS["status_success"]
             )
         else:
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.game_files_install_failed"), UI_COLORS["status_error"]
             )
         self.settings_service.write_local_config()

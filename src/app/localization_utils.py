@@ -26,6 +26,8 @@ from services.localization_service import (
     tr,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def relocalize_texts(w):
     """Apply all localized texts to the window's widgets."""
@@ -229,7 +231,7 @@ def relocalize_ui(w):
             if hasattr(w, "online_label"):
                 w._update_online_label(getattr(w, "_last_online_count", 0))
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"relocalize_app_ui: failed to refresh online label: {e}", exc_info=True
             )
         w.search_display.update_filtered_mods()

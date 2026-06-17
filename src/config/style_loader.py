@@ -19,6 +19,7 @@ from ui.common.styling import border_radius_px
 from utils.path_utils import resource_path
 
 logger = logging.getLogger(__name__)
+
 _last_arrow_color = None
 _qss_cache: dict[str, str] = {}
 _stylesheet_cache: dict[tuple, str] = {}

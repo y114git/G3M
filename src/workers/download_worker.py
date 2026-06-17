@@ -20,6 +20,13 @@ def _cleanup_file(path: str):
         pass
 
 
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
+
 class DownloadWorker(QThread):
     progress_updated = pyqtSignal(str, int, int, int)
     download_finished = pyqtSignal(str, bool, str, str)
@@ -60,7 +67,9 @@ class DownloadWorker(QThread):
 
             def on_progress(pct):
                 if not self._cancelled:
-                    self.progress_updated.emit(
+                    _safe_emit(
+                        "DownloadWorker",
+                        self.progress_updated,
                         self._record_id, pct, downloaded_ref[0], total_size
                     )
 
@@ -80,22 +89,47 @@ class DownloadWorker(QThread):
             )
             if self._cancelled:
                 _cleanup_file(self._target_path)
-                self.download_finished.emit(self._record_id, False, "cancelled", "")
+                _safe_emit(
+                    "DownloadWorker",
+                    self.download_finished,
+                    self._record_id,
+                    False,
+                    "cancelled",
+                    "",
+                )
                 return
-            self.download_finished.emit(self._record_id, True, "", self._target_path)
+            _safe_emit(
+                "DownloadWorker",
+                self.download_finished,
+                self._record_id,
+                True,
+                "",
+                self._target_path,
+            )
         except RuntimeError as e:
             _cleanup_file(self._target_path)
             if str(e) == "download_cancelled" or self._cancelled:
-                self.download_finished.emit(self._record_id, False, "cancelled", "")
+                _safe_emit(
+                    "DownloadWorker",
+                    self.download_finished,
+                    self._record_id,
+                    False,
+                    "cancelled",
+                    "",
+                )
             else:
                 logger.error("DownloadWorker: %s", e, exc_info=True)
-                self.download_finished.emit(
+                _safe_emit(
+                    "DownloadWorker",
+                    self.download_finished,
                     self._record_id, False, format_network_error(e, url=self._url), ""
                 )
         except Exception as e:
             _cleanup_file(self._target_path)
             logger.error("DownloadWorker: %s", e, exc_info=True)
-            self.download_finished.emit(
+            _safe_emit(
+                "DownloadWorker",
+                self.download_finished,
                 self._record_id, False, format_network_error(e, url=self._url), ""
             )
 
@@ -132,14 +166,30 @@ class LocalFileCopyWorker(QThread):
                     dst.write(chunk)
             if self._cancelled:
                 _cleanup_file(self._target_path)
-                self.download_finished.emit(self._record_id, False, "cancelled", "")
+                _safe_emit(
+                    "LocalFileCopyWorker",
+                    self.download_finished,
+                    self._record_id,
+                    False,
+                    "cancelled",
+                    "",
+                )
                 return
             shutil.copystat(self._source_path, self._target_path)
-            self.download_finished.emit(self._record_id, True, "", self._target_path)
+            _safe_emit(
+                "LocalFileCopyWorker",
+                self.download_finished,
+                self._record_id,
+                True,
+                "",
+                self._target_path,
+            )
         except Exception as e:
             _cleanup_file(self._target_path)
             logger.error("LocalFileCopyWorker: %s", e, exc_info=True)
-            self.download_finished.emit(
+            _safe_emit(
+                "LocalFileCopyWorker",
+                self.download_finished,
                 self._record_id,
                 False,
                 format_filesystem_error(e, path=self._source_path),

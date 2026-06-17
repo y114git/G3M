@@ -24,6 +24,15 @@ from ui.common.styling import (
 )
 from utils.path_utils import colored_icon
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_show_message(w, level: str, title: str, *args, **kwargs) -> None:
+    try:
+        w.feedback_service.show_message(level, title, *args, **kwargs)
+    except Exception as e:
+        logger.warning(f"Game UI feedback message failed: {e}", exc_info=True)
+
 
 def update_checkbox_visibility(w):
     game_def = w.app_state.game_mode
@@ -69,7 +78,7 @@ def on_game_mode_updated_by_state(w, mode_obj):
         update_change_path_button_text(w)
         update_settings_library_tab(w)
     except Exception:
-        logging.debug("Error in on_game_mode_updated_by_state", exc_info=True)
+        logger.debug("Error in on_game_mode_updated_by_state", exc_info=True)
 
 
 def update_change_path_button_text(w):
@@ -284,7 +293,7 @@ def setup_chapter_tabs(w):
 
 
 def on_chapter_tab_clicked(w, chapter_id):
-    logging.debug(f"Chapter tab clicked: {chapter_id}")
+    logger.debug(f"Chapter tab clicked: {chapter_id}")
     tabs = w.app_state.game_mode.tabs
     for i, btn in enumerate(w.chapter_tab_buttons):
         btn.setChecked(tabs[i].tab_id == chapter_id if i < len(tabs) else False)
@@ -348,7 +357,8 @@ def on_toggle_full_install(w, state):
     if hasattr(w, "game_launch"):
         w.game_launch._full_install_checkbox_is_checked = bool(state)
     if platform.system() == "Darwin" and w.app_state.is_full_install:
-        w.feedback_service.show_message(
+        _safe_show_message(
+            w,
             "info", "dialogs.unavailable", tr("dialogs.macos_install_unavailable")
         )
         w._set_checkbox_checked_silently(w.full_install_checkbox, False)
@@ -427,7 +437,8 @@ def save_custom_portproton_text(w, path: str):
 def _commit_validated_executable_text(w, path: str, save_callback, refresh_callback):
     cleaned_path = str(path or "").strip()
     if cleaned_path and not w.settings_service.validate_executable_path(cleaned_path):
-        w.feedback_service.show_message(
+        _safe_show_message(
+            w,
             "warning",
             "errors.invalid_executable_file",
             file=os.path.basename(cleaned_path),
@@ -618,7 +629,7 @@ def update_portproton_ui(w):
 
 
 def on_used_mods_updated(w):
-    logging.debug("Used mods updated, refreshing UI")
+    logger.debug("Used mods updated, refreshing UI")
     if hasattr(w, "library_display"):
         w.library_display.update_mod_widgets_active_status()
         w.library_display._update_priority_button_visibility()

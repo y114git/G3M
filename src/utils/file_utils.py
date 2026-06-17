@@ -24,6 +24,8 @@ from config.config import (
 from services.migration_service import LEGACY_MOD_ID_KEYS, migrate_legacy_chapter_id
 from utils.network_utils import download_file, get_filename_from_url, get_session
 
+logger = logging.getLogger(__name__)
+
 T = TypeVar("T")
 
 
@@ -42,12 +44,12 @@ def _retry_operation[T](
         except (OSError, PermissionError, shutil.Error) as e:
             last_error = e
             if attempt < max_retries - 1:
-                logging.debug(
+                logger.debug(
                     f"{op_name}: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying..."
                 )
                 time.sleep(delay * (attempt + 1))
             else:
-                logging.warning(
+                logger.warning(
                     f"{op_name}: Failed for {path} after {max_retries} attempts: {e}"
                 )
     raise last_error if last_error else RuntimeError(f"{op_name} failed")
@@ -79,7 +81,7 @@ def download_file_with_progress(
             ).headers.get("content-length", 0)
         )
     except Exception as e:
-        logging.debug(f"download_file_with_progress: Could not get content-length: {e}")
+        logger.debug(f"download_file_with_progress: Could not get content-length: {e}")
     downloaded_ref = downloaded_ref or [0]
     try:
         download_file(
@@ -97,14 +99,14 @@ def download_file_with_progress(
         return True
     except RuntimeError as e:
         if str(e) == "download_cancelled":
-            logging.debug("download_file_with_progress: Download cancelled")
+            logger.debug("download_file_with_progress: Download cancelled")
             return False
-        logging.error(
+        logger.error(
             f"download_file_with_progress: Download failed: {e}", exc_info=True
         )
         return False
     except Exception as e:
-        logging.error(
+        logger.error(
             f"download_file_with_progress: Download failed: {e}", exc_info=True
         )
         return False
@@ -270,7 +272,7 @@ def save_json(
             return
         except (PermissionError, OSError) as e:
             if attempt < max_retries - 1:
-                logging.debug(
+                logger.debug(
                     f"save_json: Attempt {attempt + 1}/{max_retries} failed for {path}: {e}, retrying..."
                 )
                 time.sleep(delay * (attempt + 1))
@@ -322,12 +324,12 @@ def load_json(path: str, *, persist_normalized: bool = True) -> dict:
             bak = f"{path}.invalid.bak"
             with contextlib.suppress(OSError):
                 os.replace(path, bak)
-            logging.warning(f"Corrupted JSON, backed up to {bak}")
+            logger.warning(f"Corrupted JSON, backed up to {bak}")
         elif not isinstance(e, FileNotFoundError):
-            logging.warning(f"Error loading JSON {path}: {e}")
+            logger.warning(f"Error loading JSON {path}: {e}")
         return {}
     except Exception as e:
-        logging.error(f"Error loading JSON {path}: {e}", exc_info=True)
+        logger.error(f"Error loading JSON {path}: {e}", exc_info=True)
         return {}
 
 
@@ -468,7 +470,7 @@ def _ensure_dst_dir(dst: str, op_name: str) -> bool:
         try:
             os.makedirs(dst_dir, exist_ok=True)
         except OSError as e:
-            logging.warning(f"{op_name}: Failed to create dest dir {dst_dir}: {e}")
+            logger.warning(f"{op_name}: Failed to create dest dir {dst_dir}: {e}")
             return False
     return True
 
@@ -478,7 +480,7 @@ def safe_copy(src: str, dst: str, max_retries: int = 5, delay: float = 0.1) -> b
         if os.path.abspath(src) == os.path.abspath(dst):
             return True
     except Exception as e:
-        logging.debug(
+        logger.debug(
             f"safe_copy: failed to compare source/destination paths {src} -> {dst}: {e}",
             exc_info=True,
         )
@@ -592,7 +594,7 @@ def safe_rmtree(path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
                         daemon=True,
                     ).start()
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"safe_rmtree: failed to rename {path} for deferred cleanup: {e}",
                     exc_info=True,
                 )
@@ -617,7 +619,7 @@ def cleanup_temporary_directory(
             os.replace(path, renamed_path)
             deferred_path = renamed_path
     except OSError as e:
-        logging.warning(
+        logger.warning(
             "cleanup_temporary_directory: failed to move %s for deferred cleanup: %s",
             path,
             e,
@@ -628,7 +630,7 @@ def cleanup_temporary_directory(
             if safe_rmtree(deferred_path, max_retries=1, delay=delay):
                 return
             time.sleep(delay * (attempt + 1))
-        logging.warning(
+        logger.warning(
             "cleanup_temporary_directory: deferred cleanup still failed for %s",
             deferred_path,
         )
@@ -646,7 +648,7 @@ def managed_temporary_directory(
         yield temp_dir
     finally:
         if not cleanup_temporary_directory(temp_dir):
-            logging.warning(
+            logger.warning(
                 "managed_temporary_directory: temporary directory scheduled for deferred cleanup: %s",
                 temp_dir,
             )

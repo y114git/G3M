@@ -21,6 +21,8 @@ from utils.file_utils import (
 )
 from utils.path_utils import resource_path
 
+logger = logging.getLogger(__name__)
+
 
 def _is_safe_path(path: str) -> bool:
     return not (".." in path or path.startswith("/"))
@@ -84,7 +86,7 @@ def _collect_safe_members(members, name_getter, label: str):
         m
         for m in members
         if _is_safe_path(name_getter(m))
-        or not logging.warning(f"Skipping suspicious path in {label}: {name_getter(m)}")
+        or not logger.warning(f"Skipping suspicious path in {label}: {name_getter(m)}")
     ]
 
 
@@ -113,7 +115,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
     try:
         import py7zr
     except Exception as e:
-        logging.debug(f"_extract_archive_raw: py7zr import failed (not installed): {e}")
+        logger.debug(f"_extract_archive_raw: py7zr import failed (not installed): {e}")
         py7zr = None
     out_dir_abs = os.path.abspath(out_dir)
     os.makedirs(out_dir_abs, exist_ok=True)
@@ -125,7 +127,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 try:
                     _extract_members_one_by_one(zf, targets, out_dir_abs)
                 except (ValueError, OSError) as e:
-                    logging.warning(
+                    logger.warning(
                         f"_extract_archive_raw: Failed to extract ZIP archive: {e}"
                     )
         return
@@ -140,7 +142,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 if targets:
                     _extract_members_one_by_one(tf, targets, out_dir_abs)
         except (ValueError, OSError, tarfile.TarError) as e:
-            logging.warning(f"_extract_archive_raw: Failed to extract TAR archive: {e}")
+            logger.warning(f"_extract_archive_raw: Failed to extract TAR archive: {e}")
         return
     if fname_lower.endswith(".rar") or detected_format == "rar":
         _ensure_unrar_available()
@@ -150,7 +152,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 try:
                     _extract_members_one_by_one(rf, targets, out_dir_abs)
                 except (ValueError, OSError, rarfile.RarCannotExec) as e:
-                    logging.warning(
+                    logger.warning(
                         f"_extract_archive_raw: Failed to extract RAR archive: {e}"
                     )
         return
@@ -161,7 +163,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                 try:
                     zf.extract(path=out_dir_abs, targets=targets)
                 except (ValueError, OSError) as e:
-                    logging.warning(
+                    logger.warning(
                         f"_extract_archive_raw: Failed to extract 7z archive: {e}"
                     )
         return
@@ -247,7 +249,7 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
                     os.rmdir(current)
                 current = parent
     except Exception as e:
-        logging.warning(f"Failed to handle nested folder: {e}")
+        logger.warning(f"Failed to handle nested folder: {e}")
     pattern = re.compile(r"^chapter\d+_(windows|mac)$", re.I)
     for root, dirs, files in os.walk(target_dir, topdown=False):
         del files
@@ -267,12 +269,12 @@ class ArchiveExtractor:
         fname_lower = os.path.basename(archive_path).lower()
         try:
             _extract_archive_raw(archive_path, fname_lower, target_dir)
-            logging.debug(
+            logger.debug(
                 f"ArchiveExtractor: Successfully extracted {archive_path} to {target_dir}"
             )
         except Exception as e:
             error_msg = f"Failed to extract archive {archive_path}: {e}"
-            logging.error(error_msg, exc_info=True)
+            logger.error(error_msg, exc_info=True)
             if isinstance(e, (FileNotFoundError, PermissionError, OSError, ValueError)):
                 raise
             raise ValueError(error_msg) from e
@@ -351,7 +353,7 @@ class ArchiveExtractor:
                             try:
                                 add_mod_dir_callback(target_dirname)
                             except Exception as e:
-                                logging.error(
+                                logger.error(
                                     f"extract_archive_with_backup: add_mod_dir_callback failed: {e}",
                                     exc_info=True,
                                 )
@@ -380,7 +382,7 @@ class ArchiveExtractor:
                                             target_file, backup_file_path
                                         )
                                     except Exception as e:
-                                        logging.error(
+                                        logger.error(
                                             f"extract_archive_with_backup: backup_file_callback failed: {e}",
                                             exc_info=True,
                                         )
@@ -390,7 +392,7 @@ class ArchiveExtractor:
                                             {target_file: backup_file_path}, None, None
                                         )
                                     except Exception as e:
-                                        logging.error(
+                                        logger.error(
                                             f"extract_archive_with_backup: update_manifest_callback failed: {e}",
                                             exc_info=True,
                                         )
@@ -401,7 +403,7 @@ class ArchiveExtractor:
                                 if os.path.exists(tmp_target):
                                     os.remove(tmp_target)
                             except Exception as e:
-                                logging.warning(
+                                logger.warning(
                                     f"extract_archive_with_backup: tmp cleanup failed: {e}",
                                     exc_info=True,
                                 )
@@ -411,10 +413,10 @@ class ArchiveExtractor:
                 try:
                     status_callback(error_msg)
                 except (RuntimeError, AttributeError) as e:
-                    logging.warning(
+                    logger.warning(
                         f"extract_archive_with_backup: status_callback failed: {e}"
                     )
-            logging.error(f"extract_archive_with_backup: {error_msg}", exc_info=True)
+            logger.error(f"extract_archive_with_backup: {error_msg}", exc_info=True)
         return extracted_files
 
     @staticmethod
@@ -459,7 +461,7 @@ class ArchiveExtractor:
                         for n in zf.getnames()
                     )
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ArchiveExtractor.check_archive_has_file: Error: {e}", exc_info=True
             )
         return False

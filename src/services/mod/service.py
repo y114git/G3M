@@ -45,6 +45,8 @@ from utils.process_utils import format_filesystem_error
 from workers.install.url_install_worker import UrlInstallThread
 from workers.mod.scan_worker import ModScanThread
 
+logger = logging.getLogger(__name__)
+
 
 class ModManager(QObject):
     """Manages mod operations including scanning, installation, and caching."""
@@ -71,6 +73,26 @@ class ModManager(QObject):
         self._scan_in_progress = False
         self._corrupted_cleanup_done = False
 
+    def _safe_show_feedback_message(
+        self, level: str, title: str, message: str = ""
+    ) -> None:
+        try:
+            self.feedback_service.show_message(level, title, message)
+        except Exception:
+            logger.exception("ModManager: failed to show feedback message")
+
+    @staticmethod
+    def _safe_parent_show_feedback_message(
+        parent, level: str, title: str, message: str = ""
+    ) -> None:
+        feedback_service = getattr(parent, "feedback_service", None)
+        if feedback_service is None:
+            return
+        try:
+            feedback_service.show_message(level, title, message)
+        except Exception:
+            logger.exception("ModManager: failed to show parent feedback message")
+
     def cleanup_stale_used_mods(self):
         if not self._mods_cache:
             return
@@ -86,7 +108,7 @@ class ModManager(QObject):
             new_list = [mod_id for mod_id in used_mods_list if mod_id in valid_mod_ids]
             if len(new_list) != len(used_mods_list):
                 extra_ids = set(used_mods_list) - set(new_list)
-                logging.info(
+                logger.info(
                     f"Cleanup: Removing stale mods from {settings_key}: {extra_ids}"
                 )
                 self.app_state.local_config[settings_key] = new_list
@@ -103,11 +125,11 @@ class ModManager(QObject):
             from utils.file_utils import save_json
 
             save_json(self.app_state.config_path, self.app_state.local_config, indent=2)
-            logging.warning(
+            logger.warning(
                 "Used fallback persistence for settings cleanup (settings_service was None)"
             )
         except Exception as e:
-            logging.error(f"Failed to write local config fallback: {e}", exc_info=True)
+            logger.error(f"Failed to write local config fallback: {e}", exc_info=True)
 
     def invalidate_mods_cache(self) -> None:
         with self._cache_lock:
@@ -130,7 +152,7 @@ class ModManager(QObject):
                         or mod_id
                     )
                     if not effective_id:
-                        logging.warning(
+                        logger.warning(
                             f"_on_scan_completed: Found mod with empty id in {folder_path}, skipping"
                         )
                         continue
@@ -146,7 +168,7 @@ class ModManager(QObject):
                     if mod_name:
                         mods_by_name[mod_name.lower()] = effective_id
                 except (KeyError, TypeError) as e:
-                    logging.warning(
+                    logger.warning(
                         f"_on_scan_completed: Error processing mod {mod_id}: {e}",
                         exc_info=True,
                     )
@@ -225,7 +247,7 @@ class ModManager(QObject):
         try:
             cache = self._get_mods_cache(use_async=False)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"load_local_mods: Failed to get mods cache: {e}", exc_info=True
             )
             cache = {}
@@ -240,13 +262,13 @@ class ModManager(QObject):
                         continue
                     mod_id = config_data.get("id")
                     if not mod_id:
-                        logging.warning(
+                        logger.warning(
                             "load_local_mods: Found mod with empty id, skipping"
                         )
                         continue
                     installed_mods[mod_id] = config_data
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"load_local_mods: Error processing mod info from cache (id={cached_mod_id}): {e}",
                         exc_info=True,
                     )
@@ -285,7 +307,7 @@ class ModManager(QObject):
                         mod_folder_path,
                     )
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"load_local_mods: Failed to refresh local files for mod {mod_id}: {e}",
                         exc_info=True,
                     )
@@ -312,11 +334,11 @@ class ModManager(QObject):
                             elif hasattr(existing_mod, "files"):
                                 existing_mod.files = {}
                         else:
-                            logging.debug(
+                            logger.debug(
                                 f"load_local_mods: Skipping mod {mod_id} with empty/invalid files data"
                             )
                     except Exception as e:
-                        logging.warning(
+                        logger.warning(
                             f"load_local_mods: Failed to load files for mod {mod_id}: {e}",
                             exc_info=True,
                         )
@@ -365,7 +387,7 @@ class ModManager(QObject):
                     self._parse_chapter_files(mod, config_data, mod_id)
                     self._append_mod_if_valid(mod, mod_id)
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Failed to create LocalModInfo for installed mod {mod_id}: {e}",
                         exc_info=True,
                     )
@@ -416,7 +438,7 @@ class ModManager(QObject):
                     )
                     self._append_mod_if_valid(mod, mod_id)
                 except Exception as e:
-                    logging.warning(f"Failed to build LocalModInfo: {e}")
+                    logger.warning(f"Failed to build LocalModInfo: {e}")
                     continue
             installed_gb_ids = set(installed_gamebanana_by_id)
             for mod in self.app_state.all_mods:
@@ -435,7 +457,7 @@ class ModManager(QObject):
                             if downloaded_count is not None:
                                 mod.downloads = max(downloaded_count, 0)
                         except Exception as e:
-                            logging.debug(
+                            logger.debug(
                                 f"load_local_mods: Failed to load downloads from API for mod {mod_id_attr}: {e}"
                             )
             metadata = self._read_metadata()
@@ -450,7 +472,7 @@ class ModManager(QObject):
                         if os.path.exists(p):
                             remover(p)
                     except Exception as e:
-                        logging.warning(
+                        logger.warning(
                             f"load_local_mods: failed to remove cleanup {kind} {p}: {e}",
                             exc_info=True,
                         )
@@ -461,14 +483,14 @@ class ModManager(QObject):
             self.cleanup_stale_used_mods()
             return True
         except Exception as e:
-            logging.error(f"load_local_mods failed: {e}", exc_info=True)
+            logger.error(f"load_local_mods failed: {e}", exc_info=True)
             return False
 
     @staticmethod
     def _validate_files_data(config_data: dict, mod_id: str) -> dict:
         files_data = config_data.get("files", {})
         if not isinstance(files_data, dict):
-            logging.warning(
+            logger.warning(
                 f"load_local_mods: Invalid files_data type for mod {mod_id}, expected dict, got {type(files_data).__name__}"
             )
             return {}
@@ -479,7 +501,7 @@ class ModManager(QObject):
         game = config_data.get("game")
         for file_key, ch_info in list(files_data.items()):
             if not isinstance(ch_info, dict):
-                logging.debug(
+                logger.debug(
                     f"load_local_mods: Skipping invalid chapter info for mod {mod_id}, file_key={file_key}"
                 )
                 continue
@@ -493,7 +515,7 @@ class ModManager(QObject):
                     extra_files=extra_files_list,
                 )
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"load_local_mods: Failed to process chapter data for mod {mod_id}, file_key={file_key}: {e}",
                     exc_info=True,
                 )
@@ -505,7 +527,7 @@ class ModManager(QObject):
         game = config_data.get("game")
         for file_key, ch_info in list(files_data.items()):
             if not isinstance(ch_info, dict):
-                logging.warning(
+                logger.warning(
                     f"load_local_mods: ch_info is not a dict for mod {mod_id}, file_key={file_key}, skipping"
                 )
                 continue
@@ -530,7 +552,7 @@ class ModManager(QObject):
         if mod.files:
             self.app_state.append_mod(mod)
         else:
-            logging.debug(
+            logger.debug(
                 f"Skipping mod {mod_id} ({mod.name}): game={mod.game}, has_files={bool(mod.files)}"
             )
 
@@ -606,7 +628,7 @@ class ModManager(QObject):
                 return files[0]
         except Exception as e:
             mod_id = get_mod_id(mod_info) or "unknown"
-            logging.warning(
+            logger.warning(
                 f"ModManager: Failed to resolve GameBanana file for mod {mod_id}: {e}"
             )
         return None
@@ -632,6 +654,7 @@ class ModManager(QObject):
     ):
         try:
             self.app_state.is_installing = False
+            self.app_state.clear_current_task()
             self.status_changed.emit(tr("status.ready"), "status_info")
             parent = self.parent()
             presenter = getattr(parent, "pizza_oven_conversion_presenter", None)
@@ -651,15 +674,15 @@ class ModManager(QObject):
                 on_success=lambda: refresh_ui_after_mod_install(parent, self),
             )
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ModManager: Error handling manual install request: {e}", exc_info=True
             )
-            if hasattr(self.parent(), "feedback_service"):
-                self.parent().feedback_service.show_message(
-                    "error",
-                    tr("errors.error"),
-                    tr("errors.manual_install_failed", error=str(e)),
-                )
+            self._safe_parent_show_feedback_message(
+                self.parent(),
+                "error",
+                tr("errors.error"),
+                tr("errors.manual_install_failed", error=str(e)),
+            )
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     _UNINSTALL_ERROR_MAP = {
@@ -698,13 +721,13 @@ class ModManager(QObject):
             error = ModUninstallationError(
                 f"{prefix}: {e}", mod_id=mod_id, mod_name=mod_name, reason=reason
             )
-            logging.error(
+            logger.error(
                 f"uninstall_mod: {reason}: {e}",
                 exc_info=True,
                 extra={"mod_id": mod_id, "mod_name": mod_name},
             )
             if reason == "permission_error" or reason not in ("missing_data",):
-                self.feedback_service.show_message(
+                self._safe_show_feedback_message(
                     "error",
                     "errors.uninstall_failed",
                     self._describe_uninstall_error(e),
@@ -724,19 +747,19 @@ class ModManager(QObject):
 
         if not folder_path or not os.path.exists(folder_path):
             return False
-        logging.info(f"delete_mod_files: Deleting mod folder by {label}: {folder_path}")
+        logger.info(f"delete_mod_files: Deleting mod folder by {label}: {folder_path}")
         try:
             if safe_rmtree(folder_path):
                 self.invalidate_mods_cache()
-                logging.info(
+                logger.info(
                     f"delete_mod_files: Successfully deleted mod folder by {label}: {folder_path}"
                 )
                 return True
-            logging.warning(
+            logger.warning(
                 f"delete_mod_files: safe_rmtree returned False for {folder_path}"
             )
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"delete_mod_files: Failed to delete folder {folder_path}: {e}",
                 exc_info=True,
             )
@@ -750,7 +773,7 @@ class ModManager(QObject):
         mod_info = cache.get(mod_id)
         if mod_info:
             return mod_info
-        logging.warning(
+        logger.warning(
             f"delete_mod_files: Mod with id {mod_id} not found in cache. Cache has {len(cache)} entries."
         )
         if not mod_name:
@@ -758,7 +781,7 @@ class ModManager(QObject):
         with self._cache_lock:
             mapped_mod_id = self._mods_by_name.get(mod_name.lower())
             if mapped_mod_id and mapped_mod_id in cache:
-                logging.info(
+                logger.info(
                     f"delete_mod_files: Found mod by name mapping: {mod_name} -> {mapped_mod_id}"
                 )
                 return cache[mapped_mod_id]
@@ -771,7 +794,7 @@ class ModManager(QObject):
                 else None
             )
             if cached_folder == mod_name:
-                logging.info(
+                logger.info(
                     f"delete_mod_files: Found mod by folder name: {mod_name}, id: {cached_mod_id}"
                 )
                 return cached_info
@@ -784,7 +807,7 @@ class ModManager(QObject):
                 else {}
             )
             if config_data.get("name", "") == mod_name:
-                logging.info(
+                logger.info(
                     f"delete_mod_files: Found mod by config name: {mod_name}, id: {cached_mod_id}"
                 )
                 return cached_info
@@ -801,7 +824,7 @@ class ModManager(QObject):
             )
             mod_id = get_mod_id(mod_data)
             mod_name = get_mod_name(mod_data)
-            logging.info(
+            logger.info(
                 f"delete_mod_files: id = {mod_id}, mod_name={mod_name}, folder_path={folder_path}, type={type(mod_data)}"
             )
             candidate_paths = [
@@ -821,7 +844,7 @@ class ModManager(QObject):
                 if self._try_delete_folder(path, label):
                     return
             if not mod_id:
-                logging.error(
+                logger.error(
                     "delete_mod_files: Cannot determine id or folder_path for mod_data"
                 )
                 return
@@ -843,11 +866,11 @@ class ModManager(QObject):
             for path, label in last_resort_paths:
                 if self._try_delete_folder(path, label):
                     return
-            logging.error(
+            logger.error(
                 f"delete_mod_files: Cannot delete mod - not found in cache and folder paths do not exist. id = {mod_id}, mod_name={mod_name or 'None'}"
             )
         except Exception as e:
-            logging.error(f"delete_mod_files: cleanup failed: {e}", exc_info=True)
+            logger.error(f"delete_mod_files: cleanup failed: {e}", exc_info=True)
             raise
 
     def get_mod_status(self, mod: mod_models.AnyModInfo, chapter_id: str) -> str:
@@ -882,7 +905,7 @@ class ModManager(QObject):
                     return True
             return False
         except Exception as e:
-            logging.warning(f"mod_has_update_available: exception: {e}", exc_info=True)
+            logger.warning(f"mod_has_update_available: exception: {e}", exc_info=True)
             return False
 
     def is_mod_installed(self, mod_id: str) -> bool:
@@ -929,7 +952,7 @@ class ModManager(QObject):
                     return len(os.listdir(folder)) > 0
             return True
         except Exception as e:
-            logging.warning(f"mod_has_files_for_chapter: exception: {e}", exc_info=True)
+            logger.warning(f"mod_has_files_for_chapter: exception: {e}", exc_info=True)
             return True
 
     def _read_metadata(self) -> dict:
@@ -939,7 +962,7 @@ class ModManager(QObject):
             try:
                 return load_json(self.app_state.mods_metadata_path) or {}
             except Exception as e:
-                logging.warning(f"_read_metadata: failed: {e}", exc_info=True)
+                logger.warning(f"_read_metadata: failed: {e}", exc_info=True)
                 return {}
 
     def _write_metadata(self, data: dict):
@@ -947,7 +970,7 @@ class ModManager(QObject):
             try:
                 save_json(self.app_state.mods_metadata_path, data, indent=2)
             except Exception as e:
-                logging.error(f"_write_metadata: failed: {e}", exc_info=True)
+                logger.error(f"_write_metadata: failed: {e}", exc_info=True)
 
     @staticmethod
     def _normalize_playtime_hours(value: Any) -> float:
@@ -967,7 +990,7 @@ class ModManager(QObject):
                 try:
                     metadata = load_json(self.app_state.mods_metadata_path) or {}
                 except Exception as e:
-                    logging.warning(f"add_playtime_hours: failed to read metadata: {e}")
+                    logger.warning(f"add_playtime_hours: failed to read metadata: {e}")
                     metadata = {}
             changed = False
             for mod_id in mod_ids:
@@ -981,7 +1004,7 @@ class ModManager(QObject):
                 try:
                     save_json(self.app_state.mods_metadata_path, metadata, indent=2)
                 except Exception as e:
-                    logging.error(f"add_playtime_hours: failed to write metadata: {e}")
+                    logger.error(f"add_playtime_hours: failed to write metadata: {e}")
 
     def get_playtime_hours(self, mod_id: str) -> float:
         metadata = self._read_metadata()
@@ -1089,7 +1112,7 @@ class ModManager(QObject):
                     )
                     yield folder_name, folder_path, config_path, config_data
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"_iter_mod_configs: failed to read {config_path}: {e}",
                     exc_info=True,
                 )
@@ -1164,7 +1187,7 @@ class ModManager(QObject):
                         if "config_data" in locals()
                         else cached_mod_id
                     )
-                    logging.warning(
+                    logger.warning(
                         f"Failed to build installed mod from cache for id {config_mod_id}: {e}",
                         exc_info=True,
                     )
@@ -1179,7 +1202,7 @@ class ModManager(QObject):
                         if config_data
                         else folder_name
                     )
-                    logging.warning(
+                    logger.warning(
                         f"Failed to build installed mod from config for id {config_mod_id}: {e}",
                         exc_info=True,
                     )
@@ -1203,7 +1226,7 @@ class ModManager(QObject):
                     save_json(config_path, build_mod_config_data(config_data), indent=4)
                     updated = True
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"Failed to migrate metadata for mod in {folder_name}: {e}"
                 )
         if updated:
@@ -1227,5 +1250,5 @@ def parse_mod_date(date_str: str) -> tuple[int, int, int, int, int]:
                 year += 1900
             return (year, month, day, hour, minute)
     except Exception as e:
-        logging.debug(f"parse_mod_date failed for '{date_str}': {e}")
+        logger.debug(f"parse_mod_date failed for '{date_str}': {e}")
     return (0, 0, 0, 0, 0)

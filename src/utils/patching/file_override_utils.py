@@ -1,5 +1,6 @@
 """File override and archive extraction utilities for mod patching."""
 
+import logging
 import os
 import shutil
 import tempfile
@@ -12,6 +13,8 @@ from utils.pizzatower_afom_utils import (
     is_top_level_towers_archive,
     is_towers_subpath,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_override_path(path: str) -> str:

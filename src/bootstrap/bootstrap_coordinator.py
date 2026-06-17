@@ -32,6 +32,8 @@ from utils.network_utils import (
     get_session,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class _NetworkInitThread(QThread):
     done = pyqtSignal(bool, dict)
@@ -41,7 +43,15 @@ class _NetworkInitThread(QThread):
         self._app_state = app_state
 
     def run(self) -> None:
-        has_internet = check_internet_connection()
+        try:
+            has_internet = check_internet_connection()
+        except Exception as error:
+            logger.warning(
+                "Network initialization connectivity check failed: %s",
+                error,
+                exc_info=True,
+            )
+            has_internet = False
         global_settings = {}
         if has_internet:
             try:
@@ -54,9 +64,9 @@ class _NetworkInitThread(QThread):
                 if response and response.status_code == 200:
                     global_settings = response.json() or {}
             except Exception as error:
-                logging.debug(f"Failed to fetch global settings: {error}")
+                logger.debug(f"Failed to fetch global settings: {error}")
         if not has_internet:
-            logging.info("No internet connection detected, running in offline mode")
+            logger.info("No internet connection detected, running in offline mode")
         self.done.emit(has_internet, global_settings)
 
 
@@ -91,6 +101,12 @@ class BootstrapCoordinator:
         QTimer.singleShot(SPLASH_WATCHDOG_TIMEOUT, self._watchdog_callback)
         self._create_launcher()
 
+    def _safe_critical(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.critical(None, title, message)
+        except Exception:
+            logger.exception("Failed to show startup critical error dialog")
+
     def _create_launcher(self) -> None:
         try:
             self.instance = self.window_factory(
@@ -99,8 +115,8 @@ class BootstrapCoordinator:
             server = self.server_factory(self.instance)
             if not server.listen(SINGLE_INSTANCE_KEY):
                 error_msg = tr("errors.single_instance_error")
-                logging.error(f"STARTUP ERROR: {error_msg}")
-                QMessageBox.critical(None, tr("errors.error"), error_msg)
+                logger.error(f"STARTUP ERROR: {error_msg}")
+                self._safe_critical(tr("errors.error"), error_msg)
                 sys.exit(1)
             self.instance.server = server
             self.instance.initialization_finished.connect(
@@ -113,8 +129,8 @@ class BootstrapCoordinator:
         except Exception as error:
             self.splash.close()
             error_msg = tr("errors.startup_error_message", details=str(error))
-            logging.exception(f"STARTUP ERROR: {error_msg}")
-            QMessageBox.critical(None, tr("errors.startup_error_title"), error_msg)
+            logger.exception(f"STARTUP ERROR: {error_msg}")
+            self._safe_critical(tr("errors.startup_error_title"), error_msg)
             sys.exit(1)
 
     def _finalize_window_display(self) -> None:
@@ -130,7 +146,7 @@ class BootstrapCoordinator:
     def _fallback_show_window(self) -> None:
         if self.window_shown or self.init_ready:
             return
-        logging.info("Showing window before initialization finishes")
+        logger.info("Showing window before initialization finishes")
         self._finalize_window_display()
 
     def _watchdog_callback(self) -> None:
@@ -138,10 +154,10 @@ class BootstrapCoordinator:
             return
         try:
             if not self.instance.isVisible():
-                logging.warning("Startup timed out, forcing main window display")
+                logger.warning("Startup timed out, forcing main window display")
                 self._finalize_window_display()
         except Exception as error:
-            logging.error(f"Watchdog callback error: {error}", exc_info=True)
+            logger.error(f"Watchdog callback error: {error}", exc_info=True)
 
     def _show_launcher_window(self) -> None:
         if not self.instance:
@@ -170,7 +186,7 @@ class BootstrapCoordinator:
                 self._verify_window_visible_after_reveal,
             )
         except Exception as error:
-            logging.error(f"Error showing launcher window: {error}", exc_info=True)
+            logger.error(f"Error showing launcher window: {error}", exc_info=True)
 
     def _bring_launcher_to_front(self) -> None:
         if not self.instance:
@@ -186,7 +202,7 @@ class BootstrapCoordinator:
             self.instance.raise_()
             self.instance.activateWindow()
         except Exception as error:
-            logging.debug(f"Failed to bring launcher to front: {error}")
+            logger.debug(f"Failed to bring launcher to front: {error}")
 
     def _close_splash(self) -> None:
         self.splash.close()
@@ -235,7 +251,7 @@ class BootstrapCoordinator:
                 if self.splash and self.splash.isVisible():
                     self._close_splash()
                 return
-            logging.warning(
+            logger.warning(
                 "Main window still hidden after reveal, forcing another restore"
             )
             self._ensure_window_presented()
@@ -244,7 +260,7 @@ class BootstrapCoordinator:
                 self._WINDOW_VISIBILITY_GRACE_MS, self._abort_stuck_startup
             )
         except Exception as error:
-            logging.error(
+            logger.error(
                 f"Window visibility verification failed: {error}", exc_info=True
             )
             self._abort_stuck_startup()
@@ -254,11 +270,10 @@ class BootstrapCoordinator:
             if self.splash and self.splash.isVisible():
                 self._close_splash()
             return
-        logging.critical("Startup failed: main window never became visible")
+        logger.critical("Startup failed: main window never became visible")
         if self.splash:
             self.splash.close()
-        QMessageBox.critical(
-            None,
+        self._safe_critical(
             tr("errors.startup_error_title"),
             tr(
                 "errors.startup_error_message",
@@ -345,7 +360,7 @@ class BootstrapCoordinator:
             window._mod_scan_thread.start()
             window.status_label.setText(tr("status.scanning_mods"))
         except Exception as error:
-            logging.error(
+            logger.error(
                 f"AppWindow: Failed to start mod scan thread: {error}", exc_info=True
             )
             window.feedback_service.update_status(

@@ -6,6 +6,15 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from services.chat_service import ChatManager
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
 
 class ChatRequestThread(QThread):
     messages_received = pyqtSignal(str, list)
@@ -55,7 +64,12 @@ class ChatRequestThread(QThread):
                     self._channel, force_refresh=self._force_refresh
                 )
                 if not self._is_cancelled():
-                    self.messages_received.emit(self._channel, msgs)
+                    _safe_emit(
+                        self.__class__.__name__,
+                        self.messages_received,
+                        self._channel,
+                        msgs,
+                    )
             elif (
                 self._request_type == "send_message" and self._channel and self._message
             ):
@@ -63,8 +77,19 @@ class ChatRequestThread(QThread):
                     self._channel, self._message
                 )
                 if not self._is_cancelled():
-                    self.message_sent.emit(self._channel, success, error or "")
+                    _safe_emit(
+                        self.__class__.__name__,
+                        self.message_sent,
+                        self._channel,
+                        success,
+                        error or "",
+                    )
         except Exception as e:
-            logging.error(f"ChatRequestThread: Error: {e}", exc_info=True)
+            logger.error(f"ChatRequestThread: Error: {e}", exc_info=True)
             if not self._is_cancelled():
-                self.error_occurred.emit(self._channel or "", str(e))
+                _safe_emit(
+                    self.__class__.__name__,
+                    self.error_occurred,
+                    self._channel or "",
+                    str(e),
+                )

@@ -29,6 +29,8 @@ from utils.path_utils import colored_icon, resource_path
 
 from .base_mod_widget import BaseModWidget
 
+logger = logging.getLogger(__name__)
+
 
 class InstalledModWidget(BaseModWidget):
     details_requested = pyqtSignal(object)
@@ -402,7 +404,7 @@ class InstalledModWidget(BaseModWidget):
                 mime.cleanup_later()
         except Exception as e:
             self._drag_in_progress = False
-            logging.warning(
+            logger.warning(
                 f"InstalledModWidget: drag export failed: {e}", exc_info=True
             )
 

@@ -25,6 +25,8 @@ from config.config import (
 from services.localization_service import tr
 from utils.network_utils import get_session
 
+logger = logging.getLogger(__name__)
+
 
 def _parse_attrs(attr_str: str) -> dict:
     return dict(RICH_HTML_ATTR_RE.findall(attr_str))
@@ -162,7 +164,7 @@ def _refresh_browser_document(browser: QTextBrowser | QTextEdit, doc: QTextDocum
         browser.setDocument(doc)
         browser.setTextCursor(cursor)
     except (RuntimeError, AttributeError) as e:
-        logging.debug(f"Failed to refresh browser document: {e}")
+        logger.debug(f"Failed to refresh browser document: {e}")
 
 
 def _resolve_classes(html: str) -> str:
@@ -224,13 +226,13 @@ def _build_img_tag(attrs: dict, widget_width: int) -> str:
                 pct = float(width_attr.rstrip("%"))
                 w = max(1, int(safe_width * pct / 100))
             except ValueError:
-                logging.debug("Failed to parse percentage width, using default")
+                logger.debug("Failed to parse percentage width, using default")
         else:
             with contextlib.suppress(ValueError):
                 w = int(width_attr)
     if height_attr:
         if height_attr.endswith("%"):
-            logging.debug("Percentage height not supported for images")
+            logger.debug("Percentage height not supported for images")
         else:
             with contextlib.suppress(ValueError):
                 h = int(height_attr)
@@ -290,7 +292,7 @@ class _ImageFetchRunnable(QRunnable):
             if data:
                 self._signals.loaded.emit(self.url, data)
         except Exception as e:
-            logging.debug(f"RichHTML: Failed to load image {self.url}: {e}")
+            logger.debug(f"RichHTML: Failed to load image {self.url}: {e}")
 
 
 _IMAGE_CACHE = OrderedDict()

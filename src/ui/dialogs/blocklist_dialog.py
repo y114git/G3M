@@ -1,5 +1,6 @@
 """Dialog for managing blocked mod entries."""
 
+import logging
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -27,6 +28,8 @@ from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class _GameEntryLike(Protocol):
@@ -216,11 +219,24 @@ class BlocklistDialog(QDialog):
         has_selection = bool(self.blocklist_list.selectedItems())
         self.remove_button.setEnabled(has_selection)
 
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("blocklist_dialog: failed to show warning dialog")
+
+    def _safe_question(self, *args, **kwargs):
+        try:
+            return QMessageBox.question(self, *args, **kwargs)
+        except Exception:
+            logger.exception("blocklist_dialog: failed to show question dialog")
+            return QMessageBox.StandardButton.No
+
     def add_entry(self):
         prefix_type = self.prefix_combo.currentData()
         value = self.value_edit.text().strip()
         if not value:
-            QMessageBox.warning(self, tr("common.warning"), tr("blocklist.empty_value"))
+            self._safe_warning(tr("common.warning"), tr("blocklist.empty_value"))
             return
         current_game = self.game_combo.currentData()
         if current_game:
@@ -238,8 +254,7 @@ class BlocklistDialog(QDialog):
             return
         item = selected_items[0]
         entry = item.data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.question(
-            self,
+        reply = self._safe_question(
             tr("blocklist.confirm_remove"),
             tr("blocklist.confirm_remove_text"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,

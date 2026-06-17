@@ -104,13 +104,20 @@ class _HeadlessSettingsService:
     def read_json(self, path: str):
         if not os.path.isfile(path):
             return None
-        with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return json.load(handle)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Shortcut plugin settings read failed for %s: %s", path, e)
+            return None
 
     def write_json(self, path: str, data) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+        except (OSError, TypeError, ValueError) as e:
+            logger.warning("Shortcut plugin settings write failed for %s: %s", path, e)
 
     def pick_directory(self, _title: str, _start_path: str) -> str:
         return ""

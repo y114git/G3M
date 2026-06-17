@@ -517,8 +517,7 @@ class ModVersionsDialog(QDialog):
             self._populate()
         except Exception as e:
             logger.error("mod_versions: snapshot failed: %s", e, exc_info=True)
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 format_filesystem_error(e, path=self._mod_folder),
             )
@@ -535,6 +534,25 @@ class ModVersionsDialog(QDialog):
             self._import_from_path(dialog.selected_file, prompt_for_name=True)
         elif dialog.import_method == "url" and dialog.selected_url:
             self._start_url_worker(dialog.selected_url, prompt_for_name=True)
+
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("mod_versions: failed to show warning dialog")
+
+    def _safe_information(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(self, title, message)
+        except Exception:
+            logger.exception("mod_versions: failed to show information dialog")
+
+    def _safe_question(self, *args, **kwargs):
+        try:
+            return QMessageBox.question(self, *args, **kwargs)
+        except Exception:
+            logger.exception("mod_versions: failed to show question dialog")
+            return QMessageBox.StandardButton.No
 
     def _import_from_path(
         self,
@@ -558,8 +576,7 @@ class ModVersionsDialog(QDialog):
             self._populate()
         except Exception as e:
             logger.error("mod_versions: import failed: %s", e, exc_info=True)
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 format_filesystem_error(e, path=archive_path),
             )
@@ -602,7 +619,7 @@ class ModVersionsDialog(QDialog):
             self._populate()
             self._process_next_import()
         elif error and error != "cancelled":
-            QMessageBox.warning(self, tr("errors.error"), error)
+            self._safe_warning(tr("errors.error"), error)
             self._process_next_import()
         else:
             self._process_next_import()
@@ -623,9 +640,7 @@ class ModVersionsDialog(QDialog):
 
         mod_id_str = get_gamebanana_mod_id(self._mod_data)
         if not mod_id_str:
-            QMessageBox.warning(
-                self, tr("errors.error"), tr("errors.invalid_gamebanana_mod_id")
-            )
+            self._safe_warning(tr("errors.error"), tr("errors.invalid_gamebanana_mod_id"))
             return
         mod_id = int(mod_id_str)
         itemtype = get_gamebanana_item_type(self._mod_data)
@@ -638,13 +653,10 @@ class ModVersionsDialog(QDialog):
             )
         except Exception as e:
             logger.error("mod_versions: GameBanana files failed: %s", e, exc_info=True)
-            QMessageBox.warning(
-                self, tr("errors.error"), format_network_error(e)
-            )
+            self._safe_warning(tr("errors.error"), format_network_error(e))
             return
         if not all_files:
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("mod_versions.title"),
                 tr("errors.mod_no_files", mod_name=self._get_mod_attr("name", "")),
             )
@@ -668,7 +680,7 @@ class ModVersionsDialog(QDialog):
             if file_id:
                 download_url = f"https://gamebanana.com/dl/{file_id}"
         if not download_url:
-            QMessageBox.warning(self, tr("errors.error"), tr("errors.no_download_url"))
+            self._safe_warning(tr("errors.error"), tr("errors.no_download_url"))
             return
         file_name = (
             selected.get("name")
@@ -737,8 +749,7 @@ class ModVersionsDialog(QDialog):
         self._mod_service.mod_list_updated.emit()
 
     def _on_switch(self, version_info: dict):
-        reply = QMessageBox.question(
-            self,
+        reply = self._safe_question(
             tr("mod_versions.confirm_switch_title"),
             tr("mod_versions.confirm_switch_text", name=version_info["name"]),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -749,15 +760,13 @@ class ModVersionsDialog(QDialog):
             self.setCursor(Qt.CursorShape.WaitCursor)
             _apply_version_zip(self._mod_folder, version_info["path"])
             self._refresh_mods_after_change()
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("mod_versions.title"),
                 tr("mod_versions.switch_success", name=version_info["name"]),
             )
         except Exception as e:
             logger.error("mod_versions: switch failed: %s", e, exc_info=True)
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 format_filesystem_error(e, path=version_info["path"]),
             )
@@ -765,8 +774,7 @@ class ModVersionsDialog(QDialog):
             self.unsetCursor()
 
     def _on_delete(self, version_info: dict):
-        reply = QMessageBox.question(
-            self,
+        reply = self._safe_question(
             tr("mod_versions.confirm_delete_title"),
             tr("mod_versions.confirm_delete_text", name=version_info["name"]),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -778,8 +786,7 @@ class ModVersionsDialog(QDialog):
             self._populate()
         except Exception as e:
             logger.error("mod_versions: delete failed: %s", e, exc_info=True)
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 format_filesystem_error(e, path=version_info["path"]),
             )

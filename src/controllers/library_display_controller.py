@@ -23,6 +23,8 @@ from utils.native_integration import (
 )
 from utils.process_utils import format_filesystem_error
 
+logger = logging.getLogger(__name__)
+
 
 def _bound_checkbox_is_checked(owner, attr_name: str) -> bool:
     checkbox = getattr(owner, "__dict__", {}).get(attr_name)
@@ -44,6 +46,50 @@ class LibraryDisplayController:
         self._updating_display = False
         self._last_render_signature = None
         self._pending_view_signature = None
+
+    def _safe_feedback_call(self, action: str, *args, **kwargs) -> None:
+        feedback_action = getattr(self.feedback_service, action, None)
+        if not callable(feedback_action):
+            return
+        try:
+            feedback_action(*args, **kwargs)
+        except Exception as e:
+            logger.warning(
+                "Library feedback action %s failed: %s",
+                action,
+                e,
+                exc_info=True,
+            )
+
+    def _safe_question(self, title: str, text: str):
+        from PyQt6.QtWidgets import QMessageBox
+
+        try:
+            return QMessageBox.question(
+                self.app,
+                title,
+                text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+        except Exception as e:
+            logger.warning(
+                "Delete confirmation dialog failed: %s",
+                e,
+                exc_info=True,
+            )
+            return QMessageBox.StandardButton.No
+
+    def _safe_information(self, title: str, text: str) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        try:
+            QMessageBox.information(self.app, title, text)
+        except Exception as e:
+            logger.warning(
+                "Library information dialog failed: %s",
+                e,
+                exc_info=True,
+            )
 
     def _current_view_signature(self):
         current_game = (
@@ -466,7 +512,7 @@ class LibraryDisplayController:
                     else:
                         QTimer.singleShot(0, _build_next_batch)
                 except Exception as e:
-                    logging.debug("_build_next_batch failed", exc_info=e)
+                    logger.debug("_build_next_batch failed", exc_info=e)
                     try:
                         if self.app.installed_mods_layout.count() <= 1:
                             show_empty_message_in_layout(
@@ -479,7 +525,7 @@ class LibraryDisplayController:
                         self.app.game_launch.update_button_state()
                         self._refresh_summary_from_selection()
                     except Exception as e2:
-                        logging.debug(
+                        logger.debug(
                             "Cleanup after _build_next_batch failure failed",
                             exc_info=e2,
                         )
@@ -487,7 +533,7 @@ class LibraryDisplayController:
 
             _build_next_batch()
         except Exception as e:
-            logging.debug("update_display failed", exc_info=e)
+            logger.debug("update_display failed", exc_info=e)
         finally:
             self._pending_view_signature = None
             self._updating_display = False
@@ -537,7 +583,7 @@ class LibraryDisplayController:
                             target_widget = widget
                             break
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     "on_mod_clicked: failed while scanning installed mods layout",
                     exc_info=e,
                 )
@@ -643,7 +689,7 @@ class LibraryDisplayController:
                     analytics.record_mod_details_opened("library", mod_data)
                 controller.show_mod_details_dialog(mod_data)
         except Exception as e:
-            logging.error(f"Failed to open mod details: {e}", exc_info=True)
+            logger.error(f"Failed to open mod details: {e}", exc_info=True)
 
     def _on_summary_export(self, mod_data):
         try:
@@ -665,7 +711,7 @@ class LibraryDisplayController:
                     analytics.record_mod_export_requested(mod_data)
                 controller.export_mod_to_path(mod_data, path)
         except Exception as e:
-            logging.error(f"Failed to export mod: {e}", exc_info=True)
+            logger.error(f"Failed to export mod: {e}", exc_info=True)
 
     def _on_summary_folder(self, mod_data):
         try:
@@ -676,7 +722,7 @@ class LibraryDisplayController:
                     analytics.record_mod_folder_opened(mod_data)
                 open_path_native(os.path.normpath(mod_folder))
         except Exception as e:
-            logging.error(f"Failed to open mod folder: {e}", exc_info=True)
+            logger.error(f"Failed to open mod folder: {e}", exc_info=True)
 
     def _on_summary_versions(self, mod_data):
         try:
@@ -693,17 +739,15 @@ class LibraryDisplayController:
             )
             dialog.exec()
         except Exception as e:
-            logging.error(f"Failed to open versions dialog: {e}", exc_info=True)
+            logger.error(f"Failed to open versions dialog: {e}", exc_info=True)
 
     def _on_summary_delete(self, mod_data):
         try:
             from PyQt6.QtWidgets import QMessageBox
 
-            reply = QMessageBox.question(
-                self.app,
+            reply = self._safe_question(
                 tr("dialogs.delete_confirmation"),
                 tr("dialogs.delete_mod_confirmation"),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.mod_service.uninstall_mod(mod_data)
@@ -713,7 +757,7 @@ class LibraryDisplayController:
                 self._clear_summary()
                 self._safe_update_after_mod_deletion()
         except Exception as e:
-            logging.error(f"Failed to delete mod: {e}", exc_info=True)
+            logger.error(f"Failed to delete mod: {e}", exc_info=True)
 
     def _on_summary_homepage(self, mod_data):
         try:
@@ -725,7 +769,7 @@ class LibraryDisplayController:
                     analytics.record_mod_homepage_opened(mod_data)
                 open_url_native(url)
         except Exception as e:
-            logging.error(f"Failed to open homepage: {e}", exc_info=True)
+            logger.error(f"Failed to open homepage: {e}", exc_info=True)
 
     def _on_summary_readme(self, mod_data):
         try:
@@ -733,15 +777,13 @@ class LibraryDisplayController:
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if not mod_folder or not os.path.isdir(mod_folder):
                 return
-            from PyQt6.QtWidgets import QMessageBox
 
             from utils.mod.readme_utils import find_mod_readme_files
 
             readme_files = find_mod_readme_files(mod_folder)
             if not readme_files:
                 mod_name = getattr(mod_data, "name", "") or "Mod"
-                QMessageBox.information(
-                    self.app,
+                self._safe_information(
                     tr("dialogs.info"),
                     tr("dialogs.no_readme_files", mod_name=mod_name),
                 )
@@ -758,7 +800,7 @@ class LibraryDisplayController:
             )
             dialog.exec()
         except Exception as e:
-            logging.error(f"Failed to open mod README dialog: {e}", exc_info=True)
+            logger.error(f"Failed to open mod README dialog: {e}", exc_info=True)
 
     def _refresh_mod_list_targeted(self):
         """Refresh the mod list by only adding/removing changed widgets for smooth animation"""
@@ -860,7 +902,7 @@ class LibraryDisplayController:
             self._refresh_summary_from_selection()
 
         except Exception as e:
-            logging.error(f"Error in targeted refresh: {e}", exc_info=True)
+            logger.error(f"Error in targeted refresh: {e}", exc_info=True)
 
             self.update_display()
         finally:
@@ -873,7 +915,7 @@ class LibraryDisplayController:
                 self.app.search_display.update_search_cards()
                 self.app.search_display.update_filtered_mods(preserve_page=True)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Error updating display after mod deletion: {e}", exc_info=True
             )
 
@@ -883,7 +925,7 @@ class LibraryDisplayController:
                     self.app.search_display.update_search_cards()
                     self.app.search_display.update_filtered_mods(preserve_page=True)
             except Exception as e2:
-                logging.error(f"Fallback refresh also failed: {e2}", exc_info=True)
+                logger.error(f"Fallback refresh also failed: {e2}", exc_info=True)
 
     def on_mod_use(self, mod_data):
         target_chapter_id = get_chapter_id_for_game_mode(self.app_state.game_mode)
@@ -977,7 +1019,7 @@ class LibraryDisplayController:
                         self.update_display()
                     self._update_priority_button_visibility(chapter_id)
         except Exception as e:
-            logging.error(f"Error opening priority dialog: {e}", exc_info=True)
+            logger.error(f"Error opening priority dialog: {e}", exc_info=True)
 
     def on_create_modpack_button_click(self):
         if not hasattr(self.app, "create_modpack_button"):
@@ -1053,8 +1095,9 @@ class LibraryDisplayController:
             self._modpack_dir = modpack_dir
             thread.start()
         except Exception as e:
-            logging.error(f"Error creating modpack: {e}", exc_info=True)
-            self.feedback_service.show_message(
+            logger.error(f"Error creating modpack: {e}", exc_info=True)
+            self._safe_feedback_call(
+                "show_message",
                 "error", "errors.error", format_filesystem_error(e)
             )
 
@@ -1063,13 +1106,15 @@ class LibraryDisplayController:
         if message:
             from config.config import UI_COLORS
 
-            self.feedback_service.update_status(message, UI_COLORS["status_info"])
+            self._safe_feedback_call(
+                "update_status", message, UI_COLORS["status_info"]
+            )
 
     def _on_modpack_status(self, message: str, status_type: str):
         from config.config import UI_COLORS
 
         color = UI_COLORS.get(f"status_{status_type}", UI_COLORS["status_error"])
-        self.feedback_service.update_status(message, color)
+        self._safe_feedback_call("update_status", message, color)
 
     def _on_modpack_warning_confirmation_needed(
         self, message: object, details: str, report_path: str | None
@@ -1088,13 +1133,14 @@ class LibraryDisplayController:
             if hasattr(self.app, "search_display"):
                 self.app.search_display.update_filtered_mods(preserve_page=True)
                 self.app.search_display.update_search_cards()
-            self.feedback_service.show_message(
+            self._safe_feedback_call(
+                "show_message",
                 "success",
                 "dialogs.modpack_created_title",
                 tr("dialogs.modpack_created_message", modpack_dir=modpack_dir),
             )
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Error updating UI after modpack creation: {e}", exc_info=True
             )
 
@@ -1104,7 +1150,7 @@ class LibraryDisplayController:
                     self.app.search_display.update_filtered_mods(preserve_page=True)
                     self.app.search_display.update_search_cards()
             except Exception as e2:
-                logging.error(f"Fallback refresh also failed: {e2}", exc_info=True)
+                logger.error(f"Fallback refresh also failed: {e2}", exc_info=True)
 
     def _on_modpack_finished(self, success: bool, modpack_dir: str):
         self.app_state.is_patching = False
@@ -1125,9 +1171,10 @@ class LibraryDisplayController:
                 try:
                     shutil.rmtree(modpack_dir, ignore_errors=True)
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Failed to remove modpack directory {modpack_dir}: {e}"
                     )
-            self.feedback_service.show_message(
+            self._safe_feedback_call(
+                "show_message",
                 "error", "errors.error", tr("errors.modpack_creation_failed")
             )

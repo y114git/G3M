@@ -8,6 +8,18 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from config.config import MOD_CONFIG_FILENAME
 from utils.file_utils import load_json
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_emit_scan_completed(worker, result: dict) -> None:
+    try:
+        worker.scan_completed.emit(result)
+    except Exception as e:
+        logger.error(
+            f"ModScanThread: failed to emit scan_completed signal: {e}",
+            exc_info=True,
+        )
+
 
 class ModScanThread(QThread):
     """Background thread for scanning mod directory."""
@@ -27,14 +39,14 @@ class ModScanThread(QThread):
             if self.parent() and hasattr(self.parent(), "app_state"):
                 app_state = self.parent().app_state
                 if hasattr(app_state, "_scan_blocked") and app_state._scan_blocked:
-                    logging.debug("ModScanThread: Scan blocked during installation")
-                    self.scan_completed.emit({})
+                    logger.debug("ModScanThread: Scan blocked during installation")
+                    _safe_emit_scan_completed(self, {})
                     return
         except Exception as e:
-            logging.debug(f"ModScanThread: Could not check scan block status: {e}")
+            logger.debug(f"ModScanThread: Could not check scan block status: {e}")
         result = {}
         if not os.path.exists(self.mods_dir):
-            self.scan_completed.emit(result)
+            _safe_emit_scan_completed(self, result)
             return
         try:
             with os.scandir(self.mods_dir) as entries:
@@ -51,7 +63,7 @@ class ModScanThread(QThread):
                     try:
                         config_size = os.path.getsize(config_path)
                         if config_size == 0:
-                            logging.warning(
+                            logger.warning(
                                 f"ModScanThread: Corrupted config detected (0 bytes) in {config_path}, skipping mod"
                             )
                             continue
@@ -72,26 +84,20 @@ class ModScanThread(QThread):
                             "config_mtime": config_mtime,
                         }
                     except (OSError, PermissionError, ValueError):
-                        logging.warning(
+                        logger.warning(
                             f"ModScanThread: Corrupted config detected (failed to access) in {config_path}"
                         )
                         continue
                     except KeyError:
-                        logging.debug(f"ModScanThread: missing id in {config_path}")
+                        logger.debug(f"ModScanThread: missing id in {config_path}")
                         continue
                     except Exception:
-                        logging.error(
+                        logger.error(
                             f"ModScanThread: Corrupted config detected (unexpected error) in {folder_path}"
                         )
                         continue
         except OSError:
-            logging.error(f"ModScanThread: failed to list directory {self.mods_dir}")
+            logger.error(f"ModScanThread: failed to list directory {self.mods_dir}")
         except Exception as e:
-            logging.debug(f"ModScanThread: Unexpected error during scan: {e}")
-        try:
-            self.scan_completed.emit(result)
-        except Exception as e:
-            logging.error(
-                f"ModScanThread: Failed to emit scan_completed signal: {e}",
-                exc_info=True,
-            )
+            logger.debug(f"ModScanThread: Unexpected error during scan: {e}")
+        _safe_emit_scan_completed(self, result)

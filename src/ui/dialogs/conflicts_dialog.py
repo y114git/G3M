@@ -1,5 +1,6 @@
 """Dialog for viewing mod conflict results."""
 
+import logging
 import os
 
 from PyQt6.QtCore import Qt
@@ -18,6 +19,8 @@ from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
 from utils.native_integration import open_path_native
 from utils.process_utils import format_filesystem_error
+
+logger = logging.getLogger(__name__)
 
 
 class ConflictsDialog(QDialog):
@@ -80,10 +83,21 @@ class ConflictsDialog(QDialog):
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
+    def _safe_information(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(self, title, message)
+        except Exception:
+            logger.exception("ConflictsDialog: failed to show information message")
+
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("ConflictsDialog: failed to show warning message")
+
     def _open_report_file(self):
         if not os.path.exists(self.report_md_path):
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("dialogs.conflicts.title"),
                 tr("errors.file_not_found", path=self.report_md_path),
             )
@@ -92,8 +106,7 @@ class ConflictsDialog(QDialog):
             if not open_path_native(self.report_md_path):
                 raise RuntimeError(f"Failed to open report: {self.report_md_path}")
         except Exception as e:
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 format_filesystem_error(e, path=self.report_md_path),
             )

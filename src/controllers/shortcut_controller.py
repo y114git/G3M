@@ -30,6 +30,8 @@ from utils.mod.utils import get_mod_id, get_mod_name
 from utils.native_integration import get_save_file_name
 from utils.process_utils import format_filesystem_error
 
+logger = logging.getLogger(__name__)
+
 
 def _get_platform_extension() -> str:
     return {"Windows": ".vbs", "Darwin": ".command"}.get(platform.system(), ".sh")
@@ -415,6 +417,13 @@ def _validate_shortcut_prerequisites(app_state, has_any_mod: bool) -> str | None
     return None
 
 
+def _safe_show_message(feedback_service, level: str, title: str, message: str) -> None:
+    try:
+        feedback_service.show_message(level, title, message)
+    except Exception as e:
+        logger.warning("Shortcut feedback message failed: %s", e, exc_info=True)
+
+
 def on_shortcut_button_click(
     app_state, feedback_service, used_mods_service, parent_widget: QWidget
 ):
@@ -426,7 +435,8 @@ def on_shortcut_button_click(
     if result is None:
         if analytics := getattr(parent_widget, "analytics_service", None):
             analytics.record_action("shortcut_create_blocked", reason="too_many_mods")
-        feedback_service.show_message(
+        _safe_show_message(
+            feedback_service,
             "warning", "common.warning", tr("shortcut.too_many_mods")
         )
         return
@@ -440,7 +450,7 @@ def on_shortcut_button_click(
                 reason="prerequisite_failed",
                 game=app_state.game_mode.game_id,
             )
-        feedback_service.show_message("warning", "common.warning", error)
+        _safe_show_message(feedback_service, "warning", "common.warning", error)
         return
 
     plugin_runtime_service = getattr(parent_widget, "plugin_runtime_service", None)
@@ -500,22 +510,6 @@ def on_shortcut_button_click(
 
     try:
         _write_shortcut_file(filepath, shortcut_config)
-        if analytics := getattr(parent_widget, "analytics_service", None):
-            analytics.record_action(
-                "shortcut_created",
-                game=app_state.game_mode.game_id,
-                chapter_mode="yes" if shortcut_config.get("chapter_mode") else "no",
-                launch="steam"
-                if shortcut_config.get("launch_via_steam")
-                else "portproton"
-                if shortcut_config.get("use_portproton")
-                else "direct",
-                plugins="yes" if shortcut_config.get("plugins_enabled") else "no",
-            )
-        logging.info(f"Shortcut created: {filepath}")
-        feedback_service.show_message(
-            "info", "shortcut.dialog_title", tr("shortcut.created", path=filepath)
-        )
     except Exception as e:
         if analytics := getattr(parent_widget, "analytics_service", None):
             analytics.record_action(
@@ -523,9 +517,31 @@ def on_shortcut_button_click(
                 game=app_state.game_mode.game_id,
                 reason="write_failed",
             )
-        logging.error(f"Failed to create shortcut: {e}", exc_info=True)
-        feedback_service.show_message(
+        logger.error(f"Failed to create shortcut: {e}", exc_info=True)
+        _safe_show_message(
+            feedback_service,
             "error",
             "errors.error",
             tr("shortcut.creation_failed", error=format_filesystem_error(e, path=filepath)),
         )
+        return
+
+    if analytics := getattr(parent_widget, "analytics_service", None):
+        analytics.record_action(
+            "shortcut_created",
+            game=app_state.game_mode.game_id,
+            chapter_mode="yes" if shortcut_config.get("chapter_mode") else "no",
+            launch="steam"
+            if shortcut_config.get("launch_via_steam")
+            else "portproton"
+            if shortcut_config.get("use_portproton")
+            else "direct",
+            plugins="yes" if shortcut_config.get("plugins_enabled") else "no",
+        )
+    logger.info(f"Shortcut created: {filepath}")
+    _safe_show_message(
+        feedback_service,
+        "info",
+        "shortcut.dialog_title",
+        tr("shortcut.created", path=filepath),
+    )

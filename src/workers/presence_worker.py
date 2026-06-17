@@ -14,6 +14,8 @@ from config.config import (
 )
 from utils.network_utils import cloud_function_request
 
+logger = logging.getLogger(__name__)
+
 
 class PresenceWorker(QObject):
     finished, update_online_count = pyqtSignal(), pyqtSignal(int)
@@ -70,7 +72,9 @@ class PresenceWorker(QObject):
             requests.ConnectionError,
             requests.RequestException,
         ) as e:
-            logging.debug(f"Presence worker network error: {e}")
+            logger.debug(f"Presence worker network error: {e}")
+        except Exception:
+            logger.exception("Presence worker unexpected error")
         finally:
             self._busy = False
             if count >= 0:

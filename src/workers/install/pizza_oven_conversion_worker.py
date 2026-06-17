@@ -38,6 +38,17 @@ class PizzaOvenConversionWorker(QThread):
         self._source_file_path = source_file_path
         self._gamebanana_metadata = gamebanana_metadata or {}
 
+    def _safe_emit(self, signal, *args) -> None:
+        try:
+            signal.emit(*args)
+        except Exception as e:
+            logger.warning(
+                "PizzaOvenConversionWorker: failed to emit %s: %s",
+                getattr(signal, "signal", signal.__class__.__name__),
+                e,
+                exc_info=True,
+            )
+
     def run(self) -> None:
         try:
             result = self._conversion_service.convert(
@@ -48,13 +59,13 @@ class PizzaOvenConversionWorker(QThread):
                 gamebanana_metadata=self._gamebanana_metadata,
                 progress_callback=self._on_progress,
             )
-            self.conversion_finished.emit(True, result.mod_dir, result)
+            self._safe_emit(self.conversion_finished, True, result.mod_dir, result)
         except PizzaOvenConversionError as e:
-            self.conversion_finished.emit(False, str(e), None)
+            self._safe_emit(self.conversion_finished, False, str(e), None)
         except Exception as e:
             logger.error("PizzaOven conversion failed: %s", e, exc_info=True)
-            self.conversion_finished.emit(False, str(e), None)
+            self._safe_emit(self.conversion_finished, False, str(e), None)
 
     def _on_progress(self, value: int, message: str) -> None:
-        self.progress.emit(value)
-        self.status.emit(message, "status_info")
+        self._safe_emit(self.progress, value)
+        self._safe_emit(self.status, message, "status_info")

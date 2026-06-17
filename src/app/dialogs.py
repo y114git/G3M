@@ -7,12 +7,26 @@ from config.config import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_show_message(w, level: str, title: str, message: str) -> None:
+    try:
+        w.feedback_service.show_message(level, title, message)
+    except Exception as e:
+        logger.warning(f"Dialog feedback message failed: {e}", exc_info=True)
+
+
+def _safe_update_status(w, message: str, color: str) -> None:
+    try:
+        w.feedback_service.update_status(message, color)
+    except Exception as e:
+        logger.warning(f"Dialog status feedback failed: {e}", exc_info=True)
+
 
 def open_chat(w):
     if not w.app_state.has_internet:
-        w.feedback_service.show_message(
-            "warning", "chat.no_internet", tr("chat.no_internet")
-        )
+        _safe_show_message(w, "warning", "chat.no_internet", tr("chat.no_internet"))
         return
     from ui.dialogs.chat_dialog import ChatWindow
 
@@ -28,7 +42,8 @@ def on_downloads_record_updated(w, record):
 
     if record.use_status == UseStatus.NEEDS_MANUAL:
         name = record.display_name or record.id
-        w.feedback_service.update_status(
+        _safe_update_status(
+            w,
             f"{name} - {tr('downloads.status_needs_manual')}",
             UI_COLORS["status_warning"],
         )
@@ -47,11 +62,9 @@ def on_downloads_use_completed(w):
         if hasattr(w, "library_display"):
             w.library_display.update_display()
         w.game_launch.update_button_state()
-        w.feedback_service.update_status(
-            tr("downloads.install_success"), UI_COLORS["status_success"]
-        )
+        _safe_update_status(w, tr("downloads.install_success"), UI_COLORS["status_success"])
     except Exception as e:
-        logging.warning(f"on_downloads_use_completed failed: {e}", exc_info=True)
+        logger.warning(f"on_downloads_use_completed failed: {e}", exc_info=True)
 
 
 def refresh_mod_card_buttons(w):

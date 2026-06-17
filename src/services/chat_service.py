@@ -11,6 +11,8 @@ from utils.network_utils import (
     get_session,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class ChatManager:
     """Manages chat functionality and message handling."""
@@ -36,7 +38,7 @@ class ChatManager:
     def __init__(self) -> None:
         self.base_url = CLOUD_FUNCTIONS_BASE_URL.rstrip("/")
         if not self.base_url:
-            logging.error("ChatManager: CLOUD_FUNCTIONS_BASE_URL is not configured")
+            logger.error("ChatManager: CLOUD_FUNCTIONS_BASE_URL is not configured")
         self._messages_cache: dict[str, tuple[float, list]] = {}
 
     def _check_ready(self):

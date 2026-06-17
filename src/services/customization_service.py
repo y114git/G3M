@@ -15,6 +15,8 @@ from services.localization_service import tr
 from ui.common.styling import install_panel_style_handler, qt_hex_to_display_hex
 from utils.path_utils import resource_path
 
+logger = logging.getLogger(__name__)
+
 
 def _play_background_music_process(music_path: str) -> None:
     from playsound3 import playsound
@@ -123,7 +125,7 @@ class CustomizationManager(QObject):
             self._focus_pause_active = False
             self.music_started.emit()
         except Exception as e:
-            logging.error(f"Failed to start background music: {e}", exc_info=True)
+            logger.error(f"Failed to start background music: {e}", exc_info=True)
             self.stop_background_music()
         finally:
             self._music_starting = False
@@ -140,7 +142,7 @@ class CustomizationManager(QObject):
                 if wait_for_thread:
                     player.join(timeout=1.0)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"[CustomizationManager] Error stopping music: {e}", exc_info=True
             )
         finally:
@@ -192,14 +194,14 @@ class CustomizationManager(QObject):
                     self._bg_music_instance = None
                 self.start_background_music(force=force)
         except Exception as e:
-            logging.error(f"Error in maybe_start_background_music: {e}", exc_info=True)
+            logger.error(f"Error in maybe_start_background_music: {e}", exc_info=True)
             self._music_starting = False
 
     def _ensure_background_music_state(self) -> None:
         try:
             self.maybe_start_background_music()
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"[CustomizationManager] Background music monitor tick failed: {e}",
                 exc_info=True,
             )
@@ -274,7 +276,7 @@ class CustomizationManager(QObject):
                     icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 return
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"[CustomizationManager] Failed to load launcher icon: {e}",
                 exc_info=True,
             )

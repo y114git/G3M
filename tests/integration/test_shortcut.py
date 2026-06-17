@@ -26,6 +26,7 @@ from services.game_runner import (
     _launch_game,
     _parse_shortcut_arg,
     _resolve_chapter_source_dir,
+    _wait_for_game_exit,
 )
 from services.plugins.shortcut_service import (
     ShortcutPluginContext,
@@ -131,6 +132,18 @@ class TestParseShortcutArg:
 
 
 class TestShortcutLaunch:
+    def test_wait_for_game_exit_does_not_stop_after_ten_minutes(self):
+        with (
+            patch(
+                "services.game_runner.is_game_running",
+                side_effect=[True] * 301 + [False],
+            ) as is_running,
+            patch("services.game_runner.time.sleep"),
+        ):
+            _wait_for_game_exit()
+
+        assert is_running.call_count == 302
+
     def test_launch_game_sanitizes_linux_env_for_wine(self, game_mode, shortcut_temp_dir):
         game_path = os.path.join(shortcut_temp_dir, "game")
         os.makedirs(game_path, exist_ok=True)
@@ -670,6 +683,20 @@ class TestShortcutDialog:
 
 
 class TestShortcutPluginHooks:
+    def test_shortcut_configure_logging_installs_process_exit_logging(self, monkeypatch, tmp_path):
+        from services import game_runner
+
+        registered = []
+        monkeypatch.setattr(game_runner, "get_user_data_root", lambda: str(tmp_path))
+        monkeypatch.setattr(game_runner.atexit, "register", lambda callback: registered.append(callback))
+
+        game_runner._configure_logging()
+        registered[0]()
+
+        assert registered
+        log_text = (tmp_path / "logs" / "shortcut.log").read_text(encoding="utf-8")
+        assert "Shortcut runner process exiting after" in log_text
+
     def test_execute_shortcut_plugin_hook_returns_false_when_plugin_blocks(self):
         runtime = MagicMock()
         runtime.execute_hook.return_value = [True, False]
@@ -724,6 +751,59 @@ class TestShortcutPluginBlocks:
 
 
 class TestShortcutButtonFlow:
+    def test_shortcut_success_ignores_broken_feedback(self, mock_app_state):
+        feedback_service = MagicMock()
+        feedback_service.show_message.side_effect = RuntimeError("feedback deleted")
+        used_mods_service = MagicMock()
+        used_mods_service.get_used_mods_list.return_value = []
+        parent_widget = MagicMock()
+        parent_widget.plugin_runtime_service = None
+        parent_widget.analytics_service = MagicMock()
+
+        class _FakeDialog:
+            def __init__(
+                self,
+                game_mode,
+                chapter_mod_objects,
+                shortcut_config,
+                plugin_context=None,
+                plugin_blocks=None,
+                parent=None,
+            ) -> None:
+                pass
+
+            def exec(self):
+                return QDialog.DialogCode.Accepted
+
+            def plugin_actions_enabled(self):
+                return False
+
+        with (
+            patch("controllers.shortcut_controller.ShortcutDialog", _FakeDialog),
+            patch(
+                "controllers.shortcut_controller.get_save_file_name",
+                return_value=("C:/tmp/test.vbs", "VBScript (*.vbs)"),
+            ),
+            patch("controllers.shortcut_controller._write_shortcut_file") as write_shortcut,
+        ):
+            from controllers.shortcut_controller import on_shortcut_button_click
+
+            on_shortcut_button_click(
+                mock_app_state,
+                feedback_service,
+                used_mods_service,
+                parent_widget,
+            )
+
+        write_shortcut.assert_called_once()
+        parent_widget.analytics_service.record_action.assert_called_once_with(
+            "shortcut_created",
+            game=mock_app_state.game_mode.game_id,
+            chapter_mode="yes",
+            launch="direct",
+            plugins="no",
+        )
+
     def test_shortcut_flow_collects_dialog_plugin_values(self, mock_app_state):
         feedback_service = MagicMock()
         used_mods_service = MagicMock()

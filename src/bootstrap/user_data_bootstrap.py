@@ -15,6 +15,8 @@ from utils.path_utils import (
     set_user_data_root_override,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _ask_user_data_migration_choice(legacy_root: str, target_root: str) -> bool:
     message_box = QMessageBox()
@@ -57,6 +59,13 @@ def _copy_missing_entries(source_root: str, target_root: str) -> None:
             shutil.copy2(source_path, target_path)
 
 
+def _safe_warning(title: str, message: str) -> None:
+    try:
+        QMessageBox.warning(None, title, message)
+    except Exception:
+        logger.exception("Failed to show user data bootstrap warning")
+
+
 def resolve_user_data_root_with_migration() -> str:
     g3m_root = get_default_user_data_root()
     legacy_root = get_legacy_user_data_root()
@@ -70,14 +79,13 @@ def resolve_user_data_root_with_migration() -> str:
                 os.makedirs(g3m_root, exist_ok=True)
                 _copy_missing_entries(legacy_root, g3m_root)
             except OSError as error:
-                logging.error(
+                logger.error(
                     "Failed to copy legacy data into %s: %s",
                     g3m_root,
                     error,
                     exc_info=True,
                 )
-                QMessageBox.warning(
-                    None,
+                _safe_warning(
                     tr("startup.user_data_migration_failed_title"),
                     tr(
                         "startup.user_data_migration_failed_message",

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from models.plugin_models import PLUGIN_TAGS
+
+logger = logging.getLogger(__name__)
 
 
 class PluginStateService:
@@ -26,7 +29,15 @@ class PluginStateService:
 
     def _load(self) -> dict:
         os.makedirs(self.plugins_dir, exist_ok=True)
-        data = self.settings_service.read_json(self.state_path) or {}
+        try:
+            data = self.settings_service.read_json(self.state_path) or {}
+        except Exception as e:
+            logger.warning(
+                "PluginStateService: failed to read plugin state %s: %s",
+                self.state_path,
+                e,
+            )
+            data = {}
         state = self._default_state()
         for key in state:
             value = data.get(key, state[key])

@@ -269,6 +269,61 @@ class TestDownloadFromGameBanana:
             "errors.network_request_failed", error="gb down"
         )
 
+    def test_api_failure_does_not_crash_if_error_dialog_fails(
+        self, qapp, app_state, mod_folder, monkeypatch
+    ):
+        """Checks that fallback UI failures do not escape GameBanana errors."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod.versions_dialog import ModVersionsDialog
+
+        class FailingApi:
+            def get_mod_files(self, *_args, **_kwargs):
+                raise RuntimeError("gb down")
+
+        def fail_warning(*_args, **_kwargs):
+            raise RuntimeError("dialog down")
+
+        monkeypatch.setattr("adapters.gamebanana_adapter.GameBananaAPI", FailingApi)
+        monkeypatch.setattr(QMessageBox, "warning", fail_warning)
+
+        dialog = ModVersionsDialog(
+            mod_folder,
+            {"id": "gb_mod_123", "name": "Test Mod", "homepage": "https://gamebanana.com/mods/123"},
+            app_state,
+        )
+
+        dialog._on_download_from_gb()
+
+
+class TestModVersionsSnapshot:
+    """Tests for mod version snapshot creation."""
+
+    def test_snapshot_failure_does_not_crash_if_error_dialog_fails(
+        self, qapp, app_state, mod_folder, monkeypatch
+    ):
+        """Checks that snapshot errors survive fallback warning dialog failures."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod.versions_dialog import ModVersionsDialog
+
+        def fail_create(*_args, **_kwargs):
+            raise RuntimeError("snapshot failed")
+
+        def fail_warning(*_args, **_kwargs):
+            raise RuntimeError("dialog down")
+
+        monkeypatch.setattr("ui.dialogs.mod.versions_dialog.create_version_zip", fail_create)
+        monkeypatch.setattr(QMessageBox, "warning", fail_warning)
+
+        dialog = ModVersionsDialog(
+            mod_folder,
+            {"id": "mod", "name": "Test Mod"},
+            app_state,
+        )
+
+        dialog._do_create_snapshot("snapshot")
+
 
 class TestZipDirToVersion:
     """Tests for mod versions."""

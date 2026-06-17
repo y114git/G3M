@@ -1,6 +1,7 @@
 """Controller for theme management and UI customization."""
 
 import contextlib
+import logging
 
 from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
@@ -13,6 +14,8 @@ from ui.common.styling import get_border_radius, rgba_from_color
 from ui.utils.ui_utils import DebounceTimer
 from utils.path_utils import resource_path
 from workers.background_loader_worker import BgLoader
+
+logger = logging.getLogger(__name__)
 
 
 class ThemeController:
@@ -35,6 +38,15 @@ class ThemeController:
         self._last_theme_params = {}
         self._theme_update_in_progress = False
         self._pending_theme_update = False
+
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        show_message = getattr(self.feedback_service, "show_message", None)
+        if not callable(show_message):
+            return
+        try:
+            show_message(*args, **kwargs)
+        except Exception as e:
+            logger.warning("Theme feedback message failed: %s", e, exc_info=True)
 
     def apply_theme(self, force=False):
         theme = DEFAULT_THEME
@@ -378,7 +390,6 @@ class ThemeController:
                     fs.setMaximumHeight(w.sizeHint().height())
 
     def on_background_ready(self, obj):
-        import logging
 
         from PyQt6.QtCore import Qt, QUrl
         from PyQt6.QtGui import QMovie, QPixmap
@@ -414,7 +425,7 @@ class ThemeController:
                     self.app.video_sink.videoFrameChanged.connect(on_frame_changed)
                     self.app.media_player.play()
                 except Exception as e:
-                    logging.error(
+                    logger.error(
                         f"Failed to play video background: {e}", exc_info=True
                     )
             elif obj[0] == "gif":
@@ -524,13 +535,12 @@ class ThemeController:
                 os.path.join(themes_dir, f"{name}.zip")
             )
             self.init_theme_list()
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "info", "dialogs.success", tr("dialogs.theme_exported_success")
             )
         except Exception as e:
-            import logging
 
-            logging.error(f"Failed to export theme: {e}")
+            logger.error(f"Failed to export theme: {e}")
 
     def on_theme_delete_clicked(self):
         theme_name = self.app.themes_list_widget.currentText()
@@ -541,13 +551,10 @@ class ThemeController:
         from utils.path_utils import get_user_themes_dir, resource_path
 
         if os.path.exists(resource_path(f"assets/themes/{theme_name}.zip")):
-            return self.feedback_service.show_message(
+            return self._safe_show_message(
                 "warning",
                 "dialogs.error",
-                tr(
-                    "errors.cannot_delete_builtin_theme",
-                    "Cannot delete a built-in theme.",
-                ),
+                tr("errors.cannot_delete_builtin_theme"),
             )
 
         theme_path = os.path.join(get_user_themes_dir(), f"{theme_name}.zip")
@@ -559,9 +566,8 @@ class ThemeController:
                 os.remove(theme_path)
                 self.init_theme_list()
             except Exception as e:
-                import logging
 
-                logging.error(f"Failed to delete theme: {e}")
+                logger.error(f"Failed to delete theme: {e}")
 
     def on_theme_changed_by_service(self):
         self._debounce_timer.call(self._apply_theme_change)
@@ -648,9 +654,8 @@ class ThemeController:
                     self.customization_service.stop_background_music()
                     self.customization_service.maybe_start_background_music(force=True)
         except Exception as e:
-            import logging
 
-            logging.error(
+            logger.error(
                 f"ThemeController: Error handling music after theme change: {e}",
                 exc_info=True,
             )
@@ -770,7 +775,6 @@ class ThemeController:
 
     def _reload_custom_font(self):
         """Reload custom font from disk, or fall back to language default."""
-        import logging
         import os
 
         from PyQt6.QtGui import QFontDatabase
@@ -809,18 +813,18 @@ class ThemeController:
                 families = QFontDatabase.applicationFontFamilies(f_id)
                 if families:
                     self.app.custom_font_family = families[0]
-                    logging.info(
+                    logger.info(
                         f"Custom font loaded: {families[0]} from {custom_f_path}"
                     )
                 else:
-                    logging.warning(
+                    logger.warning(
                         f"No font families found in {custom_f_path}, using default"
                     )
                     self.app.custom_font_family = localization_service.load_font()
             else:
                 self.app._custom_font_id = -1
                 self.app._custom_font_file_key = None
-                logging.error(
+                logger.error(
                     f"Failed to load font from {custom_f_path}, using default"
                 )
                 self.app.custom_font_family = localization_service.load_font()

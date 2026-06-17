@@ -33,6 +33,7 @@ def test_analytics_service_respects_opt_in_and_flushes_batch(qapp, tmp_path):
         while service._upload_thread is not None and time.time() < deadline:
             qapp.processEvents()
             time.sleep(0.01)
+        service._wait_for_upload_shutdown(timeout_ms=3000)
 
     assert request.call_count == 1
     assert service._pending == []
@@ -50,6 +51,16 @@ def test_analytics_service_records_mods_browser_search_bucket(qapp, tmp_path):
         key.startswith("search_mods_browser") and "query_len=13_plus" in key
         for key in service._always_on
     )
+
+
+def test_analytics_service_tolerates_incomplete_app_state_during_shutdown(qapp):
+    service = AnalyticsService(SimpleNamespace())
+
+    with patch("services.analytics_service.cloud_function_request", return_value=_Response()):
+        service.shutdown()
+        service._wait_for_upload_shutdown(timeout_ms=3000)
+
+    assert service._session_closed is True
 
 
 def test_analytics_service_records_mods_browser_search_opt_in_detail(qapp, tmp_path):
@@ -632,3 +643,18 @@ def test_analytics_upload_worker_uses_dedicated_session_and_bounded_timeout(qapp
         == _AnalyticsUploadWorker._REQUEST_TIMEOUT_SECONDS
     )
     session.close.assert_called_once_with()
+
+
+def test_analytics_upload_worker_logs_failed_finished_emit(caplog):
+    """Checks that analytics upload completion emit failures are logged."""
+
+    class _FailingSignal:
+        def emit(self, *_args, **_kwargs):
+            raise RuntimeError("receiver deleted")
+
+    worker = _AnalyticsUploadWorker([])
+    worker.finished = _FailingSignal()
+
+    worker.run()
+
+    assert "Analytics upload worker failed to emit finished" in caplog.text

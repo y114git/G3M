@@ -19,6 +19,15 @@ from utils.mod.config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
 from utils.patching.mod_resolve_utils import get_mod_configured_extra_files
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
 
 class CreateModpackThread(QThread):
     progress_update = pyqtSignal(int, str)
@@ -54,7 +63,7 @@ class CreateModpackThread(QThread):
         self._warning_event.set()
         if self.patcher:
             self.patcher._cancelled = True
-        self.status_update.emit("Operation cancelled", "error")
+        _safe_emit(self.__class__.__name__, self.status_update, "Operation cancelled", "error")
 
     def confirm_warning(self, accepted: bool):
         self._warning_result = accepted
@@ -65,7 +74,13 @@ class CreateModpackThread(QThread):
     ) -> bool:
         self._warning_result = True
         self._warning_event.clear()
-        self.warning_confirmation_needed.emit(message, details, report_path)
+        _safe_emit(
+            self.__class__.__name__,
+            self.warning_confirmation_needed,
+            message,
+            details,
+            report_path,
+        )
         while not self._warning_event.wait(0.1):
             if self.isInterruptionRequested() or self._cancelled:
                 return False
@@ -95,8 +110,22 @@ class CreateModpackThread(QThread):
                 self.app_state, self.mod_service, None
             )
             self.patcher.xdelta_modpack = self.xdelta_modpack
-            self.patcher.progress_update.connect(self.progress_update.emit)
-            self.patcher.status_update.connect(self.status_update.emit)
+            self.patcher.progress_update.connect(
+                lambda progress, message: _safe_emit(
+                    self.__class__.__name__,
+                    self.progress_update,
+                    progress,
+                    message,
+                )
+            )
+            self.patcher.status_update.connect(
+                lambda message, status_type: _safe_emit(
+                    self.__class__.__name__,
+                    self.status_update,
+                    message,
+                    status_type,
+                )
+            )
             self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
                 return
@@ -109,21 +138,31 @@ class CreateModpackThread(QThread):
                 if os.path.exists(self.modpack_dir):
                     try:
                         shutil.rmtree(self.modpack_dir, ignore_errors=True)
-                        logging.info(
+                        logger.info(
                             f"Cancelled modpack creation, removed directory: {self.modpack_dir}"
                         )
                     except Exception as e:
-                        logging.error(
+                        logger.error(
                             f"Failed to remove cancelled modpack directory: {e}"
                         )
             if success and (not (self.isInterruptionRequested() or self._cancelled)):
                 if self.xdelta_modpack:
                     self._create_xdelta_patches()
                 self._create_config_json()
-                self.progress_update.emit(100, tr("status.patching_completed"))
+                _safe_emit(
+                    self.__class__.__name__,
+                    self.progress_update,
+                    100,
+                    tr("status.patching_completed"),
+                )
         except Exception as e:
-            logging.error(f"CreateModpackThread failed: {e}", exc_info=True)
-            self.status_update.emit(f"Modpack creation failed: {e!s}", "error")
+            logger.error(f"CreateModpackThread failed: {e}", exc_info=True)
+            _safe_emit(
+                self.__class__.__name__,
+                self.status_update,
+                f"Modpack creation failed: {e!s}",
+                "error",
+            )
             success = False
         finally:
             if self.patcher:
@@ -136,19 +175,24 @@ class CreateModpackThread(QThread):
                             sig.disconnect()
                     self.patcher.cleanup(force=True)
                 except Exception as cleanup_error:
-                    logging.warning(
+                    logger.warning(
                         f"Error during patcher cleanup: {cleanup_error}", exc_info=True
                     )
                 finally:
                     self.patcher = None
-            self.finished.emit(success)
+            _safe_emit(self.__class__.__name__, self.finished, success)
 
     def _create_xdelta_patches(self):
         try:
             g3mtool = G3MToolManager(self.app_state)
             if not g3mtool.is_available():
-                logging.error("G3MTool not found, cannot create xdelta patches")
-                self.status_update.emit(tr("errors.g3mtool_not_available"), "error")
+                logger.error("G3MTool not found, cannot create xdelta patches")
+                _safe_emit(
+                    self.__class__.__name__,
+                    self.status_update,
+                    tr("errors.g3mtool_not_available"),
+                    "error",
+                )
                 return
             total_chapters = max(len(self.chapter_mods), 1)
             for index, (chapter_id, mods_list) in enumerate(
@@ -171,13 +215,15 @@ class CreateModpackThread(QThread):
                     chapter_id, game, data_filename
                 )
                 if not original_data_file or not os.path.exists(original_data_file):
-                    logging.warning(
+                    logger.warning(
                         f"Original data file not found for chapter {chapter_id}, skipping xdelta creation"
                     )
                     continue
                 patch_filename = f"{os.path.splitext(data_filename)[0]}.xdelta"
                 patch_path = os.path.join(chapter_modpack_dir, patch_filename)
-                self.status_update.emit(
+                _safe_emit(
+                    self.__class__.__name__,
+                    self.status_update,
                     tr("status.creating_xdelta_patch", chapter=chapter_id), "info"
                 )
                 range_start = 96 + int((index - 1) / total_chapters * 3)
@@ -187,17 +233,21 @@ class CreateModpackThread(QThread):
                     modified_data_file,
                     patch_path,
                     progress_callback=lambda progress, chapter=chapter_id, start=range_start, end=range_end: (
-                        self.progress_update.emit(
+                        _safe_emit(
+                            self.__class__.__name__,
+                            self.progress_update,
                             start + int((end - start) * progress / 100),
                             tr("status.creating_xdelta_patch", chapter=chapter),
                         )
                     ),
                 )
                 if returncode != 0:
-                    logging.error(
+                    logger.error(
                         f"Failed to create xdelta patch for chapter {chapter_id}: {stderr}"
                     )
-                    self.status_update.emit(
+                    _safe_emit(
+                        self.__class__.__name__,
+                        self.status_update,
                         tr("errors.xdelta_patch_creation_failed", chapter=chapter_id),
                         "error",
                     )
@@ -205,16 +255,18 @@ class CreateModpackThread(QThread):
                 if os.path.exists(patch_path):
                     try:
                         os.remove(modified_data_file)
-                        logging.info(
+                        logger.info(
                             f"Created xdelta patch for chapter {chapter_id}: {patch_path}"
                         )
                     except Exception as e:
-                        logging.warning(
+                        logger.warning(
                             f"Failed to remove data file after creating xdelta patch: {e}"
                         )
         except Exception as e:
-            logging.error(f"Failed to create xdelta patches: {e}", exc_info=True)
-            self.status_update.emit(
+            logger.error(f"Failed to create xdelta patches: {e}", exc_info=True)
+            _safe_emit(
+                self.__class__.__name__,
+                self.status_update,
                 tr("errors.xdelta_patch_creation_failed_general"), "error"
             )
 
@@ -242,26 +294,26 @@ class CreateModpackThread(QThread):
             )
             base_game_path = game_mode.get_game_path(self.app_state.local_config)
             if not base_game_path or not os.path.exists(base_game_path):
-                logging.warning(f"Base game path not found: {base_game_path}")
+                logger.warning(f"Base game path not found: {base_game_path}")
                 return None
             chapter_dir = find_chapter_resource_dir(
                 base_game_path, chapter_id, game_mode.macos_app_names
             )
             if not chapter_dir or not os.path.exists(chapter_dir):
-                logging.warning(
+                logger.warning(
                     f"Chapter directory not found for chapter {chapter_id} in {base_game_path}"
                 )
                 return None
             original_data_file = find_data_win(chapter_dir, data_filename, game)
             if original_data_file and os.path.exists(original_data_file):
-                logging.info(f"Found original data file: {original_data_file}")
+                logger.info(f"Found original data file: {original_data_file}")
                 return original_data_file
-            logging.warning(
+            logger.warning(
                 f"Original data file not found for expected name {data_filename} in {chapter_dir}"
             )
             return None
         except Exception as e:
-            logging.error(f"Error finding original data file: {e}", exc_info=True)
+            logger.error(f"Error finding original data file: {e}", exc_info=True)
             return None
 
     def _create_config_json(self):
@@ -298,7 +350,7 @@ class CreateModpackThread(QThread):
                         )
                         files_data[chapter_key] = file_info
                         continue
-                    logging.warning(
+                    logger.warning(
                         f"xdelta_modpack enabled but xdelta patch not found for chapter {chapter_id}, skipping in config"
                     )
                     continue
@@ -327,14 +379,17 @@ class CreateModpackThread(QThread):
                 "tags": [],
             }
             config_path = os.path.join(self.modpack_dir, "mod_config.json")
-            self.progress_update.emit(
-                99, tr("status.finalizing_chapter", display=self.modpack_name)
+            _safe_emit(
+                self.__class__.__name__,
+                self.progress_update,
+                99,
+                tr("status.finalizing_chapter", display=self.modpack_name),
             )
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(build_mod_config_data(config_data), f, indent=4, ensure_ascii=False)
-            logging.info(f"Created mod_config.json for modpack: {self.modpack_name}")
+            logger.info(f"Created mod_config.json for modpack: {self.modpack_name}")
         except Exception as e:
-            logging.error(f"Failed to create mod_config.json: {e}", exc_info=True)
+            logger.error(f"Failed to create mod_config.json: {e}", exc_info=True)
             raise
 
     def _get_modpack_extra_files(

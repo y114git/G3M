@@ -16,6 +16,8 @@ from utils.path_utils import find_theme_config_path
 from utils.process_utils import format_filesystem_error, format_network_error
 from workers.base_install_worker import BaseInstallWorker
 
+logger = logging.getLogger(__name__)
+
 
 class ThemeInstallWorker(BaseInstallWorker):
     def __init__(
@@ -47,7 +49,7 @@ class ThemeInstallWorker(BaseInstallWorker):
                 try:
                     os.remove(old_file_path)
                 except Exception as e:
-                    logging.warning(f"Failed to remove old file {old_file}: {e}")
+                    logger.warning(f"Failed to remove old file {old_file}: {e}")
         self.app_state.local_config["custom_background_path"] = ""
         asset_prefixes = {
             "background.": "custom_background",
@@ -88,14 +90,14 @@ class ThemeInstallWorker(BaseInstallWorker):
                     try:
                         extract_any_archive(content_path, extract_dir)
                     except Exception as e:
-                        logging.exception(
+                        logger.exception(
                             f"ThemeInstallWorker: Failed to extract theme archive: {e}"
                         )
                         return False
                     content_root = unwrap_single_directory_chain(extract_dir)
                     theme_json_path = find_theme_config_path(content_root)
                     if not theme_json_path:
-                        logging.error(
+                        logger.error(
                             f"ThemeInstallWorker: {THEME_CONFIG_FILENAME} not found after extraction"
                         )
                         return False
@@ -105,7 +107,7 @@ class ThemeInstallWorker(BaseInstallWorker):
             else:
                 theme_json_path = find_theme_config_path(content_path)
                 if not theme_json_path:
-                    logging.error(
+                    logger.error(
                         f"ThemeInstallWorker: {THEME_CONFIG_FILENAME} not found in theme directory"
                     )
                     return False
@@ -115,7 +117,7 @@ class ThemeInstallWorker(BaseInstallWorker):
             self.settings_service.write_local_config()
             return True
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ThemeInstallWorker: Error installing theme from path: {e}",
                 exc_info=True,
             )
@@ -133,41 +135,45 @@ class ThemeInstallWorker(BaseInstallWorker):
                     temp_archive_path = os.path.join(temp_dir, temp_archive_name)
                     try:
                         if not self._download_archive(url, temp_archive_path):
-                            self.finished.emit(False, tr("themes.download_failed"))
+                            self._safe_emit(self.finished, False, tr("themes.download_failed"))
                             return
                     except Exception as e:
-                        self.finished.emit(
+                        self._safe_emit(
+                            self.finished,
                             False, tr("themes.download_error", error=format_network_error(e, url=url))
                         )
                         return
                     if self._cancelled:
-                        self.finished.emit(False, tr("status.operation_cancelled"))
+                        self._safe_emit(self.finished, False, tr("status.operation_cancelled"))
                         return
-                    self.status.emit(
+                    self._safe_emit(
+                        self.status,
                         tr("themes.installing_theme"), UI_COLORS["status_warning"]
                     )
                     if self._install_theme_from_path(temp_archive_path):
-                        self.status.emit(tr("themes.theme_installed"), "success")
-                        self.finished.emit(True, tr("themes.theme_installed_success"))
+                        self._safe_emit(self.status, tr("themes.theme_installed"), "success")
+                        self._safe_emit(self.finished, True, tr("themes.theme_installed_success"))
                     else:
-                        self.finished.emit(False, tr("themes.installation_failed"))
+                        self._safe_emit(self.finished, False, tr("themes.installation_failed"))
             else:
                 if not os.path.exists(self.archive_path):
-                    self.finished.emit(False, tr("themes.archive_not_found"))
+                    self._safe_emit(self.finished, False, tr("themes.archive_not_found"))
                     return
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("themes.installing_theme"), UI_COLORS["status_warning"]
                 )
                 if self._install_theme_from_path(self.archive_path):
-                    self.status.emit(tr("themes.theme_installed"), "success")
-                    self.finished.emit(True, tr("themes.theme_installed_success"))
+                    self._safe_emit(self.status, tr("themes.theme_installed"), "success")
+                    self._safe_emit(self.finished, True, tr("themes.theme_installed_success"))
                 else:
-                    self.finished.emit(False, tr("themes.installation_failed"))
+                    self._safe_emit(self.finished, False, tr("themes.installation_failed"))
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ThemeInstallWorker: Installation failed: {e}", exc_info=True
             )
-            self.finished.emit(
+            self._safe_emit(
+                self.finished,
                 False,
                 tr(
                     "themes.installation_error",

@@ -1,5 +1,6 @@
 """Mod type, asset, and resource detection utilities for the patching system."""
 
+import logging
 import os
 import platform
 import re
@@ -18,6 +19,8 @@ from utils.path_utils import (
     find_supported_game_data_file,
     get_supported_game_data_filenames,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def find_files_by_extension(

@@ -16,6 +16,8 @@ from utils.archive_utils import extract_archive, unwrap_single_directory_chain
 from utils.file_utils import find_deltamod_info_file, save_json
 from utils.mod.utils import get_mod_id
 
+logger = logging.getLogger(__name__)
+
 
 class ModImportExportController:
     """Manages mod import and export functionality."""
@@ -32,6 +34,46 @@ class ModImportExportController:
         self.mod_service.invalidate_mods_cache()
         self.mod_service.load_local_mods()
         self.mod_service.mod_list_updated.emit()
+
+    def _safe_show_critical(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.critical(self.app_window, title, message)
+        except Exception as e:
+            logger.debug(
+                "ModImportExportController: critical dialog failed: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _safe_show_information(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(self.app_window, title, message)
+        except Exception as e:
+            logger.debug(
+                "ModImportExportController: information dialog failed: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _safe_feedback_status(self, message: str, color: str) -> None:
+        try:
+            self.app_window.feedback_service.update_status(message, color)
+        except Exception as e:
+            logger.debug(
+                "ModImportExportController: feedback status failed: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _safe_feedback_message(self, level: str, title: str, message: str) -> None:
+        try:
+            self.app_window.feedback_service.show_message(level, title, message)
+        except Exception as e:
+            logger.debug(
+                "ModImportExportController: feedback message failed: %s",
+                e,
+                exc_info=True,
+            )
 
     @staticmethod
     def _format_import_exception(exc: Exception, *, file_path: str = "") -> str:
@@ -105,10 +147,25 @@ class ModImportExportController:
                     with open(config_path, encoding="utf-8") as f:
                         config_data = json.load(f)
                 except Exception as e:
-                    raise RuntimeError(f"Failed to load {MOD_CONFIG_FILENAME}: {e}") from e
+                    logger.error(
+                        "Failed to load %s from %s: %s",
+                        MOD_CONFIG_FILENAME,
+                        config_path,
+                        e,
+                        exc_info=True,
+                    )
+                    self._safe_show_critical(
+                        tr("ui.error"),
+                        f"Failed to load mod config: Failed to load {MOD_CONFIG_FILENAME}: {e}",
+                    )
+                    return
 
         if not config_data:
-            raise RuntimeError(f"No valid config found in mod folder: {mod_folder}")
+            self._safe_show_critical(
+                tr("ui.error"),
+                f"Failed to load mod config: No valid config found in mod folder: {mod_folder}",
+            )
+            return
 
         config_data["id"] = mod_id
         if mod_folder:
@@ -123,10 +180,8 @@ class ModImportExportController:
             )
             editor.exec()
         except RuntimeError as e:
-            from PyQt6.QtWidgets import QMessageBox
-
-            QMessageBox.critical(
-                self.app_window, tr("ui.error"), f"Failed to load mod config: {e}"
+            self._safe_show_critical(
+                tr("ui.error"), f"Failed to load mod config: {e}"
             )
 
     def _show_import_dialog(self):
@@ -161,14 +216,12 @@ class ModImportExportController:
                             file_path=file_path,
                         )
                         self._refresh_mod_list()
-                        QMessageBox.information(
-                            self.app_window,
+                        self._safe_show_information(
                             tr("dialogs.success"),
                             tr("status.mod_imported_success"),
                         )
                     else:
-                        QMessageBox.critical(
-                            self.app_window,
+                        self._safe_show_critical(
                             tr("errors.error"),
                             tr("errors.mod_import_failed", error="Conversion failed"),
                         )
@@ -238,13 +291,12 @@ class ModImportExportController:
                             file_path=file_path,
                         )
                         self._refresh_mod_list()
-                        QMessageBox.information(
-                            self.app_window,
+                        self._safe_show_information(
                             tr("dialogs.success"),
                             tr("status.mod_imported_success"),
                         )
                     except Exception as e:
-                        logging.error(
+                        logger.error(
                             f"[IMPORT] Post-copy import failed, cleaning up {target_mod_dir}: {e}",
                             exc_info=True,
                         )
@@ -263,7 +315,7 @@ class ModImportExportController:
                         file_path, tr("errors.invalid_mod_format")
                     )
         except Exception as e:
-            logging.error(f"[IMPORT] Mod import failed: {e}", exc_info=True)
+            logger.error(f"[IMPORT] Mod import failed: {e}", exc_info=True)
             self._record_import_analytics(
                 source="file",
                 outcome="failed",
@@ -286,11 +338,10 @@ class ModImportExportController:
             if not existing_mod_folder or not os.path.isdir(existing_mod_folder):
                 existing_mod_folder = self._find_mod_dir_by_id(mod_id)
             if not existing_mod_folder or not os.path.isdir(existing_mod_folder):
-                logging.error(
+                logger.error(
                     f"[IMPORT MERGE] Could not find folder for existing mod id={mod_id}"
                 )
-                QMessageBox.critical(
-                    self.app_window,
+                self._safe_show_critical(
                     tr("errors.error"),
                     tr(
                         "errors.mod_import_failed",
@@ -319,8 +370,7 @@ class ModImportExportController:
                 merged=True,
             )
             self._refresh_mod_list()
-            QMessageBox.information(
-                self.app_window,
+            self._safe_show_information(
                 tr("dialogs.success"),
                 tr(
                     "status.mod_merged_as_version",
@@ -329,11 +379,10 @@ class ModImportExportController:
                 ),
             )
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"[IMPORT MERGE] Failed to merge mod into versions: {e}", exc_info=True
             )
-            QMessageBox.critical(
-                self.app_window,
+            self._safe_show_critical(
                 tr("errors.error"),
                 tr(
                     "errors.mod_import_failed",
@@ -357,7 +406,7 @@ class ModImportExportController:
                 if config.get("id") == mod_id:
                     return entry.path
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"_find_mod_dir_by_id: failed to read {config_path}: {e}",
                     exc_info=True,
                 )
@@ -369,9 +418,7 @@ class ModImportExportController:
 
             worker = UrlInstallThread(self.app_window, url)
             worker.status.connect(
-                lambda msg, color: self.app_window.feedback_service.update_status(
-                    msg, color
-                )
+                lambda msg, color: self._safe_feedback_status(msg, color)
             )
             worker.progress.connect(
                 lambda p: setattr(self.app_state, "progress_bar_value", p)
@@ -385,18 +432,18 @@ class ModImportExportController:
             self._active_remote_import_source = "url"
             worker.start()
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ModImportExportController: Error installing mod from URL: {e}",
                 exc_info=True,
             )
             self._record_import_analytics(source="url", outcome="failed")
-            self.app_window.feedback_service.show_message(
+            self._safe_feedback_message(
                 "error",
-                "errors.error",
+                tr("errors.error") or "Error",
                 tr(
                     "mods.installation_error",
                     error=self._format_import_exception(e, file_path=url),
-                ),
+                ) or self._format_import_exception(e, file_path=url),
             )
 
     def _on_manual_install_required(
@@ -432,10 +479,10 @@ class ModImportExportController:
                 on_success=_on_accept,
             )
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Failed to open manual install dialog from URL: {e}", exc_info=True
             )
-            self.app_window.feedback_service.show_message(
+            self._safe_feedback_message(
                 "error",
                 tr("errors.error"),
                 tr(
@@ -470,9 +517,8 @@ class ModImportExportController:
                 temp_dir=temp_dir,
             )
         except Exception as e:
-            logging.error(f"Manual install from file failed: {e}", exc_info=True)
-            QMessageBox.critical(
-                self.app_window,
+            logger.error(f"Manual install from file failed: {e}", exc_info=True)
+            self._safe_show_critical(
                 tr("errors.error"),
                 tr(
                     "errors.manual_install_failed",
@@ -487,7 +533,7 @@ class ModImportExportController:
         try:
             return (self._materialize_local_import(file_path, temp_dir), temp_dir)
         except Exception as e:
-            logging.error(f"Failed to prepare local files: {e}", exc_info=True)
+            logger.error(f"Failed to prepare local files: {e}", exc_info=True)
             with contextlib.suppress(Exception):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise
@@ -513,15 +559,15 @@ class ModImportExportController:
             self._active_remote_import_source = None
         if success:
             self._refresh_mod_list()
-            self.app_window.feedback_service.update_status(message, "green")
-            QMessageBox.information(self.app_window, tr("dialogs.success"), message)
+            self._safe_feedback_status(message, "green")
+            self._safe_show_information(tr("dialogs.success"), message)
         else:
-            logging.warning(f"Mod installation failed: {message}")
-            self.app_window.feedback_service.update_status(
-                message or tr("errors.error"), "red"
-            )
-            self.app_window.feedback_service.show_message(
-                "error", "errors.error", message
+            logger.warning(f"Mod installation failed: {message}")
+            self._safe_feedback_status(message or tr("errors.error"), "red")
+            self._safe_feedback_message(
+                "error",
+                tr("errors.error") or "Error",
+                message or tr("mods.installation_error", error="Unknown error") or "Installation failed",
             )
 
     def _find_mod_dir_by_config(self, mod) -> str | None:
@@ -543,7 +589,7 @@ class ModImportExportController:
                 if not config_mod_id and config.get("name", "") == mod.name:
                     return entry.path
             except Exception as e:
-                logging.warning(f"Error reading config {config_path}: {e}")
+                logger.warning(f"Error reading config {config_path}: {e}")
         return None
 
     def import_files_sequentially(self, file_paths: list):
@@ -563,7 +609,7 @@ class ModImportExportController:
         try:
             self._install_mod_from_file(file_path)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"[DND IMPORT] Failed to import {file_path}: {e}", exc_info=True
             )
         from PyQt6.QtCore import QTimer
@@ -578,7 +624,7 @@ class ModImportExportController:
             if not mod_dir or not os.path.exists(mod_dir):
                 mod_dir = self._find_mod_dir_by_config(mod_data)
             if not mod_dir or not os.path.exists(mod_dir):
-                logging.error(
+                logger.error(
                     f"[DND EXPORT] Mod folder not found for: {getattr(mod_data, 'name', mod_id)}"
                 )
                 return False
@@ -590,5 +636,5 @@ class ModImportExportController:
                         zipf.write(file_path, arcname)
             return True
         except Exception as e:
-            logging.error(f"[DND EXPORT] Mod export failed: {e}", exc_info=True)
+            logger.error(f"[DND EXPORT] Mod export failed: {e}", exc_info=True)
             return False

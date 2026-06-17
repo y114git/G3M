@@ -36,6 +36,14 @@ from utils.path_utils import colored_icon
 logger = logging.getLogger(__name__)
 
 
+def _safe_question(parent, title: str, message: str, buttons, default_button):
+    try:
+        return QMessageBox.question(parent, title, message, buttons, default_button)
+    except Exception:
+        logger.warning("Game versions confirmation dialog failed", exc_info=True)
+        return default_button
+
+
 class _VersionRecordWidget(QFrame):
     """Single version item with progress bar and cancel support."""
 
@@ -151,11 +159,12 @@ class _VersionRecordWidget(QFrame):
         self._manager.cancel_operation(self._record.archive_path)
 
     def _on_apply(self):
-        reply = QMessageBox.question(
+        reply = _safe_question(
             self.window(),
             tr("game_versions.confirm_apply_title"),
             tr("game_versions.confirm_apply_text", name=self._record.display_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._manager.apply_version(self._record.archive_path)
@@ -168,11 +177,12 @@ class _VersionRecordWidget(QFrame):
         self._refresh()
 
     def _on_delete(self):
-        reply = QMessageBox.question(
+        reply = _safe_question(
             self.window(),
             tr("game_versions.confirm_delete_title"),
             tr("game_versions.confirm_delete_text", name=self._record.display_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -346,6 +356,12 @@ class GameVersionsDialog(QDialog):
         self._manager.progress_updated.connect(self._on_progress)
         self._manager.operation_error.connect(self._on_error)
 
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("game_versions: failed to show warning dialog")
+
     def closeEvent(self, event):
         self.hide()
         super().closeEvent(event)
@@ -397,7 +413,7 @@ class GameVersionsDialog(QDialog):
             w.set_progress(value)
 
     def _on_error(self, msg: str):
-        QMessageBox.warning(self, tr("errors.error"), msg)
+        self._safe_warning(tr("errors.error"), msg)
 
     def _on_game_changed(self):
         self._populate()

@@ -148,3 +148,63 @@ class TestRefreshMetadataLoading:
 
         status_calls = feedback_service.update_status.call_args_list
         assert status_calls[-1].args[0] == "Game path autodetection failed. Set it in Settings > Game."
+
+    def test_fetch_finished_ignores_broken_status_feedback(self, app_state):
+        from controllers.refresh_controller import RefreshController
+
+        feedback_service = Mock()
+        feedback_service.update_status.side_effect = RuntimeError("status widget deleted")
+        mod_service = Mock()
+        used_mods_service = Mock()
+        game_launch_controller = Mock()
+        update_checker = Mock()
+        app_window = Mock()
+        app_state.mods_loaded = False
+        app_state.all_mods = ["mod"]
+
+        refresh_controller = RefreshController(
+            app_state,
+            feedback_service,
+            mod_service,
+            used_mods_service,
+            game_launch_controller,
+            update_checker,
+            app_window=app_window,
+        )
+
+        class _Signal:
+            def __init__(self) -> None:
+                self._callback = None
+
+            def connect(self, callback):
+                self._callback = callback
+
+        class _FakePostFetchWorker:
+            def __init__(self, *_args, **_kwargs) -> None:
+                self.done = _Signal()
+
+            def start(self):
+                self.done._callback(True)
+
+            def isFinished(self):  # noqa: N802
+                return True
+
+            def deleteLater(self):  # noqa: N802
+                return None
+
+        update_installed_mods_callback = Mock()
+        update_action_button_callback = Mock()
+
+        with patch("controllers.refresh_controller._PostFetchWorker", _FakePostFetchWorker):
+            refresh_controller._on_fetch_finished(
+                success=True,
+                update_installed_mods_callback=update_installed_mods_callback,
+                update_action_button_callback=update_action_button_callback,
+            )
+
+        assert app_state.mods_loaded is True
+        update_installed_mods_callback.assert_called_once()
+        update_action_button_callback.assert_called_once()
+        game_launch_controller.refresh_mods_in_use.assert_called_once()
+        used_mods_service.load_used_mods_state.assert_called_once()
+        assert refresh_controller._fetch_finished_in_progress is False

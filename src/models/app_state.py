@@ -10,6 +10,8 @@ from models.game_modes import DeltaruneGame, GameDefinition
 from models.mod_models import AnyModInfo
 from utils.mod.utils import get_mod_id
 
+logger = logging.getLogger(__name__)
+
 
 class AppState(QObject):
     """Central application state manager with reactive properties and signals."""
@@ -269,23 +271,23 @@ class AppState(QObject):
 
     def cancel_current_operation(self):
         self._operation_cancelled = True
-        logging.info("AppState: Cancel button clicked")
+        logger.info("AppState: Cancel button clicked")
         if not self._current_task:
-            logging.warning("AppState: No current_task to cancel")
+            logger.warning("AppState: No current_task to cancel")
             return
         if hasattr(self._current_task, "cancel") and callable(
             self._current_task.cancel
         ):
-            logging.info(
+            logger.info(
                 f"AppState: Calling cancel() on current_task: {type(self._current_task).__name__}"
             )
             try:
                 self._current_task.cancel()
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"AppState: Error calling cancel() on task: {e}", exc_info=True
                 )
         else:
-            logging.warning(
+            logger.warning(
                 f"AppState: current_task {type(self._current_task).__name__} does not have cancel() method"
             )

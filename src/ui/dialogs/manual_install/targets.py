@@ -6,6 +6,8 @@ from collections.abc import Callable
 
 from utils.path_utils import find_chapter_resource_dir
 
+logger = logging.getLogger(__name__)
+
 
 def resolve_target_root_for_chapter(
     game_root: str,

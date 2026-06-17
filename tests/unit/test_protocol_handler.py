@@ -81,6 +81,21 @@ class TestProtocolHandler:
         w.raise_.assert_not_called()
 
     @patch('app.protocol_handler.is_game_running')
+    @patch('app.protocol_handler.tr')
+    def test_handle_one_click_install_game_running_ignores_broken_feedback(self, mock_tr, mock_game_running):
+        """Checks that a broken feedback toast cannot crash protocol handling."""
+        mock_game_running.return_value = True
+        mock_tr.side_effect = lambda key, *args: key
+
+        w = Mock()
+        w.feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+
+        handle_one_click_install(w, "g3m://https://example.com/mod.zip")
+
+        w.activateWindow.assert_not_called()
+        w.raise_.assert_not_called()
+
+    @patch('app.protocol_handler.is_game_running')
     def test_handle_one_click_install_regular_url(self, mock_game_running):
         """Checks that handling one click install regular url."""
         mock_game_running.return_value = False
@@ -143,6 +158,20 @@ class TestProtocolHandler:
 
         w.feedback_service.show_message.assert_called_once_with(
             'error', 'errors.error', 'errors.mod_not_found')
+        mock_dialog.assert_not_called()
+
+    @patch('ui.dialogs.confirm_external_download_dialog.ConfirmExternalDownloadDialog')
+    @patch('app.protocol_handler.tr')
+    def test_enqueue_g3m_url_invalid_url_ignores_broken_feedback(self, mock_tr, mock_dialog):
+        """Checks that invalid protocol feedback failures do not crash."""
+        mock_tr.side_effect = lambda key, *args: key
+
+        w = Mock()
+        w.feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+        w.app_state = Mock()
+
+        _enqueue_g3m_url(w, "g3m://invalid-url")
+
         mock_dialog.assert_not_called()
 
     @patch('ui.dialogs.confirm_external_download_dialog.ConfirmExternalDownloadDialog')

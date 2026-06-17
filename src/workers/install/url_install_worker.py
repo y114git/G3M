@@ -31,6 +31,8 @@ from workers.install.helpers_install import (
     save_mod_config,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class UrlInstallThread(BaseInstallWorker):
     manual_install_required = pyqtSignal(str, str, str)
@@ -55,6 +57,7 @@ class UrlInstallThread(BaseInstallWorker):
         self.url = url
 
     def run(self):
+        download_url = str(self.url or "")
         try:
             if self.url.startswith(URL_PROTOCOL_PREFIXES):
                 prefix = next(
@@ -66,7 +69,7 @@ class UrlInstallThread(BaseInstallWorker):
                 if len(content) == 64 and all(
                     c in "0123456789abcdef" for c in content.lower()
                 ):
-                    self.finished.emit(False, tr("errors.mod_not_found"))
+                    self._safe_emit(self.finished, False, tr("errors.mod_not_found"))
                     return
                 if not content.startswith(("http://", "https://")):
                     content = content.replace("https//", "https://").replace(
@@ -76,7 +79,8 @@ class UrlInstallThread(BaseInstallWorker):
             else:
                 download_url = self.url
             with tempfile.TemporaryDirectory(prefix="g3m-url-install-") as temp_dir:
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("status.downloading_from_external"), UI_COLORS["status_warning"]
                 )
                 archive_path = self._download_archive(download_url, temp_dir)
@@ -91,7 +95,8 @@ class UrlInstallThread(BaseInstallWorker):
                 else:
                     self._prepare_for_manual_install(archive_path)
         except Exception as e:
-            self.finished.emit(
+            self._safe_emit(
+                self.finished,
                 False,
                 format_network_error(e, url=download_url)
                 if self._looks_like_network_error(e)
@@ -110,7 +115,8 @@ class UrlInstallThread(BaseInstallWorker):
                     mod_dir = self._install_g3m_mod_from_path(content_path)
                     if mod_dir:
                         mod_name = os.path.basename(mod_dir)
-                        self.finished.emit(
+                        self._safe_emit(
+                            self.finished,
                             True,
                             tr("status.install_complete_success", mod_name=mod_name),
                         )
@@ -125,7 +131,8 @@ class UrlInstallThread(BaseInstallWorker):
                     new_mod_path = converter.convert()
                     if new_mod_path:
                         mod_name = os.path.basename(new_mod_path)
-                        self.finished.emit(
+                        self._safe_emit(
+                            self.finished,
                             True,
                             tr("status.install_complete_success", mod_name=mod_name),
                         )
@@ -137,7 +144,7 @@ class UrlInstallThread(BaseInstallWorker):
     def _install_g3m_mod_from_path(self, content_path: str) -> str | None:
         mod_config_path = find_mod_config(content_path)
         if not mod_config_path:
-            logging.error("mod_config.json not found in G3M mod archive")
+            logger.error("mod_config.json not found in G3M mod archive")
             return None
         config_data = load_mod_config(mod_config_path)
         if not config_data:
@@ -152,11 +159,11 @@ class UrlInstallThread(BaseInstallWorker):
         target_config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         try:
             save_mod_config(target_config_path, config_data)
-            logging.info(
+            logger.info(
                 f"Installed G3M mod from URL: {target_mod_dir}, mod_id={mod_id}"
             )
         except Exception as e:
-            logging.error(f"Failed to save mod config: {e}", exc_info=True)
+            logger.error(f"Failed to save mod config: {e}", exc_info=True)
             return None
         return target_mod_dir
 
@@ -201,7 +208,7 @@ class UrlInstallThread(BaseInstallWorker):
             cancel_check=lambda: self._cancelled,
             on_response=on_response,
         )
-        self.progress.emit(100)
+        self._safe_emit(self.progress, 100)
         return archive_path
 
     @staticmethod
@@ -247,7 +254,7 @@ class UrlInstallThread(BaseInstallWorker):
                         if result:
                             return result
                 except (OSError, ImportError) as e:
-                    logging.debug(f"Could not open RAR: {e}")
+                    logger.debug(f"Could not open RAR: {e}")
             elif archive_lower.endswith(".7z"):
                 try:
                     import py7zr
@@ -257,9 +264,9 @@ class UrlInstallThread(BaseInstallWorker):
                         if result:
                             return result
                 except (OSError, ImportError) as e:
-                    logging.debug(f"Could not open 7z: {e}")
+                    logger.debug(f"Could not open 7z: {e}")
         except Exception as e:
-            logging.error(f"Error detecting content type: {e}", exc_info=True)
+            logger.error(f"Error detecting content type: {e}", exc_info=True)
         return self._detect_content_type_from_extracted(archive_path) or ""
 
     def _detect_content_type_from_extracted(self, archive_path: str) -> str | None:
@@ -283,7 +290,7 @@ class UrlInstallThread(BaseInstallWorker):
                 if has_deltamod_info_file(os.listdir(content_path)):
                     return "mod"
             except Exception as e:
-                logging.error(f"Error detecting from extracted: {e}", exc_info=True)
+                logger.error(f"Error detecting from extracted: {e}", exc_info=True)
         return None
 
     def _prepare_for_manual_install(self, archive_path: str):
@@ -305,27 +312,30 @@ class UrlInstallThread(BaseInstallWorker):
                 from utils.archive_utils import unwrap_single_directory_chain
 
                 content_path = unwrap_single_directory_chain(extract_dir)
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("status.manual_install_ready"), UI_COLORS["status_info"]
                 )
-                self.manual_install_required.emit(
+                self._safe_emit(
+                    self.manual_install_required,
                     content_path, preserved_archive_path, persistent_temp_dir
                 )
             except Exception:
                 try:
                     shutil.rmtree(persistent_temp_dir, ignore_errors=True)
                 except Exception as e:
-                    logging.debug(
+                    logger.debug(
                         f"UrlInstallThread: Failed to clean up {persistent_temp_dir}: {e}",
                         exc_info=True,
                     )
                 raise
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"UrlInstallThread: Error preparing for manual install: {e}",
                 exc_info=True,
             )
-            self.finished.emit(
+            self._safe_emit(
+                self.finished,
                 False,
                 tr(
                     "errors.manual_install_failed",
@@ -335,7 +345,9 @@ class UrlInstallThread(BaseInstallWorker):
 
     def _install_theme_from_dir(self, theme_dir: str):
         try:
-            self.status.emit(tr("themes.installing_theme"), UI_COLORS["status_warning"])
+            self._safe_emit(
+                self.status, tr("themes.installing_theme"), UI_COLORS["status_warning"]
+            )
             config_dir = self.main_window.app_state.config_dir
             app_state = self.main_window.app_state
             settings_service = self.main_window.settings_service
@@ -358,15 +370,16 @@ class UrlInstallThread(BaseInstallWorker):
                     try:
                         os.remove(old_file_path)
                     except Exception as e:
-                        logging.warning(f"Failed to remove old file {old_file}: {e}")
+                        logger.warning(f"Failed to remove old file {old_file}: {e}")
             settings_service.write_local_config()
-            self.status.emit(tr("themes.theme_installed"), "success")
-            self.finished.emit(True, tr("themes.theme_installed_success"))
+            self._safe_emit(self.status, tr("themes.theme_installed"), "success")
+            self._safe_emit(self.finished, True, tr("themes.theme_installed_success"))
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"UrlInstallThread: Error installing theme from dir: {e}", exc_info=True
             )
-            self.finished.emit(
+            self._safe_emit(
+                self.finished,
                 False,
                 tr(
                     "themes.installation_error",
@@ -383,10 +396,11 @@ class UrlInstallThread(BaseInstallWorker):
                     raise AppError("themes.archive_not_found")
                 self._install_theme_from_dir(os.path.dirname(theme_json_path))
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"UrlInstallThread: Error extracting theme: {e}", exc_info=True
                 )
-                self.finished.emit(
+                self._safe_emit(
+                    self.finished,
                     False,
                     tr(
                         "themes.installation_error",
@@ -417,19 +431,20 @@ class UrlInstallThread(BaseInstallWorker):
                             or redirect_config.get("download_url")
                         )
                         if redirect_url:
-                            self.status.emit(
+                            self._safe_emit(
+                                self.status,
                                 tr("status.deltamod_redirect_found"),
                                 UI_COLORS["status_info"],
                             )
-                            self.progress.emit(0)
+                            self._safe_emit(self.progress, 0)
                             self._process_deltamod_archive(redirect_url)
                             return True
                     except Exception as e:
-                        logging.warning(
+                        logger.warning(
                             f"UrlInstallThread: Error reading redirect config: {e}"
                         )
         except Exception as e:
-            logging.warning(f"UrlInstallThread: Error checking redirect: {e}")
+            logger.warning(f"UrlInstallThread: Error checking redirect: {e}")
         return False
 
     @staticmethod
@@ -438,7 +453,7 @@ class UrlInstallThread(BaseInstallWorker):
             if path and os.path.exists(path):
                 os.remove(path)
         except Exception as e:
-            logging.warning(f"UrlInstallThread: Failed to remove file {path}: {e}")
+            logger.warning(f"UrlInstallThread: Failed to remove file {path}: {e}")
 
     def _install_mod_from_archive(self, archive_path: str, temp_dir: str):
         try:
@@ -447,7 +462,8 @@ class UrlInstallThread(BaseInstallWorker):
                 files_in_root = os.listdir(content_path)
                 mod_name = None
                 if has_deltamod_info_file(files_in_root):
-                    self.status.emit(
+                    self._safe_emit(
+                        self.status,
                         tr("status.deltamod_archive_detected_url"),
                         UI_COLORS["status_info"],
                     )
@@ -460,7 +476,8 @@ class UrlInstallThread(BaseInstallWorker):
                         raise AppError("errors.deltamod_conversion_failed_url")
                     mod_name = os.path.basename(new_mod_path)
                 elif MOD_CONFIG_FILENAME in files_in_root:
-                    self.status.emit(
+                    self._safe_emit(
+                        self.status,
                         tr("status.installing_mod"), UI_COLORS["status_info"]
                     )
                     mod_dir = self._install_g3m_mod_from_path(content_path)
@@ -470,12 +487,14 @@ class UrlInstallThread(BaseInstallWorker):
                 else:
                     raise AppError("errors.unsupported_mod_format_url")
                 self._try_remove_file(archive_path)
-                self.finished.emit(
+                self._safe_emit(
+                    self.finished,
                     True, tr("status.install_complete_success", mod_name=mod_name)
                 )
         except Exception as e:
-            logging.error(f"UrlInstallThread: Error installing mod: {e}", exc_info=True)
-            self.finished.emit(
+            logger.error(f"UrlInstallThread: Error installing mod: {e}", exc_info=True)
+            self._safe_emit(
+                self.finished,
                 False,
                 format_network_error(e, url=self.url)
                 if self._looks_like_network_error(e)

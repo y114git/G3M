@@ -16,6 +16,13 @@ from utils.mod.utils import get_mod_id
 logger = logging.getLogger(__name__)
 
 
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
+
 class FetchModsThread(QThread):
     """Background thread for fetching mod lists from remote sources."""
 
@@ -145,7 +152,9 @@ class FetchModsThread(QThread):
 
                 fetcher = GameBananaFetcher(sort_param=sort_param, app_state=app_state)
 
-                fetcher.status = lambda msg, color: self.status.emit(msg, color)
+                fetcher.status = lambda msg, color: _safe_emit(
+                    self.__class__.__name__, self.status, msg, color
+                )
                 initial_pages = 3
                 gamebanana_mods = fetcher.fetch_mods(initial_pages=initial_pages)
                 if gamebanana_mods:
@@ -256,14 +265,18 @@ class FetchModsThread(QThread):
                     all_mods_filtered.append(local_mod)
             app_state = getattr(self.main_window, "app_state", None)
             if app_state:
-                app_state.all_mods_updated.emit(all_mods_filtered)
+                _safe_emit(
+                    self.__class__.__name__,
+                    app_state.all_mods_updated,
+                    all_mods_filtered,
+                )
             self._update_remote_exists_flags(all_mods)
             logger.info("FetchModsThread: Mod fetch completed successfully")
-            self.result.emit(True)
+            _safe_emit(self.__class__.__name__, self.result, True)
         except Exception as e:
             logger.error(f"FetchModsThread: Error in run: {e}", exc_info=True)
-            self.status.emit(str(e), UI_COLORS["status_error"])
-            self.result.emit(False)
+            _safe_emit(self.__class__.__name__, self.status, str(e), UI_COLORS["status_error"])
+            _safe_emit(self.__class__.__name__, self.result, False)
 
     def _get_local_mods(self) -> list[AnyModInfo]:
         local_mods = []
@@ -318,4 +331,4 @@ class FetchModsThread(QThread):
                 except (OSError, json.JSONDecodeError):
                     continue
         except Exception as e:
-            logging.warning(f"Failed to update remote exists flags in metadata: {e}")
+            logger.warning(f"Failed to update remote exists flags in metadata: {e}")

@@ -22,7 +22,6 @@ def _load_local_module(filename: str, module_name: str):
     spec.loader.exec_module(module)
     return module
 
-
 class _PluginApiAdapter:
     def __init__(self, settings_accessor) -> None:
         self._settings = settings_accessor
@@ -32,7 +31,6 @@ class _PluginApiAdapter:
 
     def set_config(self, key: str, value) -> None:
         self._settings.set(key, value)
-
 
 class _SaveManagerWidgetController:
     def __init__(self, app_state, save_manager, widgets, tr_func) -> None:
@@ -269,7 +267,6 @@ QFrame#slot_row_{chapter}_{slot} {{
         self.save_manager.selected_slot = None
         self.refresh_slots()
 
-
 class DRSaveManagerPlugin:
     def __init__(self) -> None:
         self._backup_info = {}
@@ -401,7 +398,6 @@ class DRSaveManagerPlugin:
     def on_after_restore_after_exit_shortcut(self, context, shortcut_context, *_args):
         self.on_after_restore_after_exit(context)
         return True
-
 
 def create_plugin():
     return DRSaveManagerPlugin()

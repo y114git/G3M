@@ -10,6 +10,8 @@ from config.config import CLOUD_FUNCTIONS_BASE_URL
 from services.localization_service import tr
 from utils.network_utils import cloud_function_request, get_session
 
+logger = logging.getLogger(__name__)
+
 UPDATE_PROMPT_RETRY_INTERVAL_MS = 500
 UPDATE_PROMPT_MAX_RETRIES = 15
 GLOBAL_SETTINGS_CACHE_TTL_SECONDS = 300
@@ -36,8 +38,35 @@ class _GlobalSettingsWorker(QThread):
                 self.finished.emit(True, response.json() or {})
                 return
         except Exception as e:
-            logging.warning("reload_global_settings: %s", e)
+            logger.warning("reload_global_settings: %s", e)
         self.finished.emit(False, {})
+
+
+def _run_global_settings_callback(callback, success: bool) -> None:
+    if not callback:
+        return
+    try:
+        callback(success)
+    except Exception:
+        logger.exception("reload_global_settings: callback failed")
+
+
+def _safe_update_status(app, message: str, color: str) -> None:
+    feedback_service = getattr(app, "feedback_service", None)
+    update_status = getattr(feedback_service, "update_status", None)
+    if not callable(update_status):
+        return
+    try:
+        update_status(message, color)
+    except Exception:
+        logger.exception("Update presenter: status feedback failed")
+
+
+def _safe_warning(parent, title: str, message: str) -> None:
+    try:
+        QMessageBox.warning(parent, title, message)
+    except Exception:
+        logger.exception("Update presenter: warning dialog failed")
 
 
 def handle_update_info(app, update_info, retry_count=0):
@@ -56,7 +85,7 @@ def handle_update_info(app, update_info, retry_count=0):
             lambda: handle_update_info(app, update_info, retry_count + 1),
         )
         return
-    logging.warning(
+    logger.warning(
         "Update dialog fallback: init_completed=%s, is_shown=%s, is_visible=%s",
         init_completed,
         is_shown,
@@ -70,16 +99,13 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
         time.time() - float(getattr(app.app_state, "global_settings_loaded_at", 0.0))
         < GLOBAL_SETTINGS_CACHE_TTL_SECONDS
     ):
-        if callback:
-            callback(True)
+        _run_global_settings_callback(callback, True)
         return
     if not app.app_state.has_internet:
-        if callback:
-            callback(False)
+        _run_global_settings_callback(callback, False)
         return
     if getattr(app.app_state, "global_settings_load_in_progress", False):
-        if callback:
-            callback(True)
+        _run_global_settings_callback(callback, True)
         return
     app.app_state.global_settings_load_in_progress = True
     if not isinstance(app, QObject):
@@ -95,11 +121,10 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
                 app.app_state.global_settings = response.json() or {}
                 app.app_state.global_settings_loaded_at = time.time()
         except Exception as e:
-            logging.warning("reload_global_settings: %s", e)
+            logger.warning("reload_global_settings: %s", e)
             success = False
         finally:
-            if callback:
-                callback(success)
+            _run_global_settings_callback(callback, success)
             app.app_state.global_settings_load_in_progress = False
         return
     worker = _GlobalSettingsWorker(app.app_state, parent=app)
@@ -109,8 +134,7 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
             if success:
                 app.app_state.global_settings = data
                 app.app_state.global_settings_loaded_at = time.time()
-            if callback:
-                callback(success)
+            _run_global_settings_callback(callback, success)
         finally:
             app.app_state.global_settings_load_in_progress = False
             worker.deleteLater()
@@ -163,7 +187,7 @@ def check_and_show_announce(app, retry_count=0, force_check=False):
         )
         if success:
             return True
-        QMessageBox.warning(
+        _safe_warning(
             app,
             tr("dialogs.warning"),
             error_message or tr("dialogs.failed_submit_poll"),
@@ -225,8 +249,6 @@ def prompt_for_update(app, update_info):
         app.update_checker.perform_update(update_info)
         return
     app.app_state.update_in_progress = False
-    app.feedback_service.update_status(
-        tr("status.update_rejected"), UI_COLORS["status_info"]
-    )
+    _safe_update_status(app, tr("status.update_rejected"), UI_COLORS["status_info"])
     if getattr(app.app_state, "pending_announce_check", False):
         check_and_show_announce(app)

@@ -43,6 +43,8 @@ from utils.patching.mod_resolve_utils import (
 )
 from utils.path_utils import get_user_data_root
 
+logger = logging.getLogger(__name__)
+
 
 def _get_patching_logs_dir() -> str:
     """Return logs/patching/ directory, creating it if needed."""
@@ -85,7 +87,7 @@ def _enforce_archive_limit(archive_dir: str):
             try:
                 os.remove(files.pop(0))
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"_enforce_archive_limit: failed to remove archived file: {e}",
                     exc_info=True,
                 )
@@ -106,7 +108,7 @@ def _get_patching_logger() -> logging.Logger:
     try:
         handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
     except (PermissionError, OSError) as error:
-        logging.warning(
+        logger.warning(
             "Failed to initialize patching file logger at %s: %s",
             log_path,
             error,
@@ -223,7 +225,7 @@ class G3MToolPatchingService(QObject):
                     digest.update(chunk)
             return digest.hexdigest()
         except Exception as e:
-            logging.debug("Failed to compute MD5 for %s: %s", path, e)
+            logger.debug("Failed to compute MD5 for %s: %s", path, e)
             return None
 
     @staticmethod

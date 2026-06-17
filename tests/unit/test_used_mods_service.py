@@ -95,3 +95,24 @@ def test_load_used_mods_state_keeps_previously_loaded_mod_when_missing_is_unconf
     assert not hasattr(service, "_pending_mod_ids")
     assert app_state.local_config["used_mods_deltarune"] == {"deltarune": "kept_mod"}
     settings_service.write_local_config.assert_called_once()
+
+
+def test_direct_launch_menu_warning_failure_is_suppressed(app_state):
+    """Checks menu-tab direct-launch warning cannot crash used-mods UI flow."""
+    feedback_service = Mock()
+    feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+    settings_service = Mock()
+    app_state.local_config = {}
+
+    service = UsedModsManager(
+        app_state,
+        Mock(),
+        feedback_service,
+        settings_service,
+        parent=None,
+    )
+
+    service.toggle_direct_launch_for_chapter("deltarune_0")
+
+    feedback_service.show_message.assert_called_once()
+    settings_service.write_local_config.assert_not_called()

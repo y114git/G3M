@@ -6,6 +6,8 @@ from multiprocessing import Process
 
 from utils.path_utils import get_user_data_root
 
+logger = logging.getLogger(__name__)
+
 
 def _play_sound_process(sound_path: str) -> None:
     from playsound3 import playsound
@@ -47,7 +49,7 @@ class AudioManager:
             process.start()
             self._sound_instance = process
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"AudioManager.play_g3m_sound: failed to play {sound_path}: {e}"
             )
             self._sound_instance = None
@@ -63,7 +65,7 @@ class AudioManager:
                         process.kill()
                         process.join(timeout=0.5)
             except Exception as e:
-                logging.debug(f"AudioManager.stop_g3m_sound: failed to stop: {e}")
+                logger.debug(f"AudioManager.stop_g3m_sound: failed to stop: {e}")
         self._sound_instance = None
 
 

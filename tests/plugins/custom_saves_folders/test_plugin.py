@@ -167,6 +167,84 @@ def test_rule_has_priority_over_enabled_fallback_folder():
     assert folder["id"] == "folder_rule"
 
 
+def test_rule_matches_updated_gamebanana_mod_id_variant():
+    plugin = _module()
+    state = plugin._StateStore(_Settings(), None, None, type("AppState", (), {"local_config": {"active_profile": "Default"}})())
+    state.list_profile_mods = lambda profile, game_id: [
+        {"id": "gb_mod_123_file_456", "name": "Updated Mod", "game": game_id}
+    ]
+
+    state._settings.set(
+        "folders",
+        [
+            {"id": "folder_fallback", "enabled": True, "game_id": "deltarune", "profile": "", "name": "fallback_folder"},
+            {"id": "folder_rule", "enabled": True, "game_id": "deltarune", "profile": "", "name": "rule_folder"},
+        ],
+    )
+    state._settings.set(
+        "mod_rules",
+        [
+            {
+                "id": "rule_a",
+                "enabled": True,
+                "profile": "Default",
+                "game_id": "deltarune",
+                "mod_id": "gb_mod_123",
+                "mod_name": "Original Mod",
+                "folder_id": "folder_rule",
+            }
+        ],
+    )
+
+    folder = state.resolve_launch_folder(
+        "deltarune",
+        "Default",
+        selections={"default": {"id": "gb_mod_123_file_456"}},
+    )
+
+    assert folder is not None
+    assert folder["id"] == "folder_rule"
+
+
+def test_gamebanana_rule_does_not_match_different_mod_with_similar_file_id():
+    plugin = _module()
+    state = plugin._StateStore(_Settings(), None, None, type("AppState", (), {"local_config": {"active_profile": "Default"}})())
+    state.list_profile_mods = lambda profile, game_id: [
+        {"id": "gb_mod_124_file_456", "name": "Different Mod", "game": game_id}
+    ]
+
+    state._settings.set(
+        "folders",
+        [
+            {"id": "folder_fallback", "enabled": True, "game_id": "deltarune", "profile": "", "name": "fallback_folder"},
+            {"id": "folder_rule", "enabled": True, "game_id": "deltarune", "profile": "", "name": "rule_folder"},
+        ],
+    )
+    state._settings.set(
+        "mod_rules",
+        [
+            {
+                "id": "rule_a",
+                "enabled": True,
+                "profile": "Default",
+                "game_id": "deltarune",
+                "mod_id": "gb_mod_123",
+                "mod_name": "Original Mod",
+                "folder_id": "folder_rule",
+            }
+        ],
+    )
+
+    folder = state.resolve_launch_folder(
+        "deltarune",
+        "Default",
+        selections={"default": {"id": "gb_mod_124_file_456"}},
+    )
+
+    assert folder is not None
+    assert folder["id"] == "folder_fallback"
+
+
 def test_rule_does_not_apply_when_target_mod_is_not_selected():
     plugin = _module()
     state = plugin._StateStore(_Settings(), None, None, type("AppState", (), {"local_config": {"active_profile": "Default"}})())

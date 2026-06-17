@@ -46,6 +46,13 @@ def _cleanup_worker(worker):
         )
 
 
+def _safe_update_status(feedback_service, message: str, color: str) -> None:
+    try:
+        feedback_service.update_status(message, color)
+    except Exception:
+        logger.warning("DownloadsManager status feedback failed", exc_info=True)
+
+
 class DownloadsManager(QObject):
     """Coordinator for all download/use operations. Created once in AppWindow."""
 
@@ -532,11 +539,13 @@ class DownloadsManager(QObject):
 
         record_id, is_dup = self.enqueue(**kwargs)
         if is_dup:
-            feedback_service.update_status(
+            _safe_update_status(
+                feedback_service,
                 tr("downloads.already_downloading"), UI_COLORS["status_warning"]
             )
         else:
-            feedback_service.update_status(
+            _safe_update_status(
+                feedback_service,
                 tr("downloads.enqueued", name=kwargs.get("display_name", "")),
                 UI_COLORS["status_info"],
             )

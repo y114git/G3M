@@ -1,5 +1,6 @@
 """Unit tests for test localization files."""
 
+import hashlib
 import json
 import re
 import zipfile
@@ -98,6 +99,48 @@ def test_plugin_archives_include_korean_localizations():
             entries = {info.filename for info in archive.infolist()}
         assert expected_entry in entries, (
             f"{archive_path.name} is missing {expected_entry}"
+        )
+
+
+def test_plugin_archives_match_source_folders_without_python_cache():
+    """Checks that shipped plugin archives contain current source files only."""
+    ignored_suffixes = (".pyc", ".pyo")
+    ignored_parts = {"__pycache__"}
+
+    for plugin_dir in PLUGIN_DIR.iterdir():
+        if not plugin_dir.is_dir():
+            continue
+        archive_path = PLUGIN_DIR / f"{plugin_dir.name}.zip"
+        if not archive_path.is_file():
+            continue
+
+        source_files = {
+            path.relative_to(plugin_dir).as_posix(): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for path in plugin_dir.rglob("*")
+            if path.is_file()
+            and ignored_parts.isdisjoint(path.relative_to(plugin_dir).parts)
+            and not path.name.endswith(ignored_suffixes)
+        }
+        with zipfile.ZipFile(archive_path) as archive:
+            archived_files = {
+                info.filename: hashlib.sha256(archive.read(info.filename)).hexdigest()
+                for info in archive.infolist()
+                if not info.is_dir()
+            }
+
+        forbidden = [
+            name
+            for name in archived_files
+            if "__pycache__" in Path(name).parts or name.endswith(ignored_suffixes)
+        ]
+        assert not forbidden, f"{archive_path.name} ships Python cache files: {forbidden}"
+        assert archived_files == source_files, (
+            f"{archive_path.name} does not match {plugin_dir.name}. "
+            f"Missing: {sorted(source_files - archived_files)}. "
+            f"Extra: {sorted(archived_files - source_files)}. "
+            f"Changed: {sorted(k for k in source_files.keys() & archived_files.keys() if source_files[k] != archived_files[k])}"
         )
 
 

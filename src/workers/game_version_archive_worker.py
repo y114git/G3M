@@ -16,6 +16,13 @@ from utils.process_utils import format_filesystem_error, format_network_error
 logger = logging.getLogger(__name__)
 
 
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
+
 class CreateVersionWorker(QThread):
     """Archive the base game folder into a zip, excluding protected exe files."""
 
@@ -49,16 +56,16 @@ class CreateVersionWorker(QThread):
                         raise InterruptedError("Cancelled")
                     zf.write(full, rel)
                     file_count += 1
-                    self.progress.emit(int((i + 1) * 100 / total))
+                    _safe_emit(self.__class__.__name__, self.progress, int((i + 1) * 100 / total))
             size = os.path.getsize(self._archive_path)
-            self.finished.emit(True, "", size, file_count)
+            _safe_emit(self.__class__.__name__, self.finished, True, "", size, file_count)
         except InterruptedError:
             self._cleanup()
-            self.finished.emit(False, "cancelled", 0, 0)
+            _safe_emit(self.__class__.__name__, self.finished, False, "cancelled", 0, 0)
         except Exception as e:
             logger.error("CreateVersionWorker failed: %s", e, exc_info=True)
             self._cleanup()
-            self.finished.emit(
+            _safe_emit(self.__class__.__name__, self.finished,
                 False,
                 format_filesystem_error(e, path=self._archive_path),
                 0,
@@ -119,7 +126,7 @@ class CreatePatchedVersionWorker(QThread):
                 dest = os.path.join(temp_game, rel)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 shutil.copy2(full, dest)
-                self.progress.emit(int((i + 1) * 40 / total_copy))
+                _safe_emit(self.__class__.__name__, self.progress, int((i + 1) * 40 / total_copy))
 
             try:
                 from services.g3mtool_patching_service import G3MToolPatchingService
@@ -128,7 +135,7 @@ class CreatePatchedVersionWorker(QThread):
                     self._app_state, self._mod_service, None
                 )
                 patcher.progress_update.connect(
-                    lambda p, _msg: self.progress.emit(40 + int(p * 0.4))
+                    lambda p, _msg: _safe_emit(self.__class__.__name__, self.progress, 40 + int(p * 0.4))
                 )
                 patcher.set_override_game_path(temp_game)
                 success = patcher.process_mod_patch(
@@ -160,16 +167,16 @@ class CreatePatchedVersionWorker(QThread):
                         raise InterruptedError("Cancelled")
                     zf.write(full, rel)
                     file_count += 1
-                    self.progress.emit(80 + int((i + 1) * 20 / total_archive))
+                    _safe_emit(self.__class__.__name__, self.progress, 80 + int((i + 1) * 20 / total_archive))
             size = os.path.getsize(self._archive_path)
-            self.finished.emit(True, "", size, file_count, patching_error)
+            _safe_emit(self.__class__.__name__, self.finished, True, "", size, file_count, patching_error)
         except InterruptedError:
             self._cleanup()
-            self.finished.emit(False, "cancelled", 0, 0, "")
+            _safe_emit(self.__class__.__name__, self.finished, False, "cancelled", 0, 0, "")
         except Exception as e:
             logger.error("CreatePatchedVersionWorker failed: %s", e, exc_info=True)
             self._cleanup()
-            self.finished.emit(
+            _safe_emit(self.__class__.__name__, self.finished,
                 False,
                 format_filesystem_error(e, path=self._archive_path),
                 0,
@@ -211,29 +218,29 @@ class ApplyVersionWorker(QThread):
     def run(self):
         try:
             if not os.path.isfile(self._archive_path):
-                self.finished.emit(
+                _safe_emit(self.__class__.__name__, self.finished,
                     False, tr("errors.file_not_found", path=self._archive_path)
                 )
                 return
             with zipfile.ZipFile(self._archive_path, "r") as zf:
                 bad = zf.testzip()
                 if bad is not None:
-                    self.finished.emit(False, f"Corrupt archive entry: {bad}")
+                    _safe_emit(self.__class__.__name__, self.finished, False, f"Corrupt archive entry: {bad}")
                     return
                 if self.isInterruptionRequested():
-                    self.finished.emit(False, "cancelled")
+                    _safe_emit(self.__class__.__name__, self.finished, False, "cancelled")
                     return
                 entries = [info.filename for info in zf.infolist() if not info.is_dir()]
                 archive_set = set(entries)
                 if self._full_replace:
                     if self.isInterruptionRequested():
-                        self.finished.emit(False, "cancelled")
+                        _safe_emit(self.__class__.__name__, self.finished, False, "cancelled")
                         return
                     self._delete_extra_files(archive_set)
                 total = len(entries) or 1
                 for i, entry in enumerate(entries):
                     if self.isInterruptionRequested():
-                        self.finished.emit(False, "cancelled")
+                        _safe_emit(self.__class__.__name__, self.finished, False, "cancelled")
                         return
                     if entry.replace("\\", "/") in self._protected:
                         continue
@@ -241,11 +248,11 @@ class ApplyVersionWorker(QThread):
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     with zf.open(entry) as src, open(target, "wb") as dst:
                         shutil.copyfileobj(src, dst)
-                    self.progress.emit(int((i + 1) * 100 / total))
-            self.finished.emit(True, "")
+                    _safe_emit(self.__class__.__name__, self.progress, int((i + 1) * 100 / total))
+            _safe_emit(self.__class__.__name__, self.finished, True, "")
         except Exception as e:
             logger.error("ApplyVersionWorker failed: %s", e, exc_info=True)
-            self.finished.emit(
+            _safe_emit(self.__class__.__name__, self.finished,
                 False, format_filesystem_error(e, path=self._archive_path)
             )
 
@@ -268,7 +275,7 @@ class ApplyVersionWorker(QThread):
                     if not os.listdir(full):
                         os.rmdir(full)
                 except OSError as e:
-                    logging.debug(f"Failed to remove empty directory {full}: {e}")
+                    logger.debug(f"Failed to remove empty directory {full}: {e}")
 
 
 class GameExportVersionWorker(QThread):
@@ -288,7 +295,7 @@ class GameExportVersionWorker(QThread):
     def run(self):
         try:
             if not os.path.isfile(self._source):
-                self.finished.emit(
+                _safe_emit(self.__class__.__name__, self.finished,
                     False, tr("errors.file_not_found", path=self._source)
                 )
                 return
@@ -302,22 +309,22 @@ class GameExportVersionWorker(QThread):
                         if self.isInterruptionRequested():
                             raise InterruptedError("Cancelled")
                         dst_zf.writestr(info, src_zf.read(info.filename))
-                        self.progress.emit(int((i + 1) * 100 / total))
+                        _safe_emit(self.__class__.__name__, self.progress, int((i + 1) * 100 / total))
                     dst_zf.writestr(
                         GAME_VERSION_MANIFEST_FILENAME,
                         json.dumps(self._manifest, ensure_ascii=False, indent=2),
                     )
-            self.finished.emit(True, "")
+            _safe_emit(self.__class__.__name__, self.finished, True, "")
         except InterruptedError:
             try:
                 if os.path.exists(self._dest):
                     os.remove(self._dest)
             except OSError:
                 pass
-            self.finished.emit(False, "cancelled")
+            _safe_emit(self.__class__.__name__, self.finished, False, "cancelled")
         except Exception as e:
             logger.error("GameExportVersionWorker failed: %s", e, exc_info=True)
-            self.finished.emit(False, format_filesystem_error(e, path=self._dest))
+            _safe_emit(self.__class__.__name__, self.finished, False, format_filesystem_error(e, path=self._dest))
 
 
 class GameImportVersionWorker(QThread):
@@ -334,19 +341,19 @@ class GameImportVersionWorker(QThread):
     def run(self):
         try:
             if not os.path.isfile(self._source):
-                self.finished.emit(
+                _safe_emit(self.__class__.__name__, self.finished,
                     False, tr("errors.file_not_found", path=self._source), {}
                 )
                 return
             with zipfile.ZipFile(self._source, "r") as zf:
                 if GAME_VERSION_MANIFEST_FILENAME not in zf.namelist():
-                    self.finished.emit(
+                    _safe_emit(self.__class__.__name__, self.finished,
                         False, f"Missing {GAME_VERSION_MANIFEST_FILENAME} manifest", {}
                     )
                     return
                 manifest = json.loads(zf.read(GAME_VERSION_MANIFEST_FILENAME))
                 if not isinstance(manifest, dict):
-                    self.finished.emit(False, "Invalid manifest type", {})
+                    _safe_emit(self.__class__.__name__, self.finished, False, "Invalid manifest type", {})
                     return
                 entries = [
                     info
@@ -362,21 +369,21 @@ class GameImportVersionWorker(QThread):
                         if self.isInterruptionRequested():
                             raise InterruptedError("Cancelled")
                         dst.writestr(info, zf.read(info.filename))
-                        self.progress.emit(int((i + 1) * 100 / total))
-            self.finished.emit(True, "", manifest)
+                        _safe_emit(self.__class__.__name__, self.progress, int((i + 1) * 100 / total))
+            _safe_emit(self.__class__.__name__, self.finished, True, "", manifest)
         except InterruptedError:
             try:
                 if os.path.exists(self._dest):
                     os.remove(self._dest)
             except OSError:
                 pass
-            self.finished.emit(False, "cancelled", {})
+            _safe_emit(self.__class__.__name__, self.finished, False, "cancelled", {})
         except json.JSONDecodeError as e:
             logger.error("GameImportVersionWorker: invalid manifest: %s", e)
-            self.finished.emit(False, "Invalid game_version_data.json manifest", {})
+            _safe_emit(self.__class__.__name__, self.finished, False, "Invalid game_version_data.json manifest", {})
         except Exception as e:
             logger.error("GameImportVersionWorker failed: %s", e, exc_info=True)
-            self.finished.emit(
+            _safe_emit(self.__class__.__name__, self.finished,
                 False, format_filesystem_error(e, path=self._source), {}
             )
 
@@ -402,14 +409,14 @@ class UrlDownloadWorker(QThread):
                             raise InterruptedError("Cancelled")
                         if chunk:
                             f.write(chunk)
-            self.finished.emit(True, "")
+            _safe_emit(self.__class__.__name__, self.finished, True, "")
         except InterruptedError:
             try:
                 if os.path.exists(self._dest):
                     os.remove(self._dest)
             except OSError:
                 pass
-            self.finished.emit(False, "cancelled")
+            _safe_emit(self.__class__.__name__, self.finished, False, "cancelled")
         except Exception as e:
             logger.error("UrlDownloadWorker failed: %s", e, exc_info=True)
             try:
@@ -417,4 +424,4 @@ class UrlDownloadWorker(QThread):
                     os.remove(self._dest)
             except OSError:
                 pass
-            self.finished.emit(False, format_network_error(e, url=self._url))
+            _safe_emit(self.__class__.__name__, self.finished, False, format_network_error(e, url=self._url))

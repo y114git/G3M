@@ -23,6 +23,8 @@ from utils.network_utils import get_session
 from utils.path_utils import fix_macos_python_symlink, version_sort_key
 from utils.process_utils import format_filesystem_error, format_network_error
 
+logger = logging.getLogger(__name__)
+
 
 class UpdateChecker(QObject):
     """Manages launcher update checking and installation."""
@@ -52,17 +54,23 @@ class UpdateChecker(QObject):
         try:
             analytics.record_update_check(outcome)
         except Exception:
-            logging.debug(
+            logger.debug(
                 "UpdateChecker: analytics record failed (%s)",
                 outcome,
                 exc_info=True,
             )
 
+    def _safe_update_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception:
+            logger.exception("UpdateChecker: failed to update status")
+
     def check_for_updates(self):
         beta_enabled = self.app_state.local_config.get("beta_updates_enabled", False)
         system = platform.system()
         if beta_enabled:
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.beta_updates_enabled"), UI_COLORS["status_warning"]
             )
         try:
@@ -71,15 +79,15 @@ class UpdateChecker(QObject):
                 self._record_update_check("no_update")
                 return
             if system == "Darwin" and "AppTranslocation" in sys.executable:
-                logging.warning(
+                logger.warning(
                     "UpdateChecker: App Translocation detected: %s", sys.executable
                 )
-                self.feedback_service.update_status(
+                self._safe_update_status(
                     tr("errors.app_translocation_detected"), UI_COLORS["status_error"]
                 )
                 self._record_update_check("blocked_translocation")
                 return
-            logging.info(
+            logger.info(
                 "UpdateChecker: Update available - version %s",
                 update_info["version"],
             )
@@ -93,7 +101,7 @@ class UpdateChecker(QObject):
                 if isinstance(e, requests.RequestException)
                 else "errors.update_check_general_error"
             )
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr(
                     key,
                     error=(
@@ -117,7 +125,7 @@ class UpdateChecker(QObject):
         launcher_files_key = "launcher_beta_files" if beta_enabled else "launcher_files"
         launcher_files = self.app_state.global_settings.get(launcher_files_key)
         if not isinstance(launcher_files, dict):
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.update_info_not_found"), UI_COLORS["status_warning"]
             )
             return None
@@ -125,14 +133,14 @@ class UpdateChecker(QObject):
         if not remote_version or version_sort_key(remote_version) <= version_sort_key(
             APP_VERSION
         ):
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.app_version_up_to_date"), UI_COLORS["status_success"]
             )
             return None
         platform_key = self._get_platform_key(system)
         download_url = (launcher_files.get("urls") or {}).get(platform_key)
         if not download_url:
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("errors.no_build_for_os", platform=platform_key),
                 UI_COLORS["status_warning"],
             )
@@ -179,7 +187,7 @@ class UpdateChecker(QObject):
         archive_path = os.path.join(
             tmp_dir, f"update{self._get_archive_extension(update_info['url'])}"
         )
-        logging.info(
+        logger.info(
             "[UPDATE] Downloading update from %s to %s",
             update_info["url"],
             archive_path,
@@ -202,7 +210,7 @@ class UpdateChecker(QObject):
                 downloaded_size += len(chunk)
                 if total_size > 0:
                     self.progress_updated.emit(int(downloaded_size / total_size * 100))
-        logging.info(
+        logger.info(
             "[UPDATE] Successfully downloaded update archive (%s bytes)",
             downloaded_size,
         )
@@ -212,7 +220,7 @@ class UpdateChecker(QObject):
         self, system: str, archive_path: str, extraction_dir: str
     ) -> None:
         os.makedirs(extraction_dir, exist_ok=True)
-        logging.info(
+        logger.info(
             "[UPDATE] Extracting archive to %s (platform: %s)",
             extraction_dir,
             system,
@@ -249,7 +257,7 @@ class UpdateChecker(QObject):
         new_exe_path = self._find_windows_installer(extraction_dir)
         if not new_exe_path:
             raise AppError("errors.exe_not_found_in_archive")
-        logging.info("[UPDATE] Found installer executable: %s", new_exe_path)
+        logger.info("[UPDATE] Found installer executable: %s", new_exe_path)
         import ctypes
 
         result = ctypes.windll.shell32.ShellExecuteW(
@@ -261,10 +269,18 @@ class UpdateChecker(QObject):
             tr("status.installer_launched_closing"), UI_COLORS["status_success"]
         )
         self.quit_requested.emit()
-        timer = threading.Timer(3.0, lambda: os._exit(0))
+        timer = threading.Timer(3.0, self._force_exit_after_installer_launch)
         timer.daemon = True
         timer.start()
         return True
+
+    @staticmethod
+    def _force_exit_after_installer_launch() -> None:
+        logger.info("Forced process exit after launching updater installer")
+        for handler in logging.getLogger().handlers:
+            with contextlib.suppress(Exception):
+                handler.flush()
+        os._exit(0)
 
     def _get_replace_target(self, system: str) -> str:
         current_exe_path = os.path.realpath(sys.executable)
@@ -374,7 +390,7 @@ fi
             error_msg = tr(
                 "errors.update_permission_error_no_write_access", path=target_dir
             )
-            logging.error("[UPDATE] %s", error_msg)
+            logger.error("[UPDATE] %s", error_msg)
             raise PermissionError(error_msg)
         updater_script_path, script_content = self._build_unix_updater_script(
             current_path, new_path, system
@@ -382,7 +398,7 @@ fi
         with open(updater_script_path, "w", encoding="utf-8") as file_obj:
             file_obj.write(script_content)
         os.chmod(updater_script_path, 0o700)
-        logging.info("[UPDATE] Launching updater script %s", updater_script_path)
+        logger.info("[UPDATE] Launching updater script %s", updater_script_path)
         try:
             Popen(
                 ["/bin/bash", updater_script_path],
@@ -401,7 +417,7 @@ fi
     def _update_worker(self, update_info):
         installer_launched = False
         try:
-            logging.info(
+            logger.info(
                 "[UPDATE] Starting update process for version %s",
                 update_info["version"],
             )
@@ -418,24 +434,24 @@ fi
                     return
                 replace_target = self._get_replace_target(system)
                 staged_content_path = self._stage_unix_content(system, extraction_dir)
-                logging.info(
+                logger.info(
                     "[UPDATE] Unix update: Replacing %s with %s",
                     replace_target,
                     staged_content_path,
                 )
                 self._perform_unix_update(replace_target, staged_content_path)
         except PermissionError as e:
-            logging.error("[UPDATE] Permission error during update: %s", e, exc_info=True)
+            logger.error("[UPDATE] Permission error during update: %s", e, exc_info=True)
             self.status_changed.emit(
                 tr("errors.update_permission_error"), UI_COLORS["status_error"]
             )
             self.update_error.emit(tr("dialogs.update_permission_error_details"))
         except AppError as e:
-            logging.error("[UPDATE] Update failed with app error: %s", e, exc_info=True)
+            logger.error("[UPDATE] Update failed with app error: %s", e, exc_info=True)
             self.status_changed.emit(str(e), UI_COLORS["status_error"])
             self.update_error.emit(str(e))
         except Exception as e:
-            logging.error("[UPDATE] Update failed with error: %s", e, exc_info=True)
+            logger.error("[UPDATE] Update failed with error: %s", e, exc_info=True)
             formatted_error = self._format_update_worker_error(e)
             self.status_changed.emit(
                 tr("errors.update_failed", error=formatted_error), UI_COLORS["status_error"]
@@ -445,10 +461,10 @@ fi
             )
         finally:
             if not installer_launched:
-                logging.info("[UPDATE] Update process finished")
+                logger.info("[UPDATE] Update process finished")
                 self.update_finished.emit()
             else:
-                logging.info("[UPDATE] Installer launched, launcher closing")
+                logger.info("[UPDATE] Installer launched, launcher closing")
 
     @staticmethod
     def _format_update_worker_error(error: Exception) -> str:

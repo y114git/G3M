@@ -38,3 +38,17 @@ def test_presence_worker_reports_question_mark_until_first_success():
         worker.run()
 
     assert emitted == [-1]
+
+
+def test_presence_worker_logs_unexpected_heartbeat_error_without_crashing():
+    worker = PresenceWorker("session-1", SimpleNamespace(has_internet=True))
+    emitted = []
+    worker.update_online_count.connect(emitted.append)
+
+    with patch(
+        "workers.presence_worker.cloud_function_request",
+        side_effect=RuntimeError("firebase failed"),
+    ):
+        worker.run()
+
+    assert emitted == [-1]

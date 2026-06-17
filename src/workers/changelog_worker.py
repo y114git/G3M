@@ -1,5 +1,6 @@
 """Changelog fetching worker."""
 
+import logging
 import os
 
 import requests
@@ -8,6 +9,15 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from config.config import NETWORK_TIMEOUT_MEDIUM
 from services.localization_service import tr
 from utils.network_utils import get_session
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class FetchChangelogWorker(QObject):
@@ -54,4 +64,4 @@ class FetchChangelogWorker(QObject):
             text = tr("errors.changelog_load_failed")
         if thread.isInterruptionRequested():
             return
-        self.finished.emit(text)
+        _safe_emit(self.__class__.__name__, self.finished, text)

@@ -1,6 +1,7 @@
 """UI tests for test dialogs."""
 
 import os
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 try:
@@ -51,6 +52,21 @@ class TestImportDialog:
                     _close_dialog(qapp, dialog)
         finally:
             localization_service.load_language(original_language)
+
+    def test_empty_url_feedback_failure_keeps_dialog_open(self, qapp):
+        """Checks empty URL warning failure does not accept or crash import dialog."""
+        from ui.dialogs.import_dialog import ImportDialog
+
+        feedback_service = Mock()
+        feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+        dialog = ImportDialog(None, feedback_service, "mods")
+
+        dialog._import_from_url()
+
+        assert dialog.selected_url is None
+        assert dialog.import_method is None
+        feedback_service.show_message.assert_called_once()
+        _close_dialog(qapp, dialog)
 
 
 class TestGameBananaFilePickerDialog:
@@ -106,6 +122,60 @@ class TestConflictsDialog:
         assert calls
         assert calls[0][1] == tr("dialogs.conflicts.title")
         assert calls[0][2] == tr("errors.file_not_found", path=report_path)
+        _close_dialog(qapp, dialog)
+
+    def test_conflicts_dialog_missing_report_ignores_broken_info_dialog(
+        self, qapp, temp_dir, monkeypatch
+    ):
+        from ui.dialogs.conflicts_dialog import ConflictsDialog
+
+        report_path = os.path.join(temp_dir, "missing_report.md")
+        dialog = ConflictsDialog(report_path, None)
+        monkeypatch.setattr(
+            "ui.dialogs.conflicts_dialog.QMessageBox.information",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._open_report_file()
+
+        _close_dialog(qapp, dialog)
+
+
+class TestPluginDetailsDialog:
+    def test_plugin_delete_confirmation_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from PyQt6.QtWidgets import QMessageBox
+
+        from models.plugin_models import InstalledPluginRecord, PluginManifest
+        from ui.dialogs.plugin_details_dialog import PluginDetailsDialog
+
+        manifest = PluginManifest(
+            config_version=1,
+            id="sample_plugin",
+            name="Sample",
+            description="Sample plugin",
+            author="Author",
+            version="1.0.0",
+            entry="plugin.py",
+        )
+        plugin = InstalledPluginRecord(manifest=manifest, path=str(tmp_path))
+        dialog = PluginDetailsDialog(
+            plugin,
+            runtime_service=Mock(get_settings_widget=Mock(return_value=None)),
+            state_service=Mock(),
+            app_state=SimpleNamespace(local_config={}),
+        )
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._confirm_delete_plugin()
+
+        assert dialog.delete_requested is False
+        assert dialog.result() == QDialog.DialogCode.Rejected
         _close_dialog(qapp, dialog)
 
 
@@ -228,6 +298,77 @@ class TestPizzaOvenConversionDialog:
         assert dialog.windowTitle() == tr("dialogs.po_convert_title")
         assert dialog.start_button.text() == tr("buttons.start_po_convert")
         assert dialog.cancel_button.text() == tr("dialogs.cancel")
+        _close_dialog(qapp, dialog)
+
+
+class TestGameManagerDialog:
+    def test_toggle_visibility_does_not_crash_if_warning_dialog_fails(
+        self, qapp, app_state, monkeypatch
+    ):
+        """Checks that validation errors survive fallback warning dialog failures."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from services.game_registry_service import GameRegistryValidationError
+        from ui.dialogs.game.manager_dialog import GameManagerDialog
+
+        registry_service = Mock()
+        registry_service.games_changed.connect = Mock()
+        registry_service.list_manager_games.return_value = [
+            SimpleNamespace(
+                id="deltarune",
+                display_name="DELTARUNE",
+                is_builtin=True,
+                is_visible=True,
+                steam_app_id=None,
+                gamebanana_id=None,
+            )
+        ]
+        registry_service.set_visibility.side_effect = GameRegistryValidationError(
+            "games.error_last_visible"
+        )
+
+        def fail_warning(*_args, **_kwargs):
+            raise RuntimeError("dialog failed")
+
+        monkeypatch.setattr(QMessageBox, "warning", fail_warning)
+
+        dialog = GameManagerDialog(
+            registry_service,
+            profile_service=Mock(),
+            game_versions_manager=Mock(),
+            settings_service=Mock(),
+            app_state=app_state,
+        )
+        dialog._on_toggle_visibility("deltarune", False)
+        _close_dialog(qapp, dialog)
+
+
+class TestBlocklistDialog:
+    def test_empty_value_does_not_crash_if_warning_dialog_fails(
+        self, qapp, monkeypatch
+    ):
+        """Checks that empty blocklist validation survives warning dialog failures."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.blocklist_dialog import BlocklistDialog
+
+        service = Mock()
+        service.get_prefix_types.return_value = [("name", "Name")]
+        service.get_blocklist_for_game.return_value = []
+        service.get_prefix_type_display_name.return_value = "Name"
+
+        def fail_warning(*_args, **_kwargs):
+            raise RuntimeError("dialog failed")
+
+        monkeypatch.setattr(QMessageBox, "warning", fail_warning)
+
+        dialog = BlocklistDialog(
+            service,
+            current_game="deltarune",
+            available_games=[SimpleNamespace(id="deltarune", display_name="DELTARUNE")],
+        )
+        dialog.value_edit.setText("")
+        dialog.add_entry()
         _close_dialog(qapp, dialog)
 
 
@@ -578,6 +719,40 @@ class TestReadmeUi:
         assert os.path.normpath(profile_service.import_profile.call_args_list[1].args[0]) == os.path.normpath(second)
         dialog.close()
 
+    def test_profile_manager_import_error_does_not_crash_if_critical_dialog_fails(
+        self, qapp, app_state, tmp_path, monkeypatch
+    ):
+        """Checks that profile import errors survive fallback critical dialog failures."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.profile_manager_dialog import ProfileManagerDialog
+
+        archive = tmp_path / "broken.zip"
+        archive.write_bytes(b"not a profile")
+
+        profile_service = Mock()
+        profile_service.active_name = "Default"
+        profile_service.list_profiles.return_value = ["Default"]
+        profile_service.get_profile_summary.return_value = {
+            "name": "Default",
+            "game": "deltarune",
+            "game_display_name": "DELTARUNE",
+            "game_mod_count": 1,
+            "total_mod_count": 1,
+            "chapter_mode": False,
+            "direct_launch": "",
+        }
+        profile_service.import_profile.side_effect = RuntimeError("profile broken")
+
+        def fail_critical(*_args, **_kwargs):
+            raise RuntimeError("dialog failed")
+
+        monkeypatch.setattr(QMessageBox, "critical", fail_critical)
+
+        dialog = ProfileManagerDialog(profile_service, app_state)
+        dialog.import_profiles_from_paths([str(archive)])
+        _close_dialog(qapp, dialog)
+
     def test_game_versions_dialog_drop_imports_multiple_files_and_urls(self, qapp, app_state, temp_dir):
         """Checks that game versions dialog drop imports multiple files and urls."""
         import os
@@ -636,6 +811,31 @@ class TestReadmeUi:
         assert os.path.normpath(actual_second_path) == os.path.normpath(second)
         assert manager.import_game_version_from_url.call_args_list[0].args == (game_id, "https://example.com/one.zip")
         assert manager.import_game_version_from_url.call_args_list[1].args == (game_id, "https://example.com/two.zip")
+        dialog.close()
+
+    def test_game_versions_error_does_not_crash_if_warning_dialog_fails(
+        self, qapp, app_state, monkeypatch
+    ):
+        """Checks that operation errors survive fallback warning dialog failures."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.game.versions_dialog import GameVersionsDialog
+
+        manager = Mock()
+        manager.records_for_game.return_value = []
+        manager.record_added.connect = Mock()
+        manager.record_removed.connect = Mock()
+        manager.record_updated.connect = Mock()
+        manager.progress_updated.connect = Mock()
+        manager.operation_error.connect = Mock()
+
+        def fail_warning(*_args, **_kwargs):
+            raise RuntimeError("dialog failed")
+
+        monkeypatch.setattr(QMessageBox, "warning", fail_warning)
+
+        dialog = GameVersionsDialog(manager, app_state)
+        dialog._on_error("operation failed")
         dialog.close()
 
     def test_mod_versions_dialog_drop_queues_multiple_imports(self, qapp, app_state, tmp_path):
@@ -1459,6 +1659,51 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_delete_missing_info_question_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks broken missing-info delete confirmation keeps entry intact."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        mod_folder = tmp_path / "missing_info_mod"
+        mod_folder.mkdir()
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_folder)))
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_missing_info_mod",
+                "name": "Missing Info Mod",
+                "author": "Author",
+                "description": "Desc",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "info_files": {"Gone.md": "hide"},
+                "files": {},
+                "folder_path": str(mod_folder),
+            },
+        )
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._info_files_list.setCurrentRow(0)
+        dialog._delete_selected_info_file()
+
+        assert dialog._info_files_list.count() == 1
+        assert dialog._collect_info_files() == {"Gone.md": "hide"}
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_reset_rechecks_stale_missing_info_file(self, qapp, tmp_path):
         """Checks that reset proceeds when a previously missing file now exists."""
         from types import SimpleNamespace
@@ -1723,6 +1968,386 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_suppresses_success_message_failure_after_save(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks that a broken success dialog does not turn a completed save into a crash."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.mod_service = Mock(
+            invalidate_mods_cache=Mock(),
+            load_local_mods=Mock(),
+            mod_list_updated=SimpleNamespace(emit=Mock()),
+        )
+        parent.library_display = SimpleNamespace(update_display=Mock())
+        monkeypatch.setattr(
+            QMessageBox,
+            "information",
+            Mock(side_effect=RuntimeError("message box failed")),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        dialog._finish_successful_save("Saved", "Done")
+
+        assert dialog.result() == QDialog.DialogCode.Accepted
+        parent.mod_service.invalidate_mods_cache.assert_called_once_with()
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_create_error_cleans_up_when_error_dialog_fails(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks a broken error dialog does not leave a partial local mod folder."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        source_file = tmp_path / "source.xdelta"
+        source_file.write_text("patch", encoding="utf-8")
+
+        parent = QWidget()
+        mods_dir = tmp_path / "mods"
+        mods_dir.mkdir()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(mods_dir))
+        parent.settings_service = SimpleNamespace(
+            write_json=Mock(side_effect=OSError("disk full"))
+        )
+        parent.mod_service = Mock()
+        parent.library_display = SimpleNamespace(update_display=Mock())
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog.name_edit.setText("Broken Save")
+        first_tab = dialog.file_tabs.widget(0)
+        dialog._create_file_frame(first_tab._file_layout, "data")
+        data_input = next(
+            w
+            for w in first_tab.findChildren(type(dialog.icon_edit))
+            if w.property("is_local_path")
+        )
+        data_input.setText(str(source_file))
+
+        dialog._save_mod()
+
+        assert not list(mods_dir.iterdir())
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        assert dialog._save_button.isEnabled()
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_validation_warning_failure_does_not_start_save(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks validation warnings cannot crash or start a save when the dialog fails."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        parent.library_display = SimpleNamespace(update_display=Mock())
+        monkeypatch.setattr(
+            QMessageBox,
+            "warning",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog.name_edit.setText("")
+        dialog._create_local_mod = Mock()
+
+        dialog._save_mod()
+
+        dialog._create_local_mod.assert_not_called()
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_cancel_question_failure_keeps_dialog_open(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks broken cancel confirmation does not reject the editor."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog.reject = Mock()
+
+        dialog._on_cancel()
+
+        dialog.reject.assert_not_called()
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_delete_question_failure_does_not_delete(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks broken delete confirmation defaults to no deletion."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        mod_dir = tmp_path / "mods" / "delete_me"
+        mod_dir.mkdir(parents=True)
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_dir)))
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_delete_me",
+                "folder_path": str(mod_dir),
+                "name": "Delete Me",
+                "version": "1.0.0",
+                "author": "Author",
+                "description": "Desc",
+                "game": "deltarune",
+                "files": {},
+            },
+        )
+
+        dialog._delete_mod()
+
+        assert mod_dir.exists()
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_delete_missing_id_critical_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks delete error feedback failure does not crash the editor."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            Mock(return_value=QMessageBox.StandardButton.Yes),
+        )
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=False, mod_data={"files": {}})
+
+        dialog._delete_mod()
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_open_missing_folder_warning_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks missing folder warning failure does not crash open-folder action."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=""))
+        monkeypatch.setattr(
+            QMessageBox,
+            "warning",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_missing_folder",
+                "name": "Missing Folder",
+                "files": {},
+            },
+        )
+
+        dialog._open_mod_folder()
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_export_success_message_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks export completion is not undone by broken success dialog."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        mod_dir = tmp_path / "mods" / "export_me"
+        mod_dir.mkdir(parents=True)
+        (mod_dir / "mod_config.json").write_text("{}", encoding="utf-8")
+        export_path = tmp_path / "export.zip"
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_dir)))
+        monkeypatch.setattr(
+            "ui.dialogs.mod_editor.dialog.get_save_file_name",
+            lambda *_args, **_kwargs: (str(export_path), ""),
+        )
+        monkeypatch.setattr(
+            QMessageBox,
+            "information",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            Mock(side_effect=AssertionError("Unexpected export failure dialog")),
+        )
+
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_export_me",
+                "folder_path": str(mod_dir),
+                "name": "Export Me",
+                "files": {},
+            },
+        )
+
+        dialog._export_mod()
+
+        assert export_path.exists()
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_export_missing_folder_critical_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks missing export source warning cannot crash the editor."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=""))
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={"id": "local_missing_export", "name": "Missing", "files": {}},
+        )
+
+        dialog._export_mod()
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_export_error_message_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks export filesystem errors stay handled if critical dialog breaks."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        mod_dir = tmp_path / "mods" / "export_fail"
+        mod_dir.mkdir(parents=True)
+        export_path = tmp_path / "missing_parent" / "export.zip"
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock(get_mod_folder_path=Mock(return_value=str(mod_dir)))
+        monkeypatch.setattr(
+            "ui.dialogs.mod_editor.dialog.get_save_file_name",
+            lambda *_args, **_kwargs: (str(export_path), ""),
+        )
+        monkeypatch.setattr(
+            QMessageBox,
+            "critical",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog = ModEditorDialog(
+            parent,
+            is_creating=False,
+            mod_data={
+                "id": "local_export_fail",
+                "folder_path": str(mod_dir),
+                "name": "Export Fail",
+                "files": {},
+            },
+        )
+
+        dialog._export_mod()
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_ignores_duplicate_save_clicks(self, qapp, tmp_path, monkeypatch):
         """Checks that repeated save clicks cannot start concurrent saves."""
         from types import SimpleNamespace
@@ -1966,6 +2591,140 @@ class TestManualInstallDialog:
 
         assert calls
         assert calls[0][2] == tr("errors.file_not_found", path=missing_file)
+        dialog.close()
+
+    def test_manual_install_missing_doc_warning_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        dialog = ManualModInstallDialog(None, str(prepared))
+        missing_file = str(prepared / "missing_readme.md")
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.QMessageBox.warning",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._open_local_file(missing_file)
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+
+    def test_manual_install_finish_warning_failure_does_not_crash(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        dialog = ManualModInstallDialog(None, str(prepared))
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.QMessageBox.warning",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._on_finish()
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+
+    def test_manual_install_no_data_files_info_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        (prepared / "README.md").write_text("# guide", encoding="utf-8")
+        dialog = ManualModInstallDialog(None, str(prepared))
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.QMessageBox.information",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._browse_data_file("deltarune_1")
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+
+    def test_manual_install_no_xdelta_files_info_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        (prepared / "data.win").write_text("data", encoding="utf-8")
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog.data_file_selections["deltarune_1"] = str(prepared / "data.win")
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.QMessageBox.information",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._add_xdelta_patch("deltarune_1")
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+
+    def test_manual_install_xdelta_outside_path_warning_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        patch_file = prepared / "patch.xdelta"
+        patch_file.write_text("patch", encoding="utf-8")
+        target_root = tmp_path / "game"
+        target_root.mkdir()
+        outside_file = tmp_path / "outside.win"
+        outside_file.write_text("data", encoding="utf-8")
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog._get_target_root_for_chapter = Mock(return_value=str(target_root))
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.get_open_file_name",
+            lambda *_args, **_kwargs: (str(outside_file), ""),
+        )
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.QMessageBox.warning",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._browse_xdelta_target_file(str(patch_file), "deltarune_1")
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+
+    def test_manual_install_extra_outside_path_warning_failure_is_ignored(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        extra_file = prepared / "extra.txt"
+        extra_file.write_text("extra", encoding="utf-8")
+        game_root = tmp_path / "game"
+        game_root.mkdir()
+        outside_folder = tmp_path / "outside"
+        outside_folder.mkdir()
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog._get_or_prompt_game_folder = Mock(return_value=str(game_root))
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.get_existing_directory",
+            lambda *_args, **_kwargs: str(outside_folder),
+        )
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.QMessageBox.warning",
+            Mock(side_effect=RuntimeError("dialog already deleted")),
+        )
+
+        dialog._browse_target_folder(str(extra_file))
+
+        assert dialog.result() == QDialog.DialogCode.Rejected
         dialog.close()
 
     def test_profile_manager_import_failure_uses_localized_filesystem_error(

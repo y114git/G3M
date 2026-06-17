@@ -15,6 +15,8 @@ from PyQt6.QtGui import QFontDatabase
 
 from utils.path_utils import get_user_lang_dir, resource_path
 
+logger = logging.getLogger(__name__)
+
 
 class LocalizationManager:
     """Manages application localization."""
@@ -56,7 +58,7 @@ class LocalizationManager:
                         os.remove(backup_path)
                 shutil.move(self.external_lang_dir, backup_path)
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"Could not move invalid language path {self.external_lang_dir}: {e}"
                 )
                 with contextlib.suppress(OSError):
@@ -79,7 +81,7 @@ class LocalizationManager:
                 with open(en_path, encoding="utf-8") as f:
                     self.fallback_strings = json.load(f)
             except Exception as e:
-                logging.debug(f"Could not load fallback strings: {e}")
+                logger.debug(f"Could not load fallback strings: {e}")
 
     def _sync_internal_languages(self):
         if not os.path.exists(self.internal_lang_dir):
@@ -92,12 +94,12 @@ class LocalizationManager:
                     try:
                         shutil.copy2(internal_path, external_path)
                     except Exception as e:
-                        logging.error(f"Could not copy {filename}: {e}")
+                        logger.error(f"Could not copy {filename}: {e}")
                 else:
                     try:
                         self._merge_lang_files(internal_path, external_path)
                     except Exception as e:
-                        logging.error(f"Could not merge {filename}: {e}")
+                        logger.error(f"Could not merge {filename}: {e}")
             else:
                 if not os.path.exists(external_path) or (
                     os.path.isfile(internal_path)
@@ -112,7 +114,7 @@ class LocalizationManager:
                         else:
                             shutil.copy2(internal_path, external_path)
                     except Exception as e:
-                        logging.error(f"Could not copy {filename}: {e}")
+                        logger.error(f"Could not copy {filename}: {e}")
 
     def _merge_lang_files(self, internal_path: str, external_path: str):
         with open(internal_path, encoding="utf-8") as f:
@@ -200,7 +202,7 @@ class LocalizationManager:
                         "path": lang_path,
                     }
                 except (OSError, json.JSONDecodeError) as e:
-                    logging.error(
+                    logger.error(
                         f"Error loading or parsing language file {filename}: {e}"
                     )
         return langs
@@ -247,7 +249,7 @@ class LocalizationManager:
                 if lang_code in self.available_languages:
                     return lang_code
         except Exception as e:
-            logging.warning(f"Error detecting system language: {e}")
+            logger.warning(f"Error detecting system language: {e}")
         return "en"
 
     def load_language(self, language_code: str) -> bool:
@@ -266,7 +268,7 @@ class LocalizationManager:
                 self.current_language = language_code
                 return True
         except Exception as e:
-            logging.error(f"Error loading language {language_code}: {e}")
+            logger.error(f"Error loading language {language_code}: {e}")
             return False
 
     def _resolve_key(self, source: dict, key: str, **kwargs) -> str | None:
@@ -373,16 +375,16 @@ class LocalizationManager:
                 families = QFontDatabase.applicationFontFamilies(font_id)
                 if families:
                     family_name = families[0]
-                    logging.debug(f"Loaded font {font_path} as family: {family_name}")
+                    logger.debug(f"Loaded font {font_path} as family: {family_name}")
                     return family_name
                 else:
-                    logging.warning(f"No font families found for {font_path}")
+                    logger.warning(f"No font families found for {font_path}")
             else:
-                logging.warning(
+                logger.warning(
                     f"Failed to load font {font_path}, addApplicationFont returned -1"
                 )
         else:
-            logging.debug(f"Font path not found or doesn't exist: {font_path}")
+            logger.debug(f"Font path not found or doesn't exist: {font_path}")
         return None
 
     def update_qt_locale(self, language_code: str, qt_translator_holder: dict) -> bool:

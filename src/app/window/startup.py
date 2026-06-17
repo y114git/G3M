@@ -9,6 +9,19 @@ from config.config import UI_COLORS
 from presentation.update_presenter import check_and_show_announce
 from services.localization_service import tr
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_update_status(window, message: str, color: str) -> None:
+    feedback_service = getattr(window, "feedback_service", None)
+    update_status = getattr(feedback_service, "update_status", None)
+    if not callable(update_status):
+        return
+    try:
+        update_status(message, color)
+    except Exception as e:
+        logger.warning("AppWindow startup status feedback failed: %s", e, exc_info=True)
+
 
 def handle_pending_install(window) -> None:
     if window.context.pending_install_url:
@@ -66,7 +79,7 @@ def trigger_initial_mods_refresh(window, *, saved_chapter_mode=False) -> None:
                 if hasattr(window, "search_display"):
                     window.search_display.update_filtered_mods(preserve_page=False)
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"AppWindow: Error building mods list: {e}", exc_info=True
                 )
 
@@ -97,11 +110,11 @@ def trigger_initial_mods_refresh(window, *, saved_chapter_mode=False) -> None:
             ):
                 window.search_display.update_filtered_mods(preserve_page=False)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"AppWindow: Error building initial mods list: {e}", exc_info=True
             )
     except Exception as e:
-        logging.error(
+        logger.error(
             f"AppWindow: Error in _load_mods_and_build_list_synchronously: {e}",
             exc_info=True,
         )
@@ -124,10 +137,11 @@ def on_mod_scan_finished(window, scan_cache: dict) -> None:
             window.used_mods_service.load_used_mods_state
         )
     except Exception as e:
-        logging.error(
+        logger.error(
             f"AppWindow: Error in _on_mod_scan_finished: {e}", exc_info=True
         )
-        window.feedback_service.update_status(
+        _safe_update_status(
+            window,
             tr("status.mod_scan_error", details=str(e)), UI_COLORS["status_error"]
         )
         window.setEnabled(True)

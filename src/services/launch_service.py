@@ -37,6 +37,8 @@ from utils.process_utils import (
 from workers.game_monitor_worker import GameMonitorWorker
 from workers.plugin_hook_worker import PluginHookThread
 
+logger = logging.getLogger(__name__)
+
 
 class GameLauncher(QObject):
     """Manages game launching, mod patching, and game monitoring."""
@@ -81,10 +83,16 @@ class GameLauncher(QObject):
             if hasattr(self, "monitor_worker") and self.monitor_worker is not None:
                 self.monitor_worker.deleteLater()
         except Exception as e:
-            logging.error(f"monitor thread cleanup failed: {e}", exc_info=True)
+            logger.error(f"monitor thread cleanup failed: {e}", exc_info=True)
 
     def _launch_status_color(self) -> str:
         return get_launch_status_color(getattr(self.app_state, "local_config", None))
+
+    def _safe_feedback_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception:
+            logger.exception("GameLauncher: failed to update feedback status")
 
     @staticmethod
     def _is_path_like_command(command_name: str) -> bool:
@@ -177,7 +185,7 @@ class GameLauncher(QObject):
                     tr("status.game_closed"), self._launch_status_color()
                 )
             except Exception as e:
-                logging.error(f"Failed to terminate game process: {e}", exc_info=True)
+                logger.error(f"Failed to terminate game process: {e}", exc_info=True)
 
     def launch_game_with_all_mods(self, restore_window_callback=None):
         self._launch_game_with_selections(
@@ -242,18 +250,18 @@ class GameLauncher(QObject):
             for mods_list in selections.values()
             if isinstance(mods_list, list)
         )
-        logging.info(
+        logger.info(
             f"Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})"
         )
         if needs_multi_mod:
-            logging.info("Using multi-mod patcher for game launch")
+            logger.info("Using multi-mod patcher for game launch")
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
             self.app_state.is_patching = True
             self.app_state.action_button_text = tr("ui.cancel_button")
             self.app_state.action_button_enabled = True
             if not self._prepare_game_files_multi_mod_async(selections):
-                logging.error("Failed to start multi-mod patching")
+                logger.error("Failed to start multi-mod patching")
                 self.app_state.progress_bar_visible = False
                 self.app_state.is_patching = False
                 self._handle_launch_failure()
@@ -431,9 +439,9 @@ class GameLauncher(QObject):
 
     def _check_game_running(self, vanilla_mode):
         if is_game_running():
-            logging.debug("[LAUNCH] Game still running, cleanup deferred to monitor")
+            logger.debug("[LAUNCH] Game still running, cleanup deferred to monitor")
             return
-        logging.info("[LAUNCH] Game is no longer running, starting cleanup")
+        logger.info("[LAUNCH] Game is no longer running, starting cleanup")
         self._record_launch_playtime()
         self._execute_plugin_hook("before_restore_after_exit", vanilla_mode)
         self.status_changed.emit(
@@ -447,7 +455,7 @@ class GameLauncher(QObject):
                 self.monitor_worker = None
         self.game_launch_finished.emit()
         self._execute_plugin_hook("after_restore_after_exit", vanilla_mode)
-        logging.info("[LAUNCH] Cleanup completed, game launch finished")
+        logger.info("[LAUNCH] Cleanup completed, game launch finished")
 
     def _record_launch_playtime(self) -> None:
         if self._launch_started_at is None:
@@ -606,11 +614,11 @@ class GameLauncher(QObject):
                             try:
                                 shutil.copytree(entry_path, target_mus_path)
                                 mus_folders_copied.append(target_mus_path)
-                                logging.info(
+                                logger.info(
                                     f"[DIRECT_LAUNCH] Copied music folder: {entry} -> {target_mus_path}"
                                 )
                             except Exception as e:
-                                logging.warning(
+                                logger.warning(
                                     f"[DIRECT_LAUNCH] Failed to copy music folder {entry}: {e}"
                                 )
             self._direct_launch_cleanup_info = {
@@ -655,7 +663,7 @@ class GameLauncher(QObject):
     ) -> bool:
         from workers.mod.patching_worker import ModPatchingThread
 
-        logging.info("Starting multi-mod patching in background thread")
+        logger.info("Starting multi-mod patching in background thread")
         chapter_mods = {
             chapter_id: mods_list
             for chapter_id, mods_list in selections.items()
@@ -698,7 +706,7 @@ class GameLauncher(QObject):
         if patching_thread:
             try:
                 if patching_thread.isRunning():
-                    logging.debug(
+                    logger.debug(
                         "Patching thread still running, will clean up via finished signal"
                     )
                 if patching_thread.patcher:
@@ -714,7 +722,7 @@ class GameLauncher(QObject):
 
                     patching_thread.finished.connect(cleanup_patching_thread)
             except Exception as e:
-                logging.error(f"Error cleaning up patching thread: {e}", exc_info=True)
+                logger.error(f"Error cleaning up patching thread: {e}", exc_info=True)
             finally:
                 self._patching_thread = None
         if not success:
@@ -723,11 +731,11 @@ class GameLauncher(QObject):
                 patching_thread.isInterruptionRequested()
                 or getattr(patching_thread, "_cancelled", False)
             ):
-                logging.info("Multi-mod patching was cancelled by user")
+                logger.info("Multi-mod patching was cancelled by user")
             else:
                 self._handle_launch_failure()
             return
-        logging.info("Multi-mod patching completed successfully")
+        logger.info("Multi-mod patching completed successfully")
         self._continue_after_patching(selections, True, True)
 
     def _try_restore_backups(self, context: str = "", emit_status: bool = True) -> bool:
@@ -736,15 +744,15 @@ class GameLauncher(QObject):
         try:
             restored = self.mod_patcher.restore_all_backups()
             if restored and emit_status:
-                logging.info(f"{context}: backups restored successfully")
+                logger.info(f"{context}: backups restored successfully")
                 self.status_changed.emit(
                     tr("status.files_restored"), UI_COLORS["status_success"]
                 )
             else:
-                logging.debug(f"{context}: no backups to restore")
+                logger.debug(f"{context}: no backups to restore")
             return restored
         except Exception as e:
-            logging.error(f"{context}: Failed to restore backups: {e}", exc_info=True)
+            logger.error(f"{context}: Failed to restore backups: {e}", exc_info=True)
             return False
 
     def _execute_plugin_hook(self, hook_name: str, *args):
@@ -812,7 +820,7 @@ class GameLauncher(QObject):
         if not success:
             self._finish_background_launch_operation()
             if thread and (thread.isInterruptionRequested() or getattr(thread, "_cancelled", False)):
-                logging.info("Plugin hook execution was cancelled by user")
+                logger.info("Plugin hook execution was cancelled by user")
             self._cleanup_direct_launch_files()
             self._handle_launch_failure("plugin")
             return
@@ -867,7 +875,7 @@ class GameLauncher(QObject):
                             )
                         )
                     if not should_continue:
-                        logging.info(
+                        logger.info(
                             "Game launch cancelled: user declined Steam launch with mods warning"
                         )
                         self._cleanup_direct_launch_files()
@@ -929,7 +937,7 @@ class GameLauncher(QObject):
                         restore_errors.append(f"direct launch exe: {e}")
                 self._direct_launch_cleanup_info = None
             if restore_errors:
-                logging.error(
+                logger.error(
                     f"[CLEANUP] {len(restore_errors)} error(s): {restore_errors[:3]}"
                 )
                 self.status_changed.emit(
@@ -941,7 +949,7 @@ class GameLauncher(QObject):
                     tr("status.files_restored"), UI_COLORS["status_success"]
                 )
         except Exception as e:
-            logging.error(f"[CLEANUP] Critical error: {e}", exc_info=True)
+            logger.error(f"[CLEANUP] Critical error: {e}", exc_info=True)
             self.status_changed.emit(
                 tr("errors.files_restore_error", error=str(e)),
                 UI_COLORS["status_error"],
@@ -953,10 +961,10 @@ class GameLauncher(QObject):
             manifest_path = os.path.join(self.app_state.config_dir, "session.lock")
             if not os.path.isfile(manifest_path):
                 return
-            logging.warning(
+            logger.warning(
                 f"Found stale session manifest: {manifest_path} - previous session may have crashed"
             )
-            self.feedback_service.update_status(
+            self._safe_feedback_status(
                 tr("status.recovering_previous_session"), UI_COLORS["status_warning"]
             )
             from services.backup_service import BackupManager
@@ -964,28 +972,28 @@ class GameLauncher(QObject):
             try:
                 backup_mgr = BackupManager.load_from_manifest(manifest_path)
                 if not backup_mgr.original_files and not backup_mgr.added_files:
-                    logging.info("Session manifest has no tracked files, cleaning up")
+                    logger.info("Session manifest has no tracked files, cleaning up")
                     backup_mgr.clear_backup_dir()
                     return
                 backup_mgr.restore_all_backups()
                 backup_mgr.clear_backup_dir()
-                logging.info(
+                logger.info(
                     "recover_previous_session: game files restored successfully"
                 )
-                self.feedback_service.update_status(
+                self._safe_feedback_status(
                     tr("status.files_restored"), UI_COLORS["status_success"]
                 )
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"recover_previous_session: Failed to restore from manifest: {e}",
                     exc_info=True,
                 )
-                self.feedback_service.update_status(
+                self._safe_feedback_status(
                     tr("errors.files_restore_error", error=str(e)),
                     UI_COLORS["status_error"],
                 )
         except Exception as e:
-            logging.error(f"recover_previous_session: Failed: {e}", exc_info=True)
+            logger.error(f"recover_previous_session: Failed: {e}", exc_info=True)
 
     def _find_and_validate_game_path(
         self, selections: dict[int, Any] | None = None, is_initial: bool = False

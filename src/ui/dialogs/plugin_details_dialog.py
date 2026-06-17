@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from PyQt6.QtCore import Qt
@@ -30,6 +31,8 @@ from ui.common.styling import (
     load_mod_icon_universal,
 )
 from utils.native_integration import open_url_native
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_text(value: str) -> str:
@@ -333,14 +336,17 @@ class PluginDetailsDialog(QDialog):
     def _confirm_delete_plugin(self):
         """Show confirmation dialog before deleting plugin."""
         from PyQt6.QtWidgets import QMessageBox
-        if (
-            QMessageBox.question(
+
+        try:
+            reply = QMessageBox.question(
                 self,
                 tr("dialogs.are_you_sure"),
                 tr("dialogs.plugin_deletion_confirmation"),
             )
-            != QMessageBox.StandardButton.Yes
-        ):
+        except Exception:
+            logger.exception("PluginDetailsDialog: failed to show delete confirmation")
+            return
+        if reply != QMessageBox.StandardButton.Yes:
             return
         self.delete_requested = True
         self.accept()

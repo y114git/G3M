@@ -227,6 +227,145 @@ def test_presenter_reuses_existing_valid_pizzatower_path_without_prompt(tmp_path
     settings_service.prompt_for_game_path.assert_not_called()
 
 
+def test_presenter_conversion_finished_suppresses_broken_feedback(tmp_path, monkeypatch):
+    """Checks conversion completion cannot crash when feedback UI is gone."""
+    app_state = Mock()
+    app_state.reset_install_state = Mock()
+    feedback_service = Mock()
+    feedback_service.update_status.side_effect = RuntimeError("status deleted")
+    feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+    mod_service = Mock()
+    worker = Mock()
+    result = SimpleNamespace(mod_dir=str(tmp_path / "Converted Mod"))
+    presenter = PizzaOvenConversionPresenter(
+        app_state=app_state,
+        feedback_service=feedback_service,
+        settings_service=Mock(),
+        mod_service=mod_service,
+        conversion_service=Mock(),
+    )
+    presenter._active_workers.add(worker)
+    monkeypatch.setattr(
+        "presentation.pizza_oven_conversion_presenter.QMessageBox.information",
+        Mock(side_effect=RuntimeError("dialog deleted")),
+    )
+
+    presenter._on_conversion_finished(
+        parent=None,
+        success=True,
+        payload=result.mod_dir,
+        result=result,
+        temp_dir=None,
+        on_success=None,
+        worker=worker,
+    )
+    presenter._on_conversion_finished(
+        parent=None,
+        success=False,
+        payload="convert failed",
+        result=None,
+        temp_dir=None,
+        on_success=None,
+        worker=worker,
+    )
+
+    app_state.reset_install_state.assert_called()
+    worker.deleteLater.assert_called()
+
+
+def test_presenter_worker_status_suppresses_broken_feedback(tmp_path, monkeypatch):
+    """Checks worker status signals cannot crash when feedback UI is gone."""
+    from PyQt6.QtWidgets import QDialog
+
+    from presentation import pizza_oven_conversion_presenter as presenter_module
+
+    class _Signal:
+        def __init__(self) -> None:
+            self.callback = None
+
+        def connect(self, callback):
+            self.callback = callback
+
+        def emit(self, *args):
+            self.callback(*args)
+
+    class _FakeWorker:
+        last = None
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.progress = _Signal()
+            self.status = _Signal()
+            self.conversion_finished = _Signal()
+            _FakeWorker.last = self
+
+        def start(self):
+            return None
+
+    class _AcceptedDialog:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    app_state = Mock()
+    app_state.mods_dir = str(tmp_path / "mods")
+    app_state.local_config = {}
+    app_state.game_mode = get_game("deltarune")
+    feedback_service = Mock()
+    feedback_service.update_status.side_effect = RuntimeError("status deleted")
+    presenter = PizzaOvenConversionPresenter(
+        app_state=app_state,
+        feedback_service=feedback_service,
+        settings_service=Mock(),
+        mod_service=Mock(),
+        conversion_service=Mock(),
+    )
+    monkeypatch.setattr(
+        "ui.dialogs.pizza_oven_conversion_dialog.PizzaOvenConversionDialog",
+        _AcceptedDialog,
+    )
+    monkeypatch.setattr(presenter, "_ensure_valid_pizzatower_path", lambda _parent: "game")
+    monkeypatch.setattr(presenter_module, "PizzaOvenConversionWorker", _FakeWorker)
+
+    assert presenter._run_conversion_flow(
+        parent=None,
+        prepared_path=str(tmp_path / "prepared"),
+        source_file_path=None,
+        temp_dir=None,
+        gamebanana_metadata={},
+    )
+    _FakeWorker.last.status.emit("working", "status_info")
+
+    feedback_service.update_status.assert_called_once_with("working", "status_info")
+
+
+def test_pizza_oven_worker_suppresses_emit_failure_after_conversion_error(caplog):
+    """Checks that conversion errors cannot crash while notifying a dead UI."""
+    from services.pizza_oven_conversion_service import PizzaOvenConversionError
+    from workers.install.pizza_oven_conversion_worker import PizzaOvenConversionWorker
+
+    class _Service:
+        def convert(self, *_args, **_kwargs):
+            raise PizzaOvenConversionError("conversion failed")
+
+    class _FailingSignal:
+        def emit(self, *_args, **_kwargs):
+            raise RuntimeError("receiver deleted")
+
+    worker = PizzaOvenConversionWorker(
+        _Service(),
+        source_dir="source",
+        mods_dir="mods",
+        game_path="game",
+    )
+    worker.conversion_finished = _FailingSignal()
+
+    worker.run()
+
+    assert "PizzaOvenConversionWorker: failed to emit" in caplog.text
+
+
 def test_convert_builds_canonical_g3m_mod_from_pizzaoven_result(tmp_path):
     """Checks that converting builds canonical g3m mod from pizzaoven result."""
     game_dir = tmp_path / "game"

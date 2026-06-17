@@ -106,6 +106,8 @@ from ui.widgets.shared.custom_title_bar import CustomTitleBar
 from utils.native_integration import open_url_native
 from utils.path_utils import colored_icon, resource_path
 
+logger = logging.getLogger(__name__)
+
 
 class AppWindow(QWidget):
     update_status_signal = pyqtSignal(str, str)
@@ -175,13 +177,22 @@ class AppWindow(QWidget):
     def _connect_own_signals(self):
         connect_window_signals(self)
 
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        show_message = getattr(self.feedback_service, "show_message", None)
+        if not callable(show_message):
+            return
+        try:
+            show_message(*args, **kwargs)
+        except Exception as e:
+            logger.warning("AppWindow feedback message failed: %s", e, exc_info=True)
+
     def _on_gb_rate_limit_error(self):
         if not self.app_state.local_config.get(
             "gb_rate_limit_notified_this_session", False
         ):
             self.app_state.local_config["gb_rate_limit_notified_this_session"] = True
             self.settings_service.write_local_config()
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "warning",
                 "ui.gamebanana_rate_limit_title",
                 "ui.gamebanana_rate_limit_body",
@@ -200,7 +211,7 @@ class AppWindow(QWidget):
                 & ~Qt.WindowState.WindowMaximized
             )
         except Exception as e:
-            logging.debug(f"Failed to clear window state: {e}")
+            logger.debug(f"Failed to clear window state: {e}")
         geometry_restored = self.settings_service.load_window_geometry(
             self, apply_maximized_state=False
         )
@@ -258,7 +269,7 @@ class AppWindow(QWidget):
         self.mod_service.handle_url_prompt_response(reply)
 
     def _handle_permission_error(self, path: str):
-        self.feedback_service.show_message("error", "errors.access_denied", path=path)
+        self._safe_show_message("error", "errors.access_denied", path=path)
 
     def _get_current_game_path(self) -> str:
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ""
@@ -674,7 +685,7 @@ class AppWindow(QWidget):
             if obj:
                 obj.setParent(None)
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"Failed to clear parent for widget/object: {e}", exc_info=True
             )
 
@@ -1035,7 +1046,7 @@ class AppWindow(QWidget):
             try:
                 painter.fillRect(self.rect(), QColor(bg_color_str))
             except (ValueError, TypeError) as e:
-                logging.debug(f"Failed to parse color '{bg_color_str}': {e}")
+                logger.debug(f"Failed to parse color '{bg_color_str}': {e}")
                 painter.fillRect(self.rect(), QColor(FALLBACK_WINDOW_BG))
         self._paint_window_outline(painter)
         super().paintEvent(event)
@@ -1257,7 +1268,7 @@ class AppWindow(QWidget):
         try:
             self.mod_service.migrate_metadata_from_local_configs()
         except Exception as e:
-            logging.warning(f"Metadata migration failed: {e}")
+            logger.warning(f"Metadata migration failed: {e}")
         self.settings_service.write_local_config()
 
     def _update_qt_locale(self, language_code):

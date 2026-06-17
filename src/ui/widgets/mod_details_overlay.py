@@ -48,6 +48,8 @@ from utils.mod.utils import get_mod_id
 from utils.native_integration import open_url_native
 from workers import WorkerSignals
 
+logger = logging.getLogger(__name__)
+
 _MOD_DETAILS_CACHE: collections.OrderedDict[tuple[int, str], tuple[float, dict]] = (
     collections.OrderedDict()
 )
@@ -230,7 +232,7 @@ class LoadModDetailsThread(QThread):
                     self.details_loaded.emit(result)
         except Exception as e:
             if not self.isInterruptionRequested():
-                logging.error(f"Error loading mod details: {e}", exc_info=True)
+                logger.error(f"Error loading mod details: {e}", exc_info=True)
 
 
 class ScreenshotViewerDialog(QDialog):
@@ -597,7 +599,7 @@ class ModDetailsOverlay(QWidget):
                         target, f"{attr_name}_viewport_margins_cache", viewport_margins
                     )
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"Failed to update viewport margins for {attr_name}: {e}",
                     exc_info=True,
                 )
@@ -620,7 +622,7 @@ class ModDetailsOverlay(QWidget):
                         f"{attr_name}_document_margin_cache",
                     )
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"Failed to update content padding for {attr_name}: {e}",
                     exc_info=True,
                 )
@@ -850,7 +852,7 @@ class ModDetailsOverlay(QWidget):
                 self._sync_timer.timeout.connect(self._sync_button_from_card)
                 self._sync_timer.start(250)
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"QTimer setup failed for _sync_timer: {e}", exc_info=True
                 )
             return
@@ -933,7 +935,7 @@ class ModDetailsOverlay(QWidget):
                 timer.stop()
                 timer.deleteLater()
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"cleanup_thread: failed to stop/delete {attr_name}: {e}",
                     exc_info=True,
                 )
@@ -1272,7 +1274,7 @@ class ModDetailsOverlay(QWidget):
             if self._is_alive(self) and self.isVisible():
                 self._apply_overlay_geometry()
         except (RuntimeError, AttributeError) as e:
-            logging.debug(f"Failed to apply overlay geometry: {e}")
+            logger.debug(f"Failed to apply overlay geometry: {e}")
         if self._original_resize_event:
             with contextlib.suppress(RuntimeError, AttributeError):
                 self._original_resize_event(event)
@@ -1329,7 +1331,7 @@ class ModDetailsOverlay(QWidget):
                 default_color=self._desc_default_color,
             )
         except Exception as e:
-            logging.warning(f"Error setting description HTML: {e}")
+            logger.warning(f"Error setting description HTML: {e}")
             self.desc_text.setPlainText(self._description_html)
 
     def _set_description_html(self, content):
@@ -1356,7 +1358,7 @@ class ModDetailsOverlay(QWidget):
                 return
             self._set_description_html(html_content)
         except Exception as e:
-            logging.error(f"Error in _on_url_description_loaded: {e}", exc_info=True)
+            logger.error(f"Error in _on_url_description_loaded: {e}", exc_info=True)
 
     def _on_url_description_error(self, error_msg, status_code):
         """Handle URL description load error."""
@@ -1372,7 +1374,7 @@ class ModDetailsOverlay(QWidget):
                     tr("errors.description_load_error_details", error=error_msg)
                 )
         except Exception as e:
-            logging.error(f"Error in _on_url_description_error: {e}", exc_info=True)
+            logger.error(f"Error in _on_url_description_error: {e}", exc_info=True)
 
     def _load_gamebanana_description(self):
         """Load GameBanana mod description."""
@@ -1411,7 +1413,7 @@ class ModDetailsOverlay(QWidget):
                 if not self._ss_urls:
                     self.update_screenshots(ss)
         except Exception as e:
-            logging.error(f"Error in _on_details_loaded: {e}", exc_info=True)
+            logger.error(f"Error in _on_details_loaded: {e}", exc_info=True)
 
     def _on_screenshot_click(self, event):
         """Handle screenshot click to open in a larger viewer."""
@@ -1429,7 +1431,7 @@ class ModDetailsOverlay(QWidget):
                 self.main_window.resizeEvent = self._original_resize_event
                 self._original_resize_event = None
             except (RuntimeError, AttributeError) as e:
-                logging.debug(f"Failed to restore main window resize event: {e}")
+                logger.debug(f"Failed to restore main window resize event: {e}")
 
     def _stop_thread(self, thread):
         """Stop and clean up a QThread safely."""
@@ -1439,7 +1441,7 @@ class ModDetailsOverlay(QWidget):
                 thread.requestInterruption()
                 thread.quit()
                 if not thread.wait(5000):
-                    logging.debug(
+                    logger.debug(
                         f"{thread.__class__.__name__}: Thread did not stop within 5s, terminating"
                     )
                     thread.terminate()
@@ -1451,7 +1453,7 @@ class ModDetailsOverlay(QWidget):
                     lambda: thread.deleteLater() if thread.isFinished() else None
                 )
         except (RuntimeError, AttributeError) as e:
-            logging.debug(f"{thread.__class__.__name__}: cleanup error: {e}")
+            logger.debug(f"{thread.__class__.__name__}: cleanup error: {e}")
 
     def _stop_thread_attr(self, attr_name: str):
         if thread := getattr(self, attr_name, None):

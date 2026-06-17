@@ -1,5 +1,7 @@
 """Main window controller composition."""
 
+import logging
+
 from PyQt6.QtWidgets import QApplication
 
 from app.dialogs import on_downloads_record_updated, on_downloads_use_completed
@@ -19,6 +21,15 @@ from presentation.pizza_oven_conversion_presenter import (
 from presentation.update_presenter import handle_update_info
 from ui.utils.ui_utils import DebounceTimer
 
+logger = logging.getLogger(__name__)
+
+
+def _safe_show_message(window, level: str, title: str, message: str) -> None:
+    try:
+        window.feedback_service.show_message(level, title, message)
+    except Exception:
+        logger.warning("Window feedback message failed", exc_info=True)
+
 
 class WindowComposition:
     """Creates presentation controllers and wires them to the application context."""
@@ -35,7 +46,8 @@ class WindowComposition:
                 lambda _: window.plugin_runtime_service.execute_hook("language_changed")
             )
         window.settings_service.restart_required.connect(
-            lambda msg: window.feedback_service.show_message(
+            lambda msg: _safe_show_message(
+                window,
                 "info",
                 "dialogs.restart_required",
                 msg,
@@ -64,7 +76,8 @@ class WindowComposition:
         window.update_checker.progress_updated.connect(window.set_progress_signal.emit)
         window.update_checker.update_finished.connect(window._on_update_cleanup)
         window.update_checker.update_error.connect(
-            lambda msg: window.feedback_service.show_message(
+            lambda msg: _safe_show_message(
+                window,
                 "error",
                 "errors.error",
                 msg,

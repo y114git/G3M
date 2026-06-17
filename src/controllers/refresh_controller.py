@@ -12,6 +12,8 @@ from services.localization_service import localization_service, tr
 from ui.utils.ui_utils import safe_stop_thread
 from workers.fetch_mods_worker import FetchModsThread
 
+logger = logging.getLogger(__name__)
+
 
 class _PostFetchWorker(QThread):
     """Background worker for heavy post-fetch operations (scan + cache restore)."""
@@ -29,7 +31,7 @@ class _PostFetchWorker(QThread):
             self._mod_service.load_local_mods()
             self.done.emit(True)
         except Exception as e:
-            logging.error(f"_PostFetchWorker: Error: {e}", exc_info=True)
+            logger.error(f"_PostFetchWorker: Error: {e}", exc_info=True)
             self.done.emit(False)
 
 
@@ -59,6 +61,16 @@ class RefreshController:
     def cleanup(self):
         self._stop_fetch_thread()
 
+    def _safe_update_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception as e:
+            logger.warning(
+                "RefreshController: status update failed: %s",
+                e,
+                exc_info=True,
+            )
+
     def _cleanup_thread_later(self, thread) -> None:
         try:
             if thread.isFinished():
@@ -87,15 +99,15 @@ class RefreshController:
                 if hasattr(thread, "cancel"):
                     thread.cancel()
             except (RuntimeError, AttributeError):
-                logging.debug("Failed to cancel thread")
+                logger.debug("Failed to cancel thread")
             try:
                 if not check_running or thread.isRunning():
                     safe_stop_thread(thread, timeout=200, blocking=False)
             except (RuntimeError, AttributeError):
-                logging.debug("Failed to cancel thread")
+                logger.debug("Failed to cancel thread")
             self._cleanup_thread_later(thread)
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"RefreshController: Error stopping {error_label} (thread may be deleted): {e}"
             )
 
@@ -131,7 +143,7 @@ class RefreshController:
             if not is_initial and localization_callback:
                 localization_callback()
             if is_game_running():
-                self.feedback_service.update_status(
+                self._safe_update_status(
                     tr("status.cant_update_while_running"), UI_COLORS["status_warning"]
                 )
                 return
@@ -140,14 +152,14 @@ class RefreshController:
                 if self.fetch_thread:
                     try:
                         if self.fetch_thread.isRunning():
-                            logging.warning(
+                            logger.warning(
                                 "RefreshController: Previous fetch thread still running, ignoring new fetch"
                             )
                             return
                     except (RuntimeError, AttributeError):
                         self.fetch_thread = None
             except Exception as e:
-                logging.debug(f"RefreshController: Error checking fetch thread: {e}")
+                logger.debug(f"RefreshController: Error checking fetch thread: {e}")
                 self.fetch_thread = None
             self.update_checker.check_for_updates()
 
@@ -163,7 +175,7 @@ class RefreshController:
             self.fetch_thread = FetchModsThread(
                 fetch_context, force_update=True, parent=None
             )
-            self.fetch_thread.status.connect(self.feedback_service.update_status)
+            self.fetch_thread.status.connect(self._safe_update_status)
             finished_kwargs = on_fetch_finished_kwargs or {}
             self.fetch_thread.result.connect(
                 lambda success: self._on_fetch_finished(
@@ -176,10 +188,10 @@ class RefreshController:
             self.fetch_thread.start()
         except Exception as e:
             error_msg = f"Failed to refresh mods list: {e}"
-            logging.error(
+            logger.error(
                 f"RefreshController.refresh_mods_list: {error_msg}", exc_info=True
             )
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 f"{tr('errors.update_list_failed')}: {e!s}", UI_COLORS["status_error"]
             )
 
@@ -216,7 +228,7 @@ class RefreshController:
         if not hasattr(self, "_fetch_finished_in_progress"):
             self._fetch_finished_in_progress = False
         if self._fetch_finished_in_progress:
-            logging.debug(
+            logger.debug(
                 "RefreshController: _on_fetch_finished already in progress, skipping"
             )
             return
@@ -236,7 +248,7 @@ class RefreshController:
                     try:
                         update_filtered_mods_callback()
                     except Exception as e:
-                        logging.error(
+                        logger.error(
                             f"RefreshController: Error in update_filtered_mods_callback: {e}",
                             exc_info=True,
                         )
@@ -246,7 +258,7 @@ class RefreshController:
                 if update_action_button_callback:
                     update_action_button_callback()
                 if success:
-                    self.feedback_service.update_status(
+                    self._safe_update_status(
                         tr("status.mod_list_updated"), UI_COLORS["status_success"]
                     )
                 else:
@@ -255,7 +267,7 @@ class RefreshController:
                         if self.app_state.all_mods
                         else tr("ui.network_update_failed")
                     )
-                    self.feedback_service.update_status(
+                    self._safe_update_status(
                         fallback_msg, UI_COLORS["status_error"]
                     )
                 if is_initial and success:
@@ -266,16 +278,16 @@ class RefreshController:
                         or ""
                     )
                     if not current_game_path or not os.path.exists(current_game_path):
-                        self.feedback_service.update_status(
+                        self._safe_update_status(
                             tr("status.no_game_path"), UI_COLORS["status_error"]
                         )
                 self.used_mods_service.load_used_mods_state()
             except Exception as e:
                 error_msg = f"Error processing mod list: {e}"
-                logging.error(
+                logger.error(
                     f"RefreshController._on_fetch_finished: {error_msg}", exc_info=True
                 )
-                self.feedback_service.update_status(
+                self._safe_update_status(
                     tr("errors.mod_list_processing_error", error=str(e)),
                     UI_COLORS["status_error"],
                 )

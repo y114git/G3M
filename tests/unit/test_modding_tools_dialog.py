@@ -4,11 +4,13 @@ import json
 import os
 import zipfile
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from PyQt6.QtWidgets import QApplication
 
 from services.localization_service import tr
 from ui.dialogs.modding_tools_dialog import (
+    ModdingToolsDialog,
     _ConvertWorkerThread,
     _CreatePatchWorkerThread,
     _DataConvertTab,
@@ -16,6 +18,57 @@ from ui.dialogs.modding_tools_dialog import (
     _MergeTab,
     _PatchTab,
 )
+
+
+def test_patch_tab_warning_failure_does_not_start_worker(monkeypatch):
+    """Checks validation warning failures do not start patch workers."""
+    app = QApplication.instance() or QApplication([])
+    tab = _PatchTab(_FakeG3M(), SimpleNamespace(local_config={}))
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog.QMessageBox.warning",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dialog deleted")),
+    )
+
+    tab._on_run()
+
+    assert tab._run_btn.isEnabled()
+    assert getattr(tab, "_worker", None) is None
+    app.processEvents()
+
+
+def test_patch_tab_progress_ignores_deleted_status_label():
+    """Checks progress updates cannot crash when the status label is deleted."""
+    app = QApplication.instance() or QApplication([])
+    tab = _PatchTab(_FakeG3M(), SimpleNamespace(local_config={}))
+    tab._status_label.setText = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        RuntimeError("status deleted")
+    )
+
+    tab._on_progress(25, "Working")
+
+    app.processEvents()
+
+
+def test_modding_tools_close_question_failure_keeps_dialog_open(monkeypatch):
+    """Checks failed close confirmation keeps active tool state open."""
+    app = QApplication.instance() or QApplication([])
+    dialog = ModdingToolsDialog(_FakeG3M(), SimpleNamespace(local_config={}))
+    event = SimpleNamespace(ignore=Mock(), accept=Mock())
+    monkeypatch.setattr(dialog, "_has_any_interaction", lambda: True)
+    stop_workers = Mock()
+    monkeypatch.setattr(dialog, "_stop_all_workers", stop_workers)
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog.QMessageBox.question",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dialog deleted")),
+    )
+
+    dialog.closeEvent(event)
+
+    event.ignore.assert_called_once_with()
+    event.accept.assert_not_called()
+    stop_workers.assert_not_called()
+    dialog.deleteLater()
+    app.processEvents()
 
 
 class _FakeG3M:
@@ -300,6 +353,71 @@ def test_data_convert_accepts_g3mpatch_zip_as_source(tmp_path, monkeypatch):
         assert "data.xdelta" in zf.namelist()
         converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
     assert converted_config["files"]["deltarune_1"]["data_file_path"] == "data.xdelta"
+
+
+def test_data_convert_can_output_game_win(tmp_path, monkeypatch):
+    """Checks that DATA conversion can write game.win as a ready DATA target."""
+    mod_folder = tmp_path / "mod"
+    versions_dir = mod_folder / "mod_versions"
+    mod_folder.mkdir(parents=True)
+    versions_dir.mkdir()
+    patch_path = mod_folder / "data.xdelta"
+    patch_path.write_text("old patch", encoding="utf-8")
+    config_path = mod_folder / "mod_config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "version": "1.2.3",
+                "game": "deltarune",
+                "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    game_dir = tmp_path / "game"
+    game_dir.mkdir()
+    (game_dir / "game.win").write_text("original", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "models.game_modes.get_game",
+        lambda game: SimpleNamespace(
+            get_tab=lambda file_key: SimpleNamespace(tab_id=file_key)
+        ),
+    )
+    monkeypatch.setattr(
+        "utils.mod.config_parser.resolve_mod_file_path",
+        lambda folder, stored_path: str(mod_folder / stored_path),
+    )
+    monkeypatch.setattr(
+        "utils.path_utils.find_chapter_resource_dir",
+        lambda game_path, chapter_id: str(game_dir),
+    )
+
+    worker = _DataConvertWorkerThread(
+        _FakeG3M(),
+        str(mod_folder),
+        {
+            "version": "1.2.3",
+            "game": "deltarune",
+            "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
+        },
+        str(tmp_path / "game_root"),
+        "game.win",
+    )
+    result = []
+    worker.finished.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert result == [
+        (True, tr("modding_tools.convert_data_success", count=1, version="1.2.3 - game.win"))
+    ]
+    version_zip = versions_dir / "1.2.3 - game.win.zip"
+    assert version_zip.is_file()
+    with zipfile.ZipFile(version_zip) as zf:
+        assert "game.win" in zf.namelist()
+        converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
+    assert converted_config["files"]["deltarune_1"]["data_file_path"] == "game.win"
 
 
 def test_data_convert_accepts_csx_source(tmp_path, monkeypatch):

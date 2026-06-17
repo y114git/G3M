@@ -18,6 +18,8 @@ from services.localization_service import tr
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 from utils.native_integration import open_url_native
 
+logger = logging.getLogger(__name__)
+
 
 class AnnouncePanel(QWidget):
     accepted_with_ok = pyqtSignal()
@@ -53,7 +55,7 @@ class AnnouncePanel(QWidget):
 
             set_rich_html(self.text_browser, self._announce.get("message", ""))
         except Exception as e:
-            logging.debug(f"set_rich_html failed, falling back to setHtml: {e}")
+            logger.debug(f"set_rich_html failed, falling back to setHtml: {e}")
             self.text_browser.setHtml(self._announce.get("message", ""))
         self.text_browser.setReadOnly(True)
         layout.addWidget(self.text_browser, 1)
@@ -138,7 +140,7 @@ class AnnouncePanel(QWidget):
             try:
                 open_url_native(link)
             except Exception as e:
-                logging.error(f"Failed to open announce link: {e}")
+                logger.error(f"Failed to open announce link: {e}")
 
     def _populate_poll_buttons(self) -> None:
         while self._poll_buttons_layout.count():

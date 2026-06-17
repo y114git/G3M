@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
 def tr(k, **kw):
     return k
 
-
 class _SlotRowFrame(QFrame):
     hover_entered = pyqtSignal(int, int)
     hover_left = pyqtSignal(int, int)
@@ -52,7 +51,6 @@ class _SlotRowFrame(QFrame):
             self.double_clicked.emit(self._chapter, self._slot)
         super().mouseDoubleClickEvent(ev)
 
-
 class _SlotHeightSyncMixin:
     def _sync_slot_height(self) -> None:
         row = getattr(self, "_slot_row", None)
@@ -85,7 +83,6 @@ class _SlotHeightSyncMixin:
         }:
             self._schedule_slot_height_sync()
         return result
-
 
 class SaveManagerViewBuilder:
 

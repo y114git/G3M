@@ -1,5 +1,6 @@
 """Dialog for managing library profiles: create, duplicate, rename, delete, reorder."""
 
+import logging
 import os
 
 from PyQt6.QtCore import QSize, Qt
@@ -25,6 +26,8 @@ from ui.common.styling import build_button_style, clamp_border_radius, get_borde
 from utils.native_integration import get_open_file_name, get_save_file_name
 from utils.path_utils import colored_icon
 from utils.process_utils import format_filesystem_error
+
+logger = logging.getLogger(__name__)
 
 _ITEM_HEIGHT = 84
 
@@ -224,6 +227,31 @@ class ProfileManagerDialog(QDialog):
         self.profile_service.switch(name)
         self._refresh_list()
 
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("profile_manager: failed to show warning dialog")
+
+    def _safe_information(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(self, title, message)
+        except Exception:
+            logger.exception("profile_manager: failed to show information dialog")
+
+    def _safe_critical(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.critical(self, title, message)
+        except Exception:
+            logger.exception("profile_manager: failed to show critical dialog")
+
+    def _safe_question(self, *args, **kwargs):
+        try:
+            return QMessageBox.question(self, *args, **kwargs)
+        except Exception:
+            logger.exception("profile_manager: failed to show question dialog")
+            return QMessageBox.StandardButton.No
+
     def _prompt_and_execute(
         self, action: callable, title_key: str, default_text: str = ""
     ):
@@ -234,8 +262,8 @@ class ProfileManagerDialog(QDialog):
             if action(name.strip()):
                 self._refresh_list()
             else:
-                QMessageBox.warning(
-                    self, tr("profiles.manager_title"), tr("profiles.already_exists")
+                self._safe_warning(
+                    tr("profiles.manager_title"), tr("profiles.already_exists")
                 )
 
     def _on_create(self):
@@ -262,8 +290,7 @@ class ProfileManagerDialog(QDialog):
         name = self._selected_name()
         if not name or name == DEFAULT_PROFILE:
             return
-        reply = QMessageBox.question(
-            self,
+        reply = self._safe_question(
             tr("profiles.manager_title"),
             tr("profiles.confirm_delete_text", name=name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -288,12 +315,12 @@ class ProfileManagerDialog(QDialog):
         if not export_path:
             return
         if self.profile_service.export(name, export_path):
-            QMessageBox.information(
-                self, tr("dialogs.success"), tr("profiles.exported_success")
+            self._safe_information(
+                tr("dialogs.success"), tr("profiles.exported_success")
             )
         else:
-            QMessageBox.warning(
-                self, tr("errors.error"), tr("profiles.export_failed", name=name)
+            self._safe_warning(
+                tr("errors.error"), tr("profiles.export_failed", name=name)
             )
 
     def _on_import(self):
@@ -315,8 +342,7 @@ class ProfileManagerDialog(QDialog):
             try:
                 name = self.profile_service.import_profile(import_path)
             except Exception as e:
-                QMessageBox.critical(
-                    self,
+                self._safe_critical(
                     tr("errors.error"),
                     tr(
                         "profiles.import_failed",
@@ -329,14 +355,12 @@ class ProfileManagerDialog(QDialog):
             return
         self._refresh_list()
         if len(imported_names) == 1:
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("dialogs.success"),
                 tr("profiles.imported_success", name=imported_names[0]),
             )
         else:
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("dialogs.success"),
                 tr("profiles.imported_success", name=", ".join(imported_names)),
             )

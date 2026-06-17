@@ -1,10 +1,13 @@
 """Close and shutdown helpers for AppWindow."""
 
 import contextlib
+import logging
 
 from PyQt6.QtWidgets import QApplication
 
 from config.config import THREAD_WAIT_TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 
 def begin_close_event(window, event, *, single_shot):
@@ -12,6 +15,7 @@ def begin_close_event(window, event, *, single_shot):
         event.accept()
         return
     window._close_cleanup_started = True
+    logger.info("Application close requested; starting shutdown cleanup")
     app = QApplication.instance()
     if app:
         with contextlib.suppress(Exception):
@@ -30,6 +34,7 @@ def begin_close_event(window, event, *, single_shot):
                 lambda: window._mark_close_task_complete("analytics")
             )
         except Exception:
+            logger.exception("Analytics shutdown failed during close")
             analytics_done = True
         if analytics_done:
             window._mark_close_task_complete("analytics")
@@ -43,11 +48,14 @@ def begin_close_event(window, event, *, single_shot):
 
 def run_deferred_close_cleanup(window) -> None:
     try:
-        if hasattr(window, "plugins_ui") and window.plugins_ui:
-            window.plugins_ui.shutdown()
-        from app.cleanup import perform_close_cleanup
+        try:
+            if hasattr(window, "plugins_ui") and window.plugins_ui:
+                window.plugins_ui.shutdown()
+            from app.cleanup import perform_close_cleanup
 
-        perform_close_cleanup(window)
+            perform_close_cleanup(window)
+        except Exception:
+            logger.exception("Deferred close cleanup failed")
     finally:
         window._mark_close_task_complete("cleanup")
 
@@ -59,6 +67,7 @@ def mark_close_task_complete(window, task_name: str) -> None:
     pending[task_name] = True
     if not all(pending.values()):
         return
+    logger.info("All close tasks completed; quitting application")
     app = QApplication.instance()
     if app:
         with contextlib.suppress(Exception):
@@ -69,6 +78,18 @@ def force_finish_close_tasks(window) -> None:
     pending = getattr(window, "_pending_close_tasks", None)
     if not pending or all(pending.values()):
         return
+    unfinished = [task_name for task_name, completed in pending.items() if not completed]
+    unfinished_text = ", ".join(unfinished)
+    if unfinished == ["analytics"]:
+        logger.info(
+            "Completing application quit with pending close tasks: %s",
+            unfinished_text,
+        )
+    else:
+        logger.warning(
+            "Forcing application quit with unfinished close tasks: %s",
+            unfinished_text,
+        )
     for task_name, completed in list(pending.items()):
         if not completed:
             pending[task_name] = True

@@ -35,10 +35,8 @@ logger = logging.getLogger(__name__)
 FORMAT_LINE_COUNTS = {1: 10318, 2: 3055}
 SAVE_PATH_RE = re.compile(r"filech(?P<chapter>\d+)_(?P<slot>\d+)$")
 
-
 def tr(k, **kw):
     return k
-
 
 def _parse_number(value: str):
     text = value.strip()
@@ -51,7 +49,6 @@ def _parse_number(value: str):
         return 0
     return int(number) if isinstance(number, float) and number.is_integer() else number
 
-
 def _serialize_number(value) -> str:
     if isinstance(value, bool):
         value = int(value)
@@ -60,7 +57,6 @@ def _serialize_number(value) -> str:
     if isinstance(value, (int, float)) and abs(float(value)) >= 1e6:
         return f"{float(value):.0e}".replace("e+", "e+0")
     return str(value)
-
 
 class _LineCursor:
     def __init__(self, lines: list[str]) -> None:
@@ -91,7 +87,6 @@ class _LineCursor:
         self._require_available("skip", count)
         self.index += count
 
-
 class _LazyPage(QWidget):
     def __init__(self, builder, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -108,14 +103,12 @@ class _LazyPage(QWidget):
         self._loaded = True
         self._builder = None
 
-
 def _detect_format(lines: list[str]) -> int:
     count = len(lines)
     for save_format, expected in FORMAT_LINE_COUNTS.items():
         if expected <= count <= expected + 10:
             return save_format
     raise ValueError(f"Unrecognized save format ({count} lines)")
-
 
 def parse_save_lines(lines: list[str], chapter: int, slot: int) -> dict:
     cursor = _LineCursor(lines)
@@ -228,7 +221,6 @@ def parse_save_lines(lines: list[str], chapter: int, slot: int) -> dict:
         "time": cursor.next_number(),
     }
 
-
 def serialize_save_data(save: dict) -> list[str]:
     save_format = save["meta"]["format"]
     lines = [save["playerName"], save["vesselName"], "", "", "", "", ""]
@@ -277,7 +269,6 @@ def serialize_save_data(save: dict) -> list[str]:
     lines.append(_serialize_number(save["time"]))
     return [line if idx <= 6 else f"{line} " for idx, line in enumerate(lines)]
 
-
 @lru_cache(maxsize=1)
 def load_simple_mode_data() -> dict:
     try:
@@ -287,10 +278,8 @@ def load_simple_mode_data() -> dict:
         logger.error("Failed to load simple mode data: %s", error)
         return {}
 
-
 def _safe_name(meta: dict | None, fallback: str) -> str:
     return (meta or {}).get("displayName") or fallback
-
 
 STORY_FLAG_GROUPS = {
     1: [
@@ -337,7 +326,6 @@ CUSTOMIZATION_FLAG_GROUPS = [
         "THRASH_MACHINE_SHOE_COLOR",
     ]),
 ]
-
 
 class SaveEditorDialog(QDialog):
     def __init__(self, file_path: str, app_state=None, parent=None, tr_func=None) -> None:

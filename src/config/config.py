@@ -387,6 +387,7 @@ GAME_DATA_FILE_EXTENSIONS = (".win", ".unx", ".ios", ".droid")
 GAME_DATA_FILENAMES = (
     "data.win",
     "game.ios",
+    "game.win",
     "game.unx",
     "game.droid",
 )

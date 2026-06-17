@@ -20,6 +20,8 @@ from models.plugin_models import (
 )
 from services.localization_service import localization_service
 
+logger = logging.getLogger(__name__)
+
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 _RANGE_RE = re.compile(r"^(\^|~|>=|<=|>|<)?(.+)$")
 MAX_PLUGIN_ARCHIVE_MEMBERS = 5000
@@ -235,7 +237,7 @@ def load_plugin_langs(plugin_dir: str) -> dict[str, dict]:
             with open(path, encoding="utf-8") as handle:
                 langs[code] = json.load(handle)
         except (OSError, json.JSONDecodeError) as e:
-            logging.warning("Failed to load plugin language file %s: %s", path, e)
+            logger.warning("Failed to load plugin language file %s: %s", path, e)
             continue
     return langs
 

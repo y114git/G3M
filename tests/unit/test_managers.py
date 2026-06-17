@@ -243,6 +243,37 @@ class TestSettingsManager:
         assert settings_emitted == [True]
         manager.feedback_service.show_message.assert_called()
 
+    def test_install_theme_from_file_suppresses_success_dialog_failure(
+        self, app_state, feedback_service, qapp, tmp_path
+    ):
+        import zipfile
+
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        manager.write_local_config = Mock()
+        manager.feedback_service.show_message = Mock(
+            side_effect=RuntimeError("dialog already deleted")
+        )
+        settings_emitted = []
+        manager.settings_changed.connect(lambda: settings_emitted.append(True))
+
+        archive_path = tmp_path / "theme.zip"
+        with zipfile.ZipFile(archive_path, "w") as zipf:
+            zipf.writestr("theme_config.json", json.dumps({"custom_border_color": "#ABCDEF"}))
+
+        manager._install_theme_from_file(str(archive_path))
+
+        assert app_state.local_config["custom_border_color"] == "#ABCDEF"
+        assert settings_emitted == [True]
+        manager.feedback_service.show_message.assert_called_once()
+
     def test_install_theme_from_file_reports_localized_error_for_source_path(
         self, app_state, feedback_service, qapp, tmp_path, monkeypatch
     ):
@@ -668,6 +699,37 @@ class TestLaunchManager:
 
         launcher.restore_window_callback.assert_called_once()
         parent.game_launch.update_button_state.assert_called_once()
+
+    def test_recover_previous_session_restores_even_if_status_update_fails(
+        self, app_state, feedback_service, tmp_path, monkeypatch
+    ):
+        """Checks that stale session recovery is not blocked by status UI failures."""
+        from services.launch_service import GameLauncher
+
+        app_state.config_dir = str(tmp_path)
+        (tmp_path / "session.lock").write_text("{}", encoding="utf-8")
+        backup_mgr = Mock()
+        backup_mgr.original_files = ["data.win"]
+        backup_mgr.added_files = []
+        monkeypatch.setattr(
+            feedback_service,
+            "update_status",
+            Mock(side_effect=RuntimeError("status failed")),
+        )
+        launcher = GameLauncher(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+        )
+
+        with patch(
+            "services.backup_service.BackupManager.load_from_manifest",
+            return_value=backup_mgr,
+        ):
+            launcher.recover_previous_session()
+
+        backup_mgr.restore_all_backups.assert_called_once_with()
+        backup_mgr.clear_backup_dir.assert_called_once_with()
 
     def test_execute_game_uses_detached_steam_launch_on_linux(
         self, app_state, feedback_service
@@ -1319,5 +1381,30 @@ class TestExpandedFormats:
 
         assert manager.clear_g3mtool_cache() is True
         assert cache_dir.exists()
+        assert list(cache_dir.iterdir()) == []
+        feedback_service.show_message.assert_called_once()
+
+    def test_clear_g3mtool_cache_success_ignores_broken_feedback(
+        self, app_state, feedback_service, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import localization_service
+        from services.settings_service import SettingsManager
+
+        cache_dir = tmp_path / "cache" / "G3MTool"
+        cache_dir.mkdir(parents=True)
+        cached_file = cache_dir / "cached.g3mcache"
+        cached_file.write_text("cache", encoding="utf-8")
+        feedback_service.ask_question = Mock(return_value=True)
+        feedback_service.show_message = Mock(side_effect=RuntimeError("toast deleted"))
+
+        manager = SettingsManager(
+            app_state, feedback_service, localization_service, parent=qapp
+        )
+        monkeypatch.setattr(
+            "services.settings_service.get_g3mtool_cache_dir",
+            lambda: str(cache_dir),
+        )
+
+        assert manager.clear_g3mtool_cache() is True
         assert list(cache_dir.iterdir()) == []
         feedback_service.show_message.assert_called_once()

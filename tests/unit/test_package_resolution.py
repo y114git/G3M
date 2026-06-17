@@ -6,7 +6,6 @@ import importlib
 import sys
 from pathlib import Path
 
-
 REPO_SRC = Path(__file__).resolve().parents[2] / "src"
 TOP_LEVEL_PACKAGES = [
     "adapters",

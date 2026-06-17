@@ -7,6 +7,8 @@ import shutil
 
 from utils.file_utils import safe_remove, safe_rmtree
 
+logger = logging.getLogger(__name__)
+
 
 class BackupManager:
     """Manages file and directory backups for safe mod operations."""

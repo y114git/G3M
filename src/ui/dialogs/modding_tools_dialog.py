@@ -49,7 +49,8 @@ _DATA_PATCH_FILTER = (
     "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
 )
 _ALL_FILTER = "All Files (*)"
-_CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", "data.win", "game.ios")
+_READY_DATA_TARGETS = ("data.win", "game.ios", "game.win")
+_CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", *_READY_DATA_TARGETS)
 _MONOSPACE_FONT_SIZE_PX = 12
 
 
@@ -59,6 +60,28 @@ def _format_progress_status(percent: int, label: str) -> str:
     if clean_label:
         return f"{clean_label}: {clean_percent}%"
     return f"{tr('modding_tools.running')} {clean_percent}%"
+
+
+def _safe_warning(parent, title: str, message: str) -> None:
+    try:
+        QMessageBox.warning(parent, title, message)
+    except Exception:
+        logger.warning("Modding tools warning dialog failed", exc_info=True)
+
+
+def _safe_question(parent, title: str, message: str, buttons, default_button):
+    try:
+        return QMessageBox.question(parent, title, message, buttons, default_button)
+    except Exception:
+        logger.warning("Modding tools question dialog failed", exc_info=True)
+        return default_button
+
+
+def _safe_set_status(label, message: str) -> None:
+    try:
+        label.setText(message)
+    except Exception:
+        logger.warning("Modding tools status update failed", exc_info=True)
 
 
 def _is_g3mpatch_source(path: str) -> bool:
@@ -166,7 +189,7 @@ def _is_ready_data_source(path: str) -> bool:
 
 
 def _target_is_ready_data(target_mode: str) -> bool:
-    return target_mode in {"data.win", "game.ios"}
+    return target_mode in _READY_DATA_TARGETS
 
 
 def _target_version_label(target_mode: str) -> str:
@@ -186,18 +209,18 @@ def _should_convert_source_to_target(path: str, target_mode: str) -> bool:
         return _is_xdelta_source(path) or _is_csx_source(path)
     if target_mode == "xdelta":
         return _is_g3mpatch_source(path) or _is_csx_source(path)
-    if target_mode in {"data.win", "game.ios"}:
+    if target_mode in _READY_DATA_TARGETS:
         if _is_g3mpatch_source(path) or _is_xdelta_source(path) or _is_csx_source(path):
             return True
         if _is_ready_data_source(path):
-            if source_name not in {"data.win", "game.ios"}:
+            if source_name not in _READY_DATA_TARGETS:
                 return False
             return source_name != target_mode
     return False
 
 
 def _resolve_target_data_name(original_path: str, target_mode: str) -> str:
-    if target_mode in {"data.win", "game.ios"}:
+    if target_mode in _READY_DATA_TARGETS:
         return target_mode
     return os.path.basename(original_path)
 
@@ -605,9 +628,7 @@ class _PatchTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
             return
         orig, second, out = (
             self._original_row.path(),
@@ -615,14 +636,12 @@ class _PatchTab(QWidget):
             self._output_row.path(),
         )
         if not orig or not second or not out:
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
             return
         mode = self._mode_combo.currentText()
         action = self._action_combo.currentIndex()
         self._run_btn.setEnabled(False)
-        self._status_label.setText(tr("modding_tools.running"))
+        _safe_set_status(self._status_label, tr("modding_tools.running"))
         if action == 2:
             target_is_xdelta = mode == "xdelta"
             self._worker = _ConvertWorkerThread(
@@ -658,15 +677,18 @@ class _PatchTab(QWidget):
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
-        self._status_label.setText(_format_progress_status(percent, label))
+        _safe_set_status(self._status_label, _format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc == 0:
-            self._status_label.setText(tr("modding_tools.success"))
+            _safe_set_status(self._status_label, tr("modding_tools.success"))
         else:
-            self._status_label.setText(tr("modding_tools.failed", error=err[:300]))
+            _safe_set_status(
+                self._status_label,
+                tr("modding_tools.failed", error=err[:300]),
+            )
 
     def has_user_interaction(self) -> bool:
         return bool(
@@ -978,13 +1000,13 @@ class _DataConvertTab(QWidget):
 
         self._mod_list.clear()
         self._run_btn.setEnabled(False)
-        self._status_label.setText("")
+        _safe_set_status(self._status_label, "")
         profile_name = self._profile_combo.currentText()
         if not profile_name:
             return
         mods_root = get_profile_mods_root(profile_name)
         if not os.path.isdir(mods_root):
-            self._status_label.setText(tr("modding_tools.convert_no_mods"))
+            _safe_set_status(self._status_label, tr("modding_tools.convert_no_mods"))
             return
         target_mode = _convert_target_mode(self._fmt_combo.currentIndex())
         found = 0
@@ -1030,7 +1052,7 @@ class _DataConvertTab(QWidget):
             found += 1
 
         if found == 0:
-            self._status_label.setText(tr("modding_tools.convert_no_mods"))
+            _safe_set_status(self._status_label, tr("modding_tools.convert_no_mods"))
         else:
             self._run_btn.setEnabled(True)
 
@@ -1058,8 +1080,9 @@ class _DataConvertTab(QWidget):
 
             normalize_mod_config_data(config_data, mod_root_path=mod_folder)
         except Exception as e:
-            self._status_label.setText(
-                tr("modding_tools.convert_data_failed", error=str(e))
+            _safe_set_status(
+                self._status_label,
+                tr("modding_tools.convert_data_failed", error=str(e)),
             )
             return
 
@@ -1068,14 +1091,16 @@ class _DataConvertTab(QWidget):
 
         game_def = get_game(game)
         if not game_def:
-            self._status_label.setText(
-                tr("modding_tools.convert_game_path_missing", game=game)
+            _safe_set_status(
+                self._status_label,
+                tr("modding_tools.convert_game_path_missing", game=game),
             )
             return
 
         game_path = game_def.get_game_path(self._app_state.local_config)
         if not game_path or not os.path.isdir(game_path):
-            self._status_label.setText(
+            _safe_set_status(
+                self._status_label,
                 tr(
                     "modding_tools.convert_game_path_missing",
                     game=game_def.display_name,
@@ -1085,18 +1110,18 @@ class _DataConvertTab(QWidget):
 
         target_mode = _convert_target_mode(self._fmt_combo.currentIndex())
         self._set_busy(True)
-        self._status_label.setText(tr("modding_tools.running"))
+        _safe_set_status(self._status_label, tr("modding_tools.running"))
         self._worker = _DataConvertWorkerThread(
             self._g3m, mod_folder, config_data, game_path, target_mode
         )
-        self._worker.progress.connect(self._status_label.setText)
+        self._worker.progress.connect(lambda message: _safe_set_status(self._status_label, message))
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
     def _on_finished(self, success, message):
         self._worker = None
         self._set_busy(False)
-        self._status_label.setText(message)
+        _safe_set_status(self._status_label, message)
 
     def has_user_interaction(self) -> bool:
         return bool(self._worker)
@@ -1235,9 +1260,7 @@ class _MergeTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
             return
         orig = self._original_row.path()
         out = self._output_row.path()
@@ -1246,12 +1269,10 @@ class _MergeTab(QWidget):
             for i in range(self._file_list.count())
         ]
         if not orig or len(patches) < 2 or not out:
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("modding_tools.merge_need_files")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_need_files"))
             return
         self._run_btn.setEnabled(False)
-        self._status_label.setText(tr("modding_tools.running"))
+        _safe_set_status(self._status_label, tr("modding_tools.running"))
         self._worker = _WorkerThread(
             self._g3m.merge_patches,
             (
@@ -1269,15 +1290,18 @@ class _MergeTab(QWidget):
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
-        self._status_label.setText(_format_progress_status(percent, label))
+        _safe_set_status(self._status_label, _format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc == 0:
-            self._status_label.setText(tr("modding_tools.success"))
+            _safe_set_status(self._status_label, tr("modding_tools.success"))
         else:
-            self._status_label.setText(tr("modding_tools.failed", error=err[:300]))
+            _safe_set_status(
+                self._status_label,
+                tr("modding_tools.failed", error=err[:300]),
+            )
 
     def has_user_interaction(self) -> bool:
         return bool(
@@ -1335,15 +1359,11 @@ class _InfoTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
             return
         target = self._file_row.path()
         if not target:
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
             return
         self._run_btn.setEnabled(False)
         self._set_output_text(tr("modding_tools.running"))
@@ -1425,18 +1445,14 @@ class _DiffTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
             return
         f1, f2 = self._file1_row.path(), self._file2_row.path()
         if not f1 or not f2:
-            QMessageBox.warning(
-                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
-            )
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
             return
         self._run_btn.setEnabled(False)
-        self._status_label.setText(tr("modding_tools.running"))
+        _safe_set_status(self._status_label, tr("modding_tools.running"))
         out_dir = tempfile.mkdtemp(prefix="modding_tools_diff_")
         self._out_dir = out_dir
         self._worker = _WorkerThread(self._g3m.diff, (f1, f2, out_dir))
@@ -1445,16 +1461,19 @@ class _DiffTab(QWidget):
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
-        self._status_label.setText(_format_progress_status(percent, label))
+        _safe_set_status(self._status_label, _format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc != 0:
-            self._status_label.setText(tr("modding_tools.failed", error=err[:300]))
+            _safe_set_status(
+                self._status_label,
+                tr("modding_tools.failed", error=err[:300]),
+            )
             self._cleanup_out_dir()
             return
-        self._status_label.setText(tr("modding_tools.success"))
+        _safe_set_status(self._status_label, tr("modding_tools.success"))
         md_file = self._find_md(self._out_dir)
         if md_file:
             from ui.dialogs.g3mtool_diff_viewer import DiffViewerDialog
@@ -1465,7 +1484,7 @@ class _DiffTab(QWidget):
             dlg.destroyed.connect(self._cleanup_out_dir)
             dlg.show()
         else:
-            self._status_label.setText(tr("modding_tools.diff_no_report"))
+            _safe_set_status(self._status_label, tr("modding_tools.diff_no_report"))
             self._cleanup_out_dir()
 
     def _cleanup_out_dir(self):
@@ -1669,7 +1688,7 @@ class ModdingToolsDialog(QDialog):
 
     def closeEvent(self, event):
         if self._has_any_interaction():
-            reply = QMessageBox.question(
+            reply = _safe_question(
                 self,
                 tr("modding_tools.title"),
                 tr("modding_tools.confirm_close"),

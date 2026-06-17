@@ -27,6 +27,8 @@ from utils.path_utils import colored_icon
 
 from .mod_card_widget import ModCardWidget
 
+logger = logging.getLogger(__name__)
+
 
 class SearchModCardWidget(ModCardWidget):
     BASE_CARD_WIDTH = 342
@@ -514,7 +516,7 @@ class SearchModCardWidget(ModCardWidget):
             if metrics_changed or name_changed or description_changed:
                 self._refresh_card_geometry(invalidate_parent=True, force=True)
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"SearchModCardWidget: Error updating mod data: {e}", exc_info=True
             )
 

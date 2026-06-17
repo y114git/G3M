@@ -2,6 +2,9 @@
 import json
 import os
 import zipfile
+from unittest.mock import Mock
+
+from PyQt6.QtWidgets import QApplication
 
 from models.game_version_models import GameVersionRecord
 from services.game_versions.store import GameVersionsStore
@@ -67,6 +70,58 @@ class TestGameVersionRecord:
         assert r.effective_status_key == 'ready'
         r.archive_exists = False
         assert r.effective_status_key == 'missing'
+
+
+def test_game_version_apply_confirmation_failure_does_not_apply(monkeypatch):
+    """Checks broken apply confirmation keeps the archived game version unchanged."""
+    from ui.dialogs.game.versions_dialog import _VersionRecordWidget
+
+    app = QApplication.instance() or QApplication([])
+    manager = Mock()
+    manager.is_busy.return_value = False
+    manager.is_applying.return_value = False
+    record = GameVersionRecord(
+        archive_path="C:/versions/game.zip",
+        game="deltarune",
+        archive_exists=True,
+    )
+    widget = _VersionRecordWidget(record, manager, app_state=Mock())
+    monkeypatch.setattr(
+        "ui.dialogs.game.versions_dialog.QMessageBox.question",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dialog deleted")),
+    )
+
+    widget._on_apply()
+
+    manager.apply_version.assert_not_called()
+    widget.deleteLater()
+    app.processEvents()
+
+
+def test_game_version_delete_confirmation_failure_does_not_delete(monkeypatch):
+    """Checks broken delete confirmation keeps the archived game version."""
+    from ui.dialogs.game.versions_dialog import _VersionRecordWidget
+
+    app = QApplication.instance() or QApplication([])
+    manager = Mock()
+    manager.is_busy.return_value = False
+    manager.is_applying.return_value = False
+    record = GameVersionRecord(
+        archive_path="C:/versions/game.zip",
+        game="deltarune",
+        archive_exists=True,
+    )
+    widget = _VersionRecordWidget(record, manager, app_state=Mock())
+    monkeypatch.setattr(
+        "ui.dialogs.game.versions_dialog.QMessageBox.question",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dialog deleted")),
+    )
+
+    widget._on_delete()
+
+    manager.delete_version.assert_not_called()
+    widget.deleteLater()
+    app.processEvents()
 
 
 class TestGameVersionsStore:
@@ -282,6 +337,25 @@ class TestCreateVersionWorker:
         success, _error, _size, count = results[0]
         assert success is True
         assert count == 0
+
+    def test_create_archive_suppresses_emit_failure_after_error(
+        self, temp_dir, qapp, caplog
+    ):
+        """Checks that archive errors cannot crash while notifying a dead UI."""
+        from workers.game_version_archive_worker import CreateVersionWorker
+
+        class _FailingSignal:
+            def emit(self, *_args, **_kwargs):
+                raise RuntimeError("receiver deleted")
+
+        archive_path = os.path.join(temp_dir, "missing", "version.zip")
+        worker = CreateVersionWorker(archive_path, temp_dir, set())
+        worker.finished = _FailingSignal()
+
+        worker.run()
+
+        assert "CreateVersionWorker failed" in caplog.text
+        assert "CreateVersionWorker: failed to emit" in caplog.text
 
 
 class TestApplyVersionWorker:

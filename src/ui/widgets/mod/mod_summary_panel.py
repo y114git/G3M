@@ -104,7 +104,7 @@ class ModSummaryPanel(QFrame):
             QTimer.singleShot(0, lambda: self._on_size_computed(mod_folder, total))
 
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"ModSummaryPanel: failed to calculate mod folder size for {mod_folder}: {e}",
                 exc_info=True,
             )

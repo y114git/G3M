@@ -12,6 +12,13 @@ from services.localization_service import tr
 logger = logging.getLogger(__name__)
 
 
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
+
 class LoadMoreGameBananaModsThread(QThread):
     result, status = pyqtSignal(list), pyqtSignal(str, str)
 
@@ -42,7 +49,7 @@ class LoadMoreGameBananaModsThread(QThread):
             game_name = get_gamebanana_reverse_map().get(self.game_id)
             if not game_name:
                 logger.error(f"Unknown game_id: {self.game_id}")
-                self.result.emit([])
+                _safe_emit(self.__class__.__name__, self.result, [])
                 return
 
             for page in range(self.start_page, self.start_page + self.num_pages):
@@ -63,11 +70,13 @@ class LoadMoreGameBananaModsThread(QThread):
                 )
                 if len(mods_data) < GAMEBANANA_PER_PAGE:
                     break
-            self.result.emit(new_mods)
+            _safe_emit(self.__class__.__name__, self.result, new_mods)
         except Exception as e:
             logger.error(f"Error loading more GameBanana mods: {e}", exc_info=True)
-            self.status.emit(
+            _safe_emit(
+                self.__class__.__name__,
+                self.status,
                 tr("errors.gamebanana_fetch_failed", error=str(e)),
                 UI_COLORS["status_error"],
             )
-            self.result.emit([])
+            _safe_emit(self.__class__.__name__, self.result, [])

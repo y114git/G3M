@@ -21,6 +21,13 @@ from services.localization_service import tr
 logger = logging.getLogger(__name__)
 
 
+def _safe_emit(owner: str, signal, *args) -> None:
+    try:
+        signal.emit(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
+
+
 class SearchGameBananaModsThread(QThread):
     result = pyqtSignal(list)
     status = pyqtSignal(str, str)
@@ -53,10 +60,10 @@ class SearchGameBananaModsThread(QThread):
         try:
             game_name = get_gamebanana_reverse_map().get(self.game_id)
             if not game_name:
-                self.result.emit([])
+                _safe_emit(self.__class__.__name__, self.result, [])
                 return
             if not self.search_string or len(self.search_string.strip()) < 2:
-                self.result.emit([])
+                _safe_emit(self.__class__.__name__, self.result, [])
                 return
             for page in range(self.start_page, self.start_page + self.num_pages):
                 if self._cancelled or self.isInterruptionRequested():
@@ -93,11 +100,13 @@ class SearchGameBananaModsThread(QThread):
                     new_mods.append(mod_info)
                 if len(records) < GAMEBANANA_PER_PAGE:
                     break
-            self.result.emit(new_mods)
+            _safe_emit(self.__class__.__name__, self.result, new_mods)
         except Exception as e:
             logger.error(f"Error searching GameBanana mods: {e}", exc_info=True)
-            self.status.emit(
+            _safe_emit(
+                self.__class__.__name__,
+                self.status,
                 tr("errors.gamebanana_fetch_failed", error=str(e)),
                 UI_COLORS["status_error"],
             )
-            self.result.emit([])
+            _safe_emit(self.__class__.__name__, self.result, [])

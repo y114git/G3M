@@ -23,6 +23,8 @@ from utils.mod.utils import (
 from utils.process_utils import format_filesystem_error
 from workers.install.batch_install_worker import InstallModsThread
 
+logger = logging.getLogger(__name__)
+
 
 class ModOperationsController:
     """Manages mod installation operations and related workflows."""
@@ -41,11 +43,31 @@ class ModOperationsController:
         try:
             return func()
         except (AttributeError, RuntimeError) as e:
-            logging.debug(f"{error_msg_prefix}: {e}", exc_info=True)
+            logger.debug(f"{error_msg_prefix}: {e}", exc_info=True)
             return default_return
         except Exception as e:
-            logging.debug(f"{error_msg_prefix}: {e}")
+            logger.debug(f"{error_msg_prefix}: {e}")
             return default_return
+
+    def _safe_update_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception as e:
+            logger.warning(
+                "ModOperationsController: status update failed: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        try:
+            self.feedback_service.show_message(*args, **kwargs)
+        except Exception as e:
+            logger.warning(
+                "ModOperationsController: feedback message failed: %s",
+                e,
+                exc_info=True,
+            )
 
     @staticmethod
     def _disconnect_task_signals(task) -> None:
@@ -62,7 +84,7 @@ class ModOperationsController:
             self.app, available_files, mod_name, homepage
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.operation_cancelled"), UI_COLORS["status_warning"]
             )
             return None
@@ -76,18 +98,21 @@ class ModOperationsController:
             lambda: self.app.game_launch.update_button_state(),
             "Failed to update button state",
         )
-        self.feedback_service.show_message(
-            "error", "errors.gamebanana_install_failed", error=str(error)
+        self._safe_execute(
+            lambda: self.feedback_service.show_message(
+                "error", "errors.gamebanana_install_failed", error=str(error)
+            ),
+            "Failed to show install start error",
         )
 
     def on_mod_download_requested(self, mod):
         if self.app_state.is_installing:
-            logging.debug(
+            logger.debug(
                 "ModOperationsController: Installation already in progress, ignoring request"
             )
             return
         if self.app_state.current_task and self.app_state.current_task.isRunning():
-            logging.debug(
+            logger.debug(
                 "ModOperationsController: Previous task still running, ignoring request"
             )
             return
@@ -99,7 +124,7 @@ class ModOperationsController:
         try:
             self._enqueue_gamebanana_download(mod, selected_file)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Error starting GameBanana mod installation: {e}", exc_info=True
             )
             self._handle_install_start_error(e)
@@ -110,7 +135,7 @@ class ModOperationsController:
 
         mod_id_str = get_gamebanana_mod_id(mod)
         if not mod_id_str:
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error", "errors.invalid_gamebanana_mod_id"
             )
             return
@@ -129,7 +154,7 @@ class ModOperationsController:
             file_name = selected_file.get("name") or selected_file.get("_sFile")
             compatibility = selected_file.get("compatibility")
         if not download_url:
-            self.feedback_service.show_message("error", "errors.no_download_url")
+            self._safe_show_message("error", "errors.no_download_url")
             return
         canonical_key = (
             f"gb_{item_type_lower}_{mod_id}_{file_id}"
@@ -193,11 +218,11 @@ class ModOperationsController:
             self.app_state.current_task = install_thread
             self.app.game_launch.update_button_state()
             install_thread.start()
-            logging.info(
+            logger.info(
                 f"ModOperationsController: Started mod installation thread (op_id={op_id})"
             )
         except Exception as e:
-            logging.error(f"Error starting install thread: {e}", exc_info=True)
+            logger.error(f"Error starting install thread: {e}", exc_info=True)
             self._handle_install_start_error(e)
 
     def _get_available_gamebanana_files(self, mod) -> list[dict]:
@@ -226,7 +251,7 @@ class ModOperationsController:
                 self._notify_gamebanana_card_refresh()
             return files
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"ModOperationsController: Failed to refresh GameBanana files for {mod_id}: {e}"
             )
             return []
@@ -251,7 +276,7 @@ class ModOperationsController:
                             file_id = int(key)
                             break
                 if not file_id:
-                    logging.warning(
+                    logger.warning(
                         f"ModOperationsController: Could not extract file_id from file_data: {file_data}"
                     )
                     continue
@@ -269,7 +294,7 @@ class ModOperationsController:
                 )
                 if not download_url:
                     download_url = f"https://gamebanana.com/dl/{file_id}"
-                    logging.debug(
+                    logger.debug(
                         f"ModOperationsController: Constructed download URL for file {file_id}: {download_url}"
                     )
                 formatted_file = {
@@ -290,7 +315,7 @@ class ModOperationsController:
                 formatted_files.append(formatted_file)
             return formatted_files
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ModOperationsController: Failed to get all GameBanana files for {mod_id}: {e}",
                 exc_info=True,
             )
@@ -301,7 +326,7 @@ class ModOperationsController:
             if hasattr(self.app, "search_display"):
                 self.app.search_display.update_search_cards()
         except Exception as e:
-            logging.debug("_notify_gamebanana_card_refresh failed", exc_info=e)
+            logger.debug("_notify_gamebanana_card_refresh failed", exc_info=e)
 
     def install_mod(self, mod, force=False, is_update=False):
         try:
@@ -321,7 +346,7 @@ class ModOperationsController:
                     mod
                 ) or self._get_all_gamebanana_files(mod)
                 if not available_files:
-                    self.feedback_service.show_message(
+                    self._safe_show_message(
                         "warning", "errors.mod_no_files", mod_name=mod.name
                     )
                     return
@@ -343,7 +368,7 @@ class ModOperationsController:
                 if mod.get_chapter_data(chapter_id):
                     available_chapters.append(chapter_id)
             if not available_chapters:
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "warning", "errors.mod_no_files", mod_name=mod.name
                 )
                 return
@@ -359,7 +384,7 @@ class ModOperationsController:
                 try:
                     self._disconnect_task_signals(self.app_state.current_task)
                 except (TypeError, RuntimeError) as e:
-                    logging.debug(
+                    logger.debug(
                         f"Failed to disconnect signals from previous task: {e}"
                     )
             self.app._install_op_id += 1
@@ -369,22 +394,8 @@ class ModOperationsController:
             )
             self._start_install_thread(install_thread, op_id)
         except (OSError, KeyError, Exception) as e:
-            from models.exceptions import ModInstallationError
-
-            mod_id = get_mod_id(mod)
-            mod_name_str = get_mod_name(mod, "Unknown Mod")
-            reason_map = {
-                IOError: "io_error",
-                OSError: "io_error",
-                KeyError: "missing_data",
-            }
-            reason = reason_map.get(type(e), "unknown")
-            raise ModInstallationError(
-                f"{reason}: {e}",
-                mod_id=mod_id,
-                mod_name=mod_name_str,
-                reason=reason,
-            ) from e
+            logger.error("ModOperationsController: install start failed: %s", e, exc_info=True)
+            self._handle_install_start_error(e)
 
     def on_install_progress_token(self, value: int, op_id: int):
         current_op_id = getattr(self.app, "_install_op_id", 0)
@@ -394,7 +405,14 @@ class ModOperationsController:
     def on_install_status_token(self, message: str, color: str, op_id: int):
         current_op_id = getattr(self.app, "_install_op_id", 0)
         if current_op_id == op_id and self.app_state.is_installing:
-            self.app._update_status(message, color)
+            try:
+                self.app._update_status(message, color)
+            except Exception as e:
+                logger.warning(
+                    "ModOperationsController: install status callback failed: %s",
+                    e,
+                    exc_info=True,
+                )
 
     def _on_install_task_finished(self, success: bool, op_id: int):
         current_op_id = getattr(self.app, "_install_op_id", 0)
@@ -441,12 +459,12 @@ class ModOperationsController:
                         analytics_mod,
                         mode=analytics_mode,
                     )
-                logging.info("ModOperationsController: Installation was cancelled")
+                logger.info("ModOperationsController: Installation was cancelled")
                 self._safe_execute(
                     lambda: setattr(self.app_state, "operation_cancelled", False),
                     "Failed to set operation_cancelled",
                 )
-                self.feedback_service.update_status(
+                self._safe_update_status(
                     tr("status.operation_cancelled"), UI_COLORS["status_warning"]
                 )
             else:
@@ -455,7 +473,7 @@ class ModOperationsController:
                         analytics_mod,
                         mode=analytics_mode,
                     )
-                self.feedback_service.update_status(
+                self._safe_update_status(
                     tr("status.mod_install_error"), UI_COLORS["status_error"]
                 )
             try:
@@ -464,7 +482,7 @@ class ModOperationsController:
                     if temp_root and os.path.isdir(temp_root):
                         shutil.rmtree(temp_root, ignore_errors=True)
             except (AttributeError, OSError, shutil.Error) as e:
-                logging.debug(f"Failed to clean temp root: {e}", exc_info=True)
+                logger.debug(f"Failed to clean temp root: {e}", exc_info=True)
             self.app.game_launch.update_button_state()
             self.app_state._scan_blocked = False
             return
@@ -490,7 +508,7 @@ class ModOperationsController:
                 if mod_id:
                     self._sync_installed_mod_to_all_mods(mod_id)
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"ModOperationsController: Failed to reload local mods: {e}",
                 exc_info=True,
             )
@@ -512,11 +530,11 @@ class ModOperationsController:
                             "Failed to update display",
                         )
                         return
-                logging.debug(
+                logger.debug(
                     f"ModOperationsController: Installed mod {mod_id} not found in filtered_mods"
                 )
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"ModOperationsController: Failed to update filtered mods: {e}",
                     exc_info=True,
                 )
@@ -525,14 +543,14 @@ class ModOperationsController:
             try:
                 self.mod_service._get_mods_cache()
             except Exception as e:
-                logging.warning(f"ModOperationsController: Failed to check cache: {e}")
+                logger.warning(f"ModOperationsController: Failed to check cache: {e}")
 
         def update_cards_with_retry():
             try:
                 self.mod_service.invalidate_mods_cache()
                 self.app.search_display.update_search_cards()
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"ModOperationsController: Failed to update search cards: {e}",
                     exc_info=True,
                 )
@@ -542,7 +560,7 @@ class ModOperationsController:
                 if hasattr(self.app, "library_display"):
                     self.app.library_display.update_display()
             except Exception as e:
-                logging.warning(
+                logger.warning(
                     f"ModOperationsController: Failed to update library display: {e}",
                     exc_info=True,
                 )
@@ -550,7 +568,7 @@ class ModOperationsController:
         if current_task and installed_mod_info:
             self.refresh_specific_mod_widget_after_update(installed_mod_info)
         elif current_task and not installed_mod_info:
-            logging.debug("ModOperationsController: current_task.mod_info was missing")
+            logger.debug("ModOperationsController: current_task.mod_info was missing")
         if installed_mod_info and (
             analytics := getattr(self.app, "analytics_service", None)
         ):
@@ -564,16 +582,16 @@ class ModOperationsController:
         self._update_debounce_short.call(update_library_with_retry)
         self._update_debounce_long.call(check_cache_and_update)
         if message:
-            self.feedback_service.update_status(message, UI_COLORS["status_success"])
+            self._safe_update_status(message, UI_COLORS["status_success"])
         else:
-            self.feedback_service.update_status(
+            self._safe_update_status(
                 tr("status.mod_installed_success"), UI_COLORS["status_success"]
             )
         if not was_installed_before:
             self._safe_execute(
                 lambda: QTimer.singleShot(
                     0,
-                    lambda: self.feedback_service.show_message(
+                    lambda: self._safe_show_message(
                         "info", "dialogs.mod_installed_apply_info"
                     ),
                 ),
@@ -610,7 +628,7 @@ class ModOperationsController:
                 if hasattr(temp_mod, "files") and temp_mod.files:
                     existing_mod.files = temp_mod.files
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"ModOperationsController: _sync_installed_mod_to_all_mods failed for {mod_id}: {e}"
             )
 
@@ -666,13 +684,13 @@ class ModOperationsController:
             if hasattr(self.app, "library_display"):
                 self.app.library_display.update_display()
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"ModOperationsController: Failed to uninstall mod: {e}", exc_info=True
             )
             mod_path = ""
             with contextlib.suppress(Exception):
                 mod_path = self.mod_service.get_mod_folder_path(get_mod_id(mod)) or ""
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error",
                 tr("errors.error"),
                 tr(

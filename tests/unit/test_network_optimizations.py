@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import requests
+from PyQt6.QtCore import QObject
 
 from presentation.update_presenter import reload_global_settings
 from services.chat_service import ChatManager
@@ -73,6 +74,60 @@ def test_reload_global_settings_force_refresh_ignores_cache():
     callback.assert_called_once_with(True)
     assert app.app_state.global_settings["announce"]["version"] == 2
     assert session.get.called
+
+
+def test_reload_global_settings_suppresses_callback_failure_when_cached():
+    """Checks that a refresh callback error is logged instead of crashing the caller."""
+    app = Mock()
+    app.app_state = Mock()
+    app.app_state.has_internet = True
+    app.app_state.global_settings = {"announce": {}}
+    app.app_state.global_settings_loaded_at = 900
+    app.app_state.global_settings_load_in_progress = False
+    callback = Mock(side_effect=RuntimeError("callback failed"))
+
+    with patch("presentation.update_presenter.time.time", return_value=1000.0):
+        reload_global_settings(app, callback=callback)
+
+    callback.assert_called_once_with(True)
+    assert app.app_state.global_settings_load_in_progress is False
+
+
+def test_reload_global_settings_suppresses_callback_failure_from_worker(qapp, monkeypatch):
+    """Checks that the Qt worker completion callback cannot crash global settings refresh."""
+    from presentation import update_presenter
+
+    app = QObject()
+    app.app_state = Mock()
+    app.app_state.has_internet = True
+    app.app_state.global_settings = {}
+    app.app_state.global_settings_load_in_progress = False
+    callback = Mock(side_effect=RuntimeError("callback failed"))
+
+    class _Signal:
+        def __init__(self) -> None:
+            self._callback = None
+
+        def connect(self, callback):
+            self._callback = callback
+
+    class _Worker:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.finished = _Signal()
+
+        def start(self):
+            self.finished._callback(True, {"announce": {"version": 2}})
+
+        def deleteLater(self):  # noqa: N802
+            return None
+
+    monkeypatch.setattr(update_presenter, "_GlobalSettingsWorker", _Worker)
+
+    reload_global_settings(app, callback=callback, force_refresh=True)
+
+    callback.assert_called_once_with(True)
+    assert app.app_state.global_settings == {"announce": {"version": 2}}
+    assert app.app_state.global_settings_load_in_progress is False
 
 
 def test_chat_get_messages_returns_empty_when_no_internet():

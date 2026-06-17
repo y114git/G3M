@@ -44,6 +44,19 @@ class SettingsUiController:
             app_window,
         )
 
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        show_message = getattr(self.feedback_service, "show_message", None)
+        if not callable(show_message):
+            return
+        try:
+            show_message(*args, **kwargs)
+        except Exception as e:
+            logger.warning(
+                "Settings feedback message failed: %s",
+                e,
+                exc_info=True,
+            )
+
     def toggle_settings_view(self):
         self.app_state.is_settings_view = not self.app_state.is_settings_view
         if self.app_state.is_settings_view:
@@ -250,7 +263,7 @@ class SettingsUiController:
             and self.app_state.current_mode == "chapter"
             and self.app_state.local_config.get("direct_launch_chapter", "")
         ):
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "warning", "ui.steam_launch", tr("ui.steam_launch_direct_conflict")
             )
             self.app.launch_via_steam_checkbox.setChecked(False)

@@ -29,6 +29,8 @@ from ui.common.dialog_theme import (
 from ui.common.styling import clamp_border_radius
 from utils.path_utils import colored_icon
 
+logger = logging.getLogger(__name__)
+
 
 class ChatWindow(QDialog):
     def __init__(self, app_state, parent=None) -> None:
@@ -263,12 +265,12 @@ class ChatWindow(QDialog):
                     self._on_input_changed(self.message_input.text())
             except (RuntimeError, AttributeError) as e:
                 self._closed = True
-                logging.debug(
+                logger.debug(
                     f"ChatWindow: Widget deleted while processing messages: {e}"
                 )
                 return
             except Exception as e:
-                logging.warning(f"ChatWindow: Failed to process messages: {e}")
+                logger.warning(f"ChatWindow: Failed to process messages: {e}")
                 if not self._closed:
                     try:
                         self.status_label.setText(tr("chat.error_loading"))
@@ -341,9 +343,9 @@ class ChatWindow(QDialog):
                     self._update_messages_display_incremental(new_message_ids)
         except (RuntimeError, AttributeError) as e:
             self._closed = True
-            logging.debug(f"ChatWindow: Widget deleted while refreshing messages: {e}")
+            logger.debug(f"ChatWindow: Widget deleted while refreshing messages: {e}")
         except Exception as e:
-            logging.debug(f"ChatWindow: Failed to refresh messages: {e}")
+            logger.debug(f"ChatWindow: Failed to refresh messages: {e}")
         finally:
             self._refreshing_messages = False
 
@@ -466,7 +468,7 @@ class ChatWindow(QDialog):
             return
         saved_channel = self.current_channel
         if not saved_channel:
-            logging.error("ChatWindow: No channel selected, cannot send message")
+            logger.error("ChatWindow: No channel selected, cannot send message")
             return
         self._updating_channel_buttons = True
         self.message_input.setEnabled(False)
@@ -522,9 +524,9 @@ class ChatWindow(QDialog):
                     self._closed = True
         except (RuntimeError, AttributeError) as e:
             self._closed = True
-            logging.debug(f"ChatWindow: Widget deleted while handling send result: {e}")
+            logger.debug(f"ChatWindow: Widget deleted while handling send result: {e}")
         except Exception as e:
-            logging.warning(f"ChatWindow: Failed to handle send result: {e}")
+            logger.warning(f"ChatWindow: Failed to handle send result: {e}")
             if not self._closed:
                 try:
                     self.status_label.setText(tr("chat.error_sending"))
@@ -556,7 +558,7 @@ class ChatWindow(QDialog):
             self._loading_messages = False
         elif self._refreshing_messages:
             self._refreshing_messages = False
-        logging.warning(
+        logger.warning(
             f"ChatWindow: Chat request error for channel {channel}: {error_message}"
         )
 

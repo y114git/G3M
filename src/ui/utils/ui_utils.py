@@ -13,6 +13,8 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
+logger = logging.getLogger(__name__)
+
 
 class DebounceTimer:
     """Timer that delays function execution until after a period of inactivity."""
@@ -41,7 +43,7 @@ class DebounceTimer:
             try:
                 self._callback()
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"DebounceTimer: Error executing callback: {e}", exc_info=True
                 )
         self._callback = None
@@ -110,21 +112,21 @@ def safe_stop_thread(thread, timeout=2000, blocking=True):
             thread.requestInterruption()
             thread.quit()
             if blocking and not thread.wait(timeout):
-                logging.warning(
+                logger.warning(
                     f"safe_stop_thread: thread {type(thread).__name__} did not stop in {timeout}ms. Thread may be blocked. Consider checking isInterruptionRequested() in worker loops."
                 )
                 try:
                     thread.terminate()
                     thread.wait(500)
                 except Exception as e:
-                    logging.debug(
+                    logger.debug(
                         f"safe_stop_thread: failed to terminate thread {type(thread).__name__}: {e}",
                         exc_info=True,
                     )
         except (RuntimeError, AttributeError):
             pass
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"safe_stop_thread: error stopping thread {type(thread).__name__}: {e}",
                 exc_info=True,
             )

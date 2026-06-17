@@ -11,6 +11,8 @@ from typing import Any
 
 from config.settings_schema import DEFAULT_APP_SETTINGS
 
+logger = logging.getLogger(__name__)
+
 LEGACY_DESCRIPTION_KEY = "tagline"
 LEGACY_ICON_KEY = "icon_url"
 LEGACY_MOD_ID_KEYS = ("key", "mod_key")

@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from app.window.startup import (
     force_finish_initialization,
     handle_pending_install,
+    on_mod_scan_finished,
     on_mods_loaded,
     post_show_initialization,
     trigger_initial_mods_refresh,
@@ -119,3 +120,19 @@ def test_trigger_initial_mods_refresh_builds_callbacks():
         relocalize.assert_called_once_with(window)
         kwargs["on_fetch_finished_kwargs"]["update_action_button_callback"]()
         game_launch.update_button_state.assert_called_once()
+
+
+def test_mod_scan_error_ignores_broken_status_feedback():
+    """Checks scan failure still re-enables the window if status UI is gone."""
+    window = SimpleNamespace(
+        mod_service=SimpleNamespace(load_local_mods=Mock(side_effect=RuntimeError("scan failed"))),
+        feedback_service=SimpleNamespace(
+            update_status=Mock(side_effect=RuntimeError("status deleted"))
+        ),
+        setEnabled=Mock(),
+    )
+
+    on_mod_scan_finished(window, {})
+
+    window.feedback_service.update_status.assert_called_once()
+    window.setEnabled.assert_called_once_with(True)

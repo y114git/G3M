@@ -4,7 +4,7 @@ import json
 import os
 import time
 import zipfile
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -451,6 +451,34 @@ def test_plugin_runtime_reports_enabled_shortcut_hook_and_passes_shortcut_contex
     assert shortcut_context.summary_lines == [("Collection", "alpha")]
 
 
+def test_headless_plugin_runtime_ignores_corrupted_plugin_state(temp_dir, monkeypatch):
+    from services.plugins.shortcut_service import build_headless_plugin_runtime
+
+    user_root = os.path.join(temp_dir, "user")
+    plugins_dir = os.path.join(user_root, "plugins")
+    os.makedirs(plugins_dir, exist_ok=True)
+    _write_plugin(plugins_dir, "headless_plugin")
+    with open(os.path.join(plugins_dir, "plugins_data.json"), "w", encoding="utf-8") as handle:
+        handle.write("{broken json")
+    monkeypatch.setattr("services.plugins.shortcut_service.get_user_data_root", lambda: user_root)
+
+    runtime = build_headless_plugin_runtime({"language": "en"})
+
+    assert runtime is not None
+    assert "headless_plugin" in runtime._installed
+
+
+def test_plugin_state_service_recovers_when_settings_read_raises(temp_dir):
+    settings_service = Mock()
+    settings_service.read_json.side_effect = OSError("state unreadable")
+    settings_service.write_json = Mock()
+
+    state_service = PluginStateService(settings_service, temp_dir)
+
+    assert state_service.is_enabled("missing_plugin") is False
+    settings_service.write_json.assert_called_once()
+
+
 def test_plugin_runtime_context_uses_plugin_scoped_feedback(temp_dir, monkeypatch, qapp):
     from ui.common import feedback as feedback_module
     from ui.common.feedback import FeedbackManager
@@ -504,7 +532,7 @@ def test_plugin_install_service_accepts_plugin_folder(temp_dir):
     _write_plugin(source_dir, "folder_plugin")
     install_service = PluginInstallService(
         plugin_state_service=state_service,
-        plugin_runtime_service=Mock(scan_installed_plugins=Mock()),
+        plugin_runtime_service=Mock(scan_installed_plugins=Mock(), enable_plugin=Mock(return_value=(True, ""))),
         plugins_dir=plugins_dir,
     )
 
@@ -516,6 +544,221 @@ def test_plugin_install_service_accepts_plugin_folder(temp_dir):
     assert os.path.isfile(os.path.join(source_dir, "folder_plugin", "plugin.py"))
     assert state_service.get_install_meta("folder_plugin")["local"] is True
     install_service.plugin_runtime_service.scan_installed_plugins.assert_not_called()
+
+
+def test_plugin_install_service_preserves_state_when_reinstalling_same_plugin(temp_dir):
+    """Checks that plugin update/reinstall preserves saved state for the same plugin id."""
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_plugin")
+    _write_plugin(source_dir, "stateful_plugin")
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=Mock(scan_installed_plugins=Mock(), enable_plugin=Mock(return_value=(True, ""))),
+        plugins_dir=plugins_dir,
+    )
+    install_service.install_path(source_dir, source="catalog", catalog_plugin_version="1.0.0")
+    state_service.set_enabled("stateful_plugin", True)
+    state_service.set_plugin_setting("stateful_plugin", "folder", "SOJ")
+
+    plugin_id = install_service.install_path(
+        source_dir,
+        source="catalog",
+        catalog_plugin_version="1.0.1",
+    )
+
+    assert plugin_id == "stateful_plugin"
+    assert state_service.is_enabled("stateful_plugin") is True
+    assert state_service.get_plugin_setting("stateful_plugin", "folder") == "SOJ"
+    assert state_service.get_install_meta("stateful_plugin")["catalog_plugin_version"] == "1.0.1"
+
+
+def test_plugin_install_service_preserves_plugin_runtime_files_when_updating(temp_dir):
+    """Checks that plugin update keeps files created by the installed plugin."""
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_plugin")
+    _write_plugin(source_dir, "runtime_data_plugin")
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=Mock(scan_installed_plugins=Mock()),
+        plugins_dir=plugins_dir,
+    )
+    install_service.install_path(source_dir, source="catalog", catalog_plugin_version="1.0.0")
+    installed_dir = os.path.join(plugins_dir, "runtime_data_plugin")
+    runtime_file = os.path.join(installed_dir, "runtime_data", "save.json")
+    os.makedirs(os.path.dirname(runtime_file), exist_ok=True)
+    with open(runtime_file, "w", encoding="utf-8") as handle:
+        handle.write('{"selected": "SOJ"}')
+    with open(os.path.join(source_dir, "runtime_data_plugin", "plugin.py"), "w", encoding="utf-8") as handle:
+        handle.write("def create_plugin():\n  return object()\n")
+
+    plugin_id = install_service.install_path(
+        source_dir,
+        source="catalog",
+        catalog_plugin_version="1.0.1",
+    )
+
+    assert plugin_id == "runtime_data_plugin"
+    assert os.path.isfile(runtime_file)
+    with open(runtime_file, encoding="utf-8") as handle:
+        assert handle.read() == '{"selected": "SOJ"}'
+    with open(os.path.join(installed_dir, "plugin.py"), encoding="utf-8") as handle:
+        assert "return object()" in handle.read()
+
+
+def test_plugin_install_service_keeps_existing_plugin_when_update_file_is_busy(
+    temp_dir, monkeypatch
+):
+    """Checks that a failed file replacement does not remove installed plugin data."""
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_plugin")
+    _write_plugin(source_dir, "busy_plugin")
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=Mock(scan_installed_plugins=Mock()),
+        plugins_dir=plugins_dir,
+    )
+    install_service.install_path(source_dir, source="catalog", catalog_plugin_version="1.0.0")
+    installed_dir = os.path.join(plugins_dir, "busy_plugin")
+    runtime_file = os.path.join(installed_dir, "runtime_data", "save.json")
+    os.makedirs(os.path.dirname(runtime_file), exist_ok=True)
+    with open(runtime_file, "w", encoding="utf-8") as handle:
+        handle.write('{"selected": "SOJ"}')
+    old_plugin_path = os.path.join(installed_dir, "plugin.py")
+    with open(old_plugin_path, encoding="utf-8") as handle:
+        old_plugin_body = handle.read()
+    with open(os.path.join(source_dir, "busy_plugin", "plugin.py"), "w", encoding="utf-8") as handle:
+        handle.write("def create_plugin():\n  return object()\n")
+    real_replace = os.replace
+
+    def fail_plugin_replace(src, dst):
+        if os.path.normcase(dst) == os.path.normcase(old_plugin_path):
+            raise PermissionError("file is busy")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", fail_plugin_replace)
+
+    with pytest.raises(PluginValidationError) as exc_info:
+        install_service.install_path(
+            source_dir,
+            source="catalog",
+            catalog_plugin_version="1.0.1",
+        )
+
+    assert "installation_failed" in str(exc_info.value)
+    assert os.path.isfile(runtime_file)
+    with open(runtime_file, encoding="utf-8") as handle:
+        assert handle.read() == '{"selected": "SOJ"}'
+    with open(old_plugin_path, encoding="utf-8") as handle:
+        assert handle.read() == old_plugin_body
+    assert state_service.get_install_meta("busy_plugin")["catalog_plugin_version"] == "1.0.0"
+
+
+def test_plugin_install_service_disables_enabled_plugin_while_updating(temp_dir):
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_plugin")
+    _write_plugin(source_dir, "enabled_update_plugin")
+    runtime = Mock(scan_installed_plugins=Mock(), disable_plugin=Mock(), enable_plugin=Mock(return_value=(True, "")))
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=runtime,
+        plugins_dir=plugins_dir,
+    )
+    install_service.install_path(source_dir, source="catalog", catalog_plugin_version="1.0.0")
+    state_service.set_enabled("enabled_update_plugin", True)
+    with open(os.path.join(source_dir, "enabled_update_plugin", "plugin.py"), "w", encoding="utf-8") as handle:
+        handle.write("def create_plugin():\n  return object()\n")
+
+    plugin_id = install_service.install_path(
+        source_dir,
+        source="catalog",
+        catalog_plugin_version="1.0.1",
+    )
+
+    assert plugin_id == "enabled_update_plugin"
+    runtime.disable_plugin.assert_called_once_with("enabled_update_plugin", persist=False)
+    runtime.scan_installed_plugins.assert_called_once_with(resolve_catalog=False)
+    runtime.enable_plugin.assert_called_once_with("enabled_update_plugin")
+    assert runtime.mock_calls.index(call.disable_plugin("enabled_update_plugin", persist=False)) < runtime.mock_calls.index(
+        call.scan_installed_plugins(resolve_catalog=False)
+    )
+    assert runtime.mock_calls.index(call.scan_installed_plugins(resolve_catalog=False)) < runtime.mock_calls.index(
+        call.enable_plugin("enabled_update_plugin")
+    )
+    assert state_service.is_enabled("enabled_update_plugin") is True
+
+
+def test_plugin_install_service_does_not_reenable_plugin_after_failed_update(
+    temp_dir, monkeypatch
+):
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_plugin")
+    _write_plugin(source_dir, "failed_update_plugin")
+    runtime = Mock(scan_installed_plugins=Mock(), disable_plugin=Mock(), enable_plugin=Mock(return_value=(True, "")))
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=runtime,
+        plugins_dir=plugins_dir,
+    )
+    install_service.install_path(source_dir, source="catalog", catalog_plugin_version="1.0.0")
+    state_service.set_enabled("failed_update_plugin", True)
+    installed_dir = os.path.join(plugins_dir, "failed_update_plugin")
+    old_plugin_path = os.path.join(installed_dir, "plugin.py")
+    real_replace = os.replace
+
+    def fail_plugin_replace(src, dst):
+        if os.path.normcase(dst) == os.path.normcase(old_plugin_path):
+            raise PermissionError("file is busy")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", fail_plugin_replace)
+
+    with pytest.raises(PluginValidationError):
+        install_service.install_path(
+            source_dir,
+            source="catalog",
+            catalog_plugin_version="1.0.1",
+        )
+
+    runtime.disable_plugin.assert_called_once_with("failed_update_plugin", persist=False)
+    runtime.enable_plugin.assert_not_called()
+    assert state_service.is_enabled("failed_update_plugin") is True
+    assert state_service.get_install_meta("failed_update_plugin")["catalog_plugin_version"] == "1.0.0"
+
+
+def test_plugin_install_service_does_not_toggle_disabled_plugin_when_updating(temp_dir):
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, os.path.join(temp_dir, "state"))
+    plugins_dir = os.path.join(temp_dir, "plugins")
+    source_dir = os.path.join(temp_dir, "source_plugin")
+    _write_plugin(source_dir, "disabled_update_plugin")
+    runtime = Mock(scan_installed_plugins=Mock(), disable_plugin=Mock(), enable_plugin=Mock(return_value=(True, "")))
+    install_service = PluginInstallService(
+        plugin_state_service=state_service,
+        plugin_runtime_service=runtime,
+        plugins_dir=plugins_dir,
+    )
+    install_service.install_path(source_dir, source="catalog", catalog_plugin_version="1.0.0")
+
+    plugin_id = install_service.install_path(
+        source_dir,
+        source="catalog",
+        catalog_plugin_version="1.0.1",
+    )
+
+    assert plugin_id == "disabled_update_plugin"
+    runtime.disable_plugin.assert_not_called()
+    runtime.enable_plugin.assert_not_called()
+    assert state_service.is_enabled("disabled_update_plugin") is False
 
 
 def test_plugin_install_service_accepts_plugin_zip(temp_dir):
@@ -591,12 +834,16 @@ def test_plugin_install_delete_does_not_touch_runtime_from_install_service(temp_
         plugins_dir=plugins_dir,
     )
     state_service.set_enabled("delete_plugin", True)
+    state_service.set_plugin_setting("delete_plugin", "folder", "SOJ")
+    state_service.set_install_meta("delete_plugin", source="catalog")
 
     install_service.delete_plugin("delete_plugin")
 
     runtime.disable_plugin.assert_not_called()
     assert not os.path.exists(os.path.join(plugins_dir, "delete_plugin"))
     assert state_service.is_enabled("delete_plugin") is False
+    assert state_service.get_plugin_settings("delete_plugin") == {}
+    assert state_service.get_install_meta("delete_plugin") == {}
 
 
 def test_plugin_zip_extraction_rejects_excessive_uncompressed_size(

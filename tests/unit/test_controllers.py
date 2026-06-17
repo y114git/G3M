@@ -88,6 +88,104 @@ class TestModOperationsController:
             ),
         )
 
+    def test_install_mod_start_failure_resets_state_without_raising(
+        self, app_state, feedback_service
+    ):
+        from controllers.mod.operations_controller import ModOperationsController
+        from models.mod_models import LocalModInfo, ModFileData
+
+        mod = LocalModInfo(
+            id="local_start_fail",
+            name="Start Fail",
+            version="1.0.0",
+            author="Author",
+            description="Desc",
+            game="deltarune",
+            files={"deltarune_1": ModFileData(data_file_url="https://example.com/a.xdelta")},
+        )
+        mod_service = Mock()
+        mod_service.is_mod_installed.return_value = False
+        app_window = Mock()
+        app_window._install_op_id = 0
+        app_window.action_button = Mock()
+        app_window.game_launch = Mock()
+        feedback_service = Mock()
+        controller = ModOperationsController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            app_window=app_window,
+        )
+
+        with patch(
+            "controllers.mod.operations_controller.InstallModsThread",
+            side_effect=RuntimeError("worker construction failed"),
+        ):
+            controller.install_mod(mod)
+
+        assert app_state.is_installing is False
+        assert app_state.current_task is None
+        assert getattr(app_state, "_scan_blocked", False) is False
+        feedback_service.show_message.assert_called_once()
+
+    def test_install_complete_success_ignores_broken_status_feedback(
+        self, app_state
+    ):
+        from controllers.mod.operations_controller import ModOperationsController
+
+        feedback_service = Mock()
+        feedback_service.update_status.side_effect = RuntimeError(
+            "status widget deleted"
+        )
+        current_task = Mock()
+        current_task.mod_info = SimpleNamespace(id="mod_a", name="Mod A")
+        app_state.current_task = current_task
+        app_state.is_installing = True
+        app_state._scan_blocked = True
+        app_state.filtered_mods = []
+        app_window = Mock()
+        app_window.game_launch.update_button_state = Mock()
+        next_mod = SimpleNamespace(id="mod_b", name="Mod B")
+        app_window.pending_updates = [next_mod]
+        mod_service = Mock()
+        controller = ModOperationsController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            app_window=app_window,
+        )
+        controller.set_install_buttons_enabled = Mock()
+        controller.refresh_specific_mod_widget_after_update = Mock()
+
+        with patch(
+            "controllers.mod.operations_controller.QTimer.singleShot",
+            side_effect=lambda _ms, callback: callback(),
+        ):
+            controller._on_install_complete(True)
+
+        assert app_state.is_installing is False
+        assert app_state._scan_blocked is False
+        mod_service.update_mod.assert_called_once_with(next_mod)
+        assert app_window.game_launch.update_button_state.called
+
+    def test_install_status_token_ignores_broken_window_status(self, app_state):
+        from controllers.mod.operations_controller import ModOperationsController
+
+        app_window = Mock()
+        app_window._install_op_id = 7
+        app_window._update_status.side_effect = RuntimeError("status widget deleted")
+        app_state.is_installing = True
+        controller = ModOperationsController(
+            app_state=app_state,
+            feedback_service=Mock(),
+            mod_service=Mock(),
+            app_window=app_window,
+        )
+
+        controller.on_install_status_token("Downloading", "yellow", 7)
+
+        app_window._update_status.assert_called_once_with("Downloading", "yellow")
+
 
 class TestGameLaunchControllerRefresh:
     def test_refresh_mods_in_use_replaces_mod_objects_inside_lists(
@@ -397,6 +495,91 @@ class TestLibraryDisplayController:
             mod
         )
 
+    def test_summary_delete_confirmation_failure_does_not_log_delete_failure(
+        self, app_state, feedback_service, caplog
+    ):
+        """Checks that a broken confirmation dialog does not masquerade as deletion."""
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
+
+        with (
+            patch(
+                "PyQt6.QtWidgets.QMessageBox.question",
+                side_effect=RuntimeError("dialog deleted"),
+            ),
+            caplog.at_level("WARNING"),
+        ):
+            controller._on_summary_delete(mod)
+
+        controller.mod_service.uninstall_mod.assert_not_called()
+        controller.used_mods_service.remove_mod_from_all_chapters.assert_not_called()
+        assert "Delete confirmation dialog failed" in caplog.text
+        assert "Failed to delete mod" not in caplog.text
+
+    def test_summary_readme_missing_info_failure_does_not_log_readme_failure(
+        self, app_state, feedback_service, tmp_path, caplog
+    ):
+        """Checks that a broken missing-README notice is logged as feedback only."""
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        controller.mod_service.get_mod_folder_path.return_value = str(tmp_path)
+        mod = SimpleNamespace(id="ghost_mod", name="Ghost Mod")
+
+        with (
+            patch(
+                "PyQt6.QtWidgets.QMessageBox.information",
+                side_effect=RuntimeError("dialog deleted"),
+            ),
+            caplog.at_level("WARNING"),
+        ):
+            controller._on_summary_readme(mod)
+
+        assert "Library information dialog failed" in caplog.text
+        assert "Failed to open mod README dialog" not in caplog.text
+
+    def test_modpack_failure_ignores_broken_feedback(
+        self, app_state, feedback_service, tmp_path
+    ):
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        mod_service = Mock()
+        feedback = Mock()
+        feedback.show_message.side_effect = RuntimeError("feedback deleted")
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback,
+            mod_service=mod_service,
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        modpack_dir = tmp_path / "failed_modpack"
+        modpack_dir.mkdir()
+        app_state.current_task = object()
+
+        controller._on_modpack_finished(False, str(modpack_dir))
+
+        assert not modpack_dir.exists()
+        assert app_state.current_task is None
+        feedback.show_message.assert_called_once()
+
 
 class TestModImportExportController:
     """Tests for controllers."""
@@ -439,6 +622,224 @@ class TestModImportExportController:
             with pytest.raises(ValueError) as exc_info:
                 controller._materialize_local_import(source_file, extract_dir)
             assert str(exc_info.value) == tr("errors.permission_denied", path=source_file)
+
+    def test_manual_import_error_dialog_failure_is_suppressed(self, temp_dir):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        controller = ModImportExportController(
+            Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock()
+        )
+        controller._prepare_local_files_for_manual_install = Mock(
+            side_effect=RuntimeError("archive broken")
+        )
+
+        with patch(
+            "controllers.mod.import_export_controller.QMessageBox.critical",
+            side_effect=RuntimeError("dialog already deleted"),
+        ):
+            controller._show_import_error_with_manual_install(
+                os.path.join(temp_dir, "broken.zip"), "broken"
+            )
+
+    def test_remote_import_finished_ui_failure_is_suppressed(self, temp_dir):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        app_state.reset_install_state = Mock()
+        app_window = Mock()
+        app_window.feedback_service.update_status.side_effect = RuntimeError(
+            "status widget deleted"
+        )
+        app_window.feedback_service.show_message.side_effect = RuntimeError(
+            "dialog already deleted"
+        )
+        controller = ModImportExportController(app_state, Mock(), app_window)
+        controller._active_remote_import_source = "url"
+        controller._record_import_analytics = Mock()
+
+        controller._on_mod_install_finished(False, "download failed")
+
+        app_state.reset_install_state.assert_called_once()
+        controller._record_import_analytics.assert_called_once_with(
+            source="url", outcome="failed"
+        )
+
+    def test_remote_import_success_information_failure_is_suppressed(self, temp_dir):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        app_state.reset_install_state = Mock()
+        controller = ModImportExportController(app_state, Mock(), Mock())
+        controller._active_remote_import_source = "url"
+        controller._record_import_analytics = Mock()
+        controller._refresh_mod_list = Mock()
+
+        with patch(
+            "controllers.mod.import_export_controller.QMessageBox.information",
+            side_effect=RuntimeError("dialog already deleted"),
+        ):
+            controller._on_mod_install_finished(True, "done")
+
+        app_state.reset_install_state.assert_called_once()
+        controller._refresh_mod_list.assert_called_once()
+        controller._record_import_analytics.assert_called_once_with(
+            source="url", outcome="success"
+        )
+
+    def test_show_mod_details_config_error_dialog_failure_is_suppressed(self, temp_dir):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        mod_data = SimpleNamespace(id="broken_mod", name="Broken Mod")
+        mod_folder = os.path.join(temp_dir, "broken_mod")
+        os.makedirs(mod_folder, exist_ok=True)
+        with open(os.path.join(mod_folder, "mod_config.json"), "w", encoding="utf-8") as handle:
+            handle.write("{bad json")
+        mod_service = Mock(get_mod_folder_path=Mock(return_value=mod_folder))
+        controller = ModImportExportController(
+            Mock(mods_dir=temp_dir, all_mods=[]), mod_service, Mock()
+        )
+
+        with patch(
+            "controllers.mod.import_export_controller.QMessageBox.critical",
+            side_effect=RuntimeError("dialog already deleted"),
+        ):
+            controller.show_mod_details_dialog(mod_data)
+
+    def test_local_import_success_information_failure_does_not_trigger_manual_fallback(
+        self, temp_dir
+    ):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        controller = ModImportExportController(app_state, Mock(), Mock())
+        content_path = os.path.join(temp_dir, "extract")
+        os.makedirs(content_path, exist_ok=True)
+        save_json(
+            os.path.join(content_path, "mod_config.json"),
+            {
+                "id": "success_mod",
+                "name": "Success Mod",
+                "author": "Author",
+                "version": "1.0.0",
+                "game": "deltarune",
+                "files": {"deltarune_1": {"data_file_path": "patch.xdelta"}},
+            },
+            indent=2,
+        )
+        with open(os.path.join(content_path, "patch.xdelta"), "w", encoding="utf-8") as handle:
+            handle.write("patch")
+        controller._materialize_local_import = Mock(return_value=content_path)
+        controller._refresh_mod_list = Mock()
+        controller._record_import_analytics = Mock()
+        controller._show_import_error_with_manual_install = Mock()
+
+        with (
+            patch(
+                "controllers.mod.import_export_controller.QMessageBox.information",
+                side_effect=RuntimeError("dialog already deleted"),
+            ),
+            patch(
+                "controllers.mod.import_export_controller.find_deltamod_info_file",
+                return_value=False,
+            ),
+        ):
+            controller._install_mod_from_file(os.path.join(temp_dir, "success.zip"))
+
+        assert os.path.isdir(os.path.join(temp_dir, "Success Mod"))
+        controller._refresh_mod_list.assert_called_once()
+        controller._show_import_error_with_manual_install.assert_not_called()
+        controller._record_import_analytics.assert_called_once_with(
+            source="file",
+            outcome="success",
+            file_path=os.path.join(temp_dir, "success.zip"),
+        )
+
+    def test_url_import_start_failure_feedback_failure_is_suppressed(self, temp_dir):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        app_window = Mock()
+        app_window.feedback_service.show_message.side_effect = RuntimeError(
+            "toast deleted"
+        )
+        controller = ModImportExportController(app_state, Mock(), app_window)
+        controller._record_import_analytics = Mock()
+
+        with patch(
+            "workers.install.url_install_worker.UrlInstallThread",
+            side_effect=RuntimeError("worker failed"),
+        ):
+            controller._install_mod_from_url("https://example.com/mod.zip")
+
+        controller._record_import_analytics.assert_called_once_with(
+            source="url", outcome="failed"
+        )
+        app_window.feedback_service.show_message.assert_called_once()
+
+    def test_url_import_worker_status_uses_safe_feedback(self, temp_dir):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        class Signal:
+            def __init__(self) -> None:
+                self.callback = None
+
+            def connect(self, callback):
+                self.callback = callback
+
+        class Worker:
+            def __init__(self, *_args) -> None:
+                self.status = Signal()
+                self.progress = Signal()
+                self.finished = Signal()
+                self.manual_install_required = Signal()
+                self.started = False
+
+            def start(self):
+                self.started = True
+
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        app_window = Mock()
+        app_window.feedback_service.update_status.side_effect = RuntimeError(
+            "status deleted"
+        )
+        controller = ModImportExportController(app_state, Mock(), app_window)
+
+        with patch(
+            "workers.install.url_install_worker.UrlInstallThread",
+            Worker,
+        ):
+            controller._install_mod_from_url("https://example.com/mod.zip")
+
+        worker = app_state.current_task
+        worker.status.callback("Downloading", "yellow")
+
+        app_window.feedback_service.update_status.assert_called_once_with(
+            "Downloading", "yellow"
+        )
+
+    def test_manual_install_required_error_feedback_failure_still_cleans_temp_dir(
+        self, temp_dir
+    ):
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        manual_temp = os.path.join(temp_dir, "manual_temp")
+        os.makedirs(manual_temp, exist_ok=True)
+        app_state = Mock(mods_dir=temp_dir, all_mods=[])
+        app_state.reset_install_state = Mock(side_effect=RuntimeError("reset failed"))
+        app_window = Mock()
+        app_window.feedback_service.show_message.side_effect = RuntimeError(
+            "toast deleted"
+        )
+        controller = ModImportExportController(app_state, Mock(), app_window)
+
+        controller._on_manual_install_required(
+            os.path.join(temp_dir, "prepared"),
+            os.path.join(temp_dir, "archive.zip"),
+            manual_temp,
+        )
+
+        assert not os.path.exists(manual_temp)
+        app_window.feedback_service.show_message.assert_called_once()
 
 
 class TestModManagerErrorFormatting:
@@ -657,6 +1058,34 @@ class TestSettingsController:
 
         app_window._show_empty_main_tabs_placeholder.assert_called_once()
         app_window._restore_main_tabs_bar.assert_not_called()
+
+    def test_steam_launch_direct_conflict_ignores_broken_feedback(self, app_state):
+        """Checks steam toggle conflict still reverts when warning feedback is gone."""
+        from controllers.settings_controller import SettingsController
+
+        app_state.current_mode = "chapter"
+        app_state.local_config["direct_launch_chapter"] = "deltarune_1"
+        app_state.game_mode = SimpleNamespace(block_steam_with_direct_launch=True)
+        feedback_service = Mock()
+        feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+        settings_service = Mock()
+        app_window = Mock()
+        app_window.launch_via_steam_checkbox.isChecked.return_value = True
+
+        controller = SettingsController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=settings_service,
+            used_mods_service=Mock(),
+            customization_service=Mock(),
+            app_window=app_window,
+        )
+
+        controller.on_toggle_steam_launch()
+
+        feedback_service.show_message.assert_called_once()
+        app_window.launch_via_steam_checkbox.setChecked.assert_called_once_with(False)
+        settings_service.on_toggle_steam_launch.assert_not_called()
 
 
 class TestSearchDisplayController:
@@ -1471,6 +1900,69 @@ class TestThemeController:
         remove_mock.assert_not_called()
         add_mock.assert_not_called()
 
+    def test_theme_save_success_ignores_broken_feedback(
+        self, app_state, tmp_path
+    ):
+        """Checks theme export remains complete when success feedback is gone."""
+        from controllers.theme_controller import ThemeController
+
+        feedback_service = Mock()
+        feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+        settings_service = Mock()
+        app_window = Mock()
+        controller = ThemeController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=settings_service,
+            customization_service=Mock(),
+            app_window=app_window,
+        )
+        controller.init_theme_list = Mock()
+
+        with (
+            patch(
+                "PyQt6.QtWidgets.QInputDialog.getText",
+                return_value=("Saved Theme", True),
+            ),
+            patch(
+                "utils.path_utils.get_user_themes_dir",
+                return_value=str(tmp_path),
+            ),
+        ):
+            controller.on_theme_save_clicked()
+
+        settings_service.write_theme_archive.assert_called_once()
+        controller.init_theme_list.assert_called_once()
+        feedback_service.show_message.assert_called_once()
+
+    def test_builtin_theme_delete_warning_ignores_broken_feedback(
+        self, app_state, tmp_path
+    ):
+        """Checks built-in theme delete warning cannot crash theme controller."""
+        from controllers.theme_controller import ThemeController
+
+        builtin_theme = tmp_path / "Builtin.zip"
+        builtin_theme.write_bytes(b"theme")
+        feedback_service = Mock()
+        feedback_service.show_message.side_effect = RuntimeError("toast deleted")
+        app_window = Mock()
+        app_window.themes_list_widget.currentText.return_value = "Builtin"
+        controller = ThemeController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=Mock(),
+            customization_service=Mock(),
+            app_window=app_window,
+        )
+
+        with patch(
+            "utils.path_utils.resource_path",
+            return_value=str(builtin_theme),
+        ):
+            controller.on_theme_delete_clicked()
+
+        feedback_service.show_message.assert_called_once()
+
     def test_resync_filter_scroll_heights_applies_current_size_hint(
         self, app_state, feedback_service
     ):
@@ -1602,6 +2094,41 @@ class TestGameLaunchController:
             tr("status.game_launched_waiting_for_exit"), "#123456"
         )
         settings_service.save_window_geometry.assert_called_once()
+
+    def test_full_install_finished_ignores_broken_status_feedback(self):
+        from controllers.game_launch_controller import GameLaunchController
+
+        app_state = Mock()
+        app_state.game_mode = Mock(
+            game_id="deltarune",
+            supports_full_install=True,
+        )
+        app_state.local_config = {}
+        app_state.clear_current_task = Mock()
+        feedback_service = Mock()
+        feedback_service.update_status.side_effect = RuntimeError("status widget deleted")
+        settings_service = Mock()
+        app_window = Mock()
+        app_window.full_install_checkbox = Mock()
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=Mock(),
+            settings_service=settings_service,
+            game_launcher=Mock(),
+            customization_service=Mock(),
+            app_window=app_window,
+        )
+        controller.update_button_state = Mock()
+
+        controller.on_full_install_finished(True, "C:/Games/Deltarune")
+
+        app_state.game_mode.set_game_path.assert_called_once_with(
+            app_state.local_config, "C:/Games/Deltarune"
+        )
+        settings_service.write_local_config.assert_called_once()
+        controller.update_button_state.assert_called_once()
 
 
 class TestAppWindowRestore:

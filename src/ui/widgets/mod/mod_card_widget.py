@@ -26,6 +26,8 @@ from utils.mod.utils import get_mod_id
 
 from .base_mod_widget import BaseModWidget
 
+logger = logging.getLogger(__name__)
+
 
 class CompatibilityCheckThread(QThread):
     _semaphore = threading.Semaphore(3)
@@ -60,7 +62,7 @@ class CompatibilityCheckThread(QThread):
             compat = api.get_supported_files_for_mod(int(gb_id), itemtype=itemtype)
             self.compatibility_checked.emit(self.mod_data, compat)
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"CompatibilityCheckThread: Error checking compatibility: {e}",
                 exc_info=True,
             )
@@ -125,11 +127,11 @@ class ModCardWidget(BaseModWidget):
                 thread.requestInterruption()
                 thread.quit()
                 if not thread.wait(100):
-                    logging.debug("Thread did not stop in 100ms, continuing")
+                    logger.debug("Thread did not stop in 100ms, continuing")
             if thread.isFinished():
                 thread.deleteLater()
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 f"ModCardWidget: failed to clean up compatibility thread: {e}",
                 exc_info=True,
             )
@@ -252,7 +254,7 @@ class ModCardWidget(BaseModWidget):
             try:
                 self.is_installed = self.parent_app.mod_service.is_mod_installed(key)
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"ModCardWidget: Error checking installation by key {key}: {e}",
                     exc_info=True,
                 )
@@ -263,7 +265,7 @@ class ModCardWidget(BaseModWidget):
                         key in self.parent_app.mod_service._get_mods_cache()
                     )
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"ModCardWidget: Error checking cache for key {key}: {e}",
                         exc_info=True,
                     )
@@ -288,7 +290,7 @@ class ModCardWidget(BaseModWidget):
                         self._on_compatibility_checked(self.mod_data, cached)
                         return
             except (ValueError, TypeError):
-                logging.debug("Failed to parse mod key for compatibility check")
+                logger.debug("Failed to parse mod key for compatibility check")
         if self._compatibility_thread:
             if self._compatibility_thread.isFinished():
                 with contextlib.suppress(TypeError, RuntimeError):
@@ -324,7 +326,7 @@ class ModCardWidget(BaseModWidget):
             )
             self._compatibility_thread.start()
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"ModCardWidget: Failed to start compatibility check: {e}",
                 exc_info=True,
             )
@@ -342,7 +344,7 @@ class ModCardWidget(BaseModWidget):
                 setattr(self.mod_data, attr, compat_info.get(info_key, default))
             self._apply_download_style()
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"ModCardWidget: Error updating compatibility info: {e}", exc_info=True
             )
 
@@ -489,7 +491,7 @@ class ModCardWidget(BaseModWidget):
             if not self.is_installed:
                 self._apply_download_style()
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"ModCardWidget: Error updating mod data: {e}", exc_info=True
             )
 

@@ -64,6 +64,8 @@ from utils.native_integration import (
 from utils.path_utils import colored_icon
 from utils.process_utils import format_filesystem_error
 
+logger = logging.getLogger(__name__)
+
 
 class ManualModInstallDialog(QDialog):
     def __init__(
@@ -177,7 +179,7 @@ class ManualModInstallDialog(QDialog):
             try:
                 shutil.rmtree(self.temp_dir_to_cleanup, ignore_errors=True)
             except Exception as e:
-                logging.warning(f"Failed to cleanup temp directory: {e}")
+                logger.warning(f"Failed to cleanup temp directory: {e}")
         super().closeEvent(event)
 
     def _scan_files(self):
@@ -491,14 +493,13 @@ class ManualModInstallDialog(QDialog):
         if not self._is_openable_doc(file_path):
             return
         if not file_path or not os.path.exists(file_path):
-            QMessageBox.warning(
-                self,
+            self._safe_warning(
                 tr("errors.error"),
                 tr("errors.file_not_found", path=file_path or "?"),
             )
             return
         if not open_path_native(file_path):
-            QMessageBox.warning(self, tr("errors.error"), file_path)
+            self._safe_warning(tr("errors.error"), file_path)
 
     def _browse_data_file(self, chapter_id: str):
         selected_data, used_patches = self._get_excluded_files()
@@ -510,8 +511,7 @@ class ManualModInstallDialog(QDialog):
             and os.path.splitext(fp)[1].lower() in DATA_FILE_EXTENSIONS
         ]
         if not found_files:
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("dialogs.no_data_files"),
                 tr("dialogs.no_data_files_in_directory"),
             )
@@ -709,15 +709,14 @@ class ManualModInstallDialog(QDialog):
                             self.xdelta_patches_mappings[chapter_id] = {}
                         self.xdelta_patches_mappings[chapter_id][file_path] = rel_file
             else:
-                QMessageBox.warning(
-                    self, tr("errors.error"), tr("dialogs.path_outside_game_folder")
+                self._safe_warning(
+                    tr("errors.error"), tr("dialogs.path_outside_game_folder")
                 )
 
     def _add_xdelta_patch(self, chapter_id: str):
         available_xdelta = self._get_available_xdelta_files(chapter_id)
         if not available_xdelta:
-            QMessageBox.information(
-                self,
+            self._safe_information(
                 tr("dialogs.no_data_files"),
                 tr("dialogs.no_xdelta_files_available"),
             )
@@ -952,8 +951,8 @@ class ManualModInstallDialog(QDialog):
                             self.extra_files_chapters[file_path] = chapter_id
                         self.extra_files_mappings[file_path] = rel_folder
             else:
-                QMessageBox.warning(
-                    self, tr("errors.error"), tr("dialogs.path_outside_game_folder")
+                self._safe_warning(
+                    tr("errors.error"), tr("dialogs.path_outside_game_folder")
                 )
 
     def _get_target_root_for_chapter(self, chapter_id: str) -> str | None:
@@ -1064,6 +1063,26 @@ class ManualModInstallDialog(QDialog):
         for widget in (self.files_summary_label,):
             widget.setStyleSheet(f"color: {hint}; background-color: {elements}; border: 1px solid {border}; border-radius: 10px;")
 
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("ManualModInstallDialog: failed to show warning message")
+
+    def _safe_critical(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.critical(self, title, message)
+        except Exception:
+            logger.exception("ManualModInstallDialog: failed to show critical message")
+
+    def _safe_information(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(self, title, message)
+        except Exception:
+            logger.exception(
+                "ManualModInstallDialog: failed to show information message"
+            )
+
     def _on_finish(self):
         has_data_files = bool(self.data_file_selections)
         selected_data, used_patches = self._get_excluded_files()
@@ -1076,15 +1095,14 @@ class ManualModInstallDialog(QDialog):
         )
         has_extra_files = extra_files_count > 0
         if not has_data_files and (not has_extra_files):
-            QMessageBox.warning(
-                self, tr("errors.error"), tr("dialogs.no_data_file_selected")
+            self._safe_warning(
+                tr("errors.error"), tr("dialogs.no_data_file_selected")
             )
             return
         for patches in self.xdelta_patches_mappings.values():
             for target_path in patches.values():
                 if not target_path or not target_path.strip():
-                    QMessageBox.warning(
-                        self,
+                    self._safe_warning(
                         tr("errors.error"),
                         tr("dialogs.xdelta_patch_no_target_path"),
                     )
@@ -1093,9 +1111,8 @@ class ManualModInstallDialog(QDialog):
             self._create_mod_from_files()
             self.accept()
         except Exception as e:
-            logging.error(f"Failed to create mod: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
+            logger.error(f"Failed to create mod: {e}", exc_info=True)
+            self._safe_critical(
                 tr("errors.error"),
                 tr("errors.manual_install_failed", error=format_filesystem_error(e)),
             )
@@ -1268,4 +1285,4 @@ class ManualModInstallDialog(QDialog):
         self._copy_root_docs_to_mod(target_mod_dir)
         config_path = os.path.join(target_mod_dir, MOD_CONFIG_FILENAME)
         save_json(config_path, build_mod_config_data(config_data), indent=2)
-        logging.info(f"Manual mod created: {target_mod_dir}")
+        logger.info(f"Manual mod created: {target_mod_dir}")

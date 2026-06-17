@@ -35,6 +35,32 @@ class PizzaOvenConversionPresenter:
         self.parent = parent
         self._active_workers: set[PizzaOvenConversionWorker] = set()
 
+    def _safe_update_status(self, message: str, color: str) -> None:
+        try:
+            self.feedback_service.update_status(message, color)
+        except Exception:
+            logger.warning("PizzaOven conversion status feedback failed", exc_info=True)
+
+    def _safe_show_message(self, level: str, title: str, message: str) -> None:
+        try:
+            self.feedback_service.show_message(level, title, message)
+        except Exception:
+            logger.warning("PizzaOven conversion toast feedback failed", exc_info=True)
+
+    @staticmethod
+    def _safe_information(parent, title: str, message: str) -> None:
+        try:
+            QMessageBox.information(parent, title, message)
+        except Exception:
+            logger.warning("PizzaOven conversion information dialog failed", exc_info=True)
+
+    @staticmethod
+    def _safe_warning(parent, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(parent, title, message)
+        except Exception:
+            logger.warning("PizzaOven conversion warning dialog failed", exc_info=True)
+
     def should_offer_conversion(
         self, prepared_path: str, gamebanana_metadata: dict | None = None
     ) -> bool:
@@ -141,7 +167,7 @@ class PizzaOvenConversionPresenter:
             on_success()
         else:
             self._refresh_mods()
-        QMessageBox.information(
+        self._safe_information(
             parent,
             tr("dialogs.success"),
             tr("dialogs.mod_created_successfully"),
@@ -181,7 +207,7 @@ class PizzaOvenConversionPresenter:
         self.app_state.progress_bar_value = 0
         self.app_state.current_task = worker
         worker.progress.connect(lambda value: setattr(self.app_state, "progress_bar_value", value))
-        worker.status.connect(self.feedback_service.update_status)
+        worker.status.connect(self._safe_update_status)
         worker.conversion_finished.connect(
             lambda success, payload, result, temp=temp_dir, cb=on_success, w=worker: self._on_conversion_finished(
                 parent,
@@ -237,7 +263,7 @@ class PizzaOvenConversionPresenter:
                         updated,
                         exc_info=True,
                     )
-            QMessageBox.warning(
+            self._safe_warning(
                 parent,
                 tr("errors.error"),
                 tr("dialogs.po_convert_invalid_game_path"),
@@ -263,7 +289,7 @@ class PizzaOvenConversionPresenter:
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
         if not success:
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error",
                 tr("errors.error"),
                 tr("errors.po_convert_failed", error=payload),
@@ -276,8 +302,8 @@ class PizzaOvenConversionPresenter:
         mod_name = result.mod_dir if hasattr(result, "mod_dir") else payload
         display_name = self._display_mod_name(mod_name)
         success_message = tr("status.po_convert_success", mod_name=display_name)
-        self.feedback_service.update_status(success_message, "status_success")
-        QMessageBox.information(
+        self._safe_update_status(success_message, "status_success")
+        self._safe_information(
             parent,
             tr("dialogs.success"),
             success_message,

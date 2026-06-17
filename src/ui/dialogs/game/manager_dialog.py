@@ -1,5 +1,7 @@
 """Dialog for managing built-in and custom games."""
 
+import logging
+
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -21,6 +23,8 @@ from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 from ui.common.styling import clamp_border_radius, get_border_radius
 from ui.dialogs.custom_game_dialog import CustomGameDialog
 from utils.path_utils import colored_icon
+
+logger = logging.getLogger(__name__)
 
 _ITEM_HEIGHT = 88
 
@@ -172,11 +176,17 @@ class GameManagerDialog(QDialog):
                 ordered.append(item.data(Qt.ItemDataRole.UserRole))
         self.registry_service.reorder(ordered)
 
+    def _safe_warning(self, title: str, message: str) -> None:
+        try:
+            QMessageBox.warning(self, title, message)
+        except Exception:
+            logger.exception("game_manager: failed to show warning dialog")
+
     def _on_toggle_visibility(self, game_id: str, visible: bool) -> None:
         try:
             self.registry_service.set_visibility(game_id, visible)
         except GameRegistryValidationError as error:
-            QMessageBox.warning(self, tr("games.manager_title"), tr(error.key))
+            self._safe_warning(tr("games.manager_title"), tr(error.key))
             self._refresh_list()
 
     def _on_add(self) -> None:
@@ -206,7 +216,7 @@ class GameManagerDialog(QDialog):
             else:
                 self.registry_service.create_custom_game(**values)
         except GameRegistryValidationError as error:
-            QMessageBox.warning(self, tr("games.manager_title"), tr(error.key))
+            self._safe_warning(tr("games.manager_title"), tr(error.key))
             self._save_dialog_values_retry(dialog, game_id)
 
     def _save_dialog_values_retry(

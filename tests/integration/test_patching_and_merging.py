@@ -62,7 +62,7 @@ class TestG3MToolAdapter:
         )
         monkeypatch.setattr("adapters.g3mtool_adapter.os.path.exists", lambda _path: True)
         info = Mock()
-        monkeypatch.setattr("adapters.g3mtool_adapter.logging.info", info)
+        monkeypatch.setattr("adapters.g3mtool_adapter.logger.info", info)
         G3MToolManager._cached_executable_paths = {}
         G3MToolManager._logged_executable_paths = set()
 

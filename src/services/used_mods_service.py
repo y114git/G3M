@@ -7,9 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-if TYPE_CHECKING:
-    from app.window import AppWindow
-
 from app.game_ui import update_chapter_tabs_style, update_steam_launch_checkbox_state
 from models.app_state import AppState
 from services.game_detection_service import get_chapter_id_for_game_mode
@@ -20,6 +17,11 @@ from services.settings_service import SettingsManager
 from ui.common.feedback import FeedbackManager
 from utils.file_utils import sanitize_filename
 from utils.mod.utils import get_mod_id, get_mod_name
+
+if TYPE_CHECKING:
+    from app.window import AppWindow
+
+logger = logging.getLogger(__name__)
 
 
 class UsedModsManager(QObject):
@@ -43,6 +45,15 @@ class UsedModsManager(QObject):
         self.parent_widget: AppWindow | None = parent
         self.used_mods: dict[str, list[Any]] = {}
         self._mods_state_loaded = False
+
+    def _safe_show_message(self, *args, **kwargs) -> None:
+        show_message = getattr(self.feedback_service, "show_message", None)
+        if not callable(show_message):
+            return
+        try:
+            show_message(*args, **kwargs)
+        except Exception as e:
+            logger.warning("UsedModsManager feedback message failed: %s", e, exc_info=True)
 
     def get_used_mods_list(self, chapter_id: str) -> list[Any]:
         return self.used_mods.get(chapter_id, [])
@@ -73,7 +84,7 @@ class UsedModsManager(QObject):
             try:
                 self.save_used_mods_state()
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"set_used_mod: Failed to save used mods state: {e}", exc_info=True
                 )
 
@@ -90,7 +101,7 @@ class UsedModsManager(QObject):
             try:
                 self.save_used_mods_state()
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"set_mods_list: Failed to save used mods state: {e}", exc_info=True
                 )
 
@@ -204,7 +215,7 @@ class UsedModsManager(QObject):
                     if mod_id:
                         mod_ids.append(mod_id)
                 except Exception as e:
-                    logging.error(
+                    logger.error(
                         f"save_used_mods_state: Failed to extract mod id from {mod_data!r}: {e}",
                         exc_info=True,
                     )
@@ -378,7 +389,7 @@ class UsedModsManager(QObject):
         try:
             return not bool(is_installed(mod_id))
         except Exception as e:
-            logging.debug(
+            logger.debug(
                 "load_used_mods_state: failed to verify installed state for %s: %s",
                 mod_id,
                 e,
@@ -464,7 +475,7 @@ class UsedModsManager(QObject):
 
     def toggle_direct_launch_for_chapter(self, chapter_id: str):
         if chapter_id.endswith("_0"):
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "info", "ui.direct_launch", tr("ui.direct_launch_menu_not_allowed")
             )
             return

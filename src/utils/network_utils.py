@@ -21,6 +21,8 @@ from config.config import (
     NETWORK_TIMEOUT_SHORT,
 )
 
+logger = logging.getLogger(__name__)
+
 _session_lock = threading.Lock()
 _shared_session = None
 
@@ -82,7 +84,7 @@ def get_filename_from_url(s, url):
         if p and p != "/" and "." in (bn := os.path.basename(unquote(p))):
             return bn
     except Exception as e:
-        logging.debug(
+        logger.debug(
             f"get_filename_from_url: failed to derive filename from headers/url {url}: {e}",
             exc_info=True,
         )
@@ -132,7 +134,7 @@ def download_file(
                 if on_response:
                     on_response(r)
             except (TypeError, AttributeError) as e:
-                logging.debug(f"download_file: on_response callback failed: {e}")
+                logger.debug(f"download_file: on_response callback failed: {e}")
             mode = (
                 "ab"
                 if getattr(r, "status_code", 200) == 206 and "Range" in headers

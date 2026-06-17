@@ -22,6 +22,8 @@ from config.config import (
     THEME_CONFIG_FILENAMES,
 )
 
+logger = logging.getLogger(__name__)
+
 _WINDOWS_RESERVED_NAMES = {
     "CON",
     "PRN",
@@ -194,7 +196,7 @@ def resolve_game_executable(base_dir, executable_type="deltarune"):
                         return exe_path
         return None
     except Exception as e:
-        logging.debug(f"resolve_game_executable: failed for {base_dir}: {e}")
+        logger.debug(f"resolve_game_executable: failed for {base_dir}: {e}")
         return None
 
 
@@ -259,7 +261,7 @@ def find_supported_game_data_file(
             ),
         )
     except Exception as e:
-        logging.debug(f"find_supported_game_data_file: failed for {base_dir}: {e}")
+        logger.debug(f"find_supported_game_data_file: failed for {base_dir}: {e}")
         return None
 
 
@@ -313,7 +315,7 @@ def find_chapter_resource_dir(
                 return None
         return target_base
     except Exception as e:
-        logging.debug(
+        logger.debug(
             f"find_chapter_resource_dir: failed for {base_dir}, chapter {chapter_id}: {e}"
         )
         return None
@@ -330,7 +332,7 @@ def _match_steam_path(normalized, steam_path):
             if normalized == sp or normalized.startswith(sp + "/"):
                 return True
     except (OSError, ValueError):
-        logging.debug("Failed to match steam path, continuing")
+        logger.debug("Failed to match steam path, continuing")
     return False
 
 
@@ -450,7 +452,7 @@ def autodetect_path(game_name: str) -> str | None:
                                 if os.path.exists(sp):
                                     paths.append(sp)
                 except (OSError, PermissionError):
-                    logging.debug("Failed to scan mount points, continuing")
+                    logger.debug("Failed to scan mount points, continuing")
         for extra in [
             "/run/media/mmcblk0p1",
             "/run/media/mmcblk1p1",
@@ -495,7 +497,7 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
             try:
                 target_rel = p.read_text(encoding="utf-8").strip()
             except Exception as e:
-                logging.debug(
+                logger.debug(
                     f"fix_macos_python_symlink: failed to read symlink target: {e}"
                 )
                 py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -508,7 +510,7 @@ def fix_macos_python_symlink(app_dir: Path) -> None:
                 stat.S_IMODE(st.st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,  # noqa: S103
             )
     except Exception as e:
-        logging.debug(f"fix_macos_python_symlink: failed: {e}")
+        logger.debug(f"fix_macos_python_symlink: failed: {e}")
 
 
 def cleanup_old_updater_files():
@@ -529,7 +531,7 @@ def cleanup_old_updater_files():
 
             safe_rmtree(backup_path)
     except Exception as e:
-        logging.debug(f"cleanup_old_updater_files: failed: {e}")
+        logger.debug(f"cleanup_old_updater_files: failed: {e}")
 
 
 def version_sort_key(v: str):
@@ -674,5 +676,5 @@ def colored_icon(name: str, color: str) -> QIcon:
         icon.addPixmap(disabled_pixmap, QIcon.Mode.Disabled)
         return icon
     except Exception as e:
-        logging.debug(f"colored_icon: failed to render {name}: {e}")
+        logger.debug(f"colored_icon: failed to render {name}: {e}")
         return QIcon(svg_path)

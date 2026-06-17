@@ -23,6 +23,8 @@ from utils.mod.config_parser import build_mod_config_data
 from utils.mod.utils import get_mod_id
 from utils.network_utils import download_file, get_session
 
+logger = logging.getLogger(__name__)
+
 
 def is_valid_url(url: str) -> bool:
     if not url or not isinstance(url, str):
@@ -52,15 +54,28 @@ class InstallModsThread(QThread):
         self._session = None
         self._active_response = None
 
+    def _safe_emit(self, signal, *args) -> None:
+        try:
+            signal.emit(*args)
+        except Exception as e:
+            logger.warning(
+                "InstallModsThread: failed to emit %s: %s",
+                getattr(signal, "signal", signal.__class__.__name__),
+                e,
+                exc_info=True,
+            )
+
     def cancel(self):
         self._cancelled = True
-        self.status.emit(tr("status.operation_cancelled"), UI_COLORS["status_error"])
+        self._safe_emit(
+            self.status, tr("status.operation_cancelled"), UI_COLORS["status_error"]
+        )
         try:
             if self._session is not None:
                 try:
                     self._session.close()
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"InstallModsThread.cancel: session close error: {e}",
                         exc_info=True,
                     )
@@ -68,12 +83,12 @@ class InstallModsThread(QThread):
                 try:
                     self._active_response.close()
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"InstallModsThread.cancel: response close error: {e}",
                         exc_info=True,
                     )
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"InstallModsThread.cancel: cleanup failed: {e}", exc_info=True
             )
 
@@ -135,11 +150,12 @@ class InstallModsThread(QThread):
     ):
 
         def progress_callback(progress):
-            self.progress.emit(progress)
+            self._safe_emit(self.progress, progress)
             if total_bytes > 0:
                 downloaded_mb = format_size_mb(downloaded_ref[0])
                 total_mb = format_size_mb(total_bytes)
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     f"{mod_name} {current_index}/{total_items} ({downloaded_mb} / {total_mb})",
                     UI_COLORS["status_warning"],
                 )
@@ -211,7 +227,7 @@ class InstallModsThread(QThread):
                             }
                         )
                     else:
-                        logging.warning(
+                        logger.warning(
                             f"InstallModsThread: Invalid URL for demo: {mod.demo_url}"
                         )
                         continue
@@ -239,7 +255,7 @@ class InstallModsThread(QThread):
                         )
                         file_info["data_file_path"] = stored_relative_path
                     elif chapter_data.data_file_url:
-                        logging.warning(
+                        logger.warning(
                             f"InstallModsThread: Invalid URL for data file: {chapter_data.data_file_url}"
                         )
                     extra_files_list = []
@@ -261,7 +277,7 @@ class InstallModsThread(QThread):
                             )
                             extra_files_list.append(stored_relative_path)
                         else:
-                            logging.warning(
+                            logger.warning(
                                 f"InstallModsThread: Invalid URL for extra file: {extra_file}"
                             )
                     if file_info or extra_files_list:
@@ -269,7 +285,7 @@ class InstallModsThread(QThread):
                             file_info["extra_files"] = extra_files_list
                         validated_files.setdefault(key, {})[chapter_id] = file_info
             if not tasks:
-                self.finished.emit(True)
+                self._safe_emit(self.finished, True)
                 return
             session = get_session()
             self._session = session
@@ -297,13 +313,14 @@ class InstallModsThread(QThread):
                     total_bytes = 0
                     break
             if self._cancelled:
-                self.finished.emit(False)
+                self._safe_emit(self.finished, False)
                 return
-            self.status.emit(
+            self._safe_emit(
+                self.status,
                 tr("status.preparing_download"), UI_COLORS["status_warning"]
             )
             if self._cancelled:
-                self.finished.emit(False)
+                self._safe_emit(self.finished, False)
                 return
             downloaded_ref = [0]
             done_files = 0
@@ -313,7 +330,7 @@ class InstallModsThread(QThread):
             current_index = 0
             for task in tasks:
                 if self._cancelled:
-                    self.finished.emit(False)
+                    self._safe_emit(self.finished, False)
                     return
                 mod = task.get("mod")
                 chapter_id = task.get("chapter_id")
@@ -349,15 +366,15 @@ class InstallModsThread(QThread):
                                     try:
                                         if os.path.isfile(file_path):
                                             os.remove(file_path)
-                                            logging.debug(
+                                            logger.debug(
                                                 f"InstallModsThread: Deleted cache file {fname}"
                                             )
                                     except Exception as e:
-                                        logging.warning(
+                                        logger.warning(
                                             f"InstallModsThread: Failed to delete cache file {fname}: {e}"
                                         )
                     except Exception as e:
-                        logging.warning(
+                        logger.warning(
                             f"InstallModsThread: delete cleanup failed: {e}",
                             exc_info=True,
                         )
@@ -379,7 +396,7 @@ class InstallModsThread(QThread):
                 status_text = (
                     f"{mod.name} {current_index}/{total_items} ({file_size_mb})"
                 )
-                self.status.emit(status_text, UI_COLORS["status_warning"])
+                self._safe_emit(self.status, status_text, UI_COLORS["status_warning"])
                 self._installed_dirs.append(cache_dir)
                 chapter_data = mod.get_chapter_data(chapter_id)
                 is_data_file = (
@@ -451,7 +468,7 @@ class InstallModsThread(QThread):
                                 chapter_id, {}
                             )["data_file_path"] = extracted_data_files[0]
                         if self._cancelled:
-                            self.finished.emit(False)
+                            self._safe_emit(self.finished, False)
                             return
                 else:
                     progress_callback = self._make_progress_callback(
@@ -477,12 +494,13 @@ class InstallModsThread(QThread):
                 if url and total_bytes == 0:
                     done_files += 1
                     progress = int(done_files / max(1, len(download_tasks)) * 100)
-                    self.progress.emit(progress)
+                    self._safe_emit(self.progress, progress)
                 if self._cancelled:
-                    self.status.emit(
+                    self._safe_emit(
+                        self.status,
                         tr("status.operation_cancelled"), UI_COLORS["status_error"]
                     )
-                    self.finished.emit(False)
+                    self._safe_emit(self.finished, False)
                     return
             for key, mod_data in installed_mods.items():
                 mod = mod_data["mod"]
@@ -539,12 +557,13 @@ class InstallModsThread(QThread):
                     else:
                         shutil.copy2(src, dst)
             except Exception as e:
-                logging.warning(f"InstallModsThread: copy extracted files failed: {e}")
+                logger.warning(f"InstallModsThread: copy extracted files failed: {e}")
             if self._cancelled:
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("status.operation_cancelled"), UI_COLORS["status_error"]
                 )
-                self.finished.emit(False)
+                self._safe_emit(self.finished, False)
                 return
             for info in mod_configs.values():
                 folder_name = info["folder_name"]
@@ -561,51 +580,50 @@ class InstallModsThread(QThread):
                 }
             self.main_window.mod_service._write_metadata(metadata)
             if self._cancelled:
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("status.operation_cancelled"), UI_COLORS["status_error"]
                 )
-                self.finished.emit(False)
+                self._safe_emit(self.finished, False)
             else:
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("status.installation_complete"), UI_COLORS["status_success"]
                 )
-                self.finished.emit(True)
+                self._safe_emit(self.finished, True)
         except PermissionError as e:
-            logging.warning(f"InstallModsThread.run: permission error: {e}")
-            try:
-                self.status.emit(
-                    tr("errors.permission_error_install"), UI_COLORS["status_error"]
-                )
-            except Exception as emit_e:
-                logging.debug(
-                    f"InstallModsThread: failed to emit permission error: {emit_e}"
-                )
-            self.finished.emit(False)
+            logger.warning(f"InstallModsThread.run: permission error: {e}")
+            self._safe_emit(
+                self.status, tr("errors.permission_error_install"), UI_COLORS["status_error"]
+            )
+            self._safe_emit(self.finished, False)
         except RuntimeError as e:
             if str(e) == "download_cancelled":
-                logging.info("InstallModsThread.run: download cancelled by user")
-                self.finished.emit(False)
+                logger.info("InstallModsThread.run: download cancelled by user")
+                self._safe_emit(self.finished, False)
             else:
-                logging.error(
+                logger.error(
                     f"InstallModsThread.run: installation error: {e}", exc_info=True
                 )
-                self.status.emit(
+                self._safe_emit(
+                    self.status,
                     tr("errors.installation_error", error=str(e)),
                     UI_COLORS["status_error"],
                 )
-                self.finished.emit(False)
+                self._safe_emit(self.finished, False)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"InstallModsThread.run: installation error: {e}", exc_info=True
             )
-            self.status.emit(
+            self._safe_emit(
+                self.status,
                 tr("errors.installation_error", error=str(e)), UI_COLORS["status_error"]
             )
-            self.finished.emit(False)
+            self._safe_emit(self.finished, False)
         finally:
             try:
                 if self.temp_root and os.path.isdir(self.temp_root):
                     shutil.rmtree(self.temp_root, ignore_errors=True)
             except Exception as cleanup_e:
-                logging.debug(f"InstallModsThread: temp cleanup failed: {cleanup_e}")
+                logger.debug(f"InstallModsThread: temp cleanup failed: {cleanup_e}")
             self._session = None

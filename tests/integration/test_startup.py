@@ -1,7 +1,9 @@
 """Integration tests for startup flows and packaged-launch validation."""
 
+import contextlib
 import faulthandler
 import importlib.util
+import logging
 import os
 import pathlib
 import subprocess
@@ -233,6 +235,171 @@ def test_install_crash_diagnostics_uses_main_log(temp_dir):
         startup_module._fault_log_handle = None
 
 
+def test_install_crash_diagnostics_logs_unraisable_exceptions(temp_dir):
+    from app import startup as startup_module
+
+    log_dir = os.path.join(temp_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "g3m.log")
+    startup_module.configure_logging("G3M", temp_dir)
+    original_unraisablehook = sys.unraisablehook
+    try:
+        startup_module.install_crash_diagnostics("G3M", log_path)
+
+        class BrokenFinalizer:
+            def __repr__(self) -> str:
+                return "<BrokenFinalizer>"
+
+        args = types.SimpleNamespace(
+            exc_type=RuntimeError,
+            exc_value=RuntimeError("unraisable logging probe"),
+            exc_traceback=None,
+            err_msg=None,
+            object=BrokenFinalizer(),
+        )
+        sys.unraisablehook(args)
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+
+        with open(log_path, encoding="utf-8") as handle:
+            log_text = handle.read()
+        assert "Unraisable exception" in log_text
+        assert "unraisable logging probe" in log_text
+    finally:
+        sys.unraisablehook = original_unraisablehook
+        faulthandler.disable()
+        if startup_module._fault_log_handle:
+            startup_module._fault_log_handle.close()
+            startup_module._fault_log_handle = None
+
+
+def test_configure_logging_writes_uncaught_exceptions_when_root_handler_exists(temp_dir):
+    from app import startup as startup_module
+
+    root = logging.getLogger()
+    original_handlers = list(root.handlers)
+    original_level = root.level
+    foreign_handler = logging.StreamHandler()
+    root.handlers = [foreign_handler]
+    root.setLevel(logging.WARNING)
+    try:
+        log_path = startup_module.configure_logging("G3M", temp_dir)
+        startup_module.install_excepthook()
+
+        try:
+            raise RuntimeError("startup logging probe")
+        except RuntimeError:
+            exctype, value, tb = sys.exc_info()
+            sys.excepthook(exctype, value, tb)
+
+        for handler in root.handlers:
+            handler.flush()
+        with open(log_path, encoding="utf-8") as handle:
+            log_text = handle.read()
+        assert "Uncaught exception" in log_text
+        assert "startup logging probe" in log_text
+    finally:
+        for handler in root.handlers:
+            with contextlib.suppress(Exception):
+                handler.close()
+        root.handlers = original_handlers
+        root.setLevel(original_level)
+
+
+def test_run_app_installs_process_exit_logging(monkeypatch):
+    from app import startup as startup_module
+
+    registered = []
+    app = Mock()
+    app.exec.return_value = 0
+    monkeypatch.setattr(startup_module, "setup_app", lambda: app)
+    monkeypatch.setattr(
+        startup_module,
+        "resolve_user_data_root_with_migration",
+        lambda: "C:/Users/Test/AppData/Roaming/G3M",
+    )
+    monkeypatch.setattr(startup_module, "configure_logging", lambda *_args: "g3m.log")
+    monkeypatch.setattr(startup_module, "install_crash_diagnostics", lambda *_args: "")
+    monkeypatch.setattr(startup_module, "install_excepthook", Mock())
+    monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", Mock())
+    monkeypatch.setattr(startup_module.atexit, "register", lambda callback: registered.append(callback))
+    monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
+    monkeypatch.setattr(startup_module, "register_url_protocol", Mock())
+    monkeypatch.setattr(startup_module.QLocalServer, "removeServer", Mock())
+
+    class _Socket:
+        def connectToServer(self, *_args, **_kwargs):  # noqa: N802
+            return None
+
+        def waitForConnected(self, *_args, **_kwargs):  # noqa: N802
+            return False
+
+    class _Coordinator:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def launch(self):
+            return None
+
+    monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
+    monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
+
+    startup_module.run_app(["--force-start"])
+
+    assert registered
+
+
+def test_run_app_logs_setup_app_failure_after_logging_is_configured(monkeypatch):
+    from app import startup as startup_module
+
+    call_order = []
+    monkeypatch.setattr(
+        startup_module,
+        "resolve_user_data_root_with_migration",
+        lambda: call_order.append("resolve") or "C:/Users/Test/AppData/Roaming/G3M",
+    )
+    monkeypatch.setattr(
+        startup_module,
+        "configure_logging",
+        lambda *_args: call_order.append("logging") or "g3m.log",
+    )
+    monkeypatch.setattr(
+        startup_module,
+        "install_crash_diagnostics",
+        lambda *_args: call_order.append("diagnostics"),
+    )
+    monkeypatch.setattr(startup_module, "install_process_exit_logging", Mock())
+    monkeypatch.setattr(startup_module, "install_excepthook", Mock())
+    monkeypatch.setattr(
+        startup_module,
+        "setup_app",
+        Mock(side_effect=RuntimeError("qt setup failed")),
+    )
+
+    assert startup_module.run_app([]) == 1
+
+    assert call_order == ["resolve", "logging", "diagnostics"]
+
+
+def test_process_exit_logging_writes_final_log_line(temp_dir, monkeypatch):
+    from app import startup as startup_module
+
+    registered = []
+    log_path = startup_module.configure_logging("G3M", temp_dir)
+    monkeypatch.setattr(
+        startup_module.atexit,
+        "register",
+        lambda callback: registered.append(callback),
+    )
+
+    startup_module.install_process_exit_logging("G3M")
+    registered[0]()
+
+    with open(log_path, encoding="utf-8") as handle:
+        log_text = handle.read()
+    assert "G3M process exiting after" in log_text
+
+
 def _connected_socket_factory():
     writes = []
 
@@ -261,6 +428,22 @@ def test_run_app_second_instance_shows_localized_error_and_sends_activate(monkey
     warning.assert_called_once()
 
 
+def test_run_app_second_instance_ignores_broken_warning_dialog(monkeypatch):
+    from app import startup as startup_module
+
+    socket_factory, writes = _connected_socket_factory()
+    monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
+    monkeypatch.setattr(startup_module, "QLocalSocket", socket_factory)
+
+    with patch(
+        "app.startup.QMessageBox.warning",
+        side_effect=RuntimeError("warning dialog deleted"),
+    ):
+        assert startup_module.run_app([]) == 0
+
+    assert writes == [startup_module.SINGLE_INSTANCE_ACTIVATE]
+
+
 def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeypatch):
     from app import startup as startup_module
 
@@ -273,6 +456,28 @@ def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeyp
 
     assert writes == ["g3m://https://example.com/mod.zip"]
     warning.assert_not_called()
+
+
+def test_run_app_game_running_ignores_broken_error_dialog(monkeypatch):
+    from app import startup as startup_module
+
+    class _DisconnectedSocket:
+        def connectToServer(self, *_args, **_kwargs):  # noqa: N802
+            return None
+
+        def waitForConnected(self, *_args, **_kwargs):  # noqa: N802
+            return False
+
+    monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
+    monkeypatch.setattr(startup_module, "QLocalSocket", _DisconnectedSocket)
+    monkeypatch.setattr(startup_module.QLocalServer, "removeServer", Mock())
+    monkeypatch.setattr(startup_module, "check_game_processes", lambda: "DELTARUNE")
+
+    with patch(
+        "app.startup.QMessageBox.critical",
+        side_effect=RuntimeError("critical dialog deleted"),
+    ):
+        assert startup_module.run_app([]) == 1
 
 
 def test_main_routes_shortcut_without_startup(monkeypatch):
@@ -499,6 +704,65 @@ def test_abort_stuck_startup_shows_error_and_quits_when_window_never_appears():
     app.quit.assert_called_once_with()
 
 
+def test_abort_stuck_startup_quits_when_error_dialog_fails():
+    """Checks that a broken stuck-startup dialog still exits via app.quit."""
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    app = Mock()
+    splash = Mock()
+    instance = Mock()
+    instance.isVisible.return_value = False
+    coordinator = BootstrapCoordinator(
+        app=app,
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(),
+    )
+    coordinator.instance = instance
+    coordinator.splash = splash
+
+    with patch(
+        "bootstrap.bootstrap_coordinator.QMessageBox.critical",
+        side_effect=RuntimeError("critical dialog deleted"),
+    ):
+        coordinator._abort_stuck_startup()
+
+    splash.close.assert_called_once_with()
+    app.quit.assert_called_once_with()
+
+
+def test_bootstrap_startup_error_exits_even_if_error_dialog_fails():
+    """Checks that startup error dialogs cannot replace the controlled exit."""
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    splash = Mock()
+
+    def create_window(*_args, **_kwargs):
+        raise RuntimeError("window failed")
+
+    def fail_critical(*_args, **_kwargs):
+        raise RuntimeError("dialog failed")
+
+    coordinator = BootstrapCoordinator(
+        app=Mock(),
+        user_root="",
+        initial_url=None,
+        window_factory=create_window,
+        server_factory=Mock(),
+    )
+    coordinator.splash = splash
+
+    with (
+        patch("bootstrap.bootstrap_coordinator.QMessageBox.critical", fail_critical),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        coordinator._create_launcher()
+
+    assert exc_info.value.code == 1
+    splash.close.assert_called_once_with()
+
+
 def test_play_startup_sound_skips_when_disabled():
     """Checks that playing startup sound skips when disabled."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
@@ -541,6 +805,24 @@ def test_play_startup_sound_uses_enabled_flag():
         coordinator._play_startup_sound()
 
     play_sound.assert_called_once_with()
+
+
+def test_network_init_thread_emits_offline_when_connectivity_check_fails(qapp):
+    """Checks that network init failures do not kill the startup worker."""
+    from bootstrap import bootstrap_coordinator as bootstrap_module
+
+    app_state = Mock()
+    thread = bootstrap_module._NetworkInitThread(app_state)
+    emissions = []
+    thread.done.connect(lambda has_internet, settings: emissions.append((has_internet, settings)))
+
+    with patch(
+        "bootstrap.bootstrap_coordinator.check_internet_connection",
+        side_effect=OSError("network probe failed"),
+    ):
+        thread.run()
+
+    assert emissions == [(False, {})]
 
 
 def test_show_launcher_window_schedules_post_show_after_reveal_delay():

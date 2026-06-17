@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from models.exceptions import ModUninstallationError
 from models.mod_models import BrowserModInfo, LocalModInfo, ModFileData
 from services.mod.service import ModManager
 from utils.file_utils import save_json
@@ -77,6 +78,33 @@ def test_create_mod_object_from_info_does_not_mutate_existing_browser_mod():
     assert existing_mod.name == "Remote Name"
     assert existing_mod.last_updated == "2025-01-01"
     assert result.name == "Local Name"
+
+
+def test_uninstall_mod_preserves_uninstall_error_if_feedback_fails(
+    app_state, feedback_service, monkeypatch
+):
+    """Checks that feedback UI failures do not replace uninstall failures."""
+    manager = ModManager(app_state, feedback_service)
+
+    def fail_delete_mod_files(*_args, **_kwargs):
+        raise PermissionError(13, "Permission denied", "C:/mods/ghost_mod")
+
+    def fail_show_message(*_args, **_kwargs):
+        raise RuntimeError("feedback failed")
+
+    monkeypatch.setattr(
+        manager,
+        "delete_mod_files",
+        fail_delete_mod_files,
+    )
+    monkeypatch.setattr(
+        feedback_service,
+        "show_message",
+        fail_show_message,
+    )
+
+    with pytest.raises(ModUninstallationError):
+        manager.uninstall_mod(SimpleNamespace(id="ghost_mod", name="Ghost Mod"))
 
 
 def test_get_installed_mods_list_handles_iter_and_cache_paths_without_folder_path_error(

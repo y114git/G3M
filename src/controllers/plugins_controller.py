@@ -111,6 +111,12 @@ class PluginsController:
         finally:
             self._filtering = False
 
+    def _safe_show_message(self, level: str, title: str, message: str = "") -> None:
+        try:
+            self.feedback_service.show_message(level, title, message)
+        except Exception:
+            logger.exception("PluginsController: failed to show feedback message")
+
     def on_tab_changed(self, index: int) -> None:
         if not hasattr(self.app, "settings_tab_widget"):
             return
@@ -559,7 +565,7 @@ QPushButton#cardButtonUninstall:disabled {{
                 imported = True
             except Exception as e:
                 logger.error("PluginsController: import failed for %s: %s", path, e, exc_info=True)
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "error", "errors.error", format_filesystem_error(e, path=path)
                 )
         if imported:
@@ -588,7 +594,7 @@ QPushButton#cardButtonUninstall:disabled {{
         else:
             success, error = self.plugin_runtime_service.enable_plugin(plugin_id)
             if not success:
-                self.feedback_service.show_message(
+                self._safe_show_message(
                     "error",
                     "errors.error",
                     error or tr("plugins.enable_failed"),
@@ -670,7 +676,7 @@ QPushButton#cardButtonUninstall:disabled {{
         except Exception as e:
             logger.error("PluginsController: delete failed for %s: %s", plugin_id, e, exc_info=True)
             plugin_path = str(getattr(plugin, "path", "") or "")
-            self.feedback_service.show_message(
+            self._safe_show_message(
                 "error", "errors.error", format_filesystem_error(e, path=plugin_path)
             )
         self.refresh_main_tabs()

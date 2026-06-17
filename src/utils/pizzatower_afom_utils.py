@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
 from collections.abc import Callable
 
 from utils.file_utils import remove_archive_extension
+
+logger = logging.getLogger(__name__)
 
 
 def get_pizzatower_towers_dir() -> str:
