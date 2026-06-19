@@ -256,7 +256,7 @@
   },
   "files": {
     "data_file": "DATA - 文件",
-    "extra_files_title": "额外文件：{key_name}",
+    "extra_files_title": "额外文件 #{number}",
     "icon_label": "图标",
     "version_label": "版本 {file_type}："
   },
@@ -528,6 +528,8 @@
     "no_readme_files": "未找到 {mod_name} 的 README。",
     "macos_install_unavailable": "在macOS上无法安装游戏文件。\\n尝试通过Steam安装Demo版。",
     "mod_name_empty": "模组名称不能为空。",
+    "empty_data_file_section": "请填写或删除“{tab_name}”标签页中的空 DATA 文件分区。",
+    "empty_extra_file_section": "请填写或删除“{tab_name}”标签页中的空额外文件 #{number} 分区。",
     "mod_name_too_long": "模组名称不能超过50个字符。",
     "mod_author_empty": "模组作者不能为空。",
     "mod_author_too_long": "模组作者不能超过50个字符。",

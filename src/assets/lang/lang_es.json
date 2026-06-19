@@ -256,7 +256,7 @@
   },
   "files": {
     "data_file": "DATA - Archivo",
-    "extra_files_title": "Archivos Adicionales: {key_name}",
+    "extra_files_title": "Archivos adicionales #{number}",
     "icon_label": "Icono",
     "version_label": "Versión {file_type}:"
   },
@@ -528,6 +528,8 @@
     "no_readme_files": "No se encontró un README para {mod_name}.",
     "macos_install_unavailable": "La instalación de archivos del juego no está disponible en macOS.\nIntenta instalar la DEMO vía Steam.",
     "mod_name_empty": "El nombre del mod no puede estar vacío.",
+    "empty_data_file_section": "Completa o elimina la sección vacía de DATA - Archivo en la pestaña '{tab_name}'.",
+    "empty_extra_file_section": "Completa o elimina la sección vacía de Archivos adicionales #{number} en la pestaña '{tab_name}'.",
     "mod_name_too_long": "El nombre del mod no puede tener más de 50 caracteres.",
     "mod_author_empty": "El autor del mod no puede estar vacío.",
     "mod_author_too_long": "El autor del mod no puede tener más de 50 caracteres.",

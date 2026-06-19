@@ -256,7 +256,7 @@
   },
   "files": {
     "data_file": "DATA - Файл",
-    "extra_files_title": "Дополнительные файлы: {key_name}",
+    "extra_files_title": "Дополнительные файлы #{number}",
     "icon_label": "Иконка",
     "version_label": "Версия {file_type}:"
   },
@@ -528,6 +528,8 @@
     "no_readme_files": "README для {mod_name} не найден.",
     "macos_install_unavailable": "Установка файлов игры недоступна на macOS.\nПопробуйте установить ДЕМОВЕРСИЮ через Steam.",
     "mod_name_empty": "Название мода не может быть пустым.",
+    "empty_data_file_section": "Заполните пустую секцию DATA - Файл во вкладке «{tab_name}» или удалите её.",
+    "empty_extra_file_section": "Заполните пустую секцию Дополнительные файлы #{number} во вкладке «{tab_name}» или удалите её.",
     "mod_name_too_long": "Название мода не может быть длиннее 50 символов.",
     "mod_author_empty": "Автор мода не может быть пустым.",
     "mod_author_too_long": "Автор мода не может быть длиннее 50 символов.",

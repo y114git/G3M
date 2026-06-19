@@ -850,7 +850,7 @@ class ModEditorDialog(QDialog):
             )
             browse_title = tr("ui.select_data_file", file_type="data")
         else:
-            title_text = tr("ui.add_extra_files")
+            title_text = tr("files.extra_files_title", number=1)
             file_filter = "All Files (*)"
             browse_title = tr("ui.select_file")
         title_lbl = QLabel(title_text)
@@ -863,6 +863,7 @@ class ModEditorDialog(QDialog):
         path_edit.setProperty(
             "is_local_path" if file_type == "data" else "is_local_extra_path", True
         )
+        path_edit.textChanged.connect(lambda _text, edit=path_edit: self._clear_field_validation_error(edit))
         fl.addWidget(path_edit)
         browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
@@ -887,6 +888,8 @@ class ModEditorDialog(QDialog):
         actions_row.addStretch()
         fl.addLayout(actions_row)
         tab_layout.insertWidget(tab_layout.count() - 1, frame)
+        if file_type == "extra":
+            self._refresh_extra_file_titles(tab_layout)
 
     def _make_icon_text_button(self, icon, text, tooltip=None):
         button = QPushButton(text)
@@ -941,6 +944,33 @@ class ModEditorDialog(QDialog):
         frame.deleteLater()
         if file_type == "data":
             self._set_tab_has_data(self._get_tab_for_layout(layout), False)
+        elif file_type == "extra":
+            self._refresh_extra_file_titles(layout)
+
+    def _iter_file_title_labels(self, layout, *, file_type: str):
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget() if layout.itemAt(i) else None
+            if not widget or not hasattr(widget, "layout") or not (frame_layout := widget.layout()):
+                continue
+            title = frame_layout.itemAt(0).widget() if frame_layout.count() > 0 else None
+            if isinstance(title, QLabel) and title.property("file_type") == file_type:
+                yield title
+
+    def _refresh_extra_file_titles(self, layout) -> None:
+        for index, title in enumerate(
+            self._iter_file_title_labels(layout, file_type="extra"),
+            start=1,
+        ):
+            title.setText(tr("files.extra_files_title", number=index))
+
+    def _set_field_validation_error(self, line_edit: QLineEdit) -> None:
+        line_edit.setProperty("validation_error", True)
+        line_edit.setStyleSheet("border: 2px solid #d9534f;")
+
+    def _clear_field_validation_error(self, line_edit: QLineEdit) -> None:
+        if line_edit.property("validation_error"):
+            line_edit.setProperty("validation_error", False)
+            line_edit.setStyleSheet("")
 
     def _browse_file(self, line_edit, title, file_filter, file_type):
         if file_type == "data":
@@ -1214,6 +1244,21 @@ class ModEditorDialog(QDialog):
             ]
         ):
             self.tag_other.setChecked(True)
+        if empty_section := self._find_empty_file_section():
+            kind = empty_section["kind"]
+            tab_name = empty_section["tab_name"]
+            field = empty_section["field"]
+            self._set_field_validation_error(field)
+            key = (
+                "dialogs.empty_data_file_section"
+                if kind == "data"
+                else "dialogs.empty_extra_file_section"
+            )
+            params = {"tab_name": tab_name}
+            if kind == "extra":
+                params["number"] = empty_section["number"]
+            self._safe_warning(tr("dialogs.validation_error"), tr(key, **params))
+            return False
         if self.is_creating and not self._has_any_mod_files():
             self._safe_warning(
                 tr("errors.error"), tr("dialogs.mod_needs_at_least_one_file")
@@ -1254,6 +1299,51 @@ class ModEditorDialog(QDialog):
             get_tab_file_layout=self._get_tab_file_layout,
             extract_frame_data_fn=self._extract_frame_data,
         )
+
+    def _find_empty_file_section(self) -> dict | None:
+        for index in range(self.file_tabs.count()):
+            tab = self.file_tabs.widget(index)
+            layout = self._get_tab_file_layout(tab)
+            if not layout:
+                continue
+            tab_name = self.file_tabs.tabText(index)
+            for title in self._iter_file_title_labels(layout, file_type="data"):
+                frame_layout = title.parentWidget().layout()
+                for item_index in range(frame_layout.count()):
+                    widget = (
+                        frame_layout.itemAt(item_index).widget()
+                        if frame_layout.itemAt(item_index)
+                        else None
+                    )
+                    if (
+                        isinstance(widget, QLineEdit)
+                        and widget.property("is_local_path")
+                        and not widget.text().strip()
+                    ):
+                        return {"kind": "data", "tab_name": tab_name, "field": widget}
+            for extra_index, title in enumerate(
+                self._iter_file_title_labels(layout, file_type="extra"),
+                start=1,
+            ):
+                frame_layout = title.parentWidget().layout()
+                for item_index in range(frame_layout.count()):
+                    widget = (
+                        frame_layout.itemAt(item_index).widget()
+                        if frame_layout.itemAt(item_index)
+                        else None
+                    )
+                    if (
+                        isinstance(widget, QLineEdit)
+                        and widget.property("is_local_extra_path")
+                        and not widget.text().strip()
+                    ):
+                        return {
+                            "kind": "extra",
+                            "tab_name": tab_name,
+                            "field": widget,
+                            "number": extra_index,
+                        }
+        return None
 
     def _validate_local_files(self):
         missing = validate_local_files(
@@ -1834,6 +1924,11 @@ class ModEditorDialog(QDialog):
             self._info_files_hint.setText(tr("ui.mod_editor_info_files_hint"))
         if hasattr(self, "_files_hint") and self._files_hint:
             self._files_hint.setText(tr("ui.mod_editor_files_hint"))
+        for index in range(self.file_tabs.count()):
+            tab = self.file_tabs.widget(index)
+            layout = self._get_tab_file_layout(tab)
+            if layout:
+                self._refresh_extra_file_titles(layout)
         if hasattr(self, "_info_add_button"):
             self._info_add_button.setText(tr("ui.add_info_file"))
         if hasattr(self, "_info_toggle_button"):

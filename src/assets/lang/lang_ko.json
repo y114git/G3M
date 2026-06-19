@@ -256,7 +256,7 @@
   },
   "files": {
     "data_file": "DATA 파일",
-    "extra_files_title": "추가 파일: {key_name}",
+    "extra_files_title": "추가 파일 #{number}",
     "icon_label": "아이콘",
     "version_label": "버전 {file_type}:"
   },
@@ -528,6 +528,8 @@
     "no_readme_files": "{mod_name}에 대한 README를 찾을 수 없습니다.",
     "macos_install_unavailable": "macOS에서는 게임 파일 설치를 지원하지 않습니다.\nSteam을 통해 DEMO를 설치해 보세요.",
     "mod_name_empty": "모드 이름은 비워둘 수 없습니다.",
+    "empty_data_file_section": "'{tab_name}' 탭의 비어 있는 DATA 파일 섹션을 채우거나 삭제하세요.",
+    "empty_extra_file_section": "'{tab_name}' 탭의 비어 있는 추가 파일 #{number} 섹션을 채우거나 삭제하세요.",
     "mod_name_too_long": "모드 이름은 50자를 초과할 수 없습니다.",
     "mod_author_empty": "모드 제작자 이름은 비워둘 수 없습니다.",
     "mod_author_too_long": "모드 제작자 이름은 50자를 초과할 수 없습니다.",

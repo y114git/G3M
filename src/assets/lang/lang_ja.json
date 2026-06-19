@@ -256,7 +256,7 @@
   },
   "files": {
     "data_file": "DATA - ファイル",
-    "extra_files_title": "追加ファイル: {key_name}",
+    "extra_files_title": "追加ファイル #{number}",
     "icon_label": "アイコン",
     "version_label": "バージョン {file_type}:"
   },
@@ -528,6 +528,8 @@
     "no_readme_files": "{mod_name} の README が見つかりませんでした。",
     "macos_install_unavailable": "macOS ではゲームファイルのインストールは利用できません。\nSteam 経由でデモをインストールすることをおすすめします。",
     "mod_name_empty": "Mod 名を空にすることはできません。",
+    "empty_data_file_section": "「{tab_name}」タブの空の DATA - ファイル セクションを入力するか削除してください。",
+    "empty_extra_file_section": "「{tab_name}」タブの空の追加ファイル #{number} セクションを入力するか削除してください。",
     "mod_name_too_long": "Mod 名は 50 文字を超えることはできません。",
     "mod_author_empty": "Mod 作成者を空にすることはできません。",
     "mod_author_too_long": "MOD 作成者は 50 文字を超えることはできません。",

@@ -1447,6 +1447,47 @@ class TestModEditorDialog:
         dialog.close()
         parent.deleteLater()
 
+    def test_mod_editor_numbers_extra_file_section_titles_by_visual_order(
+        self, qapp, tmp_path
+    ):
+        """Checks that extra file section titles are numbered top-to-bottom and renumber on delete."""
+        from types import SimpleNamespace
+
+        from services.localization_service import tr
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        first_tab = dialog.file_tabs.widget(0)
+        layout = first_tab._file_layout
+        dialog._create_file_frame(layout, "extra")
+        dialog._create_file_frame(layout, "extra")
+
+        extra_title_labels = list(
+            dialog._iter_file_title_labels(layout, file_type="extra")
+        )
+
+        assert [label.text() for label in extra_title_labels] == [
+            tr("files.extra_files_title", number=1),
+            tr("files.extra_files_title", number=2),
+        ]
+
+        first_frame = extra_title_labels[0].parentWidget()
+        dialog._remove_file_frame(layout, first_frame, "extra")
+        qapp.processEvents()
+
+        remaining_extra_titles = [
+            label.text()
+            for label in dialog._iter_file_title_labels(layout, file_type="extra")
+        ]
+        assert remaining_extra_titles == [tr("files.extra_files_title", number=1)]
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_populates_extra_file_paths_in_visible_inputs(self, qapp, tmp_path):
         """Checks that mod editor populates extra file paths in visible inputs."""
         from types import SimpleNamespace
@@ -2221,6 +2262,75 @@ class TestModEditorDialog:
 
         dialog._create_local_mod.assert_not_called()
         assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_blocks_save_when_created_file_section_is_empty(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        """Checks save is blocked, warnings include extra section number, and empty fields are highlighted."""
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QMessageBox
+
+        from services.localization_service import tr
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        parent.library_display = SimpleNamespace(update_display=Mock())
+        warning_calls = []
+        monkeypatch.setattr(
+            QMessageBox,
+            "warning",
+            lambda *args: warning_calls.append(args),
+        )
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+        dialog.name_edit.setText("Section Validation")
+        dialog._create_local_mod = Mock()
+
+        first_tab = dialog.file_tabs.widget(0)
+        layout = first_tab._file_layout
+
+        dialog._create_file_frame(layout, "data")
+        dialog._save_mod()
+
+        dialog._create_local_mod.assert_not_called()
+        assert warning_calls[-1][2] == tr(
+            "dialogs.empty_data_file_section",
+            tab_name=dialog.file_tabs.tabText(0),
+        )
+        data_input = next(
+            w for w in first_tab.findChildren(type(dialog.icon_edit)) if w.property("is_local_path")
+        )
+        assert data_input.property("validation_error") is True
+        assert "#d9534f" in data_input.styleSheet()
+
+        data_input.setText("data.win")
+        assert not data_input.property("validation_error")
+        assert data_input.styleSheet() == ""
+
+        dialog._create_file_frame(layout, "extra")
+        dialog._create_file_frame(layout, "extra")
+        extra_inputs = [
+            w
+            for w in first_tab.findChildren(type(dialog.icon_edit))
+            if w.property("is_local_extra_path")
+        ]
+        extra_inputs[0].setText("bonus.zip")
+        dialog._save_mod()
+
+        dialog._create_local_mod.assert_not_called()
+        assert warning_calls[-1][2] == tr(
+            "dialogs.empty_extra_file_section",
+            tab_name=dialog.file_tabs.tabText(0),
+            number=2,
+        )
+        assert extra_inputs[1].property("validation_error") is True
+        assert "#d9534f" in extra_inputs[1].styleSheet()
         dialog.close()
         parent.deleteLater()
 
