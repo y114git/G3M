@@ -3,7 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 from app.dialogs import on_downloads_record_updated
 from controllers.plugins_controller import PluginsController
@@ -255,6 +256,98 @@ def test_plugin_installed_record_update_scans_on_main_thread(qapp, temp_dir):
     controller.plugin_runtime_service.scan_installed_plugins.assert_called_once()
     controller.refresh_main_tabs.assert_called_once()
     controller.render.assert_called_once()
+
+
+def test_plugin_external_refresh_reuses_existing_main_view_widget(qapp, temp_dir):
+    """Checks that settings refresh does not recreate unchanged plugin main views."""
+    controller, _downloads_manager, _catalog = _make_controller(temp_dir)
+    controller.app.main_tab_widget = QTabWidget()
+    controller.render = Mock()
+    controller._loaded = True
+    plugin = SimpleNamespace(
+        plugin_id="sample_plugin",
+        enabled=True,
+        manifest=SimpleNamespace(
+            name="Sample Plugin",
+            hooks=["main_view"],
+        ),
+    )
+    controller.plugin_runtime_service.list_installed_plugins.return_value = [plugin]
+    widget = QWidget()
+    controller.plugin_runtime_service.get_main_widget.return_value = widget
+
+    controller.refresh_main_tabs()
+    controller.handle_external_refresh()
+
+    controller.plugin_runtime_service.get_main_widget.assert_called_once()
+    assert controller.app.main_tab_widget.indexOf(widget) >= 0
+    assert controller.app.main_tab_widget.count() == 1
+    assert controller.render.call_count == 1
+
+
+def test_plugin_list_render_does_not_detach_removed_cards(qapp, temp_dir):
+    """Checks that plugin list refresh cannot flash removed cards as windows."""
+    controller, _downloads_manager, _catalog = _make_controller(temp_dir)
+    controller.plugin_catalog_service.list_entries.return_value = []
+    controller.plugin_state_service.get_filters.return_value = {
+        "installed_only": False,
+        "tags": [],
+    }
+    controller.app.plugins_container = QWidget()
+    controller.app.plugins_widget = QWidget(controller.app.plugins_container)
+    controller.app.plugins_layout = QVBoxLayout(controller.app.plugins_widget)
+    controller.app.plugins_layout.addStretch()
+    plugin = SimpleNamespace(
+        plugin_id="sample_plugin",
+        enabled=True,
+        is_local=False,
+        manifest=SimpleNamespace(
+            name="Sample Plugin",
+            description="Desc",
+            version="1.0.0",
+            author="Author",
+            icon="",
+            tags=[],
+        ),
+    )
+    controller.plugin_runtime_service.list_installed_plugins.return_value = [plugin]
+
+    controller.render()
+    old_card = controller.app.plugins_layout.itemAt(0).widget()
+    controller.app.plugins_widget.show()
+    old_card.show()
+    qapp.processEvents()
+
+    controller.render()
+
+    assert old_card.parent() is controller.app.plugins_widget
+    assert old_card.isWindow() is False
+    assert old_card.isVisible() is False
+
+
+def test_plugin_main_view_widget_is_reparented_before_tab_insert(qapp, temp_dir):
+    """Checks that plugin main view widgets cannot stay as transient windows."""
+    controller, _downloads_manager, _catalog = _make_controller(temp_dir)
+    controller.app.main_tab_widget = QTabWidget()
+    plugin = SimpleNamespace(
+        plugin_id="sample_plugin",
+        enabled=True,
+        manifest=SimpleNamespace(
+            name="Sample Plugin",
+            hooks=["main_view"],
+        ),
+    )
+    widget = QWidget()
+    widget.setWindowFlag(Qt.WindowType.Window, True)
+    widget.show()
+    controller.plugin_runtime_service.list_installed_plugins.return_value = [plugin]
+    controller.plugin_runtime_service.get_main_widget.return_value = widget
+
+    controller.refresh_main_tabs()
+
+    assert widget.parent() is not None
+    assert widget.isWindow() is False
+    assert controller.app.main_tab_widget.indexOf(widget) >= 0
 
 
 def test_window_download_record_callback_leaves_plugin_refresh_to_controller():

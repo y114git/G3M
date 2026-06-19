@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from PyQt6.QtCore import QMimeData, QUrl
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QLabel, QWidget
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
 def _drain_events(qapp, cycles: int = 3) -> None:
@@ -18,6 +18,26 @@ def _drain_events(qapp, cycles: int = 3) -> None:
     for _ in range(cycles):
         qapp.processEvents()
         QTest.qWait(5)
+
+
+def test_clear_layout_widgets_does_not_detach_visible_widgets_as_windows(qapp):
+    """Checks that clearing a visible layout cannot flash removed widgets as windows."""
+    from ui.common.styling import clear_layout_widgets
+
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    child = QLabel("Plugin card", host)
+    layout.addWidget(child)
+    layout.addStretch()
+    host.show()
+    qapp.processEvents()
+
+    clear_layout_widgets(layout)
+
+    assert child.isWindow() is False
+    assert child.isVisible() is False
+    host.deleteLater()
+    _drain_events(qapp)
 
 
 class TestModWidgets:
@@ -708,6 +728,127 @@ class TestCommonWidgets:
         assert _placeholder_resource_width(290) == 270
         img_tag = _build_img_tag({'src': 'https://example.com/test.png', 'width': '300'}, 300)
         assert 'width="290"' in img_tag
+
+    def test_rich_html_accepts_unquoted_image_dimensions(self):
+        """Checks that browser-style unquoted image attrs are preserved."""
+        from ui.common.rich_html import preprocess_html
+
+        processed = preprocess_html('<img src="panel.png" width=620>', widget_width=700)
+
+        assert 'width="620"' in processed
+
+    def test_rich_html_inlines_embedded_css_classes(self):
+        """Checks that embedded CSS classes are converted for QTextDocument."""
+        from ui.common.rich_html import preprocess_html
+
+        html = """
+        <style>
+        .notice { color: #ff99aa; background-color: #222; font-weight: bold; }
+        div.ignored { display: flex; transform: scale(2); }
+        </style>
+        <p class="notice">Important</p>
+        """
+
+        processed = preprocess_html(html)
+
+        assert "<style" not in processed
+        assert "color:#ff99aa;" in processed
+        assert "background-color:#222;" in processed
+        assert "font-weight:bold;" in processed
+        assert "display:flex" not in processed
+
+    def test_rich_html_inlines_embedded_element_styles(self):
+        """Checks that simple tag selectors from style blocks are preserved."""
+        from ui.common.rich_html import preprocess_html
+
+        html = """
+        <style>
+        h1 { color: #00dc78; font-size: 28px; margin: 0; }
+        a { color: #ff40a0; text-decoration: underline; }
+        code { background: #0b0d11; color: #6de985; padding: 2px; }
+        </style>
+        <h1>Title</h1><p><a href="https://example.com">Link</a> <code>Press J</code></p>
+        """
+
+        processed = preprocess_html(html)
+
+        assert '<h1 style="color:#00dc78;font-size:28px;margin:0;">' in processed
+        assert 'href="https://example.com" style="color:#ff40a0;text-decoration:underline;"' in processed
+        assert 'background-color:#0b0d11;color:#6de985;padding:2px;' in processed
+
+    def test_rich_html_escapes_inline_style_quotes(self):
+        """Checks that quoted CSS values do not break generated attributes."""
+        from ui.common.rich_html import preprocess_html
+
+        processed = preprocess_html(
+            '<style>body { font-family: "Segoe UI", "Verdana"; color: #eee; }</style><body>Text</body>'
+        )
+
+        assert 'font-family:&quot;Segoe UI&quot;, &quot;Verdana&quot;;color:#eee;' in processed
+
+    def test_rich_html_turns_heading_border_into_rule(self):
+        """Checks that heading underlines survive QTextDocument rendering."""
+        from ui.common.rich_html import preprocess_html
+
+        processed = preprocess_html(
+            "<style>h2 { color: #6de985; border-bottom: 1px solid #039d5b; }</style><h2>Title</h2>"
+        )
+
+        assert "<h2" in processed
+        assert "border-bottom" not in processed
+        assert '<hr width="100%" color="#039d5b"' in processed
+
+    def test_rich_html_drops_paint_from_layout_container_classes(self):
+        """Checks that wrapper backgrounds do not create QTextDocument stripes."""
+        from ui.common.rich_html import preprocess_html
+
+        html = """
+        <style>
+        .page { background: #1f232b; border: 2px solid #039d5b; padding: 22px; color: #eee; }
+        .note { background: #282828; border-left: 6px solid #9d391a; color: #ffd7c2; }
+        </style>
+        <div class="page"><div class="note">Warning</div></div>
+        """
+
+        processed = preprocess_html(html)
+
+        assert 'style="color:#eee;"' in processed
+        assert "background-color:#1f232b" not in processed
+        assert "border:2px solid #039d5b" not in processed
+        assert 'bgcolor="#282828"' in processed
+        assert "border-left:4px solid #9d391a;" in processed
+
+    def test_rich_html_converts_figures_and_float_blocks(self):
+        """Checks that common web media wrappers become Qt-friendly blocks."""
+        from ui.common.rich_html import preprocess_html
+
+        html = """
+        <figure class="floatright">
+            <img src="images/panel.png" width="320">
+            <figcaption>Panel caption</figcaption>
+        </figure>
+        """
+
+        processed = preprocess_html(html, widget_width=260, base_path="C:/Mods/Sample")
+
+        assert "<figure" not in processed
+        assert "<figcaption" not in processed
+        assert '<table align="right"' in processed
+        assert "Panel caption" in processed
+        assert "file:///C:/Mods/Sample/images/panel.png" in processed
+        assert 'width="250"' in processed
+
+    def test_rich_html_uses_max_width_for_images(self):
+        """Checks that max-width is honored when width is absent."""
+        from ui.common.rich_html import preprocess_html
+
+        processed = preprocess_html(
+            '<img src="C:/Mods/image.png" style="max-width: 80%; height: 40">',
+            widget_width=500,
+        )
+
+        assert 'width="392"' in processed
+        assert 'height="40"' in processed
 
     def test_rich_html_loading_placeholder_keeps_outer_edges_transparent(self):
         """Checks that rich HTML loading placeholder keeps outer edges transparent."""

@@ -8,6 +8,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
+from models.plugin_models import CatalogPluginEntry
 from services.localization_service import localization_service, tr
 from services.plugins.catalog_service import PluginCatalogService
 from services.plugins.install_service import PluginInstallService
@@ -28,18 +29,19 @@ class _DummySettingsService:
 
 
 class _CatalogSpy:
-    def __init__(self) -> None:
+    def __init__(self, entries=None) -> None:
         self.calls = []
+        self.entries = entries or {}
 
     def is_loaded(self):
         return False
 
     def get_entry(self, plugin_id, *, load_if_needed=True):
         self.calls.append((plugin_id, load_if_needed))
-        return None
+        return self.entries.get(plugin_id)
 
 
-def _write_plugin(plugins_dir, plugin_id="sample_plugin", api_version=">=1.0.0"):
+def _write_plugin(plugins_dir, plugin_id="sample_plugin", api_version=">=1.0.0", version="1.0.0"):
     plugin_dir = os.path.join(plugins_dir, plugin_id)
     os.makedirs(os.path.join(plugin_dir, "lang"), exist_ok=True)
     with open(
@@ -54,7 +56,7 @@ def _write_plugin(plugins_dir, plugin_id="sample_plugin", api_version=">=1.0.0")
                 "name": f"plugins.{plugin_id}.name",
                 "description": f"plugins.{plugin_id}.description",
                 "author": "Tester",
-                "version": "1.0.0",
+                "version": version,
                 "api_version": api_version,
                 "entry": "plugin.py",
                 "tags": ["tool"],
@@ -217,6 +219,44 @@ def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir)
     assert catalog_spy.calls == [("sample_plugin", False)]
     assert localization_service.get_text("plugins.sample_plugin.name") == "Sample Plugin"
     assert localization_service.get_text("plugins.sample_plugin.description") == "Sample description"
+    localization_service.clear_plugin_strings("sample_plugin")
+
+
+def test_plugin_runtime_update_available_requires_newer_catalog_version(temp_dir):
+    """Checks that plugin updates are offered only for strict catalog upgrades."""
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_plugin(temp_dir, version="1.1.2")
+    catalog_entry = CatalogPluginEntry(
+        id="sample_plugin",
+        name="Sample Plugin",
+        description="Sample description",
+        author="Tester",
+        version="1.1.1",
+        api_version=">=1.0.0",
+        download_link="https://example.invalid/sample.zip",
+    )
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy({"sample_plugin": catalog_entry}),
+        plugins_dir=temp_dir,
+    )
+
+    installed = runtime.scan_installed_plugins(resolve_catalog=True)
+    assert installed["sample_plugin"].update_available is False
+
+    catalog_entry.version = "1.1.3"
+    installed = runtime.scan_installed_plugins(resolve_catalog=True)
+    assert installed["sample_plugin"].update_available is True
     localization_service.clear_plugin_strings("sample_plugin")
 
 

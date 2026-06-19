@@ -81,10 +81,12 @@ class BootstrapCoordinator:
         initial_url: str | None,
         window_factory,
         server_factory,
+        initial_external_game_process: str | None = None,
     ) -> None:
         self.app = app
         self.user_root = user_root
         self.initial_url = initial_url
+        self.initial_external_game_process = initial_external_game_process
         self.window_factory = window_factory
         self.server_factory = server_factory
         self.instance = None
@@ -112,6 +114,12 @@ class BootstrapCoordinator:
             self.instance = self.window_factory(
                 parent_for_dialogs=self.splash, initial_url=self.initial_url
             )
+            if self.initial_external_game_process and hasattr(
+                self.instance, "game_launch"
+            ):
+                self.instance.game_launch.set_external_game_process_name(
+                    self.initial_external_game_process
+                )
             server = self.server_factory(self.instance)
             if not server.listen(SINGLE_INSTANCE_KEY):
                 error_msg = tr("errors.single_instance_error")

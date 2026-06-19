@@ -29,6 +29,17 @@ def is_game_running(pid: int | None = None):
     )
 
 
+def get_running_game_process_name() -> str | None:
+    for proc in psutil.process_iter(["name"]):
+        try:
+            name = proc.info["name"]
+            if name in get_all_process_names():
+                return name
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return None
+
+
 def is_valid_mac_game_path(path: str, skip_data_check: bool, game_type: str) -> bool:
     app_path = Path(path)
     from models.game_modes import get_game

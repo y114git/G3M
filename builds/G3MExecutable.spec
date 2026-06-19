@@ -22,6 +22,8 @@ else:
 
 datas_extra = []
 debug_spec = os.getenv('G3M_SPEC_DEBUG', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 try:
     spec_path = Path(__file__).resolve()
 except NameError:
@@ -83,21 +85,25 @@ a = Analysis(
     excludes=[
         'PyQt6.QtQml',
         'PyQt6.QtQuick',
+        'PyQt6.QtQuick3D',
+        'PyQt6.QtQuickWidgets',
         'PyQt6.QtTest',
         'PyQt6.QtBluetooth',
         'PyQt6.QtNetworkAuth',
         'PyQt6.QtOpenGL',
         'PyQt6.QtOpenGLWidgets',
-        'PyQt6.QtPositioning',
-        'PyQt6.QtWebEngineCore',
-        'PyQt6.QtWebEngineQuick',
-        'PyQt6.QtWebEngineWidgets',
         'PyQt6.QtWebChannel',
+        'PyQt6.QtWebEngineCore',
+        'PyQt6.QtWebEngineWidgets',
+        'PyQt6.QtWebEngineQuick',
+        'PyQt6.QtWebSockets',
+        'PyQt6.QtPositioning',
         'PyQt6.QtSensors',
         'PyQt6.QtSerialPort',
         'PyQt6.QtLocation',
         'PyQt6.QtMultimedia',
         'PyQt6.QtMultimediaWidgets',
+        'PyQt6.QtSpatialAudio',
         'PyQt6.QtPrintSupport',
         'PyQt6.QtSql',
         'PyQt6.QtSvgWidgets',
@@ -112,6 +118,7 @@ a = Analysis(
         'PyQt6.Qt3DExtras',
         'PyQt6.QtRemoteObjects',
         'PyQt6.QtNfc',
+        'PyQt6.QtTextToSpeech',
         'tkinter',
         'turtle',
         'curses',

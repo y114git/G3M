@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any, cast
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 
 from app.game_ui import full_install_tooltip
 from config.config import UI_COLORS
+from services.game_detection_service import get_running_game_process_name
 from services.localization_service import tr
 from ui.common.styling import get_launch_status_color
 from utils.mod.utils import get_mod_id
@@ -61,6 +62,27 @@ class GameLaunchController(QObject):
         self.app = app_window
         self._full_install_checkbox_is_checked = False
         self._window_hidden_for_launch = False
+        self._external_game_timer = QTimer(self)
+        self._external_game_timer.setInterval(2000)
+        self._external_game_timer.timeout.connect(self.refresh_external_game_process)
+        self._external_game_timer.start()
+        if hasattr(self.app_state, "external_game_process_name_changed"):
+            self.app_state.external_game_process_name_changed.connect(
+                lambda _name: self.update_button_state()
+            )
+
+    def set_external_game_process_name(self, process_name: str | None) -> None:
+        self.app_state.external_game_process_name = process_name
+        if not self._external_game_timer.isActive():
+            self._external_game_timer.start()
+        self.update_button_state()
+
+    def refresh_external_game_process(self) -> None:
+        if getattr(self.app_state, "game_is_running", False):
+            return
+        current = get_running_game_process_name()
+        if current != getattr(self.app_state, "external_game_process_name", ""):
+            self.set_external_game_process_name(current)
 
     def _is_full_install_enabled(self) -> bool:
         return (
@@ -105,6 +127,18 @@ class GameLaunchController(QObject):
         if not self.app_state.initialization_completed:
             self.app_state.action_button_text = tr("status.please_wait")
             self.app_state.action_button_enabled = False
+            return
+        external_process = getattr(self.app_state, "external_game_process_name", "")
+        if external_process:
+            self.app_state.action_button_text = tr("ui.launch_button")
+            self.app_state.action_button_enabled = False
+            self._safe_update_status(
+                tr(
+                    "status.close_current_process_to_launch",
+                    process_name=external_process,
+                ),
+                UI_COLORS["status_warning"],
+            )
             return
         action_text = (
             tr("buttons.install")
@@ -227,6 +261,10 @@ class GameLaunchController(QObject):
         self.update_button_state()
 
     def on_action_button_click(self):
+        external_process = getattr(self.app_state, "external_game_process_name", "")
+        if external_process and not getattr(self.app_state, "game_is_running", False):
+            self.update_button_state()
+            return
         if getattr(self.app_state, "game_is_running", False):
             if hasattr(self.game_launcher, "close_game"):
                 self.game_launcher.close_game()

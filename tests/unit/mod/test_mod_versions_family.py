@@ -118,6 +118,62 @@ class TestSnapshotAndApply:
         _apply_version_zip(mod_folder, zp)
         assert os.path.isfile(marker)
 
+    def test_apply_can_switch_between_xdelta_and_g3mpatch_versions_repeatedly(
+        self, mod_folder
+    ):
+        """Checks repeated version switching after DATA conversion does not corrupt the mod."""
+        from ui.dialogs.mod.versions_dialog import _apply_version_zip
+        from utils.mod.version_utils import create_version_zip
+
+        config_path = os.path.join(mod_folder, "mod_config.json")
+        data_path = os.path.join(mod_folder, "data.txt")
+        xdelta_path = os.path.join(mod_folder, "data.xdelta")
+        g3mpatch_path = os.path.join(mod_folder, "data.g3mpatch")
+
+        os.remove(data_path)
+        with open(config_path, "w", encoding="utf-8") as handle:
+            handle.write(
+                '{"version":"1.0.0","files":{"deltarune_1":{"data_file_path":"data.xdelta"}}}'
+            )
+        with open(xdelta_path, "w", encoding="utf-8") as handle:
+            handle.write("xdelta patch")
+        xdelta_zip = create_version_zip(
+            mod_folder,
+            mod_folder,
+            "1.0.0 - xdelta",
+            ignore_versions_dir=True,
+        )
+
+        os.remove(xdelta_path)
+        with open(config_path, "w", encoding="utf-8") as handle:
+            handle.write(
+                '{"version":"1.0.0","files":{"deltarune_1":{"data_file_path":"data.g3mpatch"}}}'
+            )
+        with open(g3mpatch_path, "w", encoding="utf-8") as handle:
+            handle.write("g3mpatch patch")
+        g3mpatch_zip = create_version_zip(
+            mod_folder,
+            mod_folder,
+            "1.0.0 - g3mpatch",
+            ignore_versions_dir=True,
+        )
+
+        for _ in range(3):
+            _apply_version_zip(mod_folder, xdelta_zip)
+            assert os.path.isfile(xdelta_path)
+            assert not os.path.exists(g3mpatch_path)
+            with open(config_path, encoding="utf-8") as handle:
+                assert "data.xdelta" in handle.read()
+
+            _apply_version_zip(mod_folder, g3mpatch_zip)
+            assert os.path.isfile(g3mpatch_path)
+            assert not os.path.exists(xdelta_path)
+            with open(config_path, encoding="utf-8") as handle:
+                assert "data.g3mpatch" in handle.read()
+
+        assert os.path.isfile(xdelta_zip)
+        assert os.path.isfile(g3mpatch_zip)
+
     def test_apply_rejects_invalid_zip_without_removing_current_mod(self, mod_folder):
         """Checks that invalid version zips do not uninstall the current mod."""
         from ui.dialogs.mod.versions_dialog import _apply_version_zip

@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 import zipfile
 from contextlib import suppress
 
@@ -27,12 +28,15 @@ from PyQt6.QtWidgets import (
 )
 
 from services.localization_service import localization_service, tr
+from services.warning_service import create_warning_event
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
+from ui.common.feedback import FeedbackManager
 from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
 from utils.native_integration import (
+    get_existing_directory,
     get_open_file_name,
     get_open_file_names,
     get_save_file_name,
@@ -52,6 +56,30 @@ _ALL_FILTER = "All Files (*)"
 _READY_DATA_TARGETS = ("data.win", "game.ios", "game.win")
 _CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", *_READY_DATA_TARGETS)
 _MONOSPACE_FONT_SIZE_PX = 12
+
+
+def _css_url(path: str) -> str:
+    return path.replace("\\", "/").replace(" ", "%20")
+
+
+def _write_checkbox_checkmark(color: str) -> str:
+    safe_color = color.strip() if color else "#00aa6a"
+    file_key = safe_color.strip("#").replace("/", "_").replace("\\", "_")
+    path = os.path.join(tempfile.gettempdir(), f"g3m_checkbox_check_{file_key}.svg")
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+        f'<path fill="none" stroke="{safe_color}" stroke-width="2.2" '
+        'stroke-linecap="round" stroke-linejoin="round" d="M3.2 8.4 6.5 11.7 12.8 4.3"/>'
+        "</svg>"
+    )
+    try:
+        if not os.path.exists(path):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(svg)
+    except Exception:
+        logger.debug("Failed to write checkbox checkmark asset", exc_info=True)
+        return ""
+    return path
 
 
 def _format_progress_status(percent: int, label: str) -> str:
@@ -82,6 +110,55 @@ def _safe_set_status(label, message: str) -> None:
         label.setText(message)
     except Exception:
         logger.warning("Modding tools status update failed", exc_info=True)
+
+
+def _set_g3mtool_failure_status(label, operation: str, rc: int, out: str, err: str) -> None:
+    details = (err or out or "").strip()
+    if details:
+        logger.info(
+            "Modding tools %s failed with code %s: %s",
+            operation,
+            rc,
+            details[:2000],
+        )
+    _safe_set_status(label, tr("modding_tools.failed_details_logged"))
+
+
+def _show_g3mtool_failure(parent, label, operation: str, rc: int, out: str, err: str) -> None:
+    _set_g3mtool_failure_status(label, operation, rc, out, err)
+    _safe_warning(parent, tr("modding_tools.title"), tr("modding_tools.failed_details_logged"))
+
+
+def _warning_id_for_g3mtool_failure(operation: str, details: str) -> str:
+    lower_details = str(details or "").lower()
+    if operation == "merge" or "merge" in lower_details:
+        return "merge_failed"
+    if "xdelta" in lower_details or "vcdiff" in lower_details:
+        return "xdelta_apply_failed"
+    if "g3mpatch" in lower_details or operation == "patch":
+        return "g3mpatch_apply_failed"
+    return "legacy_patching_warning"
+
+
+def _show_g3mtool_warning_failure(
+    parent,
+    app_state,
+    label,
+    operation: str,
+    rc: int,
+    out: str,
+    err: str,
+) -> None:
+    details = (err or out or "").strip()
+    _set_g3mtool_failure_status(label, operation, rc, out, err)
+    event = create_warning_event(
+        _warning_id_for_g3mtool_failure(operation, details),
+        details=details,
+        fallback_message=tr("modding_tools.failed_details_logged"),
+    )
+    feedback = FeedbackManager(parent)
+    feedback.app_state = app_state
+    feedback.ask_patching_warning(event, details)
 
 
 def _is_g3mpatch_source(path: str) -> bool:
@@ -270,11 +347,17 @@ class _PathRow(QWidget):
     text_changed = pyqtSignal(str)
 
     def __init__(
-        self, label_key: str, file_filter: str, parent=None, save_mode: bool = False
+        self,
+        label_key: str,
+        file_filter: str,
+        parent=None,
+        save_mode: bool = False,
+        dir_mode: bool = False,
     ) -> None:
         super().__init__(parent)
         self._filter = file_filter
         self._save_mode = save_mode
+        self._dir_mode = dir_mode
         self._save_path_getter = None
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -295,7 +378,13 @@ class _PathRow(QWidget):
         lay.addWidget(self._btn)
 
     def _browse(self):
-        if self._save_mode:
+        if self._dir_mode:
+            path = get_existing_directory(
+                self,
+                tr("dialogs.select_target_folder"),
+                self.path(),
+            )
+        elif self._save_mode:
             start_path = self.path()
             if callable(self._save_path_getter):
                 with suppress(Exception):
@@ -478,16 +567,46 @@ class _PatchTab(QWidget):
         mode_row.addStretch()
         lay.addLayout(mode_row)
 
+        batch_row = QHBoxLayout()
+        self._batch_cb = QCheckBox(tr("modding_tools.batch_mode"))
+        self._batch_cb.setToolTip(tr("tooltips.modding_tools_batch_mode"))
+        self._batch_cb.toggled.connect(self._on_batch_toggled)
+        self._continue_cb = QCheckBox(tr("modding_tools.continue_on_error"))
+        self._continue_cb.setToolTip(tr("tooltips.modding_tools_continue_on_error"))
+        batch_row.addWidget(self._batch_cb)
+        batch_row.addWidget(self._continue_cb)
+        batch_row.addStretch()
+        lay.addLayout(batch_row)
+
         self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER)
         lay.addWidget(self._original_row)
         self._second_row = _PathRow("modding_tools.modified_file", _DATA_FILTER)
         lay.addWidget(self._second_row)
+        self._batch_label = QLabel(tr("modding_tools.batch_inputs"))
+        lay.addWidget(self._batch_label)
+        self._batch_list = QListWidget()
+        self._batch_list.setMinimumHeight(120)
+        lay.addWidget(self._batch_list, 1)
+        batch_btns = QHBoxLayout()
+        batch_btns.setSpacing(6)
+        self._batch_add_btn = QPushButton(tr("modding_tools.merge_add"))
+        self._batch_add_btn.clicked.connect(self._on_batch_add)
+        self._batch_remove_btn = QPushButton(tr("modding_tools.merge_remove"))
+        self._batch_remove_btn.clicked.connect(self._on_batch_remove)
+        batch_btns.addWidget(self._batch_add_btn)
+        batch_btns.addWidget(self._batch_remove_btn)
+        batch_btns.addStretch()
+        lay.addLayout(batch_btns)
         self._output_row = _PathRow(
             "modding_tools.output_file", _ALL_FILTER, save_mode=True
         )
         self._output_row.set_save_path_getter(self._suggest_output_path)
         self._output_row.text_changed.connect(self._on_output_text_changed)
         lay.addWidget(self._output_row)
+        self._batch_output_row = _PathRow(
+            "modding_tools.output_folder", _ALL_FILTER, dir_mode=True
+        )
+        lay.addWidget(self._batch_output_row)
         self._original_row.text_changed.connect(self._maybe_suggest_output_path)
         self._second_row.text_changed.connect(self._maybe_suggest_output_path)
 
@@ -499,6 +618,7 @@ class _PatchTab(QWidget):
         )
         lay.addWidget(self._xdelta_fallback_checkbox)
         self._update_xdelta_fallback_visibility()
+        self._update_batch_visibility()
 
         lay.addStretch()
 
@@ -537,6 +657,7 @@ class _PatchTab(QWidget):
         self._second_row._label_key = key
         self._update_filters()
         self._update_xdelta_fallback_visibility()
+        self._update_batch_visibility()
         self._maybe_suggest_output_path()
 
     def _on_mode_changed(self, _idx):
@@ -549,7 +670,53 @@ class _PatchTab(QWidget):
             self._action_combo.blockSignals(False)
         self._update_filters()
         self._update_xdelta_fallback_visibility()
+        self._update_batch_visibility()
         self._maybe_suggest_output_path()
+
+    def _on_batch_toggled(self, _checked: bool) -> None:
+        self._update_batch_visibility()
+        self._maybe_suggest_output_path()
+
+    def _batch_supported(self) -> bool:
+        return (
+            self._mode_combo.currentText() == "g3mpatch"
+            and self._action_combo.currentIndex() in {0, 1}
+        )
+
+    def _update_batch_visibility(self) -> None:
+        supported = self._batch_supported()
+        self._batch_cb.setEnabled(supported)
+        if not supported and self._batch_cb.isChecked():
+            self._batch_cb.blockSignals(True)
+            self._batch_cb.setChecked(False)
+            self._batch_cb.blockSignals(False)
+        batch = supported and self._batch_cb.isChecked()
+        for widget in (
+            self._batch_label,
+            self._batch_list,
+            self._batch_add_btn,
+            self._batch_remove_btn,
+            self._batch_output_row,
+            self._continue_cb,
+        ):
+            widget.setVisible(batch)
+        self._second_row.setVisible(not batch)
+        self._output_row.setVisible(not batch)
+
+    def _on_batch_add(self):
+        file_filter = _DATA_FILTER if self._action_combo.currentIndex() == 0 else _G3M_PATCH_FILTER
+        paths, _ = get_open_file_names(
+            self, tr("ui.select_file"), "", file_filter
+        )
+        for path in paths:
+            item = QListWidgetItem(os.path.basename(path))
+            item.setData(Qt.ItemDataRole.UserRole, path)
+            item.setToolTip(path)
+            self._batch_list.addItem(item)
+
+    def _on_batch_remove(self):
+        for item in self._batch_list.selectedItems():
+            self._batch_list.takeItem(self._batch_list.row(item))
 
     def _update_xdelta_fallback_visibility(self) -> None:
         visible = (
@@ -635,11 +802,14 @@ class _PatchTab(QWidget):
             self._second_row.path(),
             self._output_row.path(),
         )
+        mode = self._mode_combo.currentText()
+        action = self._action_combo.currentIndex()
+        if self._batch_supported() and self._batch_cb.isChecked():
+            self._on_batch_run(orig)
+            return
         if not orig or not second or not out:
             _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
             return
-        mode = self._mode_combo.currentText()
-        action = self._action_combo.currentIndex()
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
         if action == 2:
@@ -676,6 +846,43 @@ class _PatchTab(QWidget):
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
 
+    def _on_batch_run(self, orig: str) -> None:
+        out_dir = self._batch_output_row.path()
+        inputs = [
+            self._batch_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._batch_list.count())
+        ]
+        if not orig or not inputs or not out_dir:
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.batch_need_files"))
+            return
+        self._run_btn.setEnabled(False)
+        _safe_set_status(self._status_label, tr("modding_tools.running"))
+        if self._action_combo.currentIndex() == 0:
+            self._worker = _WorkerThread(
+                self._g3m.batch_create_patches,
+                (
+                    orig,
+                    inputs,
+                    out_dir,
+                    self._continue_cb.isChecked(),
+                    self._xdelta_fallback_checkbox.isChecked(),
+                ),
+            )
+        else:
+            self._worker = _WorkerThread(
+                self._g3m.batch_apply_patches,
+                (
+                    orig,
+                    inputs,
+                    out_dir,
+                    self._continue_cb.isChecked(),
+                    self._xdelta_fallback_checkbox.isChecked(),
+                ),
+            )
+        self._worker.progress.connect(self._on_progress)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.start()
+
     def _on_progress(self, percent: int, label: str) -> None:
         _safe_set_status(self._status_label, _format_progress_status(percent, label))
 
@@ -685,16 +892,17 @@ class _PatchTab(QWidget):
         if rc == 0:
             _safe_set_status(self._status_label, tr("modding_tools.success"))
         else:
-            _safe_set_status(
-                self._status_label,
-                tr("modding_tools.failed", error=err[:300]),
+            _show_g3mtool_warning_failure(
+                self, self._app_state, self._status_label, "patch", rc, out, err
             )
 
     def has_user_interaction(self) -> bool:
         return bool(
             self._original_row.path()
             or self._second_row.path()
+            or self._batch_list.count()
             or self._output_row.path()
+            or self._batch_output_row.path()
             or self._worker
         )
 
@@ -707,6 +915,14 @@ class _PatchTab(QWidget):
         self._original_row.relocalize()
         self._second_row.relocalize()
         self._output_row.relocalize()
+        self._batch_cb.setText(tr("modding_tools.batch_mode"))
+        self._batch_cb.setToolTip(tr("tooltips.modding_tools_batch_mode"))
+        self._continue_cb.setText(tr("modding_tools.continue_on_error"))
+        self._continue_cb.setToolTip(tr("tooltips.modding_tools_continue_on_error"))
+        self._batch_label.setText(tr("modding_tools.batch_inputs"))
+        self._batch_add_btn.setText(tr("modding_tools.merge_add"))
+        self._batch_remove_btn.setText(tr("modding_tools.merge_remove"))
+        self._batch_output_row.relocalize()
         self._xdelta_fallback_checkbox.setText(
             tr("checkboxes.g3mpatch_xdelta_fallback")
         )
@@ -904,6 +1120,120 @@ class _DataConvertWorkerThread(QThread):
             )
 
 
+class _BatchDataConvertWorkerThread(QThread):
+    """Convert selected mods one by one while keeping the UI responsive."""
+
+    progress = pyqtSignal(str)
+    warning_confirmation_needed = pyqtSignal(object, str, object)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, g3m, jobs, target_mode, parent=None) -> None:
+        super().__init__(parent)
+        self._g3m = g3m
+        self._jobs = list(jobs)
+        self._target_mode = target_mode
+        self._warning_event = threading.Event()
+        self._warning_result = True
+
+    def confirm_warning(self, accepted: bool) -> None:
+        self._warning_result = accepted
+        self._warning_event.set()
+
+    def _request_warning_confirmation(
+        self, message: str, details: str = "", warning_id: str = "legacy_patching_warning"
+    ) -> bool:
+        self._warning_result = True
+        self._warning_event.clear()
+        event = create_warning_event(warning_id, details=details, fallback_message=message)
+        self.warning_confirmation_needed.emit(event, details, None)
+        while not self._warning_event.wait(0.1):
+            if self.isInterruptionRequested():
+                return False
+        return self._warning_result and not self.isInterruptionRequested()
+
+    @staticmethod
+    def _warning_id_for_error(message: str) -> str:
+        lower = str(message or "").lower()
+        if "xdelta" in lower:
+            return "xdelta_apply_failed"
+        if "merge" in lower:
+            return "merge_failed"
+        if "patch" in lower or "g3mpatch" in lower:
+            return "g3mpatch_apply_failed"
+        return "legacy_patching_warning"
+
+    def run(self):
+        total = len(self._jobs)
+        converted = 0
+        for index, job in enumerate(self._jobs, start=1):
+            if self.isInterruptionRequested():
+                self.finished.emit(
+                    False,
+                    tr(
+                        "modding_tools.convert_batch_failed",
+                        current=converted,
+                        total=total,
+                        error=tr("ui.cancel_button"),
+                    ),
+                )
+                return
+            mod_name = job.get("name") or os.path.basename(job["mod_folder"])
+            self.progress.emit(
+                tr(
+                    "modding_tools.convert_batch_progress",
+                    current=index,
+                    total=total,
+                    mod=mod_name,
+                )
+            )
+            worker = _DataConvertWorkerThread(
+                self._g3m,
+                job["mod_folder"],
+                job["config_data"],
+                job["game_path"],
+                self._target_mode,
+            )
+            result = []
+            worker.progress.connect(
+                lambda message, mod=mod_name: self.progress.emit(
+                    tr("modding_tools.convert_batch_item_progress", mod=mod, message=message)
+                )
+            )
+            worker.finished.connect(
+                lambda success, message, captured=result: captured.append(
+                    (success, message)
+                )
+            )
+            worker.run()
+            success, message = result[0] if result else (False, "")
+            if not success:
+                should_continue = self._request_warning_confirmation(
+                    "",
+                    details=message,
+                    warning_id=self._warning_id_for_error(message),
+                )
+                if not should_continue:
+                    self.finished.emit(
+                        False,
+                        tr(
+                            "modding_tools.convert_batch_failed",
+                            current=converted,
+                            total=total,
+                            error=message,
+                        ),
+                    )
+                    return
+                self.progress.emit(
+                    tr("modding_tools.convert_batch_skipped", mod=mod_name)
+                )
+                continue
+            converted += 1
+        self.finished.emit(
+            True,
+            tr("modding_tools.convert_batch_success", count=converted, total=total),
+        )
+
+
 class _DataConvertTab(QWidget):
     """Tab: profile → auto-scan mods → select → batch convert DATA files."""
 
@@ -947,6 +1277,7 @@ class _DataConvertTab(QWidget):
         self._mod_list = QListWidget()
         self._mod_list.setMinimumHeight(150)
         self._mod_list.setToolTip(tr("tooltips.modding_tools_mod_list"))
+        self._mod_list.itemChanged.connect(self._update_run_state)
         lay.addWidget(self._mod_list, 1)
 
         btn_row = QHBoxLayout()
@@ -996,9 +1327,15 @@ class _DataConvertTab(QWidget):
 
     def _scan_mods(self, _idx=0):
         from config.config import MOD_CONFIG_FILENAME
+        from utils.mod.config_parser import (
+            normalize_mod_config_data,
+            resolve_mod_file_path,
+        )
         from utils.path_utils import get_profile_mods_root
 
+        self._mod_list.blockSignals(True)
         self._mod_list.clear()
+        self._mod_list.blockSignals(False)
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, "")
         profile_name = self._profile_combo.currentText()
@@ -1020,8 +1357,6 @@ class _DataConvertTab(QWidget):
             try:
                 with open(config_path, encoding="utf-8") as f:
                     config_data = json.load(f)
-                from utils.mod.config_parser import normalize_mod_config_data
-
                 normalize_mod_config_data(config_data, mod_root_path=folder_path)
             except Exception:
                 logger.debug("Skipping unreadable mod config: %s", config_path)
@@ -1036,7 +1371,6 @@ class _DataConvertTab(QWidget):
                 url = ch.get("data_file_path") or ch.get("data_file_url", "")
                 if not url:
                     continue
-                from utils.mod.config_parser import resolve_mod_file_path
 
                 source_path = resolve_mod_file_path(folder_path, url)
                 if _should_convert_source_to_target(source_path, target_mode):
@@ -1046,15 +1380,29 @@ class _DataConvertTab(QWidget):
                 continue
             display = config_data.get("name", folder_name)
             item = QListWidgetItem(display)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
             item.setData(Qt.ItemDataRole.UserRole, folder_path)
             item.setToolTip(folder_path)
+            self._mod_list.blockSignals(True)
             self._mod_list.addItem(item)
+            self._mod_list.blockSignals(False)
             found += 1
 
         if found == 0:
             _safe_set_status(self._status_label, tr("modding_tools.convert_no_mods"))
         else:
-            self._run_btn.setEnabled(True)
+            self._update_run_state()
+
+    def _checked_items(self) -> list[QListWidgetItem]:
+        return [
+            self._mod_list.item(i)
+            for i in range(self._mod_list.count())
+            if self._mod_list.item(i).checkState() == Qt.CheckState.Checked
+        ]
+
+    def _update_run_state(self, *_args) -> None:
+        self._run_btn.setEnabled(bool(self._checked_items()))
 
     def _set_busy(self, busy: bool):
         self._profile_combo.setEnabled(not busy)
@@ -1068,60 +1416,94 @@ class _DataConvertTab(QWidget):
     def _on_run(self):
         if self._worker and self._worker.isRunning():
             return
-        item = self._mod_list.currentItem()
-        if not item:
+        checked_items = self._checked_items()
+        if not checked_items:
             return
-        mod_folder = item.data(Qt.ItemDataRole.UserRole)
-        config_path = os.path.join(mod_folder, "mod_config.json")
-        try:
-            with open(config_path, encoding="utf-8") as f:
-                config_data = json.load(f)
-            from utils.mod.config_parser import normalize_mod_config_data
-
-            normalize_mod_config_data(config_data, mod_root_path=mod_folder)
-        except Exception as e:
-            _safe_set_status(
-                self._status_label,
-                tr("modding_tools.convert_data_failed", error=str(e)),
-            )
+        if not self._g3m or not self._g3m.is_available():
+            _safe_set_status(self._status_label, tr("errors.g3mtool_not_available"))
             return
-
-        game = config_data.get("game", "deltarune")
         from models.game_modes import get_game
+        from utils.mod.config_parser import normalize_mod_config_data
 
-        game_def = get_game(game)
-        if not game_def:
-            _safe_set_status(
-                self._status_label,
-                tr("modding_tools.convert_game_path_missing", game=game),
-            )
-            return
-
-        game_path = game_def.get_game_path(self._app_state.local_config)
-        if not game_path or not os.path.isdir(game_path):
-            _safe_set_status(
-                self._status_label,
-                tr(
-                    "modding_tools.convert_game_path_missing",
-                    game=game_def.display_name,
+        jobs = []
+        game_path_cache = {}
+        for item in checked_items:
+            mod_folder = item.data(Qt.ItemDataRole.UserRole)
+            config_path = os.path.join(mod_folder, "mod_config.json")
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    config_data = json.load(f)
+                normalize_mod_config_data(config_data, mod_root_path=mod_folder)
+            except Exception as e:
+                _safe_set_status(
+                    self._status_label,
+                    tr("modding_tools.convert_data_failed", error=str(e)),
                 )
+                return
+
+            game = config_data.get("game", "deltarune")
+            if game in game_path_cache:
+                game_def, game_path = game_path_cache[game]
+            else:
+                game_def = get_game(game)
+                if not game_def:
+                    _safe_set_status(
+                        self._status_label,
+                        tr("modding_tools.convert_game_path_missing", game=game),
+                    )
+                    return
+
+                game_path = game_def.get_game_path(self._app_state.local_config)
+                if not game_path or not os.path.isdir(game_path):
+                    _safe_set_status(
+                        self._status_label,
+                        tr(
+                            "modding_tools.convert_game_path_missing",
+                            game=game_def.display_name,
+                        )
+                    )
+                    return
+                game_path_cache[game] = (game_def, game_path)
+            jobs.append(
+                {
+                    "mod_folder": mod_folder,
+                    "config_data": config_data,
+                    "game_path": game_path,
+                    "name": item.text(),
+                }
             )
-            return
 
         target_mode = _convert_target_mode(self._fmt_combo.currentIndex())
         self._set_busy(True)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
-        self._worker = _DataConvertWorkerThread(
-            self._g3m, mod_folder, config_data, game_path, target_mode
-        )
+        self._worker = _BatchDataConvertWorkerThread(self._g3m, jobs, target_mode)
         self._worker.progress.connect(lambda message: _safe_set_status(self._status_label, message))
+        self._worker.warning_confirmation_needed.connect(
+            self._on_warning_confirmation_needed
+        )
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _on_warning_confirmation_needed(self, message, details: str, report_path):
+        feedback = FeedbackManager(self)
+        feedback.app_state = self._app_state
+        should_continue = feedback.ask_patching_warning(message, details, report_path)
+        if self._worker:
+            self._worker.confirm_warning(should_continue)
 
     def _on_finished(self, success, message):
         self._worker = None
         self._set_busy(False)
-        _safe_set_status(self._status_label, message)
+        if success:
+            _safe_set_status(self._status_label, message)
+        else:
+            logger.info("Modding tools DATA conversion failed: %s", message)
+            _safe_set_status(self._status_label, tr("modding_tools.failed_details_logged"))
+            _safe_warning(
+                self,
+                tr("modding_tools.title"),
+                tr("modding_tools.failed_details_logged"),
+            )
 
     def has_user_interaction(self) -> bool:
         return bool(self._worker)
@@ -1150,10 +1532,17 @@ class _MergeTab(QWidget):
         cb_row = QHBoxLayout()
         self._code_cb = QCheckBox(tr("checkboxes.merge_code"))
         self._props_cb = QCheckBox(tr("checkboxes.merge_properties"))
+        self._batch_cb = QCheckBox(tr("modding_tools.batch_mode"))
+        self._continue_cb = QCheckBox(tr("modding_tools.continue_on_error"))
+        self._report_cb = QCheckBox(tr("modding_tools.merge_report"))
         cb_row.addWidget(self._code_cb)
         cb_row.addWidget(self._props_cb)
+        cb_row.addWidget(self._batch_cb)
+        cb_row.addWidget(self._continue_cb)
+        cb_row.addWidget(self._report_cb)
         cb_row.addStretch()
         lay.addLayout(cb_row)
+        self._batch_cb.toggled.connect(self._update_batch_visibility)
 
         self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER)
         lay.addWidget(self._original_row)
@@ -1180,8 +1569,23 @@ class _MergeTab(QWidget):
         self._down_btn.clicked.connect(lambda: self._move(1))
         for b in (self._add_btn, self._remove_btn, self._up_btn, self._down_btn):
             list_btns.addWidget(b)
+        self._add_set_btn = QPushButton(tr("modding_tools.merge_add_set"))
+        self._add_set_btn.clicked.connect(self._on_add_set)
+        list_btns.addWidget(self._add_set_btn)
         list_btns.addStretch()
         lay.addLayout(list_btns)
+
+        self._set_label = QLabel(tr("modding_tools.merge_sets"))
+        lay.addWidget(self._set_label)
+        self._set_list = QListWidget()
+        self._set_list.setMinimumHeight(80)
+        lay.addWidget(self._set_list, 1)
+        set_btns = QHBoxLayout()
+        self._remove_set_btn = QPushButton(tr("modding_tools.merge_remove_set"))
+        self._remove_set_btn.clicked.connect(self._on_remove_set)
+        set_btns.addWidget(self._remove_set_btn)
+        set_btns.addStretch()
+        lay.addLayout(set_btns)
 
         self._output_row = _PathRow(
             "modding_tools.output_file", _DATA_FILTER, save_mode=True
@@ -1189,7 +1593,20 @@ class _MergeTab(QWidget):
         self._output_row.set_save_path_getter(self._suggest_output_path)
         self._output_row.text_changed.connect(self._on_output_text_changed)
         lay.addWidget(self._output_row)
+        self._patch_output_row = _PathRow(
+            "modding_tools.merge_patch_output_file", _G3M_PATCH_FILTER, save_mode=True
+        )
+        lay.addWidget(self._patch_output_row)
+        self._batch_output_row = _PathRow(
+            "modding_tools.output_folder", _ALL_FILTER, dir_mode=True
+        )
+        lay.addWidget(self._batch_output_row)
+        self._batch_patch_output_row = _PathRow(
+            "modding_tools.merge_patch_output_folder", _ALL_FILTER, dir_mode=True
+        )
+        lay.addWidget(self._batch_patch_output_row)
         self._original_row.text_changed.connect(self._maybe_suggest_output_path)
+        self._update_batch_visibility()
 
         run_row = QHBoxLayout()
         run_row.addStretch()
@@ -1221,6 +1638,43 @@ class _MergeTab(QWidget):
         for item in self._file_list.selectedItems():
             self._file_list.takeItem(self._file_list.row(item))
         self._maybe_suggest_output_path()
+
+    def _current_patches(self) -> list[str]:
+        return [
+            self._file_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._file_list.count())
+        ]
+
+    def _on_add_set(self):
+        patches = self._current_patches()
+        if len(patches) < 2:
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_set_need_files"))
+            return
+        label = " + ".join(os.path.basename(path) for path in patches)
+        item = QListWidgetItem(label)
+        item.setData(Qt.ItemDataRole.UserRole, patches)
+        item.setToolTip("\n".join(patches))
+        self._set_list.addItem(item)
+
+    def _on_remove_set(self):
+        for item in self._set_list.selectedItems():
+            self._set_list.takeItem(self._set_list.row(item))
+
+    def _update_batch_visibility(self):
+        batch = self._batch_cb.isChecked()
+        for widget in (
+            self._set_label,
+            self._set_list,
+            self._remove_set_btn,
+            self._batch_output_row,
+            self._batch_patch_output_row,
+            self._continue_cb,
+        ):
+            widget.setVisible(batch)
+        self._add_set_btn.setVisible(batch)
+        self._report_cb.setVisible(True)
+        self._output_row.setVisible(not batch)
+        self._patch_output_row.setVisible(not batch)
 
     def _move(self, direction):
         row = self._file_list.currentRow()
@@ -1263,14 +1717,19 @@ class _MergeTab(QWidget):
             _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
             return
         orig = self._original_row.path()
+        if self._batch_cb.isChecked():
+            self._on_batch_run(orig)
+            return
         out = self._output_row.path()
-        patches = [
-            self._file_list.item(i).data(Qt.ItemDataRole.UserRole)
-            for i in range(self._file_list.count())
-        ]
+        patch_out = self._patch_output_row.path()
+        patches = self._current_patches()
         if not orig or len(patches) < 2 or not out:
             _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_need_files"))
             return
+        report_path = None
+        if self._report_cb.isChecked():
+            base, _ext = os.path.splitext(patch_out or out)
+            report_path = f"{base}_merge_report.md"
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
         self._worker = _WorkerThread(
@@ -1279,10 +1738,40 @@ class _MergeTab(QWidget):
                 orig,
                 patches,
                 out,
-                None,
+                patch_out or None,
+                report_path,
                 None,
                 self._code_cb.isChecked(),
                 self._props_cb.isChecked(),
+            ),
+        )
+        self._worker.progress.connect(self._on_progress)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.start()
+
+    def _on_batch_run(self, orig: str) -> None:
+        out_dir = self._batch_output_row.path()
+        patch_out_dir = self._batch_patch_output_row.path()
+        patch_sets = [
+            self._set_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._set_list.count())
+        ]
+        if not orig or not out_dir or not patch_sets:
+            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_batch_need_files"))
+            return
+        self._run_btn.setEnabled(False)
+        _safe_set_status(self._status_label, tr("modding_tools.running"))
+        self._worker = _WorkerThread(
+            self._g3m.batch_merge_patches,
+            (
+                orig,
+                patch_sets,
+                out_dir,
+                patch_out_dir or None,
+                self._continue_cb.isChecked(),
+                self._code_cb.isChecked(),
+                self._props_cb.isChecked(),
+                self._report_cb.isChecked(),
             ),
         )
         self._worker.progress.connect(self._on_progress)
@@ -1298,9 +1787,8 @@ class _MergeTab(QWidget):
         if rc == 0:
             _safe_set_status(self._status_label, tr("modding_tools.success"))
         else:
-            _safe_set_status(
-                self._status_label,
-                tr("modding_tools.failed", error=err[:300]),
+            _show_g3mtool_warning_failure(
+                self, self._app_state, self._status_label, "merge", rc, out, err
             )
 
     def has_user_interaction(self) -> bool:
@@ -1308,19 +1796,34 @@ class _MergeTab(QWidget):
             self._original_row.path()
             or self._file_list.count()
             or self._output_row.path()
+            or self._patch_output_row.path()
+            or self._set_list.count()
+            or self._batch_output_row.path()
+            or self._batch_patch_output_row.path()
             or self._worker
         )
 
     def relocalize(self):
         self._code_cb.setText(tr("checkboxes.merge_code"))
         self._props_cb.setText(tr("checkboxes.merge_properties"))
+        self._batch_cb.setText(tr("modding_tools.batch_mode"))
+        self._batch_cb.setToolTip(tr("tooltips.modding_tools_batch_mode"))
+        self._continue_cb.setText(tr("modding_tools.continue_on_error"))
+        self._continue_cb.setToolTip(tr("tooltips.modding_tools_continue_on_error"))
+        self._report_cb.setText(tr("modding_tools.merge_report"))
         self._original_row.relocalize()
         self._list_label.setText(tr("modding_tools.merge_list"))
         self._add_btn.setText(tr("modding_tools.merge_add"))
         self._remove_btn.setText(tr("modding_tools.merge_remove"))
         self._up_btn.setText(tr("ui.move_up"))
         self._down_btn.setText(tr("ui.move_down"))
+        self._add_set_btn.setText(tr("modding_tools.merge_add_set"))
+        self._set_label.setText(tr("modding_tools.merge_sets"))
+        self._remove_set_btn.setText(tr("modding_tools.merge_remove_set"))
         self._output_row.relocalize()
+        self._patch_output_row.relocalize()
+        self._batch_output_row.relocalize()
+        self._batch_patch_output_row.relocalize()
         self._run_btn.setText(tr("modding_tools.merge_run"))
 
 
@@ -1383,8 +1886,18 @@ class _InfoTab(QWidget):
         if rc == 0:
             self._set_output_text(out)
         else:
-            self._set_output_text(
-                tr("modding_tools.failed", error=err[:500]) + "\n\n" + out
+            details = (err or out or "").strip()
+            if details:
+                logger.info(
+                    "Modding tools info failed with code %s: %s",
+                    rc,
+                    details[:2000],
+                )
+            self._set_output_text(tr("modding_tools.failed_details_logged"))
+            _safe_warning(
+                self,
+                tr("modding_tools.title"),
+                tr("modding_tools.failed_details_logged"),
             )
 
     def _set_output_text(self, text: str):
@@ -1467,10 +1980,7 @@ class _DiffTab(QWidget):
         self._run_btn.setEnabled(True)
         self._worker = None
         if rc != 0:
-            _safe_set_status(
-                self._status_label,
-                tr("modding_tools.failed", error=err[:300]),
-            )
+            _show_g3mtool_failure(self, self._status_label, "diff", rc, out, err)
             self._cleanup_out_dir()
             return
         _safe_set_status(self._status_label, tr("modding_tools.success"))
@@ -1562,6 +2072,10 @@ class ModdingToolsDialog(QDialog):
         base = build_dialog_theme_stylesheet(self._app_state)
         theme = get_dialog_theme_values(self._app_state)
         font_family = _get_app_font(self._app_state)
+        checkmark_path = _write_checkbox_checkmark(theme["border"])
+        checkmark_image = (
+            f'image: url("{_css_url(checkmark_path)}");' if checkmark_path else ""
+        )
         extra = f"""
             QLabel#modding_tools_title {{
                 font-size: 16px;
@@ -1637,6 +2151,42 @@ class ModdingToolsDialog(QDialog):
                 color: {theme["main_text"]};
                 border: 2px solid {theme["select"]};
                 border-radius: {theme["field_radius"]}px;
+            }}
+            QCheckBox::indicator {{
+                width: 16px;
+                height: 16px;
+                border: 2px solid {theme["border"]};
+                border-radius: 4px;
+                background-color: {theme["elements"]};
+            }}
+            QCheckBox::indicator:hover {{
+                border-color: {theme["select"]};
+                background-color: {theme["hover"]};
+            }}
+            QCheckBox::indicator:checked {{
+                border-color: {theme["border"]};
+                background-color: {theme["elements"]};
+                {checkmark_image}
+            }}
+            QCheckBox::indicator:disabled {{
+                border-color: {theme["secondary_text"]};
+                background-color: {theme["background"]};
+            }}
+            QListWidget::indicator {{
+                width: 16px;
+                height: 16px;
+                border: 2px solid {theme["border"]};
+                border-radius: 4px;
+                background-color: {theme["elements"]};
+            }}
+            QListWidget::indicator:hover {{
+                border-color: {theme["select"]};
+                background-color: {theme["hover"]};
+            }}
+            QListWidget::indicator:checked {{
+                border-color: {theme["border"]};
+                background-color: {theme["elements"]};
+                {checkmark_image}
             }}
         """
         self.setStyleSheet(base + extra)

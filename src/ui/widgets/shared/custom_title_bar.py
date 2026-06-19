@@ -2,6 +2,7 @@
 
 import logging
 
+from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QPoint, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
@@ -126,11 +127,14 @@ class CustomTitleBar(QWidget):
 
     @staticmethod
     def _reset_menu_button_state(button: QToolButton) -> None:
-        if not button:
+        if not button or sip.isdeleted(button):
             return
-        button.setDown(False)
-        button.clearFocus()
-        button.update()
+        try:
+            button.setDown(False)
+            button.clearFocus()
+            button.update()
+        except RuntimeError:
+            return
 
     def set_localized_texts(
         self,

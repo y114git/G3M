@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Callable
 
+from PyQt6 import sip
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
@@ -41,7 +42,7 @@ from app.game_ui import (
 )
 from services.localization_service import tr
 from ui.common.color_picker import BlackColorPickerEventFilter
-from ui.common.styling import display_hex_to_qt_hex
+from ui.common.styling import display_hex_to_qt_hex, get_theme_color
 from ui.dialogs.warning_preferences_dialog import WarningPreferencesDialog
 
 logger = logging.getLogger(__name__)
@@ -196,7 +197,23 @@ def _pick_color_for_edit(w, target_edit):
         dialog.setCurrentColor(initial_color)
     if dialog.exec() == QColorDialog.DialogCode.Accepted:
         target_edit.setText(_color_to_display_hex(dialog.currentColor()))
+        _update_color_edit_default_style(target_edit, w)
         w.theme.on_custom_style_edited()
+
+
+def _update_color_edit_default_style(target_edit: QLineEdit, w=None):
+    default_hex = (target_edit.property("default_display_hex") or "").strip().upper()
+    current_hex = target_edit.text().strip().upper()
+    is_default = bool(default_hex) and current_hex == default_hex
+    target_edit.setProperty("is_default_theme_color", is_default)
+    if is_default:
+        local_config = getattr(getattr(w, "app_state", None), "local_config", {})
+        color = QColor(get_theme_color(local_config, "main_text"))
+        target_edit.setStyleSheet(
+            f"color: rgba({color.red()}, {color.green()}, {color.blue()}, 110);"
+        )
+    else:
+        target_edit.setStyleSheet("")
 
 
 def _reset_display_hex(le: QLineEdit, w):
@@ -204,6 +221,7 @@ def _reset_display_hex(le: QLineEdit, w):
     default_hex = le.property("default_display_hex") or ""
     le.setText(default_hex)
     le.setProperty("last_valid_display_hex", default_hex)
+    _update_color_edit_default_style(le, w)
     w.theme.on_custom_style_edited()
 
 
@@ -214,6 +232,7 @@ def _commit_color_edit(w, target_edit: QLineEdit):
     ).strip().upper():
         target_edit.setText(color_text)
         target_edit.setProperty("last_valid_display_hex", color_text)
+        _update_color_edit_default_style(target_edit, w)
         w.theme.on_custom_style_edited()
 
 
@@ -234,10 +253,17 @@ def _guarded_trigger(widget, callback, cooldown_ms: int = 500):
     try:
         callback()
     finally:
-        QTimer.singleShot(
-            cooldown_ms,
-            lambda w=widget: setattr(w, "_click_guard_active", False),
-        )
+        timer = QTimer(widget)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda w=widget: _release_click_guard(w))
+        timer.timeout.connect(timer.deleteLater)
+        timer.start(cooldown_ms)
+
+
+def _release_click_guard(widget) -> None:
+    if widget is None or sip.isdeleted(widget):
+        return
+    widget._click_guard_active = False
 
 
 def _record_setting_change(w, setting_name: str, enabled: bool):

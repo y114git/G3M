@@ -25,6 +25,7 @@ from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
+from ui.common.rich_html import set_rich_html
 from utils.mod.readme_utils import (
     is_html_file,
     is_markdown_file,
@@ -125,7 +126,11 @@ class _ReadmeTab(QWidget):
             self.viewer.setMarkdown(_normalize_markdown_source(content))
             _normalize_markdown_heading_formats(self.viewer)
         elif is_html_file(self.file_path):
-            self.viewer.setHtml(content)
+            set_rich_html(
+                self.viewer,
+                content,
+                base_path=os.path.dirname(os.path.abspath(self.file_path)),
+            )
         else:
             self.viewer.setPlainText(content)
         self._loaded = True
@@ -138,6 +143,9 @@ class _ReadmeTab(QWidget):
         if self._pdf_document:
             self._pdf_document.close()
         self._loaded = False
+
+    def dispose(self) -> None:
+        self.unload_content()
 
     def _open_link(self, url: QUrl) -> None:
         allowed_schemes = {"http", "https", "mailto"}
@@ -300,7 +308,7 @@ class ModReadmeDialog(QDialog):
         for index in range(self._tabs.count()):
             tab = self._tabs.widget(index)
             if isinstance(tab, _ReadmeTab):
-                tab.unload_content()
+                tab.dispose()
 
     def done(self, result: int) -> None:
         self._unload_tabs()

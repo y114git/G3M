@@ -244,6 +244,74 @@ class TestG3MToolAdapter:
                 ["g3mtool", "patch", "create", "original.win", "modified.win", "out.g3mpatch"],
             ),
             (
+                lambda g3mtool: g3mtool.batch_apply_patches(
+                    "original.win",
+                    ["a.g3mpatch", "b.xdelta"],
+                    "out-dir",
+                    continue_on_error=True,
+                    include_xdelta_fallback=True,
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "batch",
+                    "apply",
+                    "original.win",
+                    "a.g3mpatch",
+                    "b.xdelta",
+                    "--out-dir",
+                    "out-dir",
+                    "--continue-on-error",
+                    "--xdelta-fallback",
+                ],
+            ),
+            (
+                lambda g3mtool: g3mtool.batch_create_patches(
+                    "original.win",
+                    ["mod-a.win", "mod-b.win"],
+                    "out-dir",
+                    include_xdelta_fallback=True,
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "batch",
+                    "create",
+                    "original.win",
+                    "mod-a.win",
+                    "mod-b.win",
+                    "--out-dir",
+                    "out-dir",
+                    "--xdelta-fallback",
+                ],
+            ),
+            (
+                lambda g3mtool: g3mtool.batch_merge_patches(
+                    "original.win",
+                    [["low.g3mpatch", "high.g3mpatch"], ["solo.xdelta"]],
+                    "out-dir",
+                    continue_on_error=True,
+                    merge_code=True,
+                    merge_properties=True,
+                    write_report=True,
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "batch",
+                    "merge",
+                    "original.win",
+                    "low.g3mpatch,high.g3mpatch",
+                    "solo.xdelta",
+                    "--apply",
+                    "out-dir",
+                    "--continue-on-error",
+                    "--code",
+                    "--properties",
+                    "--report",
+                ],
+            ),
+            (
                 lambda g3mtool: g3mtool.validate_patch(
                     "patch.g3mpatch",
                     data_file="original.win",
@@ -305,6 +373,10 @@ class TestG3MToolAdapter:
             ["patch", "apply"],
             ["patch", "create"],
             ["patch", "validate"],
+        ) or expected_args[1:4] in (
+            ["patch", "batch", "apply"],
+            ["patch", "batch", "create"],
+            ["patch", "batch", "merge"],
         ) or expected_args[1] in ("info", "diff"):
             expected_cmd.extend(["--cache", str(tmp_path / "cache" / "G3MTool")])
         assert actual_cmd == expected_cmd
@@ -419,6 +491,15 @@ class TestG3MToolAdapter:
             lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
             lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
             lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
+            lambda g3mtool: g3mtool.batch_apply_patches(
+                "original.win", ["patch.g3mpatch"], "out-dir"
+            ),
+            lambda g3mtool: g3mtool.batch_create_patches(
+                "original.win", ["modified.win"], "out-dir"
+            ),
+            lambda g3mtool: g3mtool.batch_merge_patches(
+                "original.win", [["a.g3mpatch", "b.g3mpatch"]], "out-dir"
+            ),
             lambda g3mtool: g3mtool.validate_patch("patch.g3mpatch", "original.win"),
             lambda g3mtool: g3mtool.execute(
                 "script.csx",
@@ -438,6 +519,23 @@ class TestG3MToolAdapter:
         g3mtool._find_executable = lambda: None
 
         assert caller(g3mtool) == (-1, "", tr("errors.g3mtool_not_available"))
+
+    def test_batch_merge_rejects_comma_paths_before_cli(self, monkeypatch):
+        """Checks that comma-delimited batch sets cannot silently corrupt paths."""
+        g3mtool = G3MToolManager()
+        g3mtool.g3mtool_path = "/tools/G3MTool"
+        run = Mock(return_value=(0, "", ""))
+        monkeypatch.setattr(g3mtool, "_run", run)
+
+        result = g3mtool.batch_merge_patches(
+            "original.win",
+            [["C:/mods/has,comma.g3mpatch"]],
+            "out-dir",
+        )
+
+        assert result[0] == 2
+        assert "cannot contain commas" in result[2]
+        run.assert_not_called()
 
 
 class TestModClassification:

@@ -29,6 +29,7 @@ class AppState(QObject):
     current_task_changed = pyqtSignal(object)
     action_button_text_changed = pyqtSignal(str)
     action_button_enabled_changed = pyqtSignal(bool)
+    external_game_process_name_changed = pyqtSignal(str)
     progress_bar_visible_changed = pyqtSignal(bool)
     progress_bar_value_changed = pyqtSignal(int)
     all_mods_updated = pyqtSignal(list)
@@ -47,6 +48,7 @@ class AppState(QObject):
         "_current_task": "current_task_changed",
         "_action_button_text": "action_button_text_changed",
         "_action_button_enabled": "action_button_enabled_changed",
+        "_external_game_process_name": "external_game_process_name_changed",
         "_progress_bar_visible": "progress_bar_visible_changed",
         "_progress_bar_value": "progress_bar_value_changed",
     }
@@ -78,6 +80,7 @@ class AppState(QObject):
         self.global_settings_loaded_at: float = 0.0
         self.is_full_install: bool = False
         self.game_is_running: bool = False
+        self._external_game_process_name: str = ""
         self.pending_dialogs: list[Any] = []
         self._operation_cancelled: bool = False
         self._filtered_mods: list[AnyModInfo] = []
@@ -243,6 +246,14 @@ class AppState(QObject):
     @action_button_enabled.setter
     def action_button_enabled(self, value: bool) -> None:
         self._action_button_enabled = value
+
+    @property
+    def external_game_process_name(self) -> str:
+        return self._external_game_process_name
+
+    @external_game_process_name.setter
+    def external_game_process_name(self, value: str | None) -> None:
+        self._external_game_process_name = str(value or "")
 
     @property
     def progress_bar_visible(self) -> bool:

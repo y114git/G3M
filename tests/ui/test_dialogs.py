@@ -10,7 +10,7 @@ except ImportError:
     from typing import override
 
 from PyQt6.QtCore import QMimeData, Qt, QUrl
-from PyQt6.QtGui import QTextCursor
+from PyQt6.QtGui import QTextCursor, QTextDocument
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 
@@ -142,6 +142,43 @@ class TestConflictsDialog:
 
 
 class TestPluginDetailsDialog:
+    def test_plugin_update_button_is_after_delete_and_runs_callback(
+        self, qapp, tmp_path
+    ):
+        from models.plugin_models import InstalledPluginRecord, PluginManifest
+        from services.localization_service import tr
+        from ui.dialogs.plugin_details_dialog import PluginDetailsDialog
+
+        manifest = PluginManifest(
+            config_version=1,
+            id="sample_plugin",
+            name="Sample",
+            description="Sample plugin",
+            author="Author",
+            version="1.0.0",
+            entry="plugin.py",
+        )
+        plugin = InstalledPluginRecord(manifest=manifest, path=str(tmp_path))
+        updated = []
+        dialog = PluginDetailsDialog(
+            plugin,
+            runtime_service=Mock(get_settings_widget=Mock(return_value=None)),
+            state_service=Mock(),
+            app_state=SimpleNamespace(local_config={}),
+            can_update=True,
+            on_update=updated.append,
+        )
+
+        button_texts = [button.text() for button in dialog.findChildren(QPushButton)]
+        delete_index = button_texts.index(tr("plugins.details_delete"))
+        update_index = button_texts.index(tr("plugins.details_update"))
+        assert update_index == delete_index + 1
+
+        dialog.findChildren(QPushButton)[update_index].click()
+
+        assert updated == ["sample_plugin"]
+        _close_dialog(qapp, dialog)
+
     def test_plugin_delete_confirmation_failure_is_ignored(
         self, qapp, tmp_path, monkeypatch
     ):
@@ -531,6 +568,113 @@ class TestReadmeUi:
 
         assert tab.viewer.toPlainText() == "Guide\nRendered HTML"
         assert cursor.charFormat().fontWeight() > 400
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_html_loads_relative_local_image(self, qapp, app_state, tmp_path):
+        """Checks that HTML INFO files can render images beside the mod file."""
+        from PyQt6.QtGui import QImage
+
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
+
+        image_dir = tmp_path / "images"
+        image_dir.mkdir()
+        image_path = image_dir / "debug.png"
+        image = QImage(12, 12, QImage.Format.Format_RGB32)
+        image.fill(0x00FF00)
+        assert image.save(str(image_path))
+        readme_path = tmp_path / "Debug Mode Controls.html"
+        readme_path.write_text(
+            '<h1>Debug Mode Controls</h1><img src="images/debug.png" width="80">',
+            encoding="utf-8",
+        )
+
+        dialog = ModReadmeDialog(app_state, "Debug Mode Controls", [str(readme_path)])
+        tab = dialog._tabs.widget(0)
+        qapp.processEvents()
+
+        resource_url = QUrl.fromLocalFile(str(image_path))
+        resource = tab.viewer.document().resource(
+            QTextDocument.ResourceType.ImageResource,
+            resource_url,
+        )
+        assert not resource.isNull()
+        assert resource.width() == 12
+        assert "Debug Mode Controls" in tab.viewer.toPlainText()
+        _close_dialog(qapp, dialog)
+
+    def test_mod_readme_html_loads_remote_image_from_local_file(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that local HTML INFO files may load remote img sources."""
+        from PyQt6.QtGui import QImage
+        from PyQt6.QtTest import QTest
+
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
+
+        image = QImage(24, 24, QImage.Format.Format_RGB32)
+        image.fill(0x0000FF)
+        url = "https://example.invalid/remote.png"
+        readme_path = tmp_path / "Remote.html"
+        readme_path.write_text(f'<h1>Remote</h1><img src="{url}" width="96">', encoding="utf-8")
+
+        with patch("ui.common.rich_html.get_session") as get_session:
+            response = Mock()
+            image_bytes = bytearray()
+            buffer = QImage(image)
+            from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+
+            data = QByteArray()
+            qbuffer = QBuffer(data)
+            qbuffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            assert buffer.save(qbuffer, "PNG")
+            image_bytes.extend(bytes(data))
+            response.content = bytes(image_bytes)
+            response.raise_for_status = Mock()
+            get_session.return_value.get.return_value = response
+            dialog = ModReadmeDialog(app_state, "Remote", [str(readme_path)])
+            tab = dialog._tabs.widget(0)
+            for _ in range(20):
+                qapp.processEvents()
+                QTest.qWait(25)
+
+                resource = tab.viewer.document().resource(
+                    QTextDocument.ResourceType.ImageResource,
+                    QUrl(url),
+                )
+                if not resource.isNull() and resource.width() == 24:
+                    break
+            assert not resource.isNull()
+            assert resource.width() == 24
+            _close_dialog(qapp, dialog)
+
+    def test_mod_readme_html_rerenders_images_after_resize(
+        self, qapp, app_state, tmp_path
+    ):
+        """Checks that lazy HTML loading does not lock images to fallback width."""
+        from PyQt6.QtGui import QImage
+        from PyQt6.QtTest import QTest
+
+        from ui.dialogs.mod.readme_dialog import ModReadmeDialog
+
+        image_dir = tmp_path / "images"
+        image_dir.mkdir()
+        image_path = image_dir / "wide.png"
+        image = QImage(640, 120, QImage.Format.Format_RGB32)
+        image.fill(0x00FF00)
+        assert image.save(str(image_path))
+        readme_path = tmp_path / "README.html"
+        readme_path.write_text('<img src="images/wide.png" width="620">', encoding="utf-8")
+
+        dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
+        dialog.resize(900, 640)
+        dialog.show()
+        for _ in range(5):
+            qapp.processEvents()
+            QTest.qWait(30)
+        tab = dialog._tabs.widget(0)
+        html = tab.viewer.toHtml()
+
+        assert str(image_path).replace("\\", "/") in html
         _close_dialog(qapp, dialog)
 
     def test_mod_readme_html_renders_common_formatting(

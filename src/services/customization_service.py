@@ -12,7 +12,11 @@ from PyQt6.QtGui import QColor, QPixmap
 from config.config import DEFAULT_COLORS
 from config.settings_schema import get_theme_color_key
 from services.localization_service import tr
-from ui.common.styling import install_panel_style_handler, qt_hex_to_display_hex
+from ui.common.styling import (
+    get_theme_color,
+    install_panel_style_handler,
+    qt_hex_to_display_hex,
+)
 from utils.path_utils import resource_path
 
 logger = logging.getLogger(__name__)
@@ -220,10 +224,22 @@ class CustomizationManager(QObject):
             effective_display_hex = custom_display_hex or default_display_hex
             widget.setText(effective_display_hex)
             widget.setPlaceholderText("")
+            widget.setProperty("is_default_theme_color", not bool(custom_display_hex))
             widget.setProperty("default_display_hex", default_display_hex)
             widget.setProperty("last_valid_display_hex", effective_display_hex)
+            self._update_color_display_style(widget, self.app_state.local_config)
         if apply_theme_callback:
             apply_theme_callback()
+
+    @staticmethod
+    def _update_color_display_style(widget, local_config=None) -> None:
+        if widget.property("is_default_theme_color"):
+            color = QColor(get_theme_color(local_config or {}, "main_text"))
+            widget.setStyleSheet(
+                f"color: rgba({color.red()}, {color.green()}, {color.blue()}, 110);"
+            )
+        else:
+            widget.setStyleSheet("")
 
     def update_mod_cards_styles(self, mod_list_widget=None, installed_mods_widget=None):
         from ui.widgets.mod.installed_mod_widget import InstalledModWidget

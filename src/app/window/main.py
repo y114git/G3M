@@ -525,9 +525,9 @@ class AppWindow(QWidget):
         self.action_frame.addWidget(self.shortcut_button)
         self.action_frame.addWidget(self.action_button)
         self.action_frame.addWidget(self.chat_button)
-        self.app_state.action_button_text_changed.connect(self.action_button.setText)
+        self.app_state.action_button_text_changed.connect(self._set_action_button_text)
         self.app_state.action_button_enabled_changed.connect(
-            self.action_button.setEnabled
+            self._set_action_button_enabled
         )
         self.app_state.progress_bar_visible_changed.connect(
             self.progress_bar.setVisible
@@ -1083,6 +1083,20 @@ class AppWindow(QWidget):
 
     def _update_status(self, message: str, color: str = "white"):
         update_status(self, message, color)
+
+    def _set_action_button_text(self, text: str) -> None:
+        button = getattr(self, "action_button", None)
+        if button is None or sip.isdeleted(button):
+            return
+        with contextlib.suppress(RuntimeError):
+            button.setText(text)
+
+    def _set_action_button_enabled(self, enabled: bool) -> None:
+        button = getattr(self, "action_button", None)
+        if button is None or sip.isdeleted(button):
+            return
+        with contextlib.suppress(RuntimeError):
+            button.setEnabled(enabled)
 
     def _update_localized_status(self, tr_key: str, color: str = "white", **kwargs):
         update_localized_status(self, tr_key, color, **kwargs)

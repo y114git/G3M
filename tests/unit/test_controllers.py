@@ -2047,6 +2047,55 @@ class TestGameLaunchController:
         assert controller is not None
         assert controller.app_state == app_state
 
+    def test_external_game_process_blocks_launch_button(self, qapp):
+        from config.config import UI_COLORS
+        from controllers.game_launch_controller import GameLaunchController
+        from services.localization_service import tr
+
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            external_game_process_name="DELTARUNE.exe",
+            is_installing=False,
+            operation_cancelled=False,
+            is_patching=False,
+            initialization_completed=True,
+            local_config={},
+            action_button_text=None,
+            action_button_enabled=True,
+            progress_bar_visible=False,
+            progress_bar_value=0,
+        )
+        feedback_service = Mock()
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        game_launcher = Mock()
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=game_launcher,
+            customization_service=Mock(),
+            app_window=Mock(),
+        )
+
+        controller.update_button_state()
+        controller.on_action_button_click()
+
+        assert app_state.action_button_text == tr("ui.launch_button")
+        assert app_state.action_button_enabled is False
+        feedback_service.update_status.assert_called_with(
+            tr(
+                "status.close_current_process_to_launch",
+                process_name="DELTARUNE.exe",
+            ),
+            UI_COLORS["status_warning"],
+        )
+        game_launcher.launch_game_with_all_mods.assert_not_called()
+        qapp.processEvents()
+
     def test_hide_window_with_dont_hide_updates_close_text_and_border_status_color(
         self,
     ):

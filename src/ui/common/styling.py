@@ -39,7 +39,8 @@ class _WidgetUpdateFilter(QObject):
                     return False
             except (RuntimeError, AttributeError):
                 return False
-            self._callback()
+            with contextlib.suppress(RuntimeError):
+                self._callback()
         return False
 
 
@@ -47,7 +48,8 @@ def install_widget_update_handler(widget, callback, attr_name="_widget_update_fi
     if not widget:
         return
     if not isinstance(widget, QObject):
-        callback()
+        with contextlib.suppress(RuntimeError):
+            callback()
         return
     existing = getattr(widget, attr_name, None)
     if existing:
@@ -56,7 +58,8 @@ def install_widget_update_handler(widget, callback, attr_name="_widget_update_fi
     handler = _WidgetUpdateFilter(widget, callback)
     widget.installEventFilter(handler)
     setattr(widget, attr_name, handler)
-    callback()
+    with contextlib.suppress(RuntimeError):
+        callback()
 
 
 class _ScrollAreaUpdateFilter(_WidgetUpdateFilter):
@@ -74,7 +77,8 @@ class _ScrollAreaUpdateFilter(_WidgetUpdateFilter):
                     return False
             except (RuntimeError, AttributeError):
                 return False
-            self._callback()
+            with contextlib.suppress(RuntimeError):
+                self._callback()
         return False
 
 
@@ -88,7 +92,8 @@ def install_scroll_area_component_handler(widget, callback, attr_name: str):
     handler = _ScrollAreaUpdateFilter(widget, callback)
     widget.installEventFilter(handler)
     setattr(widget, attr_name, handler)
-    callback()
+    with contextlib.suppress(RuntimeError):
+        callback()
 
 
 def install_scroll_area_update_handlers(scroll_area, callback, attr_prefix: str):
@@ -943,7 +948,7 @@ def clear_layout_widgets(layout, keep_last_n=1, hide_instead_of_delete=False):
                 widget.hide()
                 widget.setParent(None)
             else:
-                widget.setParent(None)
+                widget.hide()
                 widget.deleteLater()
         except (RuntimeError, AttributeError) as e:
             logger.debug(f"clear_layout_widgets: Error removing widget: {e}")

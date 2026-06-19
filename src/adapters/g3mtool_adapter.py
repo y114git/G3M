@@ -122,6 +122,8 @@ class G3MToolManager:
             return False
         if args[0] in {"info", "diff"}:
             return True
+        if len(args) >= 3 and args[0] == "patch" and args[1] == "batch":
+            return args[2] in {"apply", "create", "merge"}
         return len(args) >= 2 and args[0] == "patch" and args[1] in {
             "apply",
             "create",
@@ -155,15 +157,18 @@ class G3MToolManager:
         original_data_win: str,
         mod_patches: list[str],
         output_path: str,
+        patch_output_path: str | None = None,
         report_path: str | None = None,
         log_path: str | None = None,
         merge_code: bool = False,
         merge_properties: bool = False,
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
-        """Call g3mtool patch merge <original> <patch1> <patch2> ... --apply <output> [--report <path>] [--log <path>]"""
+        """Call g3mtool patch merge <original> <patch1> <patch2> ... --apply <output> [--out <patch>] [--report <path>] [--log <path>]"""
         cmd = ["patch", "merge", original_data_win, *mod_patches]
         cmd.extend(["--apply", output_path])
+        if patch_output_path:
+            cmd.extend(["--out", patch_output_path])
         for flag, enabled in [
             ("--code", merge_code),
             ("--properties", merge_properties),
@@ -178,6 +183,83 @@ class G3MToolManager:
             cmd,
             progress_callback=progress_callback,
         )
+
+    def batch_apply_patches(
+        self,
+        original_data_win: str,
+        patch_paths: list[str],
+        output_dir: str,
+        continue_on_error: bool = False,
+        include_xdelta_fallback: bool = False,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
+        """Call g3mtool patch batch apply <original> <patches...> --out-dir <dir>."""
+        cmd = ["patch", "batch", "apply", original_data_win, *patch_paths]
+        cmd.extend(["--out-dir", output_dir])
+        if continue_on_error:
+            cmd.append("--continue-on-error")
+        if include_xdelta_fallback:
+            cmd.append("--xdelta-fallback")
+        return self._run_command(cmd, progress_callback=progress_callback)
+
+    def batch_create_patches(
+        self,
+        original_data_win: str,
+        modified_files: list[str],
+        output_dir: str,
+        continue_on_error: bool = False,
+        include_xdelta_fallback: bool = False,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
+        """Call g3mtool patch batch create <original> <modified...> --out-dir <dir>."""
+        cmd = ["patch", "batch", "create", original_data_win, *modified_files]
+        cmd.extend(["--out-dir", output_dir])
+        if continue_on_error:
+            cmd.append("--continue-on-error")
+        if include_xdelta_fallback:
+            cmd.append("--xdelta-fallback")
+        return self._run_command(cmd, progress_callback=progress_callback)
+
+    def batch_merge_patches(
+        self,
+        original_data_win: str,
+        patch_sets: list[list[str]],
+        output_dir: str,
+        patch_output_dir: str | None = None,
+        continue_on_error: bool = False,
+        merge_code: bool = False,
+        merge_properties: bool = False,
+        write_report: bool = False,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ) -> tuple[int, str, str]:
+        """Call g3mtool patch batch merge <original> <set...> --apply <dir> [--out <dir>]."""
+        comma_paths = [
+            path
+            for paths in patch_sets
+            for path in paths
+            if "," in path
+        ]
+        if comma_paths:
+            return (
+                2,
+                "",
+                "Batch merge patch paths cannot contain commas: "
+                + ", ".join(comma_paths),
+            )
+        encoded_sets = [",".join(paths) for paths in patch_sets if paths]
+        cmd = ["patch", "batch", "merge", original_data_win, *encoded_sets]
+        cmd.extend(["--apply", output_dir])
+        if patch_output_dir:
+            cmd.extend(["--out", patch_output_dir])
+        if continue_on_error:
+            cmd.append("--continue-on-error")
+        if merge_code:
+            cmd.append("--code")
+        if merge_properties:
+            cmd.append("--properties")
+        if write_report:
+            cmd.append("--report")
+        return self._run_command(cmd, progress_callback=progress_callback)
 
     def apply_patch(
         self,
@@ -428,7 +510,7 @@ class G3MToolManager:
             stderr_text = stderr.strip()
             if returncode != 0:
                 if stderr_text:
-                    logger.warning(f"G3MTool stderr: {stderr_text[:500]}")
+                    logger.info(f"G3MTool stderr: {stderr_text[:500]}")
             elif stderr_text:
                 logger.debug(f"G3MTool stderr (non-fatal): {stderr_text[:500]}")
             return (returncode, stdout, stderr)

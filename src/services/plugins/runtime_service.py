@@ -17,6 +17,7 @@ from models.plugin_models import (
 from services.localization_service import localization_service
 from services.plugins.support import (
     PluginValidationError,
+    is_version_newer,
     load_manifest,
     load_plugin_factory,
     load_plugin_langs,
@@ -86,7 +87,7 @@ class PluginRuntimeService:
                 update_available = bool(
                     catalog_entry
                     and catalog_entry.version
-                    and catalog_entry.version != manifest.version
+                    and is_version_newer(catalog_entry.version, manifest.version)
                 )
                 error = ""
                 status = "installed"

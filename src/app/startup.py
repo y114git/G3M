@@ -13,7 +13,6 @@ import threading
 import time
 import traceback
 
-import psutil
 from PyQt6.QtCore import (
     QLibraryInfo,
     QProcess,
@@ -40,7 +39,7 @@ from config.config import (
     URL_PROTOCOL_PREFIXES,
     URL_PROTOCOL_SCHEMES,
 )
-from models.game_modes import get_all_process_names
+from services.game_detection_service import get_running_game_process_name
 from services.localization_service import localization_service, tr
 from utils.path_utils import get_launcher_dir, resource_path
 
@@ -54,13 +53,7 @@ _fault_log_handle = None
 
 
 def check_game_processes():
-    for proc in psutil.process_iter(["name"]):
-        try:
-            if proc.info["name"] in get_all_process_names():
-                return proc.info["name"]
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            pass
-    return None
+    return get_running_game_process_name()
 
 
 def configure_logging(app_name: str, user_data_root: str) -> str:
@@ -400,13 +393,14 @@ def run_app(argv: list[str] | None = None) -> int:
             _safe_warning(tr("errors.error"), tr("errors.single_instance_error"))
         return 0
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
-    if not args.force_start:
-        running_game = check_game_processes()
-        if running_game:
-            error_msg = tr("errors.game_running_message", game_name=running_game)
-            logger.error(f"STARTUP ERROR: {error_msg}")
-            _safe_critical(tr("errors.game_running_title"), error_msg)
-            return 1
+    initial_external_game_process = (
+        None if args.force_start else check_game_processes()
+    )
+    if initial_external_game_process:
+        logger.info(
+            "Detected running game process at startup: %s",
+            initial_external_game_process,
+        )
     try:
         register_url_protocol()
     except Exception as e:
@@ -419,6 +413,7 @@ def run_app(argv: list[str] | None = None) -> int:
         app=app,
         user_root=user_root,
         initial_url=url_arg,
+        initial_external_game_process=initial_external_game_process,
         window_factory=AppWindow,
         server_factory=SingleInstanceServer,
     )

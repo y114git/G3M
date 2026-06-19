@@ -1,20 +1,34 @@
 """User feedback and dialog management."""
 
 import html
+import json
+import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QStyle,
+    QVBoxLayout,
+)
 
 from services.localization_service import tr
 from services.warning_service import (
     WarningEvent,
     WarningSeverity,
     get_warning_definition,
+    normalize_warning_preferences,
 )
 
 if TYPE_CHECKING:
     from models.app_state import AppState
+
+logger = logging.getLogger(__name__)
 
 
 class FeedbackManager(QObject):
@@ -111,8 +125,10 @@ class FeedbackManager(QObject):
             return False
         icon = QMessageBox.Icon.Warning
         title = self._tr("dialogs.patching_warning.title")
+        warning_id = ""
         if isinstance(message, WarningEvent):
             definition = get_warning_definition(message.warning_id)
+            warning_id = definition.warning_id
             context = message.context
             title = self._tr(definition.title_key, **context)
             body = self._tr(definition.body_key, **context)
@@ -127,38 +143,120 @@ class FeedbackManager(QObject):
         else:
             message_text = message
         while True:
-            msg_box = QMessageBox(self.parent_widget)
-            msg_box.setIcon(icon)
-            msg_box.setWindowTitle(title)
             full_message = self._format_html(message_text)
             if details:
                 full_message = f"{full_message}<br><br>{self._format_html(details)}"
-            msg_box.setText(full_message)
-            continue_btn = msg_box.addButton(
-                self._tr("dialogs.patching_warning.continue_button"),
-                QMessageBox.ButtonRole.AcceptRole,
+            action, dont_show_again = self._exec_patching_warning_dialog(
+                title,
+                full_message,
+                icon,
+                bool(warning_id),
+                bool(report_path),
             )
-            cancel_btn = msg_box.addButton(
-                self._tr("dialogs.patching_warning.cancel_button"),
-                QMessageBox.ButtonRole.RejectRole,
-            )
-            open_report_btn = None
-            if report_path:
-                open_report_btn = msg_box.addButton(
-                    self._tr("dialogs.conflicts.open_report"),
-                    QMessageBox.ButtonRole.ActionRole,
-                )
-            msg_box.setDefaultButton(cancel_btn)
-            msg_box.exec()
-            clicked = msg_box.clickedButton()
-            if clicked == continue_btn:
+            if dont_show_again:
+                self._disable_warning(warning_id)
+            if action == "continue":
                 return True
-            if clicked == cancel_btn or clicked is None:
+            if action in {"cancel", ""}:
                 return False
-            if clicked == open_report_btn and report_path:
+            if action == "report" and report_path:
                 from ui.dialogs.conflicts_dialog import ConflictsDialog
 
                 ConflictsDialog(report_path, parent=self.parent_widget).exec()
+
+    def _exec_patching_warning_dialog(
+        self,
+        title: str,
+        message_html: str,
+        icon: QMessageBox.Icon,
+        allow_disable: bool,
+        has_report: bool,
+    ) -> tuple[str, bool]:
+        dialog = QDialog(self.parent_widget)
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        dialog.setMinimumWidth(420)
+        dialog.setObjectName("patching_warning_dialog")
+        result = {"action": "cancel"}
+
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(14, 12, 14, 12)
+        root.setSpacing(12)
+
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        icon_label = QLabel(dialog)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        icon_map = {
+            QMessageBox.Icon.Critical: QStyle.StandardPixmap.SP_MessageBoxCritical,
+            QMessageBox.Icon.Warning: QStyle.StandardPixmap.SP_MessageBoxWarning,
+            QMessageBox.Icon.Information: QStyle.StandardPixmap.SP_MessageBoxInformation,
+        }
+        pixmap = dialog.style().standardIcon(
+            icon_map.get(icon, QStyle.StandardPixmap.SP_MessageBoxWarning)
+        ).pixmap(32, 32)
+        icon_label.setPixmap(pixmap)
+        body.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+
+        message_label = QLabel(dialog)
+        message_label.setTextFormat(Qt.TextFormat.RichText)
+        message_label.setWordWrap(True)
+        message_label.setText(message_html)
+        message_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        body.addWidget(message_label, 1)
+        root.addLayout(body)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(8)
+        dont_show_checkbox = None
+        if allow_disable:
+            dont_show_checkbox = QCheckBox(
+                self._tr("dialogs.patching_warning.dont_show_again"), dialog
+            )
+            buttons.addWidget(dont_show_checkbox, 0, Qt.AlignmentFlag.AlignLeft)
+        buttons.addStretch(1)
+
+        if has_report:
+            report_btn = QPushButton(self._tr("dialogs.conflicts.open_report"), dialog)
+            report_btn.clicked.connect(lambda: (result.update(action="report"), dialog.accept()))
+            buttons.addWidget(report_btn)
+
+        continue_btn = QPushButton(
+            self._tr("dialogs.patching_warning.continue_button"), dialog
+        )
+        cancel_btn = QPushButton(
+            self._tr("dialogs.patching_warning.cancel_button"), dialog
+        )
+        continue_btn.clicked.connect(
+            lambda: (result.update(action="continue"), dialog.accept())
+        )
+        cancel_btn.clicked.connect(lambda: (result.update(action="cancel"), dialog.reject()))
+        buttons.addWidget(continue_btn)
+        buttons.addWidget(cancel_btn)
+        root.addLayout(buttons)
+        cancel_btn.setDefault(True)
+        dialog.exec()
+        return result["action"], bool(dont_show_checkbox and dont_show_checkbox.isChecked())
+
+    def _disable_warning(self, warning_id: str) -> None:
+        if not warning_id or self.app_state is None:
+            return
+        config = getattr(self.app_state, "local_config", None)
+        if not isinstance(config, dict):
+            return
+        prefs = normalize_warning_preferences(config)
+        overrides = prefs.setdefault("warning_overrides", {})
+        overrides[warning_id] = False
+        config_path = getattr(self.app_state, "config_path", "")
+        if not config_path:
+            return
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+        except Exception:
+            logger.warning("Failed to persist warning preference", exc_info=True)
 
     def update_status(self, message: str, color: str = ""):
         self.status_updated.emit(message, color)

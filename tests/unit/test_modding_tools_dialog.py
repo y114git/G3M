@@ -6,11 +6,13 @@ import zipfile
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QListWidgetItem
 
 from services.localization_service import tr
 from ui.dialogs.modding_tools_dialog import (
     ModdingToolsDialog,
+    _BatchDataConvertWorkerThread,
     _ConvertWorkerThread,
     _CreatePatchWorkerThread,
     _DataConvertTab,
@@ -149,6 +151,7 @@ class _FakeG3M:
         original_data_win,
         mod_patches,
         output_path,
+        patch_output_path=None,
         report_path=None,
         log_path=None,
         merge_code=False,
@@ -158,6 +161,45 @@ class _FakeG3M:
         self._emit_progress(progress_callback, "Merging")
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("|".join([original_data_win, *mod_patches]))
+        return 0, "", ""
+
+    def batch_create_patches(
+        self,
+        original_data_win,
+        modified_files,
+        output_dir,
+        continue_on_error=False,
+        include_xdelta_fallback=False,
+        progress_callback=None,
+    ):
+        self._emit_progress(progress_callback, "Batch creating")
+        return 0, "", ""
+
+    def batch_apply_patches(
+        self,
+        original_data_win,
+        patch_paths,
+        output_dir,
+        continue_on_error=False,
+        include_xdelta_fallback=False,
+        progress_callback=None,
+    ):
+        self._emit_progress(progress_callback, "Batch applying")
+        return 0, "", ""
+
+    def batch_merge_patches(
+        self,
+        original_data_win,
+        patch_sets,
+        output_dir,
+        patch_output_dir=None,
+        continue_on_error=False,
+        merge_code=False,
+        merge_properties=False,
+        write_report=False,
+        progress_callback=None,
+    ):
+        self._emit_progress(progress_callback, "Batch merging")
         return 0, "", ""
 
     def info(self, target, verbose=False, progress_callback=None):
@@ -187,6 +229,7 @@ class _LossyFakeG3M(_FakeG3M):
 def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
     """Checks that DATA conversion tab blocks controls while busy."""
     app = QApplication.instance() or QApplication([])
+    assert app is not None
 
     monkeypatch.setattr(_DataConvertTab, "_populate_profiles", lambda self: None)
     tab = _DataConvertTab(_FakeG3M(), SimpleNamespace(local_config={}))
@@ -210,6 +253,166 @@ def test_data_convert_tab_blocks_controls_while_busy(monkeypatch):
     assert tab._fmt_combo.isEnabled()
     assert tab._mod_list.isEnabled()
     assert tab._run_btn.isEnabled()
+
+
+def test_data_convert_tab_requires_available_g3mtool(monkeypatch, tmp_path):
+    """Checks that DATA conversion stops before worker creation when tool is missing."""
+    app = QApplication.instance() or QApplication([])
+
+    class _UnavailableG3M(_FakeG3M):
+        def is_available(self):
+            return False
+
+    monkeypatch.setattr(_DataConvertTab, "_populate_profiles", lambda self: None)
+    monkeypatch.setattr(_DataConvertTab, "_scan_mods", lambda self: None)
+    worker = Mock()
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog._BatchDataConvertWorkerThread", worker
+    )
+    tab = _DataConvertTab(_UnavailableG3M(), SimpleNamespace(local_config={}))
+    mod_dir = tmp_path / "mod"
+    mod_dir.mkdir()
+    item = QListWidgetItem("Broken Tool Mod")
+    item.setCheckState(Qt.CheckState.Checked)
+    item.setData(Qt.ItemDataRole.UserRole, str(mod_dir))
+    tab._mod_list.addItem(item)
+
+    tab._on_run()
+
+    assert tab._status_label.text() == tr("errors.g3mtool_not_available")
+    worker.assert_not_called()
+    app.processEvents()
+
+
+def test_data_convert_tab_run_requires_checked_mod(monkeypatch, tmp_path):
+    """Checks that DATA conversion uses checked mods instead of current row."""
+    app = QApplication.instance() or QApplication([])
+
+    monkeypatch.setattr(_DataConvertTab, "_populate_profiles", lambda self: None)
+    tab = _DataConvertTab(_FakeG3M(), SimpleNamespace(local_config={}))
+    mod_folder = tmp_path / "mod"
+    mod_folder.mkdir()
+
+    list_item = QListWidgetItem("Mod")
+    list_item.setFlags(list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+    list_item.setCheckState(Qt.CheckState.Unchecked)
+    list_item.setData(Qt.ItemDataRole.UserRole, str(mod_folder))
+    tab._mod_list.addItem(list_item)
+    tab._update_run_state()
+
+    assert not tab._run_btn.isEnabled()
+
+    list_item.setCheckState(Qt.CheckState.Checked)
+    tab._update_run_state()
+
+    assert tab._run_btn.isEnabled()
+    app.processEvents()
+
+
+def test_batch_data_convert_worker_processes_all_jobs(tmp_path, monkeypatch):
+    """Checks that batch DATA conversion runs every selected mod."""
+    game_dir = tmp_path / "game"
+    game_dir.mkdir()
+    (game_dir / "data.win").write_text("original", encoding="utf-8")
+    jobs = []
+    for index in range(2):
+        mod_folder = tmp_path / f"mod{index}"
+        versions_dir = mod_folder / "mod_versions"
+        mod_folder.mkdir()
+        versions_dir.mkdir()
+        (mod_folder / "data.xdelta").write_text(f"patch{index}", encoding="utf-8")
+        jobs.append(
+            {
+                "mod_folder": str(mod_folder),
+                "config_data": {
+                    "version": "1.2.3",
+                    "game": "deltarune",
+                    "files": {"deltarune_1": {"data_file_path": "data.xdelta"}},
+                },
+                "game_path": str(tmp_path / "game_root"),
+                "name": f"Mod {index}",
+            }
+        )
+
+    monkeypatch.setattr(
+        "models.game_modes.get_game",
+        lambda game: SimpleNamespace(
+            get_tab=lambda file_key: SimpleNamespace(tab_id=file_key)
+        ),
+    )
+    monkeypatch.setattr(
+        "utils.mod.config_parser.resolve_mod_file_path",
+        lambda folder, stored_path: os.path.join(folder, stored_path),
+    )
+    monkeypatch.setattr(
+        "utils.path_utils.find_chapter_resource_dir",
+        lambda game_path, chapter_id: str(game_dir),
+    )
+
+    worker = _BatchDataConvertWorkerThread(_FakeG3M(), jobs, "g3mpatch")
+    result = []
+    worker.finished.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert result == [
+        (True, tr("modding_tools.convert_batch_success", count=2, total=2))
+    ]
+    for job in jobs:
+        version_zip = os.path.join(
+            job["mod_folder"], "mod_versions", "1.2.3 - g3mpatch.zip"
+        )
+        assert os.path.isfile(version_zip)
+
+
+def test_batch_data_convert_worker_warning_continue_skips_failed_job(monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    class _FakeConvertWorker(QObject):
+        progress = pyqtSignal(str)
+        finished = pyqtSignal(bool, str)
+
+        def __init__(self, _g3m, mod_folder, *_args, **_kwargs) -> None:
+            super().__init__()
+            self._mod_folder = mod_folder
+
+        def run(self):
+            calls.append(self._mod_folder)
+            if self._mod_folder == "bad":
+                self.finished.emit(False, "xdelta failed")
+            else:
+                self.finished.emit(True, "ok")
+
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog._DataConvertWorkerThread",
+        _FakeConvertWorker,
+    )
+    worker = _BatchDataConvertWorkerThread(
+        _FakeG3M(),
+        [
+            {"mod_folder": "bad", "config_data": {}, "game_path": "", "name": "Bad"},
+            {"mod_folder": "good", "config_data": {}, "game_path": "", "name": "Good"},
+        ],
+        "g3mpatch",
+    )
+    warnings = []
+    result = []
+    worker.warning_confirmation_needed.connect(
+        lambda message, details, report: (
+            warnings.append((message.warning_id, details, report)),
+            worker.confirm_warning(True),
+        )
+    )
+    worker.finished.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert calls == ["bad", "good"]
+    assert warnings == [("xdelta_apply_failed", "xdelta failed", None)]
+    assert result == [
+        (True, tr("modding_tools.convert_batch_success", count=1, total=2))
+    ]
     app.processEvents()
 
 
@@ -765,6 +968,73 @@ def test_patch_tab_csx_apply_uses_execute(tmp_path):
     assert output_data.exists()
 
 
+def test_patch_tab_batch_create_uses_batch_adapter(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    class _RecordingG3M(_FakeG3M):
+        def batch_create_patches(
+            self,
+            original_data_win,
+            modified_files,
+            output_dir,
+            continue_on_error=False,
+            include_xdelta_fallback=False,
+            progress_callback=None,
+        ):
+            calls.append(
+                (
+                    original_data_win,
+                    modified_files,
+                    output_dir,
+                    continue_on_error,
+                    include_xdelta_fallback,
+                )
+            )
+            return super().batch_create_patches(
+                original_data_win,
+                modified_files,
+                output_dir,
+                continue_on_error,
+                include_xdelta_fallback,
+                progress_callback,
+            )
+
+    tab = _PatchTab(_RecordingG3M(), SimpleNamespace(local_config={}))
+    original = tmp_path / "data.win"
+    modified_a = tmp_path / "a.win"
+    modified_b = tmp_path / "b.win"
+    out_dir = tmp_path / "out"
+    original.write_text("original", encoding="utf-8")
+    modified_a.write_text("a", encoding="utf-8")
+    modified_b.write_text("b", encoding="utf-8")
+
+    tab._batch_cb.setChecked(True)
+    tab._continue_cb.setChecked(True)
+    tab._xdelta_fallback_checkbox.setChecked(True)
+    tab._original_row.set_path(str(original))
+    tab._batch_output_row.set_path(str(out_dir))
+    for path in (modified_a, modified_b):
+        item = QListWidgetItem(path.name)
+        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        tab._batch_list.addItem(item)
+
+    tab._on_run()
+    tab._worker.wait(5000)
+    app.processEvents()
+
+    assert calls == [
+        (
+            str(original),
+            [str(modified_a), str(modified_b)],
+            str(out_dir),
+            True,
+            True,
+        )
+    ]
+    assert tab._status_label.text() == tr("modding_tools.success")
+
+
 def test_merge_tab_suggests_patched_output_name():
     """Checks that merge tab suggests a merged data output file."""
     app = QApplication.instance() or QApplication([])
@@ -774,6 +1044,158 @@ def test_merge_tab_suggests_patched_output_name():
 
     assert tab._output_row.path().endswith("data_merged.win")
     app.processEvents()
+
+
+def test_merge_tab_single_run_uses_report_and_merge_flags(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    class _RecordingG3M(_FakeG3M):
+        def merge_patches(
+            self,
+            original_data_win,
+            mod_patches,
+            output_path,
+            patch_output_path=None,
+            report_path=None,
+            log_path=None,
+            merge_code=False,
+            merge_properties=False,
+            progress_callback=None,
+        ):
+            calls.append(
+                (
+                    original_data_win,
+                    mod_patches,
+                    output_path,
+                    patch_output_path,
+                    report_path,
+                    log_path,
+                    merge_code,
+                    merge_properties,
+                )
+            )
+            return super().merge_patches(
+                original_data_win,
+                mod_patches,
+                output_path,
+                patch_output_path,
+                report_path,
+                log_path,
+                merge_code,
+                merge_properties,
+                progress_callback,
+            )
+
+    tab = _MergeTab(_RecordingG3M(), SimpleNamespace(local_config={}))
+    original = tmp_path / "data.win"
+    patch_a = tmp_path / "a.g3mpatch"
+    patch_b = tmp_path / "b.g3mpatch"
+    output = tmp_path / "merged.win"
+    patch_output = tmp_path / "merged.g3mpatch"
+    for path in (original, patch_a, patch_b):
+        path.write_text("data", encoding="utf-8")
+
+    tab._code_cb.setChecked(True)
+    tab._props_cb.setChecked(True)
+    tab._report_cb.setChecked(True)
+    tab._original_row.set_path(str(original))
+    tab._output_row.set_path(str(output))
+    tab._patch_output_row.set_path(str(patch_output))
+    for path in (patch_a, patch_b):
+        item = QListWidgetItem(path.name)
+        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        tab._file_list.addItem(item)
+
+    tab._on_run()
+    tab._worker.wait(5000)
+    app.processEvents()
+
+    assert calls == [
+        (
+            str(original),
+            [str(patch_a), str(patch_b)],
+            str(output),
+            str(patch_output),
+            str(tmp_path / "merged_merge_report.md"),
+            None,
+            True,
+            True,
+        )
+    ]
+    assert tab._status_label.text() == tr("modding_tools.success")
+
+
+def test_merge_tab_batch_uses_sets_and_flags(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    class _RecordingG3M(_FakeG3M):
+        def batch_merge_patches(
+            self,
+            original_data_win,
+            patch_sets,
+            output_dir,
+            patch_output_dir=None,
+            continue_on_error=False,
+            merge_code=False,
+            merge_properties=False,
+            write_report=False,
+            progress_callback=None,
+        ):
+            calls.append(
+                (
+                    original_data_win,
+                    patch_sets,
+                    output_dir,
+                    patch_output_dir,
+                    continue_on_error,
+                    merge_code,
+                    merge_properties,
+                    write_report,
+                )
+            )
+            return super().batch_merge_patches(
+                original_data_win,
+                patch_sets,
+                output_dir,
+                patch_output_dir,
+                continue_on_error,
+                merge_code,
+                merge_properties,
+                write_report,
+                progress_callback,
+            )
+
+    tab = _MergeTab(_RecordingG3M(), SimpleNamespace(local_config={}))
+    original = tmp_path / "data.win"
+    out_dir = tmp_path / "merged"
+    patch_out_dir = tmp_path / "patches"
+    original.write_text("original", encoding="utf-8")
+    set_a = [str(tmp_path / "a.g3mpatch"), str(tmp_path / "b.xdelta")]
+    set_b = [str(tmp_path / "c.win"), str(tmp_path / "d.g3mpatch")]
+
+    tab._batch_cb.setChecked(True)
+    tab._continue_cb.setChecked(True)
+    tab._code_cb.setChecked(True)
+    tab._props_cb.setChecked(True)
+    tab._report_cb.setChecked(True)
+    tab._original_row.set_path(str(original))
+    tab._batch_output_row.set_path(str(out_dir))
+    tab._batch_patch_output_row.set_path(str(patch_out_dir))
+    for patch_set in (set_a, set_b):
+        item = QListWidgetItem("set")
+        item.setData(Qt.ItemDataRole.UserRole, patch_set)
+        tab._set_list.addItem(item)
+
+    tab._on_run()
+    tab._worker.wait(5000)
+    app.processEvents()
+
+    assert calls == [
+        (str(original), [set_a, set_b], str(out_dir), str(patch_out_dir), True, True, True, True)
+    ]
+    assert tab._status_label.text() == tr("modding_tools.success")
 
 
 def test_create_patch_worker_emits_incremental_progress(tmp_path):
@@ -867,3 +1289,43 @@ def test_patch_tab_updates_status_during_apply_progress(tmp_path):
     assert any("Applying patch: 1%" in text for text in updates)
     assert any("Applying patch: 4%" in text for text in updates)
     assert tab._status_label.text() == tr("modding_tools.success")
+
+
+def test_patch_tab_failure_uses_warning_event_feedback(monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    tab = _PatchTab(_FakeG3M(), SimpleNamespace(local_config={}))
+    warnings = []
+
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog.FeedbackManager.ask_patching_warning",
+        lambda self, message, details="", report_path=None: warnings.append(
+            (message.warning_id, details, report_path)
+        )
+        or False,
+    )
+
+    tab._on_finished(1, "", "xdelta checksum mismatch")
+
+    assert warnings == [("xdelta_apply_failed", "xdelta checksum mismatch", None)]
+    assert tab._status_label.text() == tr("modding_tools.failed_details_logged")
+    app.processEvents()
+
+
+def test_merge_tab_failure_uses_warning_event_feedback(monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    tab = _MergeTab(_FakeG3M(), SimpleNamespace(local_config={}))
+    warnings = []
+
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog.FeedbackManager.ask_patching_warning",
+        lambda self, message, details="", report_path=None: warnings.append(
+            (message.warning_id, details, report_path)
+        )
+        or False,
+    )
+
+    tab._on_finished(1, "", "merge conflict")
+
+    assert warnings == [("merge_failed", "merge conflict", None)]
+    assert tab._status_label.text() == tr("modding_tools.failed_details_logged")
+    app.processEvents()

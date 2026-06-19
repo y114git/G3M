@@ -40,6 +40,14 @@ def _parse_version(version: str) -> tuple[int, int, int]:
     return (major, minor, patch)
 
 
+def is_version_newer(candidate_version: str, current_version: str) -> bool:
+    """Return whether candidate_version is a strict semver upgrade over current_version."""
+    try:
+        return _parse_version(candidate_version) > _parse_version(current_version)
+    except ValueError:
+        return False
+
+
 def _matches_range(current: str, requirement: str) -> bool:
     """Check if current version matches a semver range requirement."""
     try:

@@ -458,7 +458,7 @@ def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeyp
     warning.assert_not_called()
 
 
-def test_run_app_game_running_ignores_broken_error_dialog(monkeypatch):
+def test_run_app_game_running_starts_with_external_process_state(monkeypatch):
     from app import startup as startup_module
 
     class _DisconnectedSocket:
@@ -468,16 +468,29 @@ def test_run_app_game_running_ignores_broken_error_dialog(monkeypatch):
         def waitForConnected(self, *_args, **_kwargs):  # noqa: N802
             return False
 
-    monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
+    created = {}
+
+    class _Coordinator:
+        def __init__(self, **kwargs) -> None:
+            created.update(kwargs)
+
+        def launch(self):
+            return None
+
+    app = Mock()
+    app.exec.return_value = 0
+    monkeypatch.setattr(startup_module, "setup_app", lambda: app)
     monkeypatch.setattr(startup_module, "QLocalSocket", _DisconnectedSocket)
     monkeypatch.setattr(startup_module.QLocalServer, "removeServer", Mock())
     monkeypatch.setattr(startup_module, "check_game_processes", lambda: "DELTARUNE")
+    monkeypatch.setattr(startup_module, "register_url_protocol", Mock())
+    monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
 
-    with patch(
-        "app.startup.QMessageBox.critical",
-        side_effect=RuntimeError("critical dialog deleted"),
-    ):
-        assert startup_module.run_app([]) == 1
+    with patch("app.startup.QMessageBox.critical") as critical:
+        assert startup_module.run_app([]) == 0
+
+    critical.assert_not_called()
+    assert created["initial_external_game_process"] == "DELTARUNE"
 
 
 def test_main_routes_shortcut_without_startup(monkeypatch):

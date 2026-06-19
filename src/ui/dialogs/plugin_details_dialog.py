@@ -187,18 +187,6 @@ class PluginDetailsDialog(QDialog):
         summary_layout.addLayout(meta_layout, 1)
         layout.addWidget(summary)
 
-        actions_layout = QHBoxLayout()
-        has_actions = False
-        if manifest and self._can_update:
-            update_button = QPushButton(tr("plugins.details_update"))
-            update_button.setToolTip(tr("tooltips.plugin_update"))
-            update_button.clicked.connect(lambda: self._on_update(self._plugin_id()))
-            actions_layout.addWidget(update_button)
-            has_actions = True
-        actions_layout.addStretch(1)
-        if has_actions:
-            layout.addLayout(actions_layout)
-
         if self.plugin is not None:
             settings_title = QLabel(tr("plugins.details_settings"))
             settings_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -210,13 +198,22 @@ class PluginDetailsDialog(QDialog):
         dr = get_border_radius(self.app_state.local_config)
         tc = get_theme_color(self.app_state.local_config, "main_text", "#e8e9eb")
         if self.plugin is not None:
+            actions_layout = QHBoxLayout()
+            actions_layout.addStretch(1)
             delete_button = QPushButton(tr("plugins.details_delete"))
             delete_button.setStyleSheet(
                 f"background-color: darkred; color: {tc}; border-radius: {dr}px;"
             )
             delete_button.setToolTip(tr("tooltips.plugin_delete"))
             delete_button.clicked.connect(self._confirm_delete_plugin)
-            layout.addWidget(delete_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+            actions_layout.addWidget(delete_button)
+            if manifest and self._can_update:
+                update_button = QPushButton(tr("plugins.details_update"))
+                update_button.setToolTip(tr("tooltips.plugin_update"))
+                update_button.clicked.connect(self._request_update)
+                actions_layout.addWidget(update_button)
+            actions_layout.addStretch(1)
+            layout.addLayout(actions_layout)
         else:
             download_button = QPushButton(tr("plugins.action_download"))
             download_button.setEnabled(self._can_download)
@@ -354,3 +351,10 @@ class PluginDetailsDialog(QDialog):
     def _request_download(self):
         self.download_requested = True
         self.accept()
+
+    def _request_update(self):
+        plugin_id = self._plugin_id()
+        if not plugin_id or not self._on_update:
+            return
+        self.accept()
+        self._on_update(plugin_id)

@@ -3,6 +3,7 @@
 import contextlib
 import logging
 
+from PyQt6 import sip
 from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 
@@ -16,6 +17,13 @@ from utils.path_utils import resource_path
 from workers.background_loader_worker import BgLoader
 
 logger = logging.getLogger(__name__)
+
+
+def _is_deleted_qt_object(obj) -> bool:
+    try:
+        return sip.isdeleted(obj)
+    except TypeError:
+        return False
 
 
 class ThemeController:
@@ -246,20 +254,25 @@ class ThemeController:
             self.customization_service.load_launcher_icon(self.app.launcher_icon_label)
 
             def _recenter_logo():
-                if hasattr(self.app, "top_panel_widget") and hasattr(
-                    self.app, "launcher_icon_label"
-                ):
-                    app = self.app
-                    ph = app.top_panel_widget.height()
-                    lh = app.launcher_icon_label.height()
-                    pw = app.top_panel_widget.width()
-                    lw = app.launcher_icon_label.width()
+                if _is_deleted_qt_object(self.app):
+                    return
+                with contextlib.suppress(RuntimeError):
+                    if hasattr(self.app, "top_panel_widget") and hasattr(
+                        self.app, "launcher_icon_label"
+                    ):
+                        app = self.app
+                        ph = app.top_panel_widget.height()
+                        lh = app.launcher_icon_label.height()
+                        pw = app.top_panel_widget.width()
+                        lw = app.launcher_icon_label.width()
 
-                    if not all(isinstance(x, (int, float)) for x in (ph, lh, pw, lw)):
-                        return
+                        if not all(
+                            isinstance(x, (int, float)) for x in (ph, lh, pw, lw)
+                        ):
+                            return
 
-                    y = max(0, (ph - lh) // 2)
-                    app.launcher_icon_label.move((pw - lw) // 2, y)
+                        y = max(0, (ph - lh) // 2)
+                        app.launcher_icon_label.move((pw - lw) // 2, y)
 
             QTimer.singleShot(0, _recenter_logo)
 
@@ -277,53 +290,58 @@ class ThemeController:
         color_only_style = f"color: {text_color};"
 
         def _deferred_style_updates():
-            if hasattr(self.app, "search_display") and hasattr(
-                self.app.search_display, "update_all_cards_labels"
-            ):
-                self.app.search_display.update_all_cards_labels()
-            for cb in getattr(self.app, "library_tag_widgets", ()):
-                cb.setStyleSheet(checkbox_style)
-            for attr in ("chapter_mode_checkbox", "full_install_checkbox"):
-                w = getattr(self.app, attr, None)
-                if w:
-                    w.setStyleSheet(color_only_style)
-            for attr in (
-                "tag_textedit",
-                "tag_customization",
-                "tag_gameplay",
-                "tag_other",
-            ):
-                w = getattr(self.app, attr, None)
-                if w:
-                    w.setStyleSheet(checkbox_style)
-            update_chapter_tabs_style(self.app)
-            if hasattr(self.app, "library_tab_builder"):
-                self.app.library_tab_builder.update_priority_button_style()
-                if hasattr(self.app.library_tab_builder, "refresh_filter_scroll_styles"):
-                    self.app.library_tab_builder.refresh_filter_scroll_styles()
-            if hasattr(self.app, "search_tab_builder") and hasattr(
-                self.app.search_tab_builder, "refresh_dynamic_styles"
-            ):
-                self.app.search_tab_builder.refresh_dynamic_styles()
-            summary = getattr(self.app, "mod_summary_panel", None)
-            if summary and hasattr(summary, "refresh_theme"):
-                summary.refresh_theme()
-            elif summary and hasattr(summary, "apply_theme"):
-                summary.apply_theme()
-            for dialog_attr in (
-                "_game_versions_dialog",
-                "_mod_versions_dialog",
-                "_downloads_dialog",
-                "_log_viewer_dialog",
-                "_modding_tools_dialog",
-            ):
-                dialog = getattr(self.app, dialog_attr, None)
-                if not dialog or not hasattr(dialog, "refresh_theme"):
-                    continue
-                with contextlib.suppress(RuntimeError):
-                    dialog.refresh_theme()
-            self.update_dynamic_elements()
-            self._resync_filter_scroll_heights()
+            if _is_deleted_qt_object(self.app):
+                return
+            with contextlib.suppress(RuntimeError):
+                if hasattr(self.app, "search_display") and hasattr(
+                    self.app.search_display, "update_all_cards_labels"
+                ):
+                    self.app.search_display.update_all_cards_labels()
+                for cb in getattr(self.app, "library_tag_widgets", ()):
+                    cb.setStyleSheet(checkbox_style)
+                for attr in ("chapter_mode_checkbox", "full_install_checkbox"):
+                    w = getattr(self.app, attr, None)
+                    if w:
+                        w.setStyleSheet(color_only_style)
+                for attr in (
+                    "tag_textedit",
+                    "tag_customization",
+                    "tag_gameplay",
+                    "tag_other",
+                ):
+                    w = getattr(self.app, attr, None)
+                    if w:
+                        w.setStyleSheet(checkbox_style)
+                update_chapter_tabs_style(self.app)
+                if hasattr(self.app, "library_tab_builder"):
+                    self.app.library_tab_builder.update_priority_button_style()
+                    if hasattr(
+                        self.app.library_tab_builder, "refresh_filter_scroll_styles"
+                    ):
+                        self.app.library_tab_builder.refresh_filter_scroll_styles()
+                if hasattr(self.app, "search_tab_builder") and hasattr(
+                    self.app.search_tab_builder, "refresh_dynamic_styles"
+                ):
+                    self.app.search_tab_builder.refresh_dynamic_styles()
+                summary = getattr(self.app, "mod_summary_panel", None)
+                if summary and hasattr(summary, "refresh_theme"):
+                    summary.refresh_theme()
+                elif summary and hasattr(summary, "apply_theme"):
+                    summary.apply_theme()
+                for dialog_attr in (
+                    "_game_versions_dialog",
+                    "_mod_versions_dialog",
+                    "_downloads_dialog",
+                    "_log_viewer_dialog",
+                    "_modding_tools_dialog",
+                ):
+                    dialog = getattr(self.app, dialog_attr, None)
+                    if not dialog or not hasattr(dialog, "refresh_theme"):
+                        continue
+                    with contextlib.suppress(RuntimeError):
+                        dialog.refresh_theme()
+                self.update_dynamic_elements()
+                self._resync_filter_scroll_heights()
 
         QTimer.singleShot(0, _deferred_style_updates)
         self.app.update()

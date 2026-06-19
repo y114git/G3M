@@ -93,6 +93,7 @@ class PluginsController:
         self._filtering = False
         self._catalog_worker: _PluginCatalogWorker | None = None
         self._plugin_tab_ids: list[str] = []
+        self._plugin_tab_signature: tuple[tuple[str, str], ...] = ()
         self._download_buttons: dict[str, QPushButton] = {}
         self.downloads_manager.record_updated.connect(self._on_download_record_updated)
         self.downloads_manager.record_removed.connect(self._on_download_record_removed)
@@ -131,7 +132,7 @@ class PluginsController:
             return
         self.plugin_runtime_service.scan_installed_plugins(resolve_catalog=False)
         self._loaded = True
-        self.refresh_main_tabs()
+        self.refresh_main_tabs(force_rebuild=force_refresh)
         self.render()
         if force_refresh or self._catalog_worker is None:
             self._start_catalog_load()
@@ -210,7 +211,7 @@ class PluginsController:
         self.plugin_runtime_service.scan_installed_plugins(
             resolve_catalog=self.plugin_catalog_service.is_loaded()
         )
-        self.refresh_main_tabs()
+        self.refresh_main_tabs(force_rebuild=True)
         if self._loaded:
             self.render()
 
@@ -220,7 +221,7 @@ class PluginsController:
         self.plugin_runtime_service.scan_installed_plugins(
             resolve_catalog=self.plugin_catalog_service.is_loaded()
         )
-        self.refresh_main_tabs()
+        self.refresh_main_tabs(force_rebuild=True)
 
     def handle_external_refresh(self) -> None:
         self.plugin_runtime_service.scan_installed_plugins(
@@ -574,7 +575,7 @@ QPushButton#cardButtonUninstall:disabled {{
             )
             if analytics := getattr(self.app, "analytics_service", None):
                 analytics.record_plugin_imported(source="manual")
-            self.refresh_main_tabs()
+            self.refresh_main_tabs(force_rebuild=True)
             self.render()
 
     def toggle_plugin(self, plugin_id: str) -> None:
@@ -607,7 +608,7 @@ QPushButton#cardButtonUninstall:disabled {{
                     enabled=True,
                     source="installed",
                 )
-        self.refresh_main_tabs()
+        self.refresh_main_tabs(force_rebuild=True)
         self.render()
 
     def show_plugin_details(self, plugin_id: str) -> None:
@@ -679,7 +680,7 @@ QPushButton#cardButtonUninstall:disabled {{
             self._safe_show_message(
                 "error", "errors.error", format_filesystem_error(e, path=plugin_path)
             )
-        self.refresh_main_tabs()
+        self.refresh_main_tabs(force_rebuild=True)
         self.render()
 
     def _apply_list_style(self) -> None:
@@ -785,10 +786,30 @@ QPushButton#cardButtonUninstall:disabled {{
         """Explicit cleanup method for deterministic shutdown."""
         self._clear_catalog_worker()
 
-    def refresh_main_tabs(self) -> None:
+    def refresh_main_tabs(self, *, force_rebuild: bool = False) -> None:
         if not hasattr(self.app, "main_tab_widget"):
             return
         tab_widget = self.app.main_tab_widget
+        main_view_plugins = [
+            plugin
+            for plugin in self.plugin_runtime_service.list_installed_plugins()
+            if (
+                plugin.enabled
+                and plugin.manifest
+                and "main_view" in plugin.manifest.hooks
+            )
+        ]
+        desired_signature = tuple(
+            (plugin.plugin_id, plugin.manifest.name)
+            for plugin in main_view_plugins
+        )
+        if (
+            not force_rebuild
+            and desired_signature == self._plugin_tab_signature
+            and self._plugin_tabs_are_attached(tab_widget)
+        ):
+            self._update_plugin_tab_labels(tab_widget, main_view_plugins)
+            return
         updates_were_enabled = tab_widget.updatesEnabled()
         tab_widget.setUpdatesEnabled(False)
         try:
@@ -803,22 +824,49 @@ QPushButton#cardButtonUninstall:disabled {{
                 widget.deleteLater()
                 delattr(self.app, f"_plugin_tab_{plugin_id}")
             self._plugin_tab_ids.clear()
-            for plugin in self.plugin_runtime_service.list_installed_plugins():
-                if (
-                    not plugin.enabled
-                    or not plugin.manifest
-                    or "main_view" not in plugin.manifest.hooks
-                ):
-                    continue
+            self._plugin_tab_signature = ()
+            for plugin in main_view_plugins:
                 widget = self.plugin_runtime_service.get_main_widget(
                     plugin.plugin_id, tab_widget
                 )
                 if widget is None:
                     continue
+                widget.setWindowFlag(Qt.WindowType.Window, False)
+                widget.setParent(tab_widget)
                 widget.hide()
                 setattr(self.app, f"_plugin_tab_{plugin.plugin_id}", widget)
                 tab_widget.addTab(widget, _resolve_text(plugin.manifest.name))
                 self._plugin_tab_ids.append(plugin.plugin_id)
+            self._plugin_tab_signature = (
+                desired_signature
+                if len(self._plugin_tab_ids) == len(main_view_plugins)
+                else tuple(
+                    (plugin.plugin_id, plugin.manifest.name)
+                    for plugin in main_view_plugins
+                    if plugin.plugin_id in self._plugin_tab_ids
+                )
+            )
         finally:
             tab_widget.setUpdatesEnabled(updates_were_enabled)
             tab_widget.update()
+
+    def _plugin_tabs_are_attached(self, tab_widget) -> bool:
+        for plugin_id in self._plugin_tab_ids:
+            widget = getattr(self.app, f"_plugin_tab_{plugin_id}", None)
+            if widget is None or tab_widget.indexOf(widget) < 0:
+                return False
+        return True
+
+    def _update_plugin_tab_labels(self, tab_widget, plugins) -> None:
+        labels_by_id = {
+            plugin.plugin_id: _resolve_text(plugin.manifest.name)
+            for plugin in plugins
+            if plugin.manifest
+        }
+        for plugin_id in self._plugin_tab_ids:
+            widget = getattr(self.app, f"_plugin_tab_{plugin_id}", None)
+            if widget is None:
+                continue
+            index = tab_widget.indexOf(widget)
+            if index >= 0 and plugin_id in labels_by_id:
+                tab_widget.setTabText(index, labels_by_id[plugin_id])
