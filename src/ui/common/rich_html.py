@@ -12,6 +12,8 @@ import os
 import re
 import weakref
 from collections import OrderedDict
+from pathlib import PureWindowsPath
+from urllib.parse import quote
 
 from PyQt6.QtCore import QObject, QRectF, QRunnable, Qt, QThreadPool, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QImage, QPainter, QTextDocument
@@ -319,6 +321,13 @@ def _resolve_image_src(src: str, base_path: str | None = None) -> str:
     if _is_absolute_local_path(src):
         return QUrl.fromLocalFile(src).toString()
     if base_path:
+        if _WINDOWS_DRIVE_PATTERN.match(base_path):
+            resolved = str(
+                PureWindowsPath(base_path).joinpath(
+                    *src.replace("\\", "/").split("/")
+                )
+            ).replace("\\", "/")
+            return f"file:///{quote(resolved, safe='/:')}"
         return QUrl.fromLocalFile(os.path.abspath(os.path.join(base_path, src))).toString()
     return src
 

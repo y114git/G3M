@@ -838,6 +838,18 @@ class TestCommonWidgets:
         assert "file:///C:/Mods/Sample/images/panel.png" in processed
         assert 'width="250"' in processed
 
+    def test_rich_html_encodes_special_characters_in_windows_base_paths(self):
+        """Checks that Windows file URLs encode spaces and reserved characters."""
+        from ui.common.rich_html import preprocess_html
+
+        processed = preprocess_html(
+            '<img src="images/my #icon?.png" width="120">',
+            widget_width=400,
+            base_path="C:/My Documents/Sample Mod",
+        )
+
+        assert "file:///C:/My%20Documents/Sample%20Mod/images/my%20%23icon%3F.png" in processed
+
     def test_rich_html_uses_max_width_for_images(self):
         """Checks that max-width is honored when width is absent."""
         from ui.common.rich_html import preprocess_html

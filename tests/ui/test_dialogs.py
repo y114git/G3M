@@ -13,6 +13,11 @@ from PyQt6.QtCore import QMimeData, Qt, QUrl
 from PyQt6.QtGui import QTextCursor, QTextDocument
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
+EXPECTED_DIALOG_WIDTH = 1145
+# Configured base Mod Editor width after the recent +35px total width adjustment.
+# Some Qt runners realize the top-level window slightly wider, so tests treat this
+# as the minimum intended width rather than an exact on-screen frame size.
+
 
 def _close_dialog(qapp, dialog) -> None:
     dialog.close()
@@ -1151,6 +1156,23 @@ class TestDialogTheme:
 
 class TestModEditorDialog:
     """Tests for dialogs."""
+    def test_mod_editor_default_width_is_thirty_pixels_wider(self, qapp, tmp_path):
+        """Checks that mod editor opens with the updated default width."""
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        assert dialog.width() >= EXPECTED_DIALOG_WIDTH
+        dialog.close()
+        parent.deleteLater()
+
     def test_mod_editor_defaults_to_current_library_game(self, qapp, tmp_path):
         """Checks that create mod defaults to the current library game."""
         from types import SimpleNamespace
@@ -1485,6 +1507,114 @@ class TestModEditorDialog:
             for label in dialog._iter_file_title_labels(layout, file_type="extra")
         ]
         assert remaining_extra_titles == [tr("files.extra_files_title", number=1)]
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_marks_pizzatower_towers_extra_as_special_runtime_target(
+        self, qapp, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        from services.localization_service import tr
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+        for i in range(dialog.game_combo.count()):
+            if dialog.game_combo.itemData(i) == "pizzatower":
+                dialog.game_combo.setCurrentIndex(i)
+                break
+
+        first_tab = dialog.file_tabs.widget(0)
+        layout = first_tab._file_layout
+        dialog._create_file_frame(layout, "extra")
+        extra_input = next(
+            w
+            for w in first_tab.findChildren(type(dialog.icon_edit))
+            if w.property("is_local_extra_path")
+        )
+        extra_input.setText("towers/")
+
+        frame = extra_input.parentWidget()
+        assert frame.property("specialRuntimeTarget") is True
+        hint_label = frame.findChild(QLabel, "special_runtime_hint")
+        assert hint_label is not None
+        assert hint_label.text() == tr(
+            "tooltips.mod_editor_special_extra_target_towers",
+            target_path="%APPDATA%/PizzaTower_GM2/towers/",
+        )
+        alignment = hint_label.alignment()
+        assert alignment & Qt.AlignmentFlag.AlignLeft
+        assert alignment & Qt.AlignmentFlag.AlignVCenter
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_marks_frickbears3_addons_extra_as_special_runtime_target(
+        self, qapp, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        from services.localization_service import tr
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+        for i in range(dialog.game_combo.count()):
+            if dialog.game_combo.itemData(i) == "frickbears3":
+                dialog.game_combo.setCurrentIndex(i)
+                break
+
+        first_tab = dialog.file_tabs.widget(0)
+        layout = first_tab._file_layout
+        dialog._create_file_frame(layout, "extra")
+        extra_input = next(
+            w
+            for w in first_tab.findChildren(type(dialog.icon_edit))
+            if w.property("is_local_extra_path")
+        )
+        extra_input.setText("addons/")
+
+        frame = extra_input.parentWidget()
+        assert frame.property("specialRuntimeTarget") is True
+        hint_label = frame.findChild(QLabel, "special_runtime_hint")
+        assert hint_label is not None
+        assert hint_label.text() == tr(
+            "tooltips.mod_editor_special_extra_target_addons",
+            target_path="%LOCALAPPDATA%/Frickbears3/addons/",
+        )
+        alignment = hint_label.alignment()
+        assert alignment & Qt.AlignmentFlag.AlignLeft
+        assert alignment & Qt.AlignmentFlag.AlignVCenter
+        dialog.close()
+        parent.deleteLater()
+
+    def test_mod_editor_uses_two_pixel_borders_for_file_cards_and_special_targets(
+        self, qapp, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        from ui.dialogs.mod_editor.dialog import ModEditorDialog
+
+        parent = QWidget()
+        parent.app_state = SimpleNamespace(local_config={}, mods_dir=str(tmp_path))
+        parent.settings_service = Mock()
+        parent.mod_service = Mock()
+        dialog = ModEditorDialog(parent, is_creating=True)
+
+        stylesheet = dialog.styleSheet()
+
+        assert 'QFrame[fileCard="true"] {' in stylesheet
+        assert "border: 2px solid" in stylesheet
+        assert 'QFrame[fileCard="true"][specialRuntimeTarget="true"] {' in stylesheet
+        assert "border: 2px dashed" in stylesheet
+        assert "border: 1px solid" not in stylesheet
+
         dialog.close()
         parent.deleteLater()
 

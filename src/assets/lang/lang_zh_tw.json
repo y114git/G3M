@@ -388,6 +388,8 @@
     "mod_editor_add_extra": "為這個分頁新增額外檔案壓縮包或資料夾。",
     "mod_editor_selected_file": "將被包含進模組中的已選檔案或資料夾。",
     "mod_editor_data_version": "此 DATA 檔案項目的版本標籤。",
+    "mod_editor_special_extra_target_towers": "特殊 extra 檔案：遊戲執行期間會放入 {target_path}。",
+    "mod_editor_special_extra_target_addons": "特殊 extra 檔案：遊戲執行期間會放入 {target_path}。",
     "save_mod": "儲存模組",
     "delete_mod": "刪除此本地模組以及其資料夾中的所有檔案。",
     "export_mod": "將此本地模組匯出成可分享或備份的壓縮檔。",

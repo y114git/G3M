@@ -385,6 +385,8 @@
     "mod_editor_add_extra": "Agrega archivos o carpetas extra para esta pestaña.",
     "mod_editor_selected_file": "Archivo o carpeta seleccionados que se incluirán en el mod.",
     "mod_editor_data_version": "Etiqueta de versión para esta entrada de archivo DATA.",
+    "mod_editor_special_extra_target_towers": "Archivos extra especiales: se colocarán en {target_path} mientras el juego esté abierto.",
+    "mod_editor_special_extra_target_addons": "Archivos extra especiales: se colocarán en {target_path} mientras el juego esté abierto.",
     "save_mod": "Guardar mod",
     "delete_mod": "Elimina este mod local y todos los archivos de su carpeta.",
     "export_mod": "Exporta este mod local a un archivo para compartirlo o guardarlo.",

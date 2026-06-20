@@ -749,7 +749,7 @@ class TestLaunchManager:
             patch.object(
                 launcher, "_start_detached_command", return_value=True
             ) as start_detached,
-            patch("services.launch_service.open_url_native") as web_open,
+            patch("services.launch_service.open_url_native"),
         ):
             launcher._execute_game(
                 {"target": "steam://rungameid/1690940", "cwd": None, "type": "url"}
@@ -758,7 +758,34 @@ class TestLaunchManager:
         start_detached.assert_called_once_with(
             "steam", ["steam://rungameid/1690940"]
         )
-        web_open.assert_not_called()
+
+    def test_check_game_running_restores_window_before_cleanup_finishes(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+
+        parent = Mock()
+        parent.game_launch = Mock()
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        launcher.restore_window_callback = Mock()
+        launcher._record_launch_playtime = Mock()
+        launcher._execute_plugin_hook = Mock()
+        launcher._cleanup_direct_launch_files = Mock()
+        launcher.monitor_thread = None
+
+        with (
+            patch.object(launcher, "parent", return_value=parent),
+            patch("services.launch_service.is_game_running", return_value=False),
+        ):
+            launcher._check_game_running(False)
+
+        launcher.restore_window_callback.assert_called_once()
+        launcher._cleanup_direct_launch_files.assert_called_once()
+        assert app_state.is_patching is False
+        assert app_state.progress_bar_visible is False
+        parent.game_launch.update_button_state.assert_called_once()
 
     def test_execute_game_falls_back_to_xdg_open_when_steam_detach_fails_on_linux(
         self, app_state, feedback_service

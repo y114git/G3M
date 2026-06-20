@@ -329,7 +329,8 @@ class GameLaunchController(QObject):
         if self._window_hidden_for_launch:
             self.window_restore_requested.emit()
         self._window_hidden_for_launch = False
-        self.app_state.progress_bar_visible = False
+        if not self.app_state.is_patching:
+            self.app_state.progress_bar_visible = False
         self.update_button_state()
         self.update_geometry_requested.emit()
         self.library_display_update_requested.emit()

@@ -96,6 +96,8 @@ class UseWorker(QThread):
                 success = self._install_g3m_mod(content_path, gb_metadata)
             elif self._is_afom_archive(extract_dir, gb_metadata):
                 success = self._install_afom_archive(extract_dir, gb_metadata)
+            elif self._is_frickbears3_addon_archive(extract_dir, gb_metadata):
+                success = self._install_frickbears3_addon_archive(extract_dir, gb_metadata)
             elif gb_metadata:
                 success = self._install_via_gamebanana_converter(gb_metadata)
             else:
@@ -292,6 +294,19 @@ class UseWorker(QThread):
             logger.debug("UseWorker: AFOM inspection failed: %s", e, exc_info=True)
             return False
 
+    def _is_frickbears3_addon_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
+        game = str((gb_metadata or {}).get("game") or self._metadata.get("game") or "").strip().lower()
+        if game and game != "frickbears3":
+            return False
+        try:
+            from services.frickbears3_addons_service import Frickbears3AddonsService
+
+            inspection = Frickbears3AddonsService().inspect_extracted_archive(extract_dir)
+            return inspection.eligible
+        except Exception as e:
+            logger.debug("UseWorker: FRICKBEARS3 addon inspection failed: %s", e, exc_info=True)
+            return False
+
     def _install_afom_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
         try:
             from services.pizza_tower_afom_service import PizzaTowerAFOMService
@@ -305,6 +320,21 @@ class UseWorker(QThread):
             return bool(result)
         except Exception as e:
             logger.error("UseWorker: AFOM conversion failed: %s", e, exc_info=True)
+            return False
+
+    def _install_frickbears3_addon_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
+        try:
+            from services.frickbears3_addons_service import Frickbears3AddonsService
+
+            result = Frickbears3AddonsService().convert_extracted_archive(
+                extract_dir,
+                self._mods_dir,
+                source_file_path=self._file_path,
+                gamebanana_metadata=gb_metadata or None,
+            )
+            return bool(result)
+        except Exception as e:
+            logger.error("UseWorker: FRICKBEARS3 addon conversion failed: %s", e, exc_info=True)
             return False
 
     @staticmethod

@@ -67,6 +67,7 @@ from ui.dialogs.mod_editor.storage import (
 )
 from ui.utils.ui_utils import UIAnimator
 from utils.file_utils import get_file_filter, get_unique_mod_dir
+from utils.frickbears3_addons_utils import is_top_level_addons_archive
 from utils.mod.config_parser import (
     MOD_ALLOWED_TAGS,
     MOD_FIELD_LIMITS,
@@ -84,6 +85,7 @@ from utils.native_integration import (
     open_path_native,
 )
 from utils.path_utils import colored_icon, resource_path
+from utils.pizzatower_afom_utils import is_top_level_towers_archive
 from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
@@ -114,7 +116,7 @@ class ModEditorDialog(QDialog):
         self.setWindowTitle(tr("ui.create_mod") if is_creating else tr("ui.edit_mod"))
         self.setModal(True)
         scale = self._cfg.get("ui_scale", 1.0) if self._cfg else 1.0
-        self.resize(round(1110 * scale), round(700 * scale))
+        self.resize(round(1165 * scale), round(700 * scale))
         self.setMinimumSize(round(700 * scale), round(500 * scale))
         self._section_widgets = {}
         self._init_ui()
@@ -298,7 +300,7 @@ class ModEditorDialog(QDialog):
         self.setStyleSheet(
             f"""
             QFrame#modEditorSettingsFrame, QFrame#modEditorFilesFrame {{
-                border: 1px solid {border};
+                border: 2px solid {border};
                 border-radius: {self._br()}px;
                 background-color: {background};
             }}
@@ -316,7 +318,7 @@ class ModEditorDialog(QDialog):
                 font-weight: 700;
             }}
             QFrame[fileActionsRow="true"] {{
-                border: 1px solid {border};
+                border: 2px solid {border};
                 border-radius: {self._br()}px;
                 background-color: {elements};
             }}
@@ -324,22 +326,28 @@ class ModEditorDialog(QDialog):
                 color: {secondary};
                 qproperty-alignment: AlignCenter;
             }}
+            QLabel[specialHintText="true"] {{
+                color: {secondary};
+            }}
             QLineEdit, QComboBox {{
                 background-color: {elements};
             }}
             QListWidget {{
                 background-color: {elements};
                 color: {main_text};
-                border: 1px solid {border};
+                border: 2px solid {border};
                 border-radius: {self._br()}px;
             }}
             QTabWidget::pane, QScrollArea {{
                 background-color: {background};
             }}
             QFrame[fileCard="true"] {{
-                border: 1px solid {border};
+                border: 2px solid {border};
                 border-radius: {self._br()}px;
                 background-color: {elements};
+            }}
+            QFrame[fileCard="true"][specialRuntimeTarget="true"] {{
+                border: 2px dashed {border};
             }}
             """
         )
@@ -857,6 +865,17 @@ class ModEditorDialog(QDialog):
         title_lbl.setStyleSheet("font-weight: bold;")
         title_lbl.setProperty("file_type", file_type)
         fl.addWidget(title_lbl)
+        special_hint_lbl = None
+        if file_type == "extra":
+            special_hint_lbl = QLabel("")
+            special_hint_lbl.setObjectName("special_runtime_hint")
+            special_hint_lbl.setProperty("specialHintText", True)
+            special_hint_lbl.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            special_hint_lbl.setWordWrap(True)
+            special_hint_lbl.hide()
+            fl.addWidget(special_hint_lbl)
         path_edit = QLineEdit()
         path_edit.setPlaceholderText(tr("ui.select_file"))
         path_edit.setToolTip(tr("tooltips.mod_editor_selected_file"))
@@ -864,6 +883,12 @@ class ModEditorDialog(QDialog):
             "is_local_path" if file_type == "data" else "is_local_extra_path", True
         )
         path_edit.textChanged.connect(lambda _text, edit=path_edit: self._clear_field_validation_error(edit))
+        if file_type == "extra":
+            path_edit.textChanged.connect(
+                lambda _text, layout=tab_layout, edit=path_edit, card=frame, hint=special_hint_lbl: self._update_extra_file_special_state(
+                    layout, edit, card, hint
+                )
+            )
         fl.addWidget(path_edit)
         browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
@@ -890,6 +915,9 @@ class ModEditorDialog(QDialog):
         tab_layout.insertWidget(tab_layout.count() - 1, frame)
         if file_type == "extra":
             self._refresh_extra_file_titles(tab_layout)
+            self._update_extra_file_special_state(
+                tab_layout, path_edit, frame, special_hint_lbl
+            )
 
     def _make_icon_text_button(self, icon, text, tooltip=None):
         button = QPushButton(text)
@@ -962,6 +990,106 @@ class ModEditorDialog(QDialog):
             start=1,
         ):
             title.setText(tr("files.extra_files_title", number=index))
+
+    def _is_special_runtime_extra_path(self, layout, raw_path: str) -> bool:
+        normalized = self._normalize_config_path(str(raw_path or "").strip())
+        if not normalized:
+            return False
+        game_id = self.game_combo.currentData() or self.mod_data.get("game", "deltarune")
+        if game_id == "pizzatower":
+            lowered = normalized.lower().rstrip("/")
+            if lowered == "towers" or lowered.startswith("towers/"):
+                return True
+            base_name = os.path.basename(lowered)
+            if base_name == "towers":
+                return True
+            if is_top_level_towers_archive(base_name):
+                return True
+        if game_id == "frickbears3":
+            lowered = normalized.lower().rstrip("/")
+            if lowered == "addons" or lowered.startswith("addons/"):
+                return True
+            base_name = os.path.basename(lowered)
+            if base_name == "addons":
+                return True
+            if is_top_level_addons_archive(base_name):
+                return True
+        return False
+
+    def _special_runtime_extra_hint(self, layout, raw_path: str) -> str:
+        normalized = self._normalize_config_path(str(raw_path or "").strip())
+        if not normalized:
+            return ""
+        game_id = self.game_combo.currentData() or self.mod_data.get("game", "deltarune")
+        lowered = normalized.lower().rstrip("/")
+        base_name = os.path.basename(lowered)
+        if game_id == "pizzatower" and (
+            lowered == "towers"
+            or lowered.startswith("towers/")
+            or base_name == "towers"
+            or is_top_level_towers_archive(base_name)
+        ):
+            return tr(
+                "tooltips.mod_editor_special_extra_target_towers",
+                target_path="%APPDATA%/PizzaTower_GM2/towers/",
+            )
+        if game_id == "frickbears3" and (
+            lowered == "addons"
+            or lowered.startswith("addons/")
+            or base_name == "addons"
+            or is_top_level_addons_archive(base_name)
+        ):
+            return tr(
+                "tooltips.mod_editor_special_extra_target_addons",
+                target_path="%LOCALAPPDATA%/Frickbears3/addons/",
+            )
+        return ""
+
+    def _update_extra_file_special_state(
+        self,
+        layout,
+        path_edit: QLineEdit,
+        frame: QFrame,
+        hint_label: QLabel | None = None,
+    ) -> None:
+        is_special = self._is_special_runtime_extra_path(layout, path_edit.text())
+        frame.setProperty("specialRuntimeTarget", is_special)
+        if hint_label is not None:
+            hint_text = self._special_runtime_extra_hint(layout, path_edit.text())
+            hint_label.setText(hint_text)
+            hint_label.setVisible(bool(is_special and hint_text))
+        self.style().unpolish(frame)
+        self.style().polish(frame)
+        frame.update()
+        if hint_label is not None:
+            self.style().unpolish(hint_label)
+            self.style().polish(hint_label)
+            hint_label.update()
+
+    def _refresh_all_extra_file_special_states(self) -> None:
+        for index in range(self.file_tabs.count()):
+            tab = self.file_tabs.widget(index)
+            layout = self._get_tab_file_layout(tab)
+            if not layout:
+                continue
+            for i in range(layout.count()):
+                widget = layout.itemAt(i).widget() if layout.itemAt(i) else None
+                if not widget or not hasattr(widget, "layout") or not (frame_layout := widget.layout()):
+                    continue
+                path_edit = next(
+                    (
+                        frame_layout.itemAt(j).widget()
+                        for j in range(frame_layout.count())
+                        if isinstance(frame_layout.itemAt(j).widget(), QLineEdit)
+                        and frame_layout.itemAt(j).widget().property("is_local_extra_path")
+                    ),
+                    None,
+                )
+                hint_label = widget.findChild(QLabel, "special_runtime_hint")
+                if isinstance(path_edit, QLineEdit):
+                    self._update_extra_file_special_state(
+                        layout, path_edit, widget, hint_label
+                    )
 
     def _set_field_validation_error(self, line_edit: QLineEdit) -> None:
         line_edit.setProperty("validation_error", True)
@@ -1956,6 +2084,7 @@ class ModEditorDialog(QDialog):
         if hasattr(self, "_switch_version_button"):
             self._switch_version_button.setText(tr("mod_versions.switch_version_button"))
         self._refresh_info_files_list()
+        self._refresh_all_extra_file_special_states()
 
     def apply_theme(self) -> None:
         self._apply_theme_styles()
@@ -1971,3 +2100,4 @@ class ModEditorDialog(QDialog):
             self._info_up_button.setIcon(self._icon("arrow_up.svg"))
         if hasattr(self, "_info_down_button"):
             self._info_down_button.setIcon(self._icon("arrow_down.svg"))
+        self._refresh_all_extra_file_special_states()

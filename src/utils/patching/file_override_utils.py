@@ -7,6 +7,12 @@ import tempfile
 
 from config.config import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
 from services.localization_service import tr
+from utils.frickbears3_addons_utils import (
+    apply_frickbears3_addons_from_mod_source,
+    get_frickbears3_addons_dir,
+    is_addons_subpath,
+    is_top_level_addons_archive,
+)
 from utils.patching import mod_content_utils as mod_content
 from utils.pizzatower_afom_utils import (
     apply_afom_towers_from_mod_source,
@@ -86,11 +92,21 @@ def _iter_configured_override_entries(
         )
         if not target_relative:
             continue
+        target_root = None
+        if (game_id or "").strip().lower() == "frickbears3" and (
+            is_addons_subpath(normalized) or is_top_level_addons_archive(normalized)
+        ):
+            target_root = get_frickbears3_addons_dir()
+            if is_addons_subpath(normalized):
+                target_relative = "" if normalized == "addons/" else normalized[len("addons/") :]
+            else:
+                target_relative = ""
         yield {
             "source": source_path,
             "target_relative": target_relative,
             "is_directory": normalized.endswith("/"),
             "display_name": normalized,
+            "target_root": target_root,
         }
 
 
@@ -259,6 +275,7 @@ def _apply_configured_override_entries(
     for entry in entries:
         source_path = entry["source"]
         target_relative = entry["target_relative"]
+        entry_target_dir = entry.get("target_root") or target_dir
         if entry["is_directory"]:
             if not os.path.isdir(source_path):
                 patcher.patching_logger.warning(
@@ -286,7 +303,7 @@ def _apply_configured_override_entries(
                     file_source = os.path.join(root, file)
                     rel_file = file if rel_root == "." else os.path.join(rel_root, file)
                     target_path = os.path.join(
-                        target_dir,
+                        entry_target_dir,
                         target_relative.rstrip("/"),
                         rel_file,
                     )
@@ -294,7 +311,7 @@ def _apply_configured_override_entries(
                         patcher,
                         file_source,
                         target_path,
-                        target_dir,
+                        entry_target_dir,
                         chapter_id,
                         is_modpack,
                         processed_archives,
@@ -320,12 +337,12 @@ def _apply_configured_override_entries(
             ):
                 return False
             continue
-        target_path = os.path.join(target_dir, target_relative)
+        target_path = os.path.join(entry_target_dir, target_relative)
         if not _copy_override_file(
             patcher,
             source_path,
             target_path,
-            target_dir,
+            entry_target_dir,
             chapter_id,
             is_modpack,
             processed_archives,
@@ -524,6 +541,18 @@ def apply_file_overrides(
             extract_archive=extract_any_archive,
         ):
             return False
+    if (not is_modpack) and (game_id or "").strip().lower() == "frickbears3":
+        from utils.archive_utils import extract_any_archive
+
+        if not apply_frickbears3_addons_from_mod_source(
+            mod_source_dir,
+            backup_or_mark=lambda target_file: patcher._backup_or_mark_file(
+                chapter_id, target_file
+            ),
+            logger=patcher.patching_logger,
+            extract_archive=extract_any_archive,
+        ):
+            return False
     if configured_paths is not None:
         configured_entries = list(
             _iter_configured_override_entries(
@@ -551,6 +580,10 @@ def apply_file_overrides(
             source_rel_path = os.path.relpath(source_file, mod_source_dir)
             if source_file.lower().endswith(xdelta_extensions):
                 continue
+            if is_addons_subpath(source_rel_path):
+                continue
+            if is_top_level_addons_archive(source_rel_path):
+                continue
             if is_towers_subpath(source_rel_path):
                 continue
             if is_top_level_towers_archive(source_rel_path):
@@ -565,6 +598,10 @@ def apply_file_overrides(
             source_path = os.path.join(root, file)
             file_lower = file.lower()
             source_rel_path = os.path.relpath(source_path, mod_source_dir)
+            if is_addons_subpath(source_rel_path) or is_top_level_addons_archive(
+                source_rel_path
+            ):
+                continue
             if is_towers_subpath(source_rel_path) or is_top_level_towers_archive(
                 source_rel_path
             ):

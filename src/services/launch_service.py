@@ -442,6 +442,10 @@ class GameLauncher(QObject):
             logger.debug("[LAUNCH] Game still running, cleanup deferred to monitor")
             return
         logger.info("[LAUNCH] Game is no longer running, starting cleanup")
+        self.app_state.is_patching = True
+        self.app_state.progress_bar_visible = True
+        if self.restore_window_callback:
+            self.restore_window_callback()
         self._record_launch_playtime()
         self._execute_plugin_hook("before_restore_after_exit", vanilla_mode)
         self.status_changed.emit(
@@ -455,6 +459,12 @@ class GameLauncher(QObject):
                 self.monitor_worker = None
         self.game_launch_finished.emit()
         self._execute_plugin_hook("after_restore_after_exit", vanilla_mode)
+        self.app_state.is_patching = False
+        self.app_state.progress_bar_visible = False
+        parent = self.parent()
+        controller = getattr(parent, "game_launch", None) if parent else None
+        if controller and hasattr(controller, "update_button_state"):
+            controller.update_button_state()
         logger.info("[LAUNCH] Cleanup completed, game launch finished")
 
     def _record_launch_playtime(self) -> None:

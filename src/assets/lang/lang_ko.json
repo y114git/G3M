@@ -385,6 +385,8 @@
     "mod_editor_add_extra": "추가 파일이 포함된 압축 파일이나 폴더를 추가합니다.",
     "mod_editor_selected_file": "모드에 포함될 선택된 파일 또는 폴더입니다.",
     "mod_editor_data_version": "이 DATA 파일 항목의 버전 라벨입니다.",
+    "mod_editor_special_extra_target_towers": "특수 extra 파일: 게임 실행 중에는 {target_path} 로 들어갑니다.",
+    "mod_editor_special_extra_target_addons": "특수 extra 파일: 게임 실행 중에는 {target_path} 로 들어갑니다.",
     "save_mod": "모드 저장",
     "delete_mod": "이 로컬 모드와 폴더 내부의 모든 파일을 삭제합니다.",
     "export_mod": "이 로컬 모드를 공유하거나 백업할 수 있는 압축 파일로 내보냅니다.",

@@ -385,6 +385,8 @@
     "mod_editor_add_extra": "为这个标签页添加额外文件归档或文件夹。",
     "mod_editor_selected_file": "将被包含进模组的已选文件或文件夹。",
     "mod_editor_data_version": "这个 DATA 文件条目的版本标签。",
+    "mod_editor_special_extra_target_towers": "特殊 extra 文件：游戏运行期间会放入 {target_path}。",
+    "mod_editor_special_extra_target_addons": "特殊 extra 文件：游戏运行期间会放入 {target_path}。",
     "save_mod": "保存模组",
     "delete_mod": "删除这个本地模组以及其文件夹中的全部文件。",
     "export_mod": "把这个本地模组导出为可分享或备份的压缩包。",

@@ -385,6 +385,8 @@
     "mod_editor_add_extra": "このタブに追加ファイルを含むアーカイブまたはフォルダーを追加します。",
     "mod_editor_selected_file": "MOD に含まれる選択したファイルまたはフォルダー。",
     "mod_editor_data_version": "この DATA ファイル エントリのバージョン ラベル。",
+    "mod_editor_special_extra_target_towers": "特別な追加ファイル: ゲームの実行中は {target_path} に配置されます。",
+    "mod_editor_special_extra_target_addons": "特別な追加ファイル: ゲームの実行中は {target_path} に配置されます。",
     "save_mod": "Modを保存",
     "delete_mod": "このローカル MOD とそのフォルダー内のすべてのファイルを削除します。",
     "export_mod": "このローカル MOD を、共有またはバックアップできるアーカイブにエクスポートします。",

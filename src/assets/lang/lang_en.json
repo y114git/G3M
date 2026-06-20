@@ -385,6 +385,8 @@
     "mod_editor_add_extra": "Add archives or folders with extra files for this tab.",
     "mod_editor_selected_file": "The selected file or folder that will be included in the mod.",
     "mod_editor_data_version": "Version label for this DATA file entry.",
+    "mod_editor_special_extra_target_towers": "Special extra files: these will be restored into {target_path} while the game is running.",
+    "mod_editor_special_extra_target_addons": "Special extra files: these will be restored into {target_path} while the game is running.",
     "save_mod": "Save Mod",
     "delete_mod": "Delete this local mod and all files inside its folder.",
     "export_mod": "Export this local mod into an archive you can share or back up.",
