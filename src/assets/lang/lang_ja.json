@@ -275,7 +275,8 @@
     "chapter_1": "チャプター 1",
     "chapter_2": "チャプター 2",
     "chapter_3": "チャプター 3",
-    "chapter_4": "チャプター 4"
+    "chapter_4": "チャプター 4",
+    "chapter_5": "チャプター 5"
   },
   "checkboxes": {
     "disable_background": "背景を無効にする",

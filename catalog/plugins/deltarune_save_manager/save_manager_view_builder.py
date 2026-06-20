@@ -147,7 +147,7 @@ class SaveManagerViewBuilder:
         save_tabs = QTabWidget()
         slot_labels = {}
         slot_rows = {}
-        for ch in range(1, 5):
+        for ch in range(1, 6):
             tab = QWidget()
             v = QVBoxLayout(tab)
             for s in range(3):

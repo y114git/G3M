@@ -135,11 +135,13 @@ def test_plugin_archives_match_source_folders_without_python_cache():
             for name in archived_files
             if "__pycache__" in Path(name).parts or name.endswith(ignored_suffixes)
         ]
+        source_names = set(source_files)
+        archived_names = set(archived_files)
         assert not forbidden, f"{archive_path.name} ships Python cache files: {forbidden}"
         assert archived_files == source_files, (
             f"{archive_path.name} does not match {plugin_dir.name}. "
-            f"Missing: {sorted(source_files - archived_files)}. "
-            f"Extra: {sorted(archived_files - source_files)}. "
+            f"Missing: {sorted(source_names - archived_names)}. "
+            f"Extra: {sorted(archived_names - source_names)}. "
             f"Changed: {sorted(k for k in source_files.keys() & archived_files.keys() if source_files[k] != archived_files[k])}"
         )
 

@@ -239,7 +239,7 @@ def patches_dir():
 @pytest.fixture
 def deltarune_chapter_dirs(game_data_dir):
     base = Path(game_data_dir) / 'deltarune'
-    return {'menu': str(base / 'chapter0_menu'), 'chapter1': str(base / 'chapter1_'), 'chapter2': str(base / 'chapter2_'), 'chapter3': str(base / 'chapter3_'), 'chapter4': str(base / 'chapter4_')}
+    return {'menu': str(base / 'chapter0_menu'), 'chapter1': str(base / 'chapter1_'), 'chapter2': str(base / 'chapter2_'), 'chapter3': str(base / 'chapter3_'), 'chapter4': str(base / 'chapter4_'), 'chapter5': str(base / 'chapter5_')}
 
 
 @pytest.fixture
@@ -250,7 +250,7 @@ def patches_game_dirs(patches_dir):
     result = {}
     deltarune_path = patches_path / 'deltarune'
     if deltarune_path.exists():
-        result['deltarune'] = {'menu': str(deltarune_path / 'chapter0_menu'), 'chapter1': str(deltarune_path / 'chapter1_'), 'chapter2': str(deltarune_path / 'chapter2_'), 'chapter3': str(deltarune_path / 'chapter3_'), 'chapter4': str(deltarune_path / 'chapter4_')}
+        result['deltarune'] = {'menu': str(deltarune_path / 'chapter0_menu'), 'chapter1': str(deltarune_path / 'chapter1_'), 'chapter2': str(deltarune_path / 'chapter2_'), 'chapter3': str(deltarune_path / 'chapter3_'), 'chapter4': str(deltarune_path / 'chapter4_'), 'chapter5': str(deltarune_path / 'chapter5_')}
     for game_name in ['deltarune_demo', 'undertale', 'undertale_yellow', 'pizzatower', 'sugaryspire']:
         game_path = patches_path / game_name
         if game_path.exists():

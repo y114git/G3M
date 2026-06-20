@@ -275,7 +275,8 @@
     "chapter_1": "챕터 1",
     "chapter_2": "챕터 2",
     "chapter_3": "챕터 3",
-    "chapter_4": "챕터 4"
+    "chapter_4": "챕터 4",
+    "chapter_5": "챕터 5"
   },
   "checkboxes": {
     "disable_background": "배경 비활성화",

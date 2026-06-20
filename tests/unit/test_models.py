@@ -261,14 +261,14 @@ class TestDeltaruneGame:
         assert g.block_steam_with_direct_launch is True
         assert g.supports_full_install is False
 
-    def test_has_5_tabs(self):
-        """Checks that has 5 tabs."""
+    def test_has_6_tabs(self):
+        """Checks that has 6 tabs."""
         g = DeltaruneGame()
-        assert len(g.tabs) == 5
+        assert len(g.tabs) == 6
         assert g.is_multi_tab is True
         assert g.tabs[0].files_key == '0'
         assert g.tabs[1].files_key == '1'
-        assert g.tabs[4].files_key == '4'
+        assert g.tabs[5].files_key == '5'
 
     def test_get_tab_by_id(self):
         """Checks that getting tab by id."""
@@ -280,8 +280,8 @@ class TestDeltaruneGame:
     def test_get_chapter_id(self):
         """Checks that getting chapter id."""
         g = DeltaruneGame()
-        expected = ['deltarune_0', 'deltarune_1', 'deltarune_2', 'deltarune_3', 'deltarune_4']
-        for i in range(5):
+        expected = ['deltarune_0', 'deltarune_1', 'deltarune_2', 'deltarune_3', 'deltarune_4', 'deltarune_5']
+        for i in range(6):
             assert g.get_chapter_id(i) == expected[i]
 
     def test_direct_launch_allowed(self):
@@ -306,7 +306,7 @@ class TestDeltaruneGame:
                         game='undertale',
                         files={'undertale': ModFileData(data_file_url='url')})
         result = g.filter_mods_for_ui([mod1, mod2])
-        assert len(result) == 5
+        assert len(result) == 6
         assert mod1 in result[1]
         assert mod2 not in result[1]
 

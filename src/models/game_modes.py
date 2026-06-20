@@ -229,6 +229,7 @@ class DeltaruneGame(GameDefinition):
         GameTab("deltarune_2", "2", "tabs.chapter_2", "chapter_2"),
         GameTab("deltarune_3", "3", "tabs.chapter_3", "chapter_3"),
         GameTab("deltarune_4", "4", "tabs.chapter_4", "chapter_4"),
+        GameTab("deltarune_5", "5", "tabs.chapter_5", "chapter_5"),
     ]
     executables = {
         "windows": ("DELTARUNE.exe", "DELTARUNE"),

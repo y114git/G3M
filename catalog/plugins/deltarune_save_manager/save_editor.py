@@ -472,6 +472,8 @@ class SaveEditorDialog(QDialog):
         try:
             chapter, slot = self._save_identity()
             self.save_data = parse_save_lines(self._current_advanced_lines(), chapter, slot)
+            if str(chapter) not in self.simple_mode_data["chapters"]["meta"]:
+                raise KeyError(f"Missing simple-mode metadata for chapter {chapter}")
         except Exception as error:
             logger.warning("SaveEditorDialog: simple mode unavailable: %s", error)
             self._simple_ready = False

@@ -231,6 +231,7 @@ class LibraryTabBuilder(QObject):
                 tr("tabs.chapter_2"),
                 tr("tabs.chapter_3"),
                 tr("tabs.chapter_4"),
+                tr("tabs.chapter_5"),
             ]
         ):
             btn = QPushButton(name)

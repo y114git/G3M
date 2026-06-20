@@ -38,6 +38,7 @@ LEGACY_CHAPTER_IDS = {
     "2": "deltarune_2",
     "3": "deltarune_3",
     "4": "deltarune_4",
+    "5": "deltarune_5",
     "-10": "deltarunedemo",
     "-20": "undertale",
     "-30": "undertaleyellow",

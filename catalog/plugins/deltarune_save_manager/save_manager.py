@@ -61,6 +61,30 @@ class SaveManager(QObject):
         except OSError:
             return False
 
+    @staticmethod
+    def _has_collection_dirs(path: str) -> bool:
+        if not path or not os.path.isdir(path):
+            return False
+        rx = re.compile(r"(.+?)_(\d+)$")
+        try:
+            return any(
+                rx.match(entry) and os.path.isdir(os.path.join(path, entry))
+                for entry in os.listdir(path)
+            )
+        except OSError:
+            return False
+
+    def _is_usable_save_path(self, path: str) -> bool:
+        save_utils = _load_save_utils()
+        return bool(path) and os.path.isdir(path) and (
+            save_utils.is_valid_save_path(path) or self._has_collection_dirs(path)
+        )
+
+    def _clear_save_path(self) -> None:
+        self.save_path = ''
+        self.current_collection_idx = -1
+        self.selected_slot = None
+
     @property
     def save_path(self):
         if self._save_path is None:
@@ -126,12 +150,11 @@ class SaveManager(QObject):
         return ''
 
     def find_and_validate_save_path(self) -> bool:
-        save_utils = _load_save_utils()
-        is_valid_save_path = save_utils.is_valid_save_path
-
-        if is_valid_save_path(self.save_path):
+        if self._is_usable_save_path(self.save_path):
             self.migrate_old_collections()
             return True
+        if self.save_path and not os.path.isdir(self.save_path):
+            self._clear_save_path()
 
         candidates = []
         system = platform.system()
@@ -153,17 +176,14 @@ class SaveManager(QObject):
             candidates.extend([proton_full, proton_demo, native_cfg])
 
         for path in candidates:
-            if is_valid_save_path(path):
+            if self._is_usable_save_path(path):
                 self.save_path = path
                 self.migrate_old_collections()
                 return True
 
-        return self.prompt_for_save_path()
+        return False
 
     def prompt_for_save_path(self) -> bool:
-        save_utils = _load_save_utils()
-        is_valid_save_path = save_utils.is_valid_save_path
-
         path = self.settings_manager.pick_directory(
             tr('ui.select_deltarune_saves_folder'),
             self._last_browse_dir,
@@ -173,11 +193,13 @@ class SaveManager(QObject):
             return False
         self._last_browse_dir = path
 
-        if not is_valid_save_path(path):
+        if not os.path.isdir(path):
             self.feedback_manager.show_message('warning', 'errors.empty_folder_title', tr('errors.empty_folder_message'))
             return False
 
         self.save_path = path
+        self.current_collection_idx = -1
+        self.selected_slot = None
         self.migrate_old_collections()
         return True
 
@@ -396,7 +418,7 @@ class SaveManager(QObject):
         else:
             slot_indices = [selected_slot[1]]
         if copy_all_chapters:
-            chapters_to_copy = range(1, 5)
+            chapters_to_copy = range(1, 6)
             if selected_slot is None:
                 prompt = tr('dialogs.overwrite_all_3_slots_all_chapters_collection') if to_collection else tr('dialogs.overwrite_all_3_slots_all_chapters_main')
             else:
@@ -578,12 +600,9 @@ class SaveManager(QObject):
         return {'in_collection': in_col, 'collection_name': collection_name, 'can_navigate_left': in_col and idx > 0, 'can_navigate_right': in_col, 'has_collections': len(cols) > 0}
 
     def prompt_for_save_collection_on_launch(self) -> int | None:
-        save_utils = _load_save_utils()
-        is_valid_save_path = save_utils.is_valid_save_path
-
         if not self.save_path:
             self.find_and_validate_save_path()
-        if not is_valid_save_path(self.save_path):
+        if not self._is_usable_save_path(self.save_path):
             return -1
         cols = self.list_collections()
         if not cols:
@@ -605,10 +624,9 @@ class SaveManager(QObject):
 
     def apply_collection_saves_for_launch(self, collection_idx: int) -> dict:
         save_utils = _load_save_utils()
-        is_valid_save_path = save_utils.is_valid_save_path
         save_slot_finish_map = save_utils.SAVE_SLOT_FINISH_MAP
 
-        if collection_idx == -1 or not is_valid_save_path(self.save_path):
+        if collection_idx == -1 or not self._is_usable_save_path(self.save_path):
             return {}
         collection_path = self.get_collection_path(collection_idx)
         if not collection_path or not os.path.isdir(collection_path):
@@ -669,7 +687,7 @@ class SaveManager(QObject):
                             exc,
                         )
 
-        for chapter in range(1, 5):
+        for chapter in range(1, 6):
             for slot in range(3):
                 main_file = os.path.join(main_save_path, f'filech{chapter}_{slot}')
                 col_file = os.path.join(collection_path, f'filech{chapter}_{slot}')

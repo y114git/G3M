@@ -36,6 +36,7 @@ _SCRIPT_BLOCK_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.IGNORECASE | re
 _LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE | re.DOTALL)
 _CSS_RULE_RE = re.compile(r"([^{}]+)\{([^{}]+)\}", re.IGNORECASE | re.DOTALL)
 _UNQUOTED_ATTR_RE = re.compile(r"(\w[\w-]*)=([^\s\"'>/]+)")
+_WINDOWS_DRIVE_PATTERN = re.compile(r"^[a-zA-Z]:[\\/]")
 _OPEN_TAG_RE_TEMPLATE = r"<({tag})\b([^>]*)>"
 _FIGCAPTION_RE = re.compile(
     r"<figcaption\b([^>]*)>(.*?)</figcaption>", re.IGNORECASE | re.DOTALL
@@ -290,11 +291,17 @@ def _is_remote_image_src(src: str) -> bool:
     return src.startswith(("http://", "https://"))
 
 
+def _is_absolute_local_path(src: str) -> bool:
+    if os.path.isabs(src):
+        return True
+    return bool(_WINDOWS_DRIVE_PATTERN.match(src))
+
+
 def _local_image_path_from_src(src: str) -> str:
     url = QUrl(src)
     if url.scheme().lower() == "file":
         return url.toLocalFile()
-    if not url.scheme() and os.path.isabs(src):
+    if not url.scheme() and _is_absolute_local_path(src):
         return src
     return ""
 
@@ -309,7 +316,7 @@ def _resolve_image_src(src: str, base_path: str | None = None) -> str:
         return src
     if scheme:
         return src
-    if os.path.isabs(src):
+    if _is_absolute_local_path(src):
         return QUrl.fromLocalFile(src).toString()
     if base_path:
         return QUrl.fromLocalFile(os.path.abspath(os.path.join(base_path, src))).toString()
