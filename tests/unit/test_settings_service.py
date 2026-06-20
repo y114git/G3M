@@ -152,6 +152,10 @@ def test_prompt_for_game_path_success_ignores_broken_status_feedback(
     manager.write_local_config = Mock()
     manager.validate_selected_game_path = Mock(return_value=True)
     monkeypatch.setattr(
+        "services.settings_service.get_open_file_name",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    monkeypatch.setattr(
         "services.settings_service.get_existing_directory",
         lambda *_args, **_kwargs: str(game_dir),
     )
@@ -186,6 +190,10 @@ def test_prompt_for_game_path_initial_info_failure_still_opens_picker(
     )
     manager.write_local_config = Mock()
     manager.validate_selected_game_path = Mock(return_value=True)
+    monkeypatch.setattr(
+        "services.settings_service.get_open_file_name",
+        lambda *_args, **_kwargs: ("", ""),
+    )
     monkeypatch.setattr(
         "services.settings_service.get_existing_directory",
         lambda *_args, **_kwargs: str(game_dir),
