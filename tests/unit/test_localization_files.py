@@ -21,6 +21,31 @@ def _flatten_keys(data: dict, prefix: str = "") -> dict[str, str]:
     return keys
 
 
+def _normalized_text_bytes(data: bytes) -> bytes:
+    return data.replace(b"\r\n", b"\n")
+
+
+def _is_text_bytes(data: bytes) -> bool:
+    if b"\x00" in data:
+        return False
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def _semantic_file_bytes(data: bytes) -> bytes:
+    if _is_text_bytes(data):
+        return _normalized_text_bytes(data)
+    return data
+
+
+def _plugin_file_bytes(path: Path) -> bytes:
+    data = path.read_bytes()
+    return _semantic_file_bytes(data)
+
+
 def test_all_language_files_have_same_translation_keys():
     """Checks that every shipped language contains every English key."""
     english_keys = set(
@@ -116,7 +141,7 @@ def test_plugin_archives_match_source_folders_without_python_cache():
 
         source_files = {
             path.relative_to(plugin_dir).as_posix(): hashlib.sha256(
-                path.read_bytes()
+                _plugin_file_bytes(path)
             ).hexdigest()
             for path in plugin_dir.rglob("*")
             if path.is_file()
@@ -125,7 +150,9 @@ def test_plugin_archives_match_source_folders_without_python_cache():
         }
         with zipfile.ZipFile(archive_path) as archive:
             archived_files = {
-                info.filename: hashlib.sha256(archive.read(info.filename)).hexdigest()
+                info.filename: hashlib.sha256(
+                    _semantic_file_bytes(archive.read(info.filename))
+                ).hexdigest()
                 for info in archive.infolist()
                 if not info.is_dir()
             }
