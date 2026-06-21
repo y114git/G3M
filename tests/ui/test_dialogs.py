@@ -14,9 +14,6 @@ from PyQt6.QtGui import QTextCursor, QTextDocument
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 EXPECTED_DIALOG_WIDTH = 1145
-# Configured base Mod Editor width after the recent +35px total width adjustment.
-# Some Qt runners realize the top-level window slightly wider, so tests treat this
-# as the minimum intended width rather than an exact on-screen frame size.
 
 
 def _close_dialog(qapp, dialog) -> None:

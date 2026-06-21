@@ -9,7 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_update_widgets(window):
-    return [window.action_button, window.chat_button, window.change_background_button]
+    return [
+        window.action_button,
+        window.community_button,
+        window.change_background_button,
+    ]
 
 
 def set_update_ui_enabled(window, enabled: bool) -> None:

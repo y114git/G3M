@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QWIDGETSIZE_MAX,
     QCheckBox,
@@ -295,7 +296,16 @@ class LibraryTabBuilder(QObject):
         add_btn.setToolTip(tr("ui.add_mod"))
         add_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self._update_add_mod_button_style(add_btn, p_btn.sizeHint().height(), colors)
+        diagnostics_btn = QPushButton(tr("diagnostics.button"))
+        diagnostics_btn.setObjectName("diagnostics_button")
+        self.widgets["diagnostics_button"] = diagnostics_btn
+        diagnostics_btn.setToolTip(tr("diagnostics.tooltip"))
+        diagnostics_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self._update_add_mod_button_style(
+            diagnostics_btn, p_btn.sizeHint().height(), colors, with_icon=False
+        )
         header_row.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        header_row.addWidget(diagnostics_btn, 0, Qt.AlignmentFlag.AlignLeft)
         header_row.addStretch()
         mods_lbl = QLabel(tr("ui.installed_mods_label"))
         mods_lbl.setToolTip(tr("tooltips.installed_mods"))
@@ -424,7 +434,9 @@ class LibraryTabBuilder(QObject):
         self.widgets.update(
             {
                 "library_filters_widget": filters,
+                "library_header_layout": header_row,
                 "add_mod_button": add_btn,
+                "diagnostics_button": diagnostics_btn,
                 "game_type_combo": game_combo,
                 "library_game_label": game_label,
                 "chapter_mode_checkbox": ch_cb,
@@ -575,12 +587,12 @@ class LibraryTabBuilder(QObject):
         )
         return f"QPushButton#{obj_name} {{ border: 2px solid {colors['border']}; border-radius: {br}px; background-color: {colors['elements']}; color: {colors['main_text']}; margin: 0px; padding: 0px; }} QPushButton#{obj_name}:hover {{ background-color: {colors['hover']}; }}"
 
-    def _update_add_mod_button_style(self, add_btn, button_height, colors):
+    def _update_add_mod_button_style(self, add_btn, button_height, colors, *, with_icon=True):
         """Rebuild add_mod_button to match the priority button."""
         from utils.path_utils import colored_icon
 
         add_btn.setFixedHeight(button_height)
-        add_btn.setIcon(colored_icon("add", colors["main_text"]))
+        add_btn.setIcon(colored_icon("add", colors["main_text"]) if with_icon else QIcon())
         add_btn.setStyleSheet(
             build_button_style(
                 add_btn.objectName(),
@@ -644,14 +656,16 @@ class LibraryTabBuilder(QObject):
                 )
         game_combo = self.widgets.get("game_type_combo")
         if game_combo:
-            if "add_mod_button" in self.widgets:
-                self._update_add_mod_button_style(
-                    self.widgets["add_mod_button"],
-                    self.widgets["priority_button"].sizeHint().height()
-                    if "priority_button" in self.widgets
-                    else game_combo.sizeHint().height(),
-                    colors,
-                )
+            for button_key in ("add_mod_button", "diagnostics_button"):
+                if button_key in self.widgets:
+                    self._update_add_mod_button_style(
+                        self.widgets[button_key],
+                        self.widgets["priority_button"].sizeHint().height()
+                        if "priority_button" in self.widgets
+                        else game_combo.sizeHint().height(),
+                        colors,
+                        with_icon=button_key == "add_mod_button",
+                    )
             if "profile_settings_button" in self.widgets:
                 self._update_profile_settings_button_style(
                     self.widgets["profile_settings_button"], game_combo, colors

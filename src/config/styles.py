@@ -41,8 +41,6 @@ SETTINGS_COLOR_CONFIG = {
     "main_text": "ui.main_text_color",
     "secondary_text": "ui.secondary_text_color",
 }
-CHAT_MESSAGE_BACKGROUND_COLOR = "rgba(255, 255, 255, 0.1)"
-
 """Reusable QSS snippets and style templates."""
 STYLES_TEMPLATE_SUBDIR = "config/qss"
 QSS_TRANSPARENT_SCROLL = "QScrollArea { background-color: transparent; }"

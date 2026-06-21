@@ -39,3 +39,4 @@ def initialize_window_runtime(window) -> None:
     window._game_versions_dialog = None
     window._log_viewer_dialog = None
     window._modding_tools_dialog = None
+    window._diagnostics_dialog = None

@@ -40,6 +40,7 @@ LOG_ARCHIVE_FILE_PREFIX = "g3m"
 SINGLE_INSTANCE_KEY = "g3m.single-instance-lock"
 CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL", "")
 SOCIAL_LINKS = {
+    "boosty": "https://boosty.to/y114",
     "telegram": "https://t.me/y_maintg",
     "discord": "https://discord.gg/2MFdvFfD9a",
 }
@@ -111,7 +112,6 @@ FALLBACK_TOOLTIP_BG = shared_styles.FALLBACK_TOOLTIP_BG
 FALLBACK_WINDOW_BG = shared_styles.FALLBACK_WINDOW_BG
 FALLBACK_SCROLL_GROOVE = shared_styles.FALLBACK_SCROLL_GROOVE
 SETTINGS_COLOR_CONFIG = shared_styles.SETTINGS_COLOR_CONFIG
-CHAT_MESSAGE_BACKGROUND_COLOR = shared_styles.CHAT_MESSAGE_BACKGROUND_COLOR
 RICH_HTML_IMAGE_CACHE_MAX_SIZE = shared_styles.RICH_HTML_IMAGE_CACHE_MAX_SIZE
 STYLES_TEMPLATE_SUBDIR = shared_styles.STYLES_TEMPLATE_SUBDIR
 QSS_TRANSPARENT_SCROLL = shared_styles.QSS_TRANSPARENT_SCROLL
@@ -168,10 +168,11 @@ RICH_HTML_FONT_COLOR_RE = re.compile(
 """Localization mapping constants."""
 WIDGET_LOCALIZATIONS = [
     ("online_label", "setToolTip", "tooltips.online_counter"),
+    ("boosty_button", "setToolTip", "buttons.boosty"),
     ("telegram_button", "setToolTip", "buttons.telegram"),
     ("beta_updates_checkbox", "setToolTip", "tooltips.beta_updates"),
     ("discord_button", "setToolTip", "buttons.discord"),
-    ("chat_button", "setText", "ui.chat_button"),
+    ("community_button", "setText", "ui.community_button"),
     ("shortcut_button", "setText", "buttons.shortcut"),
     ("tags_label", "setText", "ui.tags_label"),
     ("tags_label", "setToolTip", "tooltips.filter_by_tag"),

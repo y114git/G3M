@@ -239,7 +239,7 @@ class ThemeController:
         btn_size = scale(40)
         icon_size_social = scale(32)
         social_style = f"padding: {scale(4)}px; min-width: {btn_size}px; min-height: {btn_size}px; max-width: {btn_size}px; max-height: {btn_size}px;"
-        for btn_attr in ("telegram_button", "discord_button"):
+        for btn_attr in ("boosty_button", "telegram_button", "discord_button"):
             btn = getattr(self.app, btn_attr, None)
             if btn:
                 btn.setFixedSize(btn_size, btn_size)
@@ -334,6 +334,7 @@ class ThemeController:
                     "_downloads_dialog",
                     "_log_viewer_dialog",
                     "_modding_tools_dialog",
+                    "_diagnostics_dialog",
                 ):
                     dialog = getattr(self.app, dialog_attr, None)
                     if not dialog or not hasattr(dialog, "refresh_theme"):

@@ -479,6 +479,7 @@ class AppWindow(QWidget):
         self.top_frame.addStretch()
         social_style = "padding: 4px; min-width: 40px; min-height: 40px; max-width: 40px; max-height: 40px;"
         for attr, icon_svg, url_key, lang_key in (
+            ("boosty_button", "boosty_logo.svg", "boosty", "buttons.boosty"),
             ("telegram_button", "telegram_logo.svg", "telegram", "buttons.telegram"),
             ("discord_button", "discord_logo.svg", "discord", "buttons.discord"),
         ):
@@ -490,7 +491,9 @@ class AppWindow(QWidget):
                 )
             )
             btn.setIcon(QIcon(resource_path(f"assets/icons/{icon_svg}")))
-            btn.setIconSize(QSize(32, 32))
+            btn.setIconSize(
+                QSize(36, 36) if url_key == "boosty" else QSize(32, 32)
+            )
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             btn.setStyleSheet(social_style)
             btn.setToolTip(tr(lang_key))
@@ -517,14 +520,14 @@ class AppWindow(QWidget):
         self.action_button.clicked.connect(self.game_launch.on_action_button_click)
         self.app_state.is_installing = False
         self.pending_updates = []
-        self.chat_button = QPushButton(tr("ui.chat_button"))
-        from app.dialogs import open_chat
+        self.community_button = QPushButton(tr("ui.community_button"))
+        from app.dialogs import open_community_dialog
 
-        self.chat_button.clicked.connect(lambda: open_chat(self))
+        self.community_button.clicked.connect(lambda: open_community_dialog(self))
         self.shortcut_button.clicked.connect(self._on_shortcut_button_click)
         self.action_frame.addWidget(self.shortcut_button)
         self.action_frame.addWidget(self.action_button)
-        self.action_frame.addWidget(self.chat_button)
+        self.action_frame.addWidget(self.community_button)
         self.app_state.action_button_text_changed.connect(self._set_action_button_text)
         self.app_state.action_button_enabled_changed.connect(
             self._set_action_button_enabled
@@ -769,6 +772,7 @@ class AppWindow(QWidget):
                 "_downloads_dialog",
                 "_log_viewer_dialog",
                 "_modding_tools_dialog",
+                "_diagnostics_dialog",
             ):
                 dialog = getattr(self, dialog_attr, None)
                 if not dialog:

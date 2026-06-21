@@ -55,7 +55,7 @@ class _ProgressBar:
 def test_set_update_ui_enabled_toggles_all_controls():
     window = SimpleNamespace(
         action_button=_Widget(),
-        chat_button=_Widget(),
+        community_button=_Widget(),
         change_background_button=_Widget(),
         top_refresh_button=_Widget(),
         settings_button=_Widget(),
@@ -64,7 +64,7 @@ def test_set_update_ui_enabled_toggles_all_controls():
     set_update_ui_enabled(window, False)
 
     assert window.action_button.enabled is False
-    assert window.chat_button.enabled is False
+    assert window.community_button.enabled is False
     assert window.change_background_button.enabled is False
     assert window.top_refresh_button.enabled is False
     assert window.settings_button.enabled is False

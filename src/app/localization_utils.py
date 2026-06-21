@@ -171,6 +171,12 @@ def relocalize_texts(w):
     ):
         w._modding_tools_dialog.relocalize_ui()
     if (
+        hasattr(w, "_diagnostics_dialog")
+        and w._diagnostics_dialog
+        and w._diagnostics_dialog.isVisible()
+    ):
+        w._diagnostics_dialog.relocalize_ui()
+    if (
         hasattr(w, "_log_viewer_dialog")
         and w._log_viewer_dialog
         and w._log_viewer_dialog.isVisible()
@@ -187,6 +193,11 @@ def relocalize_texts(w):
         if btn:
             btn.setToolTip(tr("modding_tools.title"))
             btn.setAccessibleName(tr("modding_tools.title"))
+    btn = getattr(w, "diagnostics_button", None)
+    if btn:
+        btn.setText(tr("diagnostics.button"))
+        btn.setToolTip(tr("diagnostics.tooltip"))
+        btn.setAccessibleName(tr("diagnostics.title"))
     summary = getattr(w, "mod_summary_panel", None)
     if summary and hasattr(summary, "update_labels_text"):
         summary.update_labels_text()

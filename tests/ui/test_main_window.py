@@ -31,6 +31,17 @@ def _close_widget(qapp, widget) -> None:
     _drain_events(qapp, cycles=6, delay_ms=10)
 
 
+def _mod_stub(mod_id: str, name: str, chapter_ids: tuple[str, ...] = ()):
+    mod = Mock()
+    mod.get_id.return_value = mod_id
+    mod.get_name.return_value = name
+    mod.name = name
+    mod.get_chapter_data.side_effect = (
+        lambda chapter_id: {"files": []} if chapter_id in chapter_ids else None
+    )
+    return mod
+
+
 def _window_test_patches(temp_dir):
     user_root = os.path.join(temp_dir, "user")
     profiles_dir = os.path.join(temp_dir, "profiles")
@@ -902,8 +913,14 @@ class TestTabBuilders:
         widget = builder.build()
         widgets = builder.get_widgets()
         assert widgets["add_mod_button"].text() == tr("ui.add_mod")
+        assert widgets["diagnostics_button"].text() == tr("diagnostics.button")
+        assert widgets["diagnostics_button"].icon().isNull()
         assert (
             widgets["add_mod_button"].minimumHeight()
+            == widgets["priority_button"].sizeHint().height()
+        )
+        assert (
+            widgets["diagnostics_button"].minimumHeight()
             == widgets["priority_button"].sizeHint().height()
         )
         assert widgets["library_profile_label"].text() == tr("ui.profile_label")
@@ -949,6 +966,98 @@ class TestTabBuilders:
         assert search_btn.isVisible()
         widget.close()
         widget.deleteLater()
+
+    def test_library_header_places_diagnostics_next_to_add_mod(
+        self, qapp, app_state, feedback_service
+    ):
+        from services.localization_service import tr
+        from ui.builders.library_tab_builder import LibraryTabBuilder
+
+        builder = LibraryTabBuilder(app_state, None)
+        widget = builder.build()
+        widgets = builder.get_widgets()
+        add_btn = widgets["add_mod_button"]
+        diagnostics_btn = widgets["diagnostics_button"]
+        header_layout = widgets["library_header_layout"]
+
+        assert header_layout.indexOf(add_btn) < header_layout.indexOf(diagnostics_btn)
+        assert diagnostics_btn.toolTip() == tr("diagnostics.tooltip")
+        assert diagnostics_btn.icon().isNull()
+        widget.deleteLater()
+
+    def test_diagnostics_dialog_lists_current_scope_mods_but_checks_only_enabled(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+        profile_mod = _mod_stub("profile-mod", "Profile Mod", ("deltarune_1",))
+        disabled_mod = _mod_stub("disabled-mod", "Disabled Mod", ("deltarune_1",))
+        other_game_mod = _mod_stub("other-game", "Other Game", ("undertale_0",))
+        app_state.current_mode = "chapter"
+        app_state.selected_chapter_id = "deltarune_1"
+        used_mods_service = Mock()
+        used_mods_service.get_used_mods_list.return_value = [profile_mod]
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = [
+            {"id": "profile-mod", "game": "deltarune"},
+            {"id": "disabled-mod", "game": "deltarune"},
+            {"id": "other-game", "game": "undertale"},
+        ]
+        by_id = {
+            "profile-mod": profile_mod,
+            "disabled-mod": disabled_mod,
+            "other-game": other_game_mod,
+        }
+        mod_service.create_mod_object_from_info.side_effect = (
+            lambda mod_info, _all_mods=None: by_id[mod_info["id"]]
+        )
+        mod_service.mod_has_files_for_chapter.side_effect = (
+            lambda mod_data, chapter_id: bool(mod_data.get_chapter_data(chapter_id))
+        )
+
+        with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
+            dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
+        try:
+            checks = {check.text(): check.isChecked() for check in dialog._mod_checks.values()}
+            assert checks == {"Profile Mod": True, "Disabled Mod": False}
+            assert all(check.toolTip() for check in dialog._mod_checks.values())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_diagnostics_dialog_uses_active_selections_for_default_game_scope(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+        enabled_mod = _mod_stub("enabled-mod", "Enabled Mod", ("deltarune_1",))
+        disabled_mod = _mod_stub("disabled-mod", "Disabled Mod", ("deltarune_1",))
+        app_state.current_mode = "game"
+        app_state.selected_chapter_id = None
+        used_mods_service = Mock()
+        used_mods_service.get_used_mods_list.return_value = []
+        used_mods_service.get_active_mod_selections.return_value = {
+            "deltarune_1": [enabled_mod]
+        }
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = [
+            {"id": "enabled-mod", "game": "deltarune"},
+            {"id": "disabled-mod", "game": "deltarune"},
+        ]
+        by_id = {"enabled-mod": enabled_mod, "disabled-mod": disabled_mod}
+        mod_service.create_mod_object_from_info.side_effect = (
+            lambda mod_info, _all_mods=None: by_id[mod_info["id"]]
+        )
+
+        with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
+            dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
+        try:
+            checks = {check.text(): check.isChecked() for check in dialog._mod_checks.values()}
+            assert checks == {"Enabled Mod": True, "Disabled Mod": False}
+            assert all(check.toolTip() for check in dialog._mod_checks.values())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
 
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
         """Checks that modsing browser tab builder creation."""

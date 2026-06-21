@@ -6,6 +6,7 @@ from app.game_ui import refresh_game_lists, update_checkbox_visibility
 from config.config import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
 from services.localization_service import tr
+from ui.dialogs.community_dialog import CommunityDialog
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +25,10 @@ def _safe_update_status(w, message: str, color: str) -> None:
         logger.warning(f"Dialog status feedback failed: {e}", exc_info=True)
 
 
-def open_chat(w):
-    if not w.app_state.has_internet:
-        _safe_show_message(w, "warning", "chat.no_internet", tr("chat.no_internet"))
-        return
-    from ui.dialogs.chat_dialog import ChatWindow
-
+def open_community_dialog(w):
     if analytics := getattr(w, "analytics_service", None):
-        analytics.record_dialog_opened("chat")
-    chat_window = ChatWindow(w.app_state, w)
-    chat_window.exec()
+        analytics.record_dialog_opened("community")
+    CommunityDialog(w, w.app_state).exec()
 
 
 def on_downloads_record_updated(w, record):
@@ -144,6 +139,28 @@ def open_modding_tools_dialog(w):
         lambda: setattr(w, "_modding_tools_dialog", None)
     )
     w._modding_tools_dialog.show()
+
+
+def open_diagnostics_dialog(w):
+    from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+    if getattr(w, "_diagnostics_dialog", None) and w._diagnostics_dialog.isVisible():
+        w._diagnostics_dialog.raise_()
+        w._diagnostics_dialog.activateWindow()
+        return
+    analytics = getattr(w, "analytics_service", None)
+    if analytics:
+        analytics.record_dialog_opened("mod_diagnostics")
+    w._diagnostics_dialog = ModDiagnosticsDialog(
+        w.app_state,
+        w.mod_service,
+        w.used_mods_service,
+        parent=w,
+    )
+    w._diagnostics_dialog.destroyed.connect(
+        lambda: setattr(w, "_diagnostics_dialog", None)
+    )
+    w._diagnostics_dialog.show()
 
 
 def populate_profile_combo(w):

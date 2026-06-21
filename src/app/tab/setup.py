@@ -5,6 +5,7 @@ import contextlib
 from app.dialogs import (
     on_profile_combo_changed,
     on_profile_switched,
+    open_diagnostics_dialog,
     open_downloads_dialog,
     open_game_versions_dialog,
     open_modding_tools_dialog,
@@ -162,6 +163,7 @@ def setup_library_tab(w):
         ),
         optional=(
             "add_mod_button",
+            "diagnostics_button",
             "installed_mods_label",
             "priority_button",
             "create_modpack_button",
@@ -194,6 +196,8 @@ def _wire_library_signals(w):
         w.add_mod_button.clicked.connect(
             w.mod_import_export_controller.show_add_mod_dialog
         )
+    if getattr(w, "diagnostics_button", None):
+        w.diagnostics_button.clicked.connect(lambda: open_diagnostics_dialog(w))
     if hasattr(w.installed_mods_container, "files_dropped"):
         w.installed_mods_container.files_dropped.connect(
             w.mod_import_export_controller.import_files_sequentially
