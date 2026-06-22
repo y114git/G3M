@@ -39,6 +39,7 @@ LOG_ARCHIVE_DIR_NAME = "g3m"
 LOG_ARCHIVE_FILE_PREFIX = "g3m"
 SINGLE_INSTANCE_KEY = "g3m.single-instance-lock"
 CLOUD_FUNCTIONS_BASE_URL = os.getenv("CLOUD_FUNCTIONS_BASE_URL", "")
+DRP_CLIENT_ID = os.getenv("DRP_CLIENT_ID", "")
 SOCIAL_LINKS = {
     "boosty": "https://boosty.to/y114",
     "telegram": "https://t.me/y_maintg",
@@ -195,6 +196,16 @@ WIDGET_LOCALIZATIONS = [
     ("show_reset_buttons_checkbox", "setText", "ui.show_reset_buttons"),
     ("analytics_opt_in_checkbox", "setText", "ui.analytics_opt_in"),
     ("analytics_opt_in_checkbox", "setToolTip", "tooltips.analytics_opt_in"),
+    (
+        "disable_discord_rich_presence_checkbox",
+        "setText",
+        "ui.disable_discord_rich_presence",
+    ),
+    (
+        "disable_discord_rich_presence_checkbox",
+        "setToolTip",
+        "tooltips.disable_discord_rich_presence",
+    ),
     ("manage_warnings_button", "setText", "buttons.manage_warnings"),
     ("manage_warnings_button", "setToolTip", "tooltips.manage_warnings"),
     ("clear_g3mtool_cache_button", "setText", "buttons.clear_g3mtool_cache"),

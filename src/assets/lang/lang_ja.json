@@ -245,6 +245,7 @@
     "homepage": "ホームページ",
     "show_reset_buttons": "リセットボタンを表示",
     "analytics_opt_in": "匿名分析でプロジェクトを支援する",
+    "disable_discord_rich_presence": "Discord Rich Presence を無効化",
     "error": "エラー",
     "select": "選択",
     "no_data_files": "DATA ファイルはありません",
@@ -354,6 +355,7 @@
     "language": "G3M インターフェイスで使用される言語を選択します。",
     "ui_scale": "インターフェース全体をスケールします。値を大きくすると、テキストとコントロールが大きくなります。",
     "analytics_opt_in": "機能の使用状況、ダイアログ表示、ダウンロード、検索、ゲーム起動結果の分類など、匿名化された集計利用統計を共有して G3M の改善に協力します。個人データ、生のファイルパス、正確な検索語、直接識別子は送信されません。",
+    "disable_discord_rich_presence": "Discord Rich Presence 連携を完全に無効にします。有効にすると、G3M は Discord に一切のアクティビティを公開しません。",
     "pause_background_music_unfocused": "G3M がフォーカスされていない場合、または最小化されている場合は、BGM を停止します。再生制限があるため、戻ると最初からやり直しとなります。",
     "sort_mode": "現在のリストを並べ替える方法を選択します。",
     "select_game": "使用するゲームの MOD または設定を選択します。",
@@ -1401,6 +1403,30 @@
       "minor_file_overrides_only": "DATA パッチが適用されていないファイルのみの MOD に表示されます。",
       "cache_rebuild_needed": "G3MTool が入力ファイルの再利用可能なキャッシュ DATAを再構築する必要がある場合に表示されます。",
       "legacy_patching_warning": "古いまたは未分類のパッチ適用およびマージのリスクについて表示されます。"
+    }
+  },
+  "discord_rich_presence": {
+    "status": {
+      "configuring": "G3M を設定中",
+      "appearance": "G3M の外観をカスタマイズ中",
+      "plugins": "プラグインを管理中",
+      "browsing_mods": "MOD を閲覧中",
+      "mod_details": "MOD の詳細を表示中",
+      "preparing_launch": "ゲームの起動を準備中",
+      "mod_editor": "MOD を編集中",
+      "game_backup": "ゲームのバックアップを作成中",
+      "mod_backup": "MOD のバックアップを作成中",
+      "creating_modpack": "モッドパックを作成中",
+      "converting_mods": "MOD を変換中",
+      "diff_report": "差分レポートを表示中",
+      "modding_tools": "MOD ツールを使用中",
+      "downloads": "ダウンロードを管理中",
+      "blacklist": "ブラックリストを管理中",
+      "searching": "検索中",
+      "restoring": "終了後にゲームを復元中",
+      "playing": "{game} をプレイ中",
+      "playing_with_mods": "{mods_amount} 個の MOD で {game} をプレイ中",
+      "unknown_game": "ゲーム"
     }
   }
 }

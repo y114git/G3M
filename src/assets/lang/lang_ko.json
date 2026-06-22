@@ -245,6 +245,7 @@
     "homepage": "홈페이지",
     "show_reset_buttons": "리셋 버튼 표시",
     "analytics_opt_in": "익명 분석 데이터 수집으로 프로젝트에 도움 주기",
+    "disable_discord_rich_presence": "Discord Rich Presence 끄기",
     "error": "에러",
     "select": "선택",
     "no_data_files": "data 파일 없음",
@@ -354,6 +355,7 @@
     "language": "G3M 인터페이스에서 사용할 언어를 선택합니다.",
     "ui_scale": "인터페이스 전체 크기를 조절합니다. 값이 클수록 텍스트와 컨트롤이 더 크게 표시됩니다.",
     "analytics_opt_in": "기능 사용, 창 열기, 다운로드, 검색, 게임 실행 결과 등의 익명 통계 데이터를 공유하여 G3M 개선에 도움을 줍니다. 개인 정보, 실제 파일 경로, 정확한 검색어, 직접 식별 정보는 전송되지 않습니다.",
+    "disable_discord_rich_presence": "Discord Rich Presence 연동을 완전히 끕니다. 켜면 G3M은 Discord에 어떤 활동도 게시하지 않습니다.",
     "pause_background_music_unfocused": "G3M 창이 비활성화되거나 최소화되면 배경 음악을 멈춥니다. 재생 제한으로 인해 다시 돌아오면 처음부터 재생됩니다.",
     "sort_mode": "모드를 정렬하는 방법을 선택합니다",
     "select_game": "작업할 게임의 모드 또는 설정을 선택합니다.",
@@ -1401,6 +1403,30 @@
       "minor_file_overrides_only": "DATA 패치 없이 파일만 적용하는 모드에서 표시됩니다.",
       "cache_rebuild_needed": "G3MTool이 입력 파일의 재사용 캐시 데이터를 다시 만들어야 할 때 표시됩니다.",
       "legacy_patching_warning": "오래되었거나 아직 분류되지 않은 패치/병합 위험에 표시됩니다."
+    }
+  },
+  "discord_rich_presence": {
+    "status": {
+      "configuring": "G3M 설정 중",
+      "appearance": "G3M 외형 커스터마이즈 중",
+      "plugins": "플러그인 관리 중",
+      "browsing_mods": "모드 탐색 중",
+      "mod_details": "모드 세부 정보 보는 중",
+      "preparing_launch": "게임 실행 준비 중",
+      "mod_editor": "모드 편집 중",
+      "game_backup": "게임 백업 생성 중",
+      "mod_backup": "모드 백업 생성 중",
+      "creating_modpack": "모드팩 생성 중",
+      "converting_mods": "모드 변환 중",
+      "diff_report": "차이 보고서 보는 중",
+      "modding_tools": "모딩 도구 사용 중",
+      "downloads": "다운로드 관리 중",
+      "blacklist": "블랙리스트 관리 중",
+      "searching": "검색 중",
+      "restoring": "종료 후 게임 복원 중",
+      "playing": "{game} 플레이 중",
+      "playing_with_mods": "{mods_amount}개 모드와 함께 {game} 플레이 중",
+      "unknown_game": "게임"
     }
   }
 }

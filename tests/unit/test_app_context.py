@@ -36,6 +36,7 @@ def test_build_application_context_creates_services_and_session(qapp, temp_dir):
     assert context.services.game_launcher is not None
     assert context.services.analytics_service is not None
     assert context.services.downloads_manager.mods_dir == context.app_state.mods_dir
+    assert context.services.discord_rich_presence_service is not None
     assert context.services.plugin_state_service is not None
     assert context.services.plugin_catalog_service is not None
     assert context.services.plugin_runtime_service is not None

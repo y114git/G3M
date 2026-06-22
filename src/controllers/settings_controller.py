@@ -145,6 +145,10 @@ class SettingsUiController:
             self.app.analytics_opt_in_checkbox.setChecked(
                 config.get("analytics_opt_in_enabled", False)
             )
+        if hasattr(self.app, "disable_discord_rich_presence_checkbox"):
+            self.app.disable_discord_rich_presence_checkbox.setChecked(
+                config.get("disable_discord_rich_presence", False)
+            )
         for attr, key in (
             ("hide_mods_browser_tab_checkbox", "hide_mods_browser_tab"),
             ("hide_library_tab_checkbox", "hide_library_tab"),
@@ -293,6 +297,11 @@ class SettingsUiController:
     def on_toggle_show_reset_buttons(self, state):
         self.settings_service.on_toggle_show_reset_buttons(bool(state))
         self.app._update_section_reset_buttons_visibility()
+
+    def on_toggle_disable_discord_rich_presence(self, state):
+        self.settings_service.on_toggle_disable_discord_rich_presence(bool(state))
+        if hasattr(self.app, "discord_rich_presence_service"):
+            self.app.discord_rich_presence_service.apply_enabled_setting()
 
     def on_toggle_disable_animations(self, state):
         self.settings_service.on_toggle_disable_animations(bool(state))

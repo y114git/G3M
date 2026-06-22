@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from services.analytics_service import AnalyticsService
 from services.announce_service import AnnounceService
 from services.customization_service import CustomizationManager
+from services.discord_rich_presence_service import DiscordRichPresenceService
 from services.downloads.manager import DownloadsManager
 from services.game_registry_service import GameRegistryService
 from services.game_versions.manager import GameVersionsManager
@@ -29,6 +30,7 @@ class ServiceContainer:
     feedback_service: FeedbackManager
     settings_service: SettingsManager
     analytics_service: AnalyticsService
+    discord_rich_presence_service: DiscordRichPresenceService
     announce_service: AnnounceService
     game_registry_service: GameRegistryService
     profile_service: ProfileService

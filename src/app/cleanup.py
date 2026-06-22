@@ -116,6 +116,8 @@ def perform_close_cleanup(w):
         w.customization_service.stop_background_music()
         if getattr(w, "plugin_runtime_service", None):
             w.plugin_runtime_service.execute_hook("app_shutdown")
+        if getattr(w, "discord_rich_presence_service", None):
+            w.discord_rich_presence_service.shutdown()
         if getattr(w, "session_manager", None):
             w.session_manager.stop()
         if getattr(w, "search_display", None) and w.search_display:

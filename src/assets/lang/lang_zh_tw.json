@@ -245,6 +245,7 @@
     "homepage": "模組介紹頁",
     "show_reset_buttons": "顯示重置按鈕",
     "analytics_opt_in": "透過匿名分析幫助專案",
+    "disable_discord_rich_presence": "停用 Discord Rich Presence",
     "no_data_files": "無 DATA 檔案",
     "extra_files_label": "額外檔案：",
     "changed_data_files_label": "已更改的DATA檔案：",
@@ -357,6 +358,7 @@
     "language": "選擇 G3M 介面使用的語言。",
     "ui_scale": "縮放整個介面。數值越大，文字和控制項就越大。",
     "analytics_opt_in": "透過分享額外的匿名聚合使用統計來幫助改進 G3M，例如功能使用、對話框開啟、下載、搜尋以及遊戲啟動結果分組。不會傳送個人資料、原始檔案路徑、精確搜尋詞或直接識別資訊。",
+    "disable_discord_rich_presence": "完全停用 Discord Rich Presence 整合。啟用後，G3M 不會向 Discord 發佈任何活動狀態。",
     "pause_background_music_unfocused": "當 G3M 失去焦點或最小化時停止背景音樂。由於播放限制，回到應用程式後音樂會從頭重新開始。",
     "sort_mode": "選擇目前列表的排序方式。",
     "select_game": "選擇你目前要查看模組或設定的遊戲。",
@@ -1401,6 +1403,30 @@
       "minor_file_overrides_only": "當模組只複製檔案而不套用 DATA 補丁時顯示。",
       "cache_rebuild_needed": "當 G3MTool 需要為輸入檔案重建可重用快取資料時顯示。",
       "legacy_patching_warning": "用於舊版或尚未分類的修補/合併風險。"
+    }
+  },
+  "discord_rich_presence": {
+    "status": {
+      "configuring": "正在設定 G3M",
+      "appearance": "正在自訂 G3M 外觀",
+      "plugins": "正在管理外掛",
+      "browsing_mods": "正在瀏覽模組",
+      "mod_details": "正在查看模組詳情",
+      "preparing_launch": "正在準備啟動遊戲",
+      "mod_editor": "正在編輯模組",
+      "game_backup": "正在建立遊戲備份",
+      "mod_backup": "正在建立模組備份",
+      "creating_modpack": "正在建立模組包",
+      "converting_mods": "正在轉換模組",
+      "diff_report": "正在查看差異報告",
+      "modding_tools": "正在使用模組工具",
+      "downloads": "正在管理下載",
+      "blacklist": "正在管理黑名單",
+      "searching": "正在搜尋",
+      "restoring": "正在於離開後還原遊戲",
+      "playing": "正在遊玩 {game}",
+      "playing_with_mods": "正在遊玩 {game}，已啟用 {mods_amount} 個模組",
+      "unknown_game": "一款遊戲"
     }
   }
 }

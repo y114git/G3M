@@ -299,6 +299,7 @@ def setup_settings_tab(w):
             "beta_updates_checkbox",
             "show_reset_buttons_checkbox",
             "analytics_opt_in_checkbox",
+            "disable_discord_rich_presence_checkbox",
             "fullscreen_checkbox",
             "disable_animations_checkbox",
             "disable_background_checkbox",
@@ -431,6 +432,19 @@ def setup_settings_tab(w):
                 lambda: w.analytics_service.set_opt_in_enabled(bool(state)),
                 lambda: _record_setting_change(
                     w, "analytics_opt_in_enabled", bool(state)
+                ),
+            ),
+        )
+    )
+    w.disable_discord_rich_presence_checkbox.stateChanged.connect(
+        lambda state: _guarded_trigger(
+            w.disable_discord_rich_presence_checkbox,
+            lambda: _run_actions(
+                lambda: w.settings_ui.on_toggle_disable_discord_rich_presence(
+                    bool(state)
+                ),
+                lambda: _record_setting_change(
+                    w, "disable_discord_rich_presence", bool(state)
                 ),
             ),
         )
@@ -793,6 +807,9 @@ def setup_settings_tab(w):
         w.app_state.local_config.get("analytics_opt_in_enabled", False)
     )
     w.analytics_opt_in_checkbox.blockSignals(False)
+    w.disable_discord_rich_presence_checkbox.setChecked(
+        w.app_state.local_config.get("disable_discord_rich_presence", False)
+    )
     w.hide_mods_browser_tab_checkbox.setChecked(
         w.app_state.local_config.get("hide_mods_browser_tab", False)
     )

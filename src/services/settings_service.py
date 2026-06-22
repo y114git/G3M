@@ -290,6 +290,9 @@ class SettingsManager(QObject):
     def on_toggle_analytics_opt_in(self, enabled: bool):
         self._toggle_setting("analytics_opt_in_enabled", enabled, None)
 
+    def on_toggle_disable_discord_rich_presence(self, enabled: bool):
+        self._toggle_setting("disable_discord_rich_presence", enabled, None)
+
     def on_toggle_downloads_no_auto_use(self, enabled: bool):
         self._toggle_setting("downloads_no_auto_use", enabled, None)
 

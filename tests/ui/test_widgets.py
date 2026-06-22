@@ -862,6 +862,16 @@ class TestCommonWidgets:
         assert 'width="392"' in processed
         assert 'height="40"' in processed
 
+    def test_rich_html_strips_script_blocks_with_spaced_end_tag(self):
+        """Checks that script blocks are removed even when end tag contains whitespace."""
+        from ui.common.rich_html import preprocess_html
+
+        processed = preprocess_html('<div>safe</div><script>alert("x")</script ><p>ok</p>')
+
+        assert "<script" not in processed.lower()
+        assert 'alert("x")' not in processed
+        assert "<p>ok</p>" in processed
+
     def test_rich_html_loading_placeholder_keeps_outer_edges_transparent(self):
         """Checks that rich HTML loading placeholder keeps outer edges transparent."""
         from ui.common.rich_html import _create_loading_placeholder

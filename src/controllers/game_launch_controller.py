@@ -214,6 +214,12 @@ class GameLaunchController(QObject):
                         "mod_apply_cancelled",
                         {"hook": "patching", "reason": "cancelled"},
                     )
+            drp_service = getattr(self.app, "discord_rich_presence_service", None)
+            if drp_service:
+                with contextlib.suppress(Exception):
+                    drp_service.on_mod_apply_cancelled(
+                        {"hook": "patching", "reason": "cancelled"}
+                    )
         if plugin_thread:
             try:
                 plugin_thread.progress_update.disconnect()
@@ -301,6 +307,10 @@ class GameLaunchController(QObject):
             )
             self.update_button_state()
             return
+        drp_service = getattr(self.app, "discord_rich_presence_service", None)
+        if drp_service:
+            with contextlib.suppress(Exception):
+                drp_service.on_before_mod_apply()
         self.game_launcher.launch_game_with_all_mods(
             restore_window_callback=self.app.restore_window_signal.emit,
         )

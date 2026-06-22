@@ -3,6 +3,7 @@
 import os
 import tempfile
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -1446,6 +1447,47 @@ class TestLibraryCyopAfomFilter:
         app_window.game_type_combo.currentData.return_value = "deltarune"
         filters, _ = controller._build_library_filters_and_sort()
         assert filters["tags"] == []
+
+    def test_library_summary_readme_opens_dialog_without_status_announcement(
+        self, app_state, feedback_service, monkeypatch, temp_dir
+    ):
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.analytics_service = Mock()
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = temp_dir
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        mod_data = SimpleNamespace(name="Test Mod", id="test_mod")
+
+        monkeypatch.setattr(
+            "utils.mod.readme_utils.find_mod_readme_files",
+            lambda _path: [str(Path(temp_dir) / "README.md")],
+        )
+
+        class _Dialog:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def exec(self):
+                return 0
+
+        monkeypatch.setattr(
+            "ui.dialogs.mod.readme_dialog.ModReadmeDialog",
+            _Dialog,
+        )
+
+        controller._on_summary_readme(mod_data)
+
+        app_window.analytics_service.record_dialog_opened.assert_called_once_with(
+            "mod_readme"
+        )
 
 
 class TestSettingsUiController:

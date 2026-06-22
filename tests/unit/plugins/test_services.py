@@ -209,6 +209,7 @@ def test_plugin_runtime_scan_merges_localizations_without_catalog_load(temp_dir)
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=catalog_spy,
@@ -245,6 +246,7 @@ def test_plugin_runtime_update_available_requires_newer_catalog_version(temp_dir
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy({"sample_plugin": catalog_entry}),
@@ -275,6 +277,7 @@ def test_plugin_runtime_loads_dataclass_plugin(temp_dir):
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy(),
@@ -320,6 +323,7 @@ def test_plugin_runtime_scan_formats_validation_errors(temp_dir):
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy(),
@@ -368,6 +372,7 @@ def test_plugin_runtime_allows_enabling_newer_plugin_api_requirement(temp_dir):
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy(),
@@ -396,6 +401,7 @@ def test_plugin_runtime_reports_enabled_hook_and_passes_task_runtime(temp_dir):
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy(),
@@ -462,6 +468,7 @@ def test_plugin_runtime_reports_enabled_shortcut_hook_and_passes_shortcut_contex
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy(),
@@ -535,6 +542,7 @@ def test_plugin_runtime_context_uses_plugin_scoped_feedback(temp_dir, monkeypatc
         profile_service=Mock(),
         game_registry_service=Mock(),
         customization_service=Mock(),
+        used_mods_service=Mock(),
         downloads_manager=Mock(),
         plugin_state_service=state_service,
         plugin_catalog_service=_CatalogSpy(),
@@ -561,6 +569,33 @@ def test_plugin_runtime_context_uses_plugin_scoped_feedback(temp_dir, monkeypatc
 
     box.setWindowTitle.assert_called_once_with("Sample Plugin")
     assert "Sample description" in box.setText.call_args.args[0]
+
+
+def test_plugin_runtime_context_exposes_used_mods_service(temp_dir):
+    localization_service.clear_plugin_strings()
+    localization_service.load_language("en")
+    settings_service = _DummySettingsService()
+    state_service = PluginStateService(settings_service, temp_dir)
+    _write_plugin(temp_dir, "sample_plugin")
+    used_mods_service = Mock()
+    runtime = PluginRuntimeService(
+        app_state=Mock(local_config={}),
+        feedback_service=Mock(),
+        settings_service=Mock(),
+        profile_service=Mock(),
+        game_registry_service=Mock(),
+        customization_service=Mock(),
+        used_mods_service=used_mods_service,
+        downloads_manager=Mock(),
+        plugin_state_service=state_service,
+        plugin_catalog_service=_CatalogSpy(),
+        plugins_dir=temp_dir,
+    )
+
+    runtime.scan_installed_plugins()
+    context = runtime._build_context("sample_plugin")
+
+    assert context.used_mods_service is used_mods_service
 
 
 def test_plugin_install_service_accepts_plugin_folder(temp_dir):

@@ -39,6 +39,7 @@ class PluginRuntimeService:
         profile_service,
         game_registry_service,
         customization_service,
+        used_mods_service,
         downloads_manager,
         plugin_state_service,
         plugin_catalog_service,
@@ -50,6 +51,7 @@ class PluginRuntimeService:
         self.profile_service = profile_service
         self.game_registry_service = game_registry_service
         self.customization_service = customization_service
+        self.used_mods_service = used_mods_service
         self.downloads_manager = downloads_manager
         self.plugin_state_service = plugin_state_service
         self.plugin_catalog_service = plugin_catalog_service
@@ -153,6 +155,7 @@ class PluginRuntimeService:
             profile_service=self.profile_service,
             game_registry_service=self.game_registry_service,
             customization_service=self.customization_service,
+            used_mods_service=self.used_mods_service,
             downloads_manager=self.downloads_manager,
             localization_service=localization_service,
             plugin_settings=PluginSettingsAccessor(plugin_id, self.plugin_state_service),

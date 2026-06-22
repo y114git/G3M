@@ -245,6 +245,7 @@
     "homepage": "Homepage",
     "show_reset_buttons": "Show Reset Buttons",
     "analytics_opt_in": "Help the project with anonymous analytics",
+    "disable_discord_rich_presence": "Disable Discord Rich Presence",
     "error": "Error",
     "select": "Select",
     "no_data_files": "No DATA files",
@@ -354,6 +355,7 @@
     "language": "Choose the language used by the G3M interface.",
     "ui_scale": "Scale the whole interface. Higher values make text and controls larger.",
     "analytics_opt_in": "Help improve G3M by sharing extra anonymous aggregated usage statistics such as feature usage, dialog opens, downloads, searches, and game launch outcome buckets. No personal data, raw file paths, exact queries, or direct identifiers are sent.",
+    "disable_discord_rich_presence": "Turn off Discord Rich Presence integration completely. When enabled, G3M will not publish any Discord activity.",
     "pause_background_music_unfocused": "Stop background music whenever G3M is unfocused or minimized. Because of playback limitations, it starts again from the beginning when you return.",
     "sort_mode": "Choose how the current list should be sorted.",
     "select_game": "Choose which game's mods or settings you want to work with.",
@@ -1401,6 +1403,30 @@
       "minor_file_overrides_only": "Shown for file-only mods where no DATA patch is applied.",
       "cache_rebuild_needed": "Shown when G3MTool needs to rebuild reusable cache data for an input file.",
       "legacy_patching_warning": "Shown for older or uncategorized patching and merging risks."
+    }
+  },
+  "discord_rich_presence": {
+    "status": {
+      "configuring": "Configuring G3M",
+      "appearance": "Customizing G3M appearance",
+      "plugins": "Managing plugins",
+      "browsing_mods": "Browsing mods",
+      "mod_details": "Viewing mod details",
+      "preparing_launch": "Preparing game to launch",
+      "mod_editor": "Editing mod",
+      "game_backup": "Creating game backup",
+      "mod_backup": "Creating mod backup",
+      "creating_modpack": "Creating modpack",
+      "converting_mods": "Converting mods",
+      "diff_report": "Viewing diff report",
+      "modding_tools": "Using modding tools",
+      "downloads": "Managing downloads",
+      "blacklist": "Managing blacklist",
+      "searching": "Searching",
+      "restoring": "Restoring game after exit",
+      "playing": "Playing {game}",
+      "playing_with_mods": "Playing {game} with {mods_amount} mods",
+      "unknown_game": "a game"
     }
   }
 }

@@ -650,6 +650,12 @@ class SettingsViewBuilder:
         cl_audio.addLayout(sound_buttons_layout)
         layout.addWidget(sec_audio)
 
+        disable_discord_rich_presence_checkbox = self._styled_checkbox(
+            tr("ui.disable_discord_rich_presence"),
+            tr("tooltips.disable_discord_rich_presence"),
+            "disable_discord_rich_presence",
+            reset_value=False,
+        )
         sec_styling, cl_styling = self._collapsible_section(
             tr("ui.settings_section_styling"),
             "appearance_styling",
@@ -719,6 +725,10 @@ class SettingsViewBuilder:
         checkboxes_layout.addWidget(disable_startup_sound_checkbox)
         cl_adv.addLayout(checkboxes_layout)
         cl_adv.addWidget(
+            disable_discord_rich_presence_checkbox,
+            alignment=Qt.AlignmentFlag.AlignCenter,
+        )
+        cl_adv.addWidget(
             pause_background_music_unfocused_checkbox,
             alignment=Qt.AlignmentFlag.AlignCenter,
         )
@@ -737,6 +747,9 @@ class SettingsViewBuilder:
         self.widgets["change_font_button"] = change_font_button
         self.widgets["background_music_button"] = background_music_button
         self.widgets["startup_sound_button"] = startup_sound_button
+        self.widgets["disable_discord_rich_presence_checkbox"] = (
+            disable_discord_rich_presence_checkbox
+        )
         self.widgets["custom_style_frame"] = custom_style_frame
         self.widgets["color_widgets"] = color_widgets
         self.widgets["color_labels"] = color_labels

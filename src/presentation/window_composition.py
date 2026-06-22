@@ -41,6 +41,10 @@ class WindowComposition:
         window = self.window
         window.feedback_service.status_updated.connect(window.update_status_signal.emit)
         window.settings_service.language_changed.connect(lambda _: relocalize_ui(window))
+        if getattr(window, "discord_rich_presence_service", None) is not None:
+            window.settings_service.language_changed.connect(
+                window.discord_rich_presence_service.on_language_changed
+            )
         if window.plugin_runtime_service is not None:
             window.settings_service.language_changed.connect(
                 lambda _: window.plugin_runtime_service.execute_hook("language_changed")
@@ -57,6 +61,10 @@ class WindowComposition:
         if window.plugin_runtime_service is not None:
             window.settings_service.theme_changed.connect(
                 lambda: window.plugin_runtime_service.execute_hook("theme_changed")
+            )
+        if getattr(window, "discord_rich_presence_service", None) is not None:
+            window.settings_service.theme_changed.connect(
+                window.discord_rich_presence_service.on_theme_changed
             )
         window.mod_service.progress_updated.connect(window.set_progress_signal.emit)
         window.mod_service.status_changed.connect(window.update_status_signal.emit)
@@ -90,6 +98,10 @@ class WindowComposition:
         if window.plugin_runtime_service:
             window.profile_service.profile_switched.connect(
                 lambda _name: window.plugin_runtime_service.execute_hook("profile_changed")
+            )
+        if getattr(window, "discord_rich_presence_service", None) is not None:
+            window.profile_service.profile_switched.connect(
+                window.discord_rich_presence_service.on_profile_changed
             )
         window.session_manager.online_count_changed.connect(window._update_online_label)
         window._load_used_mods_debounce = DebounceTimer(delay_ms=200)
@@ -194,6 +206,10 @@ class WindowComposition:
         if window.plugins_ui is not None:
             window.settings_service.theme_changed.connect(
                 lambda: window.plugins_ui.handle_theme_refresh()
+            )
+        if getattr(window, "discord_rich_presence_service", None) is not None:
+            window.initialization_finished.connect(
+                window.discord_rich_presence_service.start
             )
         self._connect_cross_service_signals()
 

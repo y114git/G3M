@@ -148,6 +148,7 @@ class PluginContext:
     profile_service: Any
     game_registry_service: Any
     customization_service: Any
+    used_mods_service: Any
     downloads_manager: Any
     localization_service: Any
     plugin_settings: PluginSettingsAccessor

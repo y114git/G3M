@@ -175,6 +175,19 @@ class GameLauncher(QObject):
         parent = self.parent()
         return getattr(parent, "plugin_runtime_service", None) if parent else None
 
+    def _discord_rich_presence_service(self):
+        parent = self.parent()
+        return getattr(parent, "discord_rich_presence_service", None) if parent else None
+
+    def _safe_discord_rich_presence_call(self, method_name: str, *args) -> None:
+        service = self._discord_rich_presence_service()
+        if service is None:
+            return
+        try:
+            getattr(service, method_name)(*args)
+        except Exception:
+            logger.exception("Discord Rich Presence callback failed: %s", method_name)
+
     def close_game(self):
         worker = getattr(self, "monitor_worker", None)
         process = getattr(worker, "process", None)
@@ -322,6 +335,9 @@ class GameLauncher(QObject):
                 )
                 if runtime_service:
                     runtime_service.execute_hook("after_game_started", vanilla_mode)
+                self._safe_discord_rich_presence_call(
+                    "on_after_game_started", vanilla_mode
+                )
                 return
             if not working_directory or not os.path.isdir(working_directory):
                 msg = tr("errors.working_directory_not_found", path=working_directory)
@@ -405,6 +421,9 @@ class GameLauncher(QObject):
             self.monitor_thread.started.connect(self.monitor_worker.run)
             self.monitor_thread.start()
             self._execute_plugin_hook("after_game_started", vanilla_mode)
+            self._safe_discord_rich_presence_call(
+                "on_after_game_started", vanilla_mode
+            )
         except Exception as e:
             self.status_changed.emit(
                 self._format_launch_error(
@@ -448,6 +467,9 @@ class GameLauncher(QObject):
             self.restore_window_callback()
         self._record_launch_playtime()
         self._execute_plugin_hook("before_restore_after_exit", vanilla_mode)
+        self._safe_discord_rich_presence_call(
+            "on_before_restore_after_exit", vanilla_mode
+        )
         self.status_changed.emit(
             tr("status.game_closed_restoring_files"), UI_COLORS["status_info"]
         )
@@ -459,6 +481,9 @@ class GameLauncher(QObject):
                 self.monitor_worker = None
         self.game_launch_finished.emit()
         self._execute_plugin_hook("after_restore_after_exit", vanilla_mode)
+        self._safe_discord_rich_presence_call(
+            "on_after_restore_after_exit", vanilla_mode
+        )
         self.app_state.is_patching = False
         self.app_state.progress_bar_visible = False
         parent = self.parent()
@@ -852,6 +877,9 @@ class GameLauncher(QObject):
             progress_span=4 if needs_multi_mod else 100,
         ):
             return
+        self._safe_discord_rich_presence_call(
+            "on_after_mod_apply_before_launch", selections, needs_multi_mod
+        )
         self._finalize_launch_after_plugin_hooks(selections, needs_multi_mod)
 
     def _finalize_launch_after_plugin_hooks(

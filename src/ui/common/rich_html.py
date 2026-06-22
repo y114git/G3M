@@ -33,8 +33,12 @@ from utils.network_utils import get_session
 logger = logging.getLogger(__name__)
 
 _CSS_DOTS_PER_METER = 2835
-_STYLE_BLOCK_RE = re.compile(r"<style\b[^>]*>(.*?)</style>", re.IGNORECASE | re.DOTALL)
-_SCRIPT_BLOCK_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL)
+_STYLE_BLOCK_RE = re.compile(
+    r"<style\b[^>]*>(.*?)</style\s*>", re.IGNORECASE | re.DOTALL
+)
+_SCRIPT_BLOCK_RE = re.compile(
+    r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL
+)
 _LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE | re.DOTALL)
 _CSS_RULE_RE = re.compile(r"([^{}]+)\{([^{}]+)\}", re.IGNORECASE | re.DOTALL)
 _UNQUOTED_ATTR_RE = re.compile(r"(\w[\w-]*)=([^\s\"'>/]+)")

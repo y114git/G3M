@@ -13,6 +13,7 @@ from models.app_state import AppState
 from services.analytics_service import AnalyticsService
 from services.announce_service import AnnounceService
 from services.customization_service import CustomizationManager
+from services.discord_rich_presence_service import DiscordRichPresenceService
 from services.downloads.manager import DownloadsManager
 from services.game_registry_service import GameRegistryService
 from services.game_versions.manager import GameVersionsManager
@@ -60,6 +61,7 @@ class ApplicationContext:
         window.lang_service = self.lang_service
         window.launcher_dir = self.launcher_dir
         window.dialog_parent = self.dialog_parent
+        self.app_state._app_window = window
         window.server = None
         for name in self.services.__dataclass_fields__:
             setattr(window, name, getattr(self.services, name))
@@ -111,6 +113,11 @@ def build_application_context(parent=None) -> ApplicationContext:
     settings_service.profile_service = profile_service
     session_manager = SessionManager(app_state, parent=parent)
     analytics_service = AnalyticsService(app_state, parent)
+    discord_rich_presence_service = DiscordRichPresenceService(
+        app_state,
+        used_mods_service=None,
+        parent=parent,
+    )
     mod_service = ModManager(app_state, feedback_service, settings_service, parent)
     pizza_oven_conversion_service = PizzaOvenConversionService()
     game_launcher = GameLauncher(app_state, feedback_service, mod_service, parent)
@@ -123,6 +130,7 @@ def build_application_context(parent=None) -> ApplicationContext:
         settings_service,
         parent,
     )
+    discord_rich_presence_service.used_mods_service = used_mods_service
     user_root = get_user_data_root()
     plugins_dir = os.path.join(user_root, "plugins")
     os.makedirs(plugins_dir, exist_ok=True)
@@ -147,6 +155,7 @@ def build_application_context(parent=None) -> ApplicationContext:
             profile_service,
             game_registry_service,
             customization_service,
+            used_mods_service,
             downloads_manager,
             plugin_state_service,
             plugin_catalog_service,
@@ -170,6 +179,7 @@ def build_application_context(parent=None) -> ApplicationContext:
         feedback_service=feedback_service,
         settings_service=settings_service,
         analytics_service=analytics_service,
+        discord_rich_presence_service=discord_rich_presence_service,
         announce_service=announce_service,
         game_registry_service=game_registry_service,
         profile_service=profile_service,

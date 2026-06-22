@@ -1118,12 +1118,28 @@ class TestTabBuilders:
         assert "plugins_layout" in builder.get_widgets()
         assert "plugins_widget" in builder.get_widgets()
         assert "pause_background_music_unfocused_checkbox" in builder.get_widgets()
+        assert "disable_discord_rich_presence_checkbox" in builder.get_widgets()
         assert builder.get_widgets()["language_combo"].toolTip() == tr(
             "tooltips.language"
         )
         assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr(
             "tooltips.ui_scale"
         )
+
+    def test_settings_view_builder_places_discord_presence_toggle_in_appearance_advanced(
+        self, qapp, app_state, feedback_service
+    ):
+        from services.localization_service import tr
+        from ui.builders.settings_view_builder import SettingsViewBuilder
+
+        builder = SettingsViewBuilder(app_state, None)
+        widget = builder.build()
+        try:
+            checkbox = builder.get_widgets()["disable_discord_rich_presence_checkbox"]
+            assert checkbox.text() == tr("ui.disable_discord_rich_presence")
+            assert checkbox.toolTip() == tr("tooltips.disable_discord_rich_presence")
+        finally:
+            widget.deleteLater()
 
     def test_settings_view_builder_exposes_custom_binary_controls(
         self, qapp, app_state, feedback_service

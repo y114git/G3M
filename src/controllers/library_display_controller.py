@@ -794,7 +794,7 @@ class LibraryDisplayController:
                 analytics.record_dialog_opened("mod_readme")
             dialog = ModReadmeDialog(
                 self.app_state,
-                getattr(mod_data, "name", "") or "Mod",
+                mod_name,
                 readme_files,
                 parent=self.app,
             )

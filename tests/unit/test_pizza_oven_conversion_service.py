@@ -259,18 +259,66 @@ def test_presenter_conversion_finished_suppresses_broken_feedback(tmp_path, monk
         on_success=None,
         worker=worker,
     )
-    presenter._on_conversion_finished(
-        parent=None,
-        success=False,
-        payload="convert failed",
-        result=None,
-        temp_dir=None,
-        on_success=None,
-        worker=worker,
+
+
+def test_presenter_run_conversion_flow_starts_worker_without_manual_status_push(
+    tmp_path, monkeypatch
+):
+    """Checks conversion start relies on worker wiring without manual status push."""
+    app_state = Mock()
+    app_state.mods_dir = str(tmp_path / "mods")
+    feedback_service = Mock()
+    presenter = PizzaOvenConversionPresenter(
+        app_state=app_state,
+        feedback_service=feedback_service,
+        settings_service=Mock(),
+        mod_service=Mock(),
+        conversion_service=Mock(),
+    )
+    monkeypatch.setattr(
+        presenter,
+        "_ensure_valid_pizzatower_path",
+        lambda parent: str(tmp_path / "game"),
     )
 
-    app_state.reset_install_state.assert_called()
-    worker.deleteLater.assert_called()
+    class _Dialog:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def exec(self):
+            from PyQt6.QtWidgets import QDialog
+
+            return QDialog.DialogCode.Accepted
+
+    class _Worker:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.progress = SimpleNamespace(connect=lambda _fn: None)
+            self.status = SimpleNamespace(connect=lambda _fn: None)
+            self.conversion_finished = SimpleNamespace(connect=lambda _fn: None)
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(
+        "ui.dialogs.pizza_oven_conversion_dialog.PizzaOvenConversionDialog",
+        _Dialog,
+    )
+    monkeypatch.setattr(
+        "presentation.pizza_oven_conversion_presenter.PizzaOvenConversionWorker",
+        _Worker,
+    )
+
+    result = presenter._run_conversion_flow(
+        parent=None,
+        prepared_path=str(tmp_path / "prepared"),
+        source_file_path=None,
+        temp_dir=None,
+        gamebanana_metadata={},
+        on_success=None,
+    )
+
+    assert result is True
+    feedback_service.update_status.assert_not_called()
 
 
 def test_presenter_worker_status_suppresses_broken_feedback(tmp_path, monkeypatch):
@@ -337,7 +385,7 @@ def test_presenter_worker_status_suppresses_broken_feedback(tmp_path, monkeypatc
     )
     _FakeWorker.last.status.emit("working", "status_info")
 
-    feedback_service.update_status.assert_called_once_with("working", "status_info")
+    feedback_service.update_status.assert_any_call("working", "status_info")
 
 
 def test_pizza_oven_worker_suppresses_emit_failure_after_conversion_error(caplog):

@@ -66,21 +66,30 @@ class TestConstants:
     def test_env_config_loading_without_env(self, monkeypatch):
         """Checks that enving config loading without env."""
         monkeypatch.delenv("CLOUD_FUNCTIONS_BASE_URL", raising=False)
+        monkeypatch.delenv("DRP_CLIENT_ID", raising=False)
         monkeypatch.setattr("dotenv.load_dotenv", lambda *args, **kwargs: False)
 
         config_module = self._reload_config_module()
 
         assert isinstance(config_module.CLOUD_FUNCTIONS_BASE_URL, str)
         assert config_module.CLOUD_FUNCTIONS_BASE_URL == ""
+        assert isinstance(config_module.DRP_CLIENT_ID, str)
+        assert config_module.DRP_CLIENT_ID == ""
 
     def test_env_config_loading_with_dotenv_file(self, monkeypatch, tmp_path):
         """Checks that enving config loading with dotenv file."""
         configured_value = "https://example.com/functions"
+        configured_drp_client_id = "discord-client-id"
         monkeypatch.delenv("CLOUD_FUNCTIONS_BASE_URL", raising=False)
+        monkeypatch.delenv("DRP_CLIENT_ID", raising=False)
         dotenv_path = tmp_path / "src" / ".env"
         dotenv_path.parent.mkdir()
         dotenv_path.write_text(
-            f"CLOUD_FUNCTIONS_BASE_URL={configured_value}\n", encoding="utf-8"
+            (
+                f"CLOUD_FUNCTIONS_BASE_URL={configured_value}\n"
+                f"DRP_CLIENT_ID={configured_drp_client_id}\n"
+            ),
+            encoding="utf-8",
         )
         monkeypatch.setattr("sys.frozen", True, raising=False)
         monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
@@ -93,6 +102,8 @@ class TestConstants:
 
         assert isinstance(config_module.CLOUD_FUNCTIONS_BASE_URL, str)
         assert configured_value == config_module.CLOUD_FUNCTIONS_BASE_URL
+        assert isinstance(config_module.DRP_CLIENT_ID, str)
+        assert configured_drp_client_id == config_module.DRP_CLIENT_ID
 
     def test_presence_timing_constants(self):
         """Checks that presenceing timing constants."""

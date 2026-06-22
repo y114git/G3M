@@ -200,6 +200,7 @@ def build_headless_plugin_runtime(
         SimpleNamespace(),
         SimpleNamespace(),
         SimpleNamespace(),
+        SimpleNamespace(),
         plugin_state_service,
         _HeadlessCatalogService(),
         plugins_dir,
