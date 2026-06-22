@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "G3M"
-version = "3.1.2"
+version = "3.2.0"
 description = "G3M - GameMaker Mod Manager"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -25,7 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 build = ["pyinstaller==6.21.0"]
 test = [
-    "pytest==9.1.0",
+    "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "pytest-html==4.2.0",
     "pytest-mock==3.15.1",

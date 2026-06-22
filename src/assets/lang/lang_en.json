@@ -4,7 +4,7 @@
     "language_name": "English",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_en",
-    "version": "3.1.0"
+    "version": "3.2.0"
   },
   "blocklist": {
     "title": "Blocklist Manager",

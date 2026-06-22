@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import difflib
+import logging
 import os
 import tempfile
 import zipfile
 from collections import defaultdict
+from multiprocessing import Process
 from typing import Any
 
 from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -46,6 +47,22 @@ from ui.common.dialog_theme import (
 from utils.mod.utils import get_mod_id, get_mod_name
 
 MAX_G3MPATCH_PREVIEW_BYTES = 100 * 1024 * 1024
+logger = logging.getLogger(__name__)
+
+
+def _play_audio_preview_process(sound_path: str) -> None:
+    try:
+        __import__("playsound3").playsound(os.path.abspath(sound_path))
+    except ImportError:
+        logger.warning(
+            "ModDiagnosticsDialog: audio preview is unavailable because playsound3 is not installed"
+        )
+    except Exception as exc:
+        logger.warning(
+            "ModDiagnosticsDialog: failed to play audio preview %s: %s",
+            sound_path,
+            exc,
+        )
 
 
 class DiagnosticsWorker(QThread):
@@ -76,8 +93,7 @@ class ModDiagnosticsDialog(QDialog):
         self._selected_resource_types: set[str] = set()
         self._resource_filters_initialized = False
         self._preview_temp_dir = os.path.join(tempfile.gettempdir(), "g3m_diagnostics_preview")
-        self._audio_output: QAudioOutput | None = None
-        self._audio_player: QMediaPlayer | None = None
+        self._audio_process: Process | None = None
         self._current_audio_path = ""
         self._report: DiagnosticsReport | None = None
         self._worker: DiagnosticsWorker | None = None
@@ -985,18 +1001,21 @@ class ModDiagnosticsDialog(QDialog):
     def _play_preview_audio(self) -> None:
         if not self._current_audio_path:
             return
-        if self._audio_output is None:
-            self._audio_output = QAudioOutput(self)
-            self._audio_output.setVolume(0.75)
-        if self._audio_player is None:
-            self._audio_player = QMediaPlayer(self)
-            self._audio_player.setAudioOutput(self._audio_output)
-        self._audio_player.setSource(QUrl.fromLocalFile(self._current_audio_path))
-        self._audio_player.play()
+        self._stop_preview_audio()
+        process = Process(
+            target=_play_audio_preview_process,
+            args=(os.path.abspath(self._current_audio_path),),
+            daemon=True,
+        )
+        process.start()
+        self._audio_process = process
 
     def _stop_preview_audio(self) -> None:
-        if self._audio_player is not None:
-            self._audio_player.stop()
+        process = self._audio_process
+        if process is not None and process.is_alive():
+            process.terminate()
+            process.join(timeout=1.0)
+        self._audio_process = None
 
     def _resource_comparison_text(self, impact: DataImpact, entry: dict[str, Any]) -> str:
         if not self._report:
@@ -1249,5 +1268,6 @@ class ModDiagnosticsDialog(QDialog):
     def closeEvent(self, event) -> None:
         if self._worker and self._worker.isRunning():
             self._worker.wait(1000)
+        self._stop_preview_audio()
         event.accept()
         self.deleteLater()

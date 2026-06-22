@@ -724,14 +724,12 @@ class SettingsViewBuilder:
         checkboxes_layout.addWidget(disable_background_checkbox)
         checkboxes_layout.addWidget(disable_startup_sound_checkbox)
         cl_adv.addLayout(checkboxes_layout)
-        cl_adv.addWidget(
-            disable_discord_rich_presence_checkbox,
-            alignment=Qt.AlignmentFlag.AlignCenter,
-        )
-        cl_adv.addWidget(
-            pause_background_music_unfocused_checkbox,
-            alignment=Qt.AlignmentFlag.AlignCenter,
-        )
+        audio_checkboxes_layout = QHBoxLayout()
+        audio_checkboxes_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        audio_checkboxes_layout.setSpacing(20)
+        audio_checkboxes_layout.addWidget(disable_discord_rich_presence_checkbox)
+        audio_checkboxes_layout.addWidget(pause_background_music_unfocused_checkbox)
+        cl_adv.addLayout(audio_checkboxes_layout)
         layout.addWidget(sec_adv)
 
         layout.addStretch()

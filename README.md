@@ -110,7 +110,6 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 - Load plugins from an online catalog or from local archives and folders. Installed plugins are scanned, validated for manifest shape, hooks, tags, relations, and file safety, then marked as installed, enabled, broken, local-only, or update-available.
 - Toggle plugins on and off, open plugin settings, and surface plugin-provided main views and hooks through the runtime service.
 - The bundled catalog currently exposes `DR Save Manager` for DELTARUNE save collection management and `Custom Saves Folders` for per-game, per-profile, or per-mod save folder switching.
-- G3M still includes an anonymous in-app chat dialog with language channels. It is part of the current UI and uses the app's network-backed chat service when that backend is configured and reachable.
 
 ### Interface, help, and privacy
 

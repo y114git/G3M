@@ -6,6 +6,7 @@ import importlib.util
 import logging
 import os
 import pathlib
+import platform
 import subprocess
 import sys
 import tempfile
@@ -954,7 +955,8 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                 sys.stderr.write(f"Startup target not found: {target}\n")
                 return False
 
-            target.chmod(target.stat().st_mode | 0o111)
+            if platform.system() != "Windows":
+                target.chmod(target.stat().st_mode | 0o111)
             cwd = str(extract_path)
 
             env = os.environ.copy()

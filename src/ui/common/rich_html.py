@@ -37,7 +37,7 @@ _STYLE_BLOCK_RE = re.compile(
     r"<style\b[^>]*>(.*?)</style\s*>", re.IGNORECASE | re.DOTALL
 )
 _SCRIPT_BLOCK_RE = re.compile(
-    r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL
+    r"<script\b[^>]*>.*?</script\b[^>]*>", re.IGNORECASE | re.DOTALL
 )
 _LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE | re.DOTALL)
 _CSS_RULE_RE = re.compile(r"([^{}]+)\{([^{}]+)\}", re.IGNORECASE | re.DOTALL)

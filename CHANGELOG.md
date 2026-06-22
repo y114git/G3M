@@ -1,3 +1,33 @@
+### Version 3.2.0 — 22.06.26
+
+- **FRICKBEARS3 Addons Support**
+
+  - Mods that are meant to go into the `addons/` folder are now installed there automatically, without needing Manual Install.
+  - If you are creating a mod, you can now point an Extra file to `addons/` or `addons.zip`, and its contents will go to the correct `addons/` folder instead of the main game folder.
+
+- **DELTARUNE Chapter 5 Support**
+
+  - DELTARUNE TOMORROW!
+
+- **Mod Diagnostics (BETA)**
+
+  - There is now a new **Diagnostics** button next to **Add Mod**. It opens a dialog where you can inspect mods, their state, their contents, the exact changes they will make before launch, detect conflict points in advance, compare them, preview relevant files, and more. This feature is still in BETA, so any ideas and feedback are welcome.
+
+- **Discord Rich Presence**
+
+  - Congratulations, now everyone on Discord can envy you, the happy owner of G3M, while you patch games, download mods, customize G3M, and so on in maximum comfort. You can disable it in *Settings > Appearance > Advanced > Disable Discord Rich Presence*.
+
+- **Batch Operations**
+
+  - Modding Tools now support batch conversion, patching, merging, and more. This should save you a lot of time when doing repetitive work, especially because batch operations use heavier caching, so identical mods are not processed again, which can reduce the time needed for large mod sets many times over.
+
+- **Other Improvements and Bug Fixes**
+
+  - G3M now properly detects when you are launching a native Linux binary and when you are launching an `.exe`, which means it no longer tries to use Wine or PortProton all the time, only when needed.
+  - HTML file and markup support were improved, and `img src` tags are now supported too, both local and remote.
+  - During Modding Tools operations, just like during a normal launch, problems now produce proper informative warnings and errors, with the option to skip them or stop the process. You can also now check a box to hide specific warnings in the future and restore them later in *Settings > Game > Manage warnings*.
+  - Plugins were improved a bit, performance was improved, and a lot of work was done to catch different situations where the launcher could silently crash during certain actions or combinations of actions. The number of such cases was reduced heavily, and they are now logged properly.
+
 ### Version 3.1.2 — 05.06.26
 
 - Just small bugfixes with flickereing, crashes etc.
