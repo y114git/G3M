@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from services.localization_service import localization_service
 
@@ -153,6 +154,20 @@ def test_shutdown_clears_and_closes_client():
 
     assert client.cleared == 1
     assert client.closed == 1
+
+
+def test_start_registers_shutdown_with_about_to_quit():
+    service = _service()
+    signal = Mock()
+    app = SimpleNamespace(aboutToQuit=signal, topLevelWidgets=lambda: [])
+
+    with patch(
+        "services.discord_rich_presence_service.QApplication.instance",
+        return_value=app,
+    ):
+        service.start()
+
+    signal.connect.assert_called_once_with(service.shutdown)
 
 
 def test_localizations_resolve_runtime_strings():

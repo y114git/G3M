@@ -22,7 +22,7 @@ from ui.common.styling import (
     get_border_radius,
     get_theme_color,
 )
-from utils.path_utils import colored_icon
+from utils.path_utils import colored_icon, normalize_user_input_path
 
 logger = logging.getLogger(__name__)
 
@@ -386,7 +386,7 @@ def save_custom_executable(w, path: str):
 def save_custom_executable_text(w, path: str):
     _commit_validated_executable_text(
         w,
-        str(path or "").strip(),
+        normalize_user_input_path(path),
         lambda value: save_custom_executable(w, value),
         lambda: update_custom_executable_ui(w),
     )
@@ -401,7 +401,7 @@ def _save_binary_override(w, config_key: str, path: str):
 def save_custom_g3mtool_text(w, path: str):
     _commit_validated_executable_text(
         w,
-        str(path or "").strip(),
+        normalize_user_input_path(path),
         lambda value: _save_binary_override(w, "custom_g3mtool_path", value),
         lambda: update_custom_binary_ui(w),
     )
@@ -410,7 +410,7 @@ def save_custom_g3mtool_text(w, path: str):
 def save_custom_xdelta_text(w, path: str):
     _commit_validated_executable_text(
         w,
-        str(path or "").strip(),
+        normalize_user_input_path(path),
         lambda value: _save_binary_override(w, "custom_xdelta_path", value),
         lambda: update_custom_binary_ui(w),
     )
@@ -419,7 +419,7 @@ def save_custom_xdelta_text(w, path: str):
 def save_custom_wine_text(w, path: str):
     _commit_validated_executable_text(
         w,
-        str(path or "").strip(),
+        normalize_user_input_path(path),
         lambda value: _save_binary_override(w, "custom_wine_path", value),
         lambda: update_custom_binary_ui(w),
     )
@@ -428,25 +428,24 @@ def save_custom_wine_text(w, path: str):
 def save_custom_portproton_text(w, path: str):
     _commit_validated_executable_text(
         w,
-        str(path or "").strip(),
+        normalize_user_input_path(path),
         lambda value: _save_portproton_override(w, value),
         lambda: update_custom_binary_ui(w),
     )
 
 
 def _commit_validated_executable_text(w, path: str, save_callback, refresh_callback):
-    cleaned_path = str(path or "").strip()
-    if cleaned_path and not w.settings_service.validate_executable_path(cleaned_path):
+    if path and not w.settings_service.validate_executable_path(path):
         _safe_show_message(
             w,
             "warning",
             "errors.invalid_executable_file",
-            file=os.path.basename(cleaned_path),
+            file=os.path.basename(path),
         )
         refresh_callback()
         _clear_active_path_focus(w)
         return
-    save_callback(cleaned_path)
+    save_callback(path)
     refresh_callback()
     _clear_active_path_focus(w)
 
@@ -458,14 +457,13 @@ def _clear_active_path_focus(w):
 
 
 def _save_portproton_override(w, path: str):
-    cleaned_path = str(path or "").strip()
-    w.app_state.local_config["custom_portproton_path"] = cleaned_path
+    w.app_state.local_config["custom_portproton_path"] = normalize_user_input_path(path)
     w.settings_service.write_local_config()
     w.settings_service.settings_changed.emit()
 
 
 def commit_game_path_text(w, path: str):
-    cleaned_path = str(path or "").strip()
+    cleaned_path = normalize_user_input_path(path)
     if cleaned_path and not w.settings_service.validate_selected_game_path(cleaned_path):
         w.settings_service.show_invalid_game_path_warning(cleaned_path)
         update_path_inputs_ui(w)

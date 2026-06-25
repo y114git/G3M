@@ -350,7 +350,115 @@ def test_run_app_installs_process_exit_logging(monkeypatch):
     assert registered
 
 
-def test_run_app_logs_setup_app_failure_after_logging_is_configured(monkeypatch):
+def test_run_app_creates_qapplication_before_user_data_migration(monkeypatch):
+    from app import startup as startup_module
+
+    call_order = []
+    app = Mock()
+    app.exec.return_value = 0
+    monkeypatch.setattr(
+        startup_module,
+        "setup_app",
+        lambda: call_order.append("setup_app") or app,
+    )
+    monkeypatch.setattr(
+        startup_module,
+        "resolve_user_data_root_with_migration",
+        lambda: call_order.append("resolve") or "C:/Users/Test/AppData/Local/G3M",
+    )
+    monkeypatch.setattr(
+        startup_module, "configure_logging", lambda *_args: "g3m.log"
+    )
+    monkeypatch.setattr(
+        startup_module, "install_crash_diagnostics", lambda *_args: ""
+    )
+    monkeypatch.setattr(startup_module, "install_process_exit_logging", Mock())
+    monkeypatch.setattr(startup_module, "install_excepthook", Mock())
+    monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", Mock())
+    monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
+    monkeypatch.setattr(startup_module, "register_url_protocol", Mock())
+    monkeypatch.setattr(startup_module.QLocalServer, "removeServer", Mock())
+
+    class _Socket:
+        def connectToServer(self, *_args, **_kwargs):  # noqa: N802
+            return None
+
+        def waitForConnected(self, *_args, **_kwargs):  # noqa: N802
+            return False
+
+    class _Coordinator:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def launch(self):
+            return None
+
+    monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
+    monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
+
+    assert startup_module.run_app(["--force-start"]) == 0
+    assert call_order[:2] == ["setup_app", "resolve"]
+
+
+def test_run_app_legacy_user_data_migration_path_runs_after_qapplication_setup(
+    monkeypatch,
+):
+    from app import startup as startup_module
+
+    call_order = []
+    app = Mock()
+    app.exec.return_value = 0
+    monkeypatch.setattr(
+        startup_module,
+        "setup_app",
+        lambda: call_order.append("setup_app") or app,
+    )
+
+    def _resolve_user_root():
+        call_order.append("resolve")
+        return "C:/Users/Test/AppData/Local/G3M"
+
+    monkeypatch.setattr(
+        startup_module,
+        "resolve_user_data_root_with_migration",
+        _resolve_user_root,
+    )
+    monkeypatch.setattr(
+        startup_module, "configure_logging", lambda *_args: "g3m.log"
+    )
+    monkeypatch.setattr(
+        startup_module, "install_crash_diagnostics", lambda *_args: ""
+    )
+    monkeypatch.setattr(startup_module, "install_process_exit_logging", Mock())
+    monkeypatch.setattr(startup_module, "install_excepthook", Mock())
+    monkeypatch.setattr(startup_module, "cleanup_old_temp_directories", Mock())
+    monkeypatch.setattr(startup_module, "check_game_processes", lambda: None)
+    monkeypatch.setattr(startup_module, "register_url_protocol", Mock())
+    monkeypatch.setattr(startup_module.QLocalServer, "removeServer", Mock())
+
+    class _Socket:
+        def connectToServer(self, *_args, **_kwargs):  # noqa: N802
+            return None
+
+        def waitForConnected(self, *_args, **_kwargs):  # noqa: N802
+            return False
+
+    class _Coordinator:
+        def __init__(self, **_kwargs) -> None:
+            call_order.append("coordinator")
+
+        def launch(self):
+            call_order.append("launch")
+            return None
+
+    monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
+    monkeypatch.setattr(startup_module, "BootstrapCoordinator", _Coordinator)
+
+    assert startup_module.run_app(["--force-start"]) == 0
+    assert call_order[:4] == ["setup_app", "resolve", "coordinator", "launch"]
+
+
+def test_run_app_returns_error_when_qapplication_setup_fails(monkeypatch):
     from app import startup as startup_module
 
     call_order = []
@@ -378,8 +486,7 @@ def test_run_app_logs_setup_app_failure_after_logging_is_configured(monkeypatch)
     )
 
     assert startup_module.run_app([]) == 1
-
-    assert call_order == ["resolve", "logging", "diagnostics"]
+    assert call_order == []
 
 
 def test_process_exit_logging_writes_final_log_line(temp_dir, monkeypatch):

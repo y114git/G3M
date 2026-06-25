@@ -361,13 +361,18 @@ def run_app(argv: list[str] | None = None) -> int:
     if platform.system() == "Linux":
         os.environ.setdefault("NO_AT_BRIDGE", "1")
     try:
+        app = setup_app()
+    except Exception as e:
+        logger.exception("STARTUP ERROR: failed to create QApplication: %s", e)
+        traceback.print_exc(file=sys.stderr)
+        return 1
+    try:
         user_root = resolve_user_data_root_with_migration()
         log_path = configure_logging(APP_DISPLAY_NAME, user_root)
         install_process_exit_logging(APP_DISPLAY_NAME)
         install_crash_diagnostics(APP_DISPLAY_NAME, log_path)
         install_excepthook()
         cleanup_old_temp_directories()
-        app = setup_app()
     except Exception as e:
         logger.exception("STARTUP ERROR: failed to initialize process: %s", e)
         traceback.print_exc(file=sys.stderr)

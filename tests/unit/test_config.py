@@ -1,5 +1,6 @@
 """Unit tests for test config."""
 
+import ast
 import sys
 import types
 from pathlib import Path
@@ -121,3 +122,87 @@ class TestConstants:
 
         assert "os.path.join(project_root, 'src', '.env')" in spec_text
         assert "datas_extra.append((env_path, 'src'))" in spec_text
+
+    def test_pyinstaller_spec_keeps_difflib_for_mod_diagnostics(self):
+        """Checks that frozen builds keep difflib required by diagnostics UI."""
+        spec_path = Path(__file__).resolve().parents[2] / "builds" / "G3MExecutable.spec"
+        if not spec_path.exists():
+            pytest.skip("PyInstaller spec file is not available in this checkout")
+        spec_text = spec_path.read_text(encoding="utf-8")
+        dialog_module_path = (
+            Path(__file__).resolve().parents[2]
+            / "src"
+            / "ui"
+            / "dialogs"
+            / "mod_diagnostics_dialog.py"
+        )
+        dialog_tree = ast.parse(dialog_module_path.read_text(encoding="utf-8"))
+
+        uses_difflib = False
+        for node in ast.walk(dialog_tree):
+            if isinstance(node, ast.Import):
+                uses_difflib = any(alias.name == "difflib" for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module == "difflib":
+                uses_difflib = True
+            if uses_difflib:
+                break
+
+        assert uses_difflib
+        assert "'difflib'" not in spec_text
+
+    def test_native_dialogs_do_not_require_tkinter(self):
+        """Checks that file dialogs stay on Qt so frozen builds can keep tkinter excluded."""
+        native_integration_path = (
+            Path(__file__).resolve().parents[2]
+            / "src"
+            / "utils"
+            / "native_integration.py"
+        )
+        native_integration_text = native_integration_path.read_text(encoding="utf-8")
+
+        assert "QFileDialog" in native_integration_text
+        assert "tkinter" not in native_integration_text
+
+    def test_pyinstaller_spec_does_not_exclude_runtime_imports(self):
+        """Checks that frozen builds do not exclude modules imported by runtime code."""
+        spec_path = Path(__file__).resolve().parents[2] / "builds" / "G3MExecutable.spec"
+        if not spec_path.exists():
+            pytest.skip("PyInstaller spec file is not available in this checkout")
+
+        spec_tree = ast.parse(spec_path.read_text(encoding="utf-8"))
+        excludes: set[str] = set()
+        for node in ast.walk(spec_tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Analysis":
+                for keyword in node.keywords:
+                    if keyword.arg == "excludes" and isinstance(keyword.value, ast.List):
+                        excludes = {
+                            element.value
+                            for element in keyword.value.elts
+                            if isinstance(element, ast.Constant)
+                            and isinstance(element.value, str)
+                        }
+                        break
+
+        runtime_imports: set[str] = set()
+        src_root = Path(__file__).resolve().parents[2] / "src"
+        for path in src_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    runtime_imports.update(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    runtime_imports.add(node.module)
+
+        def _conflicts(import_name: str, excluded_name: str) -> bool:
+            return (
+                import_name == excluded_name
+                or import_name.startswith(f"{excluded_name}.")
+            )
+
+        direct_conflicts = sorted(
+            f"{runtime_import} <- {excluded}"
+            for runtime_import in runtime_imports
+            for excluded in excludes
+            if _conflicts(runtime_import, excluded)
+        )
+        assert direct_conflicts == []

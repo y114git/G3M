@@ -13,6 +13,7 @@ from utils.path_utils import (
     find_supported_game_data_file,
     get_user_data_root,
     get_user_mods_dir,
+    normalize_user_input_path,
     resolve_game_executable,
     resource_path,
 )
@@ -274,6 +275,11 @@ class TestPathUtils:
         with open(test_file, "w", encoding="utf-8") as f:
             f.write("test")
         assert os.path.exists(test_file)
+
+    def test_normalize_user_input_path_converts_file_uri_to_windows_path(self):
+        """Checks that pasted file URIs are normalized into plain local paths."""
+        result = normalize_user_input_path("file:///C:/Users/Evan/Downloads/frickbears3-v1.1.4")
+        assert result == "C:/Users/Evan/Downloads/frickbears3-v1.1.4"
 
     def test_pizzatower_path_validation_with_custom_executable(self, temp_dir):
         """Checks that pizzatowering path validation with custom executable."""

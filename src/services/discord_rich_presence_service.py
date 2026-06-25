@@ -123,8 +123,10 @@ class DiscordRichPresenceService(QObject):
         self._dirty = False
         self._override_presence: dict[str, Any] | None = None
         self._state = _PresenceState()
+        self._shutdown_hook_connected = False
 
     def start(self) -> None:
+        self._ensure_shutdown_hook()
         self._ensure_timer()
         self.apply_enabled_setting()
 
@@ -198,6 +200,15 @@ class DiscordRichPresenceService(QObject):
         self._timer = QTimer(self)
         self._timer.setInterval(SYNC_INTERVAL_MS)
         self._timer.timeout.connect(self.refresh)
+
+    def _ensure_shutdown_hook(self) -> None:
+        if self._shutdown_hook_connected:
+            return
+        app = QApplication.instance()
+        if app is None:
+            return
+        app.aboutToQuit.connect(self.shutdown)
+        self._shutdown_hook_connected = True
 
     def _set_override_presence(self, semantic_key: str) -> None:
         if not self._enabled:

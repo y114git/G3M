@@ -1,3 +1,7 @@
+### Version 3.2.1 — 25.06.26
+
+- **Lot of stupid bugs fix, if you have 3.2.0, delete it and install 3.2.1. Really sorry for those bugs, hope you'll enjoy chapter 5 and new mods normally now!**
+
 ### Version 3.2.0 — 22.06.26
 
 - **FRICKBEARS3 Addons Support**

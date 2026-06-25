@@ -45,6 +45,7 @@ from utils.native_integration import (
 )
 from utils.path_utils import (
     get_g3mtool_cache_dir,
+    normalize_user_input_path,
     resolve_game_executable,
 )
 from utils.process_utils import format_filesystem_error, format_network_error
@@ -360,6 +361,7 @@ class SettingsManager(QObject):
         )
         if not filepath:
             return None
+        filepath = normalize_user_input_path(filepath)
         error_message = self.get_executable_path_error(filepath)
         if error_message is not None:
             self._safe_show_message(
@@ -374,7 +376,7 @@ class SettingsManager(QObject):
         self, path: str, game=None, *, allow_custom_executable_override: bool = True
     ) -> bool:
         game = game or self.app_state.game_mode
-        cleaned_path = str(path or "").strip()
+        cleaned_path = normalize_user_input_path(path)
         if not cleaned_path:
             return True
         if not os.path.isdir(cleaned_path):
@@ -409,6 +411,7 @@ class SettingsManager(QObject):
         )
 
     def get_executable_path_error(self, filepath: str) -> str | None:
+        filepath = normalize_user_input_path(filepath)
         if not os.path.isfile(filepath):
             return tr("errors.launch_command_missing_path", path=filepath)
         if platform.system() == "Windows":

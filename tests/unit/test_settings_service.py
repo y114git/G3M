@@ -109,6 +109,30 @@ def test_select_executable_path_invalid_feedback_failure_returns_none(monkeypatc
     manager.feedback_service.show_message.assert_called_once()
 
 
+def test_validate_selected_game_path_accepts_file_uri(monkeypatch, tmp_path):
+    """Checks pasted file URIs are normalized before game-path validation."""
+    game_dir = tmp_path / "game"
+    game_dir.mkdir()
+    manager = SettingsManager(
+        app_state=SimpleNamespace(game_mode=SimpleNamespace(), local_config={}),
+        feedback_service=Mock(),
+        localization_service=localization_service,
+    )
+    monkeypatch.setattr(
+        "services.settings_service.resolve_game_executable",
+        lambda path, _game_id: "C:/Games/Frickbears3.exe"
+        if path == str(game_dir).replace("\\", "/")
+        else None,
+    )
+
+    result = manager.validate_selected_game_path(
+        game_dir.resolve().as_uri(),
+        SimpleNamespace(game_id="frickbears3", custom_exec_config_key=""),
+    )
+
+    assert result is True
+
+
 def test_invalid_game_path_warning_feedback_failure_is_suppressed():
     """Checks invalid game path warning cannot crash path validation flow."""
     game = SimpleNamespace(

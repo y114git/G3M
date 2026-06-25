@@ -7,6 +7,7 @@ import re
 import stat
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from PyQt6.QtCore import QByteArray, Qt
 from PyQt6.QtGui import QIcon, QPixmap
@@ -50,6 +51,21 @@ _WINDOWS_RESERVED_NAMES = {
 }
 
 _user_data_root_override: str | None = None
+
+
+def normalize_user_input_path(path: str) -> str:
+    cleaned = str(path or "").strip()
+    if not cleaned:
+        return ""
+    if cleaned.lower().startswith("file://"):
+        parsed = urlsplit(cleaned)
+        local_path = unquote(parsed.path or "")
+        if parsed.netloc:
+            local_path = f"//{parsed.netloc}{local_path}"
+        if len(local_path) > 3 and local_path[0] == "/" and local_path[2] == ":":
+            local_path = local_path[1:]
+        cleaned = local_path
+    return os.path.normpath(cleaned).replace("\\", "/")
 
 
 def get_launcher_dir():

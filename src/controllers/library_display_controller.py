@@ -777,12 +777,12 @@ class LibraryDisplayController:
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if not mod_folder or not os.path.isdir(mod_folder):
                 return
+            mod_name = getattr(mod_data, "name", "") or "Mod"
 
             from utils.mod.readme_utils import find_mod_readme_files
 
             readme_files = find_mod_readme_files(mod_folder)
             if not readme_files:
-                mod_name = getattr(mod_data, "name", "") or "Mod"
                 self._safe_information(
                     tr("dialogs.info"),
                     tr("dialogs.no_readme_files", mod_name=mod_name),

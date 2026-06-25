@@ -302,6 +302,7 @@ class TestAppWindow:
         self, qapp, temp_dir
     ):
         from app.window import AppWindow
+        from utils.path_utils import normalize_user_input_path
 
         _, _, _, _, _, patches = _window_test_patches(temp_dir)
         with (
@@ -334,7 +335,7 @@ class TestAppWindow:
                 assert window.settings_game_path_label.text().endswith(" Path:")
                 assert (
                     window.app_state.local_config.get("custom_g3mtool_path")
-                    == custom_path
+                    == normalize_user_input_path(custom_path)
                 )
                 assert not window.settings_reset_g3mtool_button.isHidden()
 

@@ -34,7 +34,8 @@ def has_unix_executable_signature(filepath: str) -> bool:
 def validate_windows_executable_path(
     filepath: str, *, subprocess_module=subprocess
 ) -> str | None:
-    command = [filepath]
+    native_filepath = os.path.normpath(filepath)
+    command = [native_filepath]
     creationflags = getattr(subprocess_module, "CREATE_NO_WINDOW", 0) | getattr(
         subprocess_module, "CREATE_SUSPENDED", 0
     )
@@ -52,7 +53,7 @@ def validate_windows_executable_path(
         subprocess_module.SubprocessError,
     ) as error:
         return format_external_process_error(
-            error, command=command, target_path=filepath
+            error, command=command, target_path=native_filepath
         )
     finally:
         if process is not None:

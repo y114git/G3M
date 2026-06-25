@@ -1489,6 +1489,48 @@ class TestLibraryCyopAfomFilter:
             "mod_readme"
         )
 
+    def test_library_summary_readme_passes_mod_name_into_dialog(
+        self, app_state, feedback_service, monkeypatch, temp_dir, caplog
+    ):
+        from controllers.library_display_controller import LibraryDisplayController
+
+        app_window = Mock()
+        app_window.analytics_service = Mock()
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = temp_dir
+        controller = LibraryDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=mod_service,
+            used_mods_service=Mock(),
+            app_window=app_window,
+        )
+        mod_data = SimpleNamespace(name="Named Mod", id="named_mod")
+        monkeypatch.setattr(
+            "utils.mod.readme_utils.find_mod_readme_files",
+            lambda _path: [str(Path(temp_dir) / "README.md")],
+        )
+        captured = {}
+
+        class _Dialog:
+            def __init__(self, app_state_arg, mod_name_arg, readme_files_arg, parent=None) -> None:
+                captured["app_state"] = app_state_arg
+                captured["mod_name"] = mod_name_arg
+                captured["readme_files"] = readme_files_arg
+                captured["parent"] = parent
+
+            def exec(self):
+                return 0
+
+        monkeypatch.setattr("ui.dialogs.mod.readme_dialog.ModReadmeDialog", _Dialog)
+
+        with caplog.at_level("ERROR"):
+            controller._on_summary_readme(mod_data)
+
+        assert captured["mod_name"] == "Named Mod"
+        assert captured["parent"] is app_window
+        assert "Failed to open mod README dialog" not in caplog.text
+
 
 class TestSettingsUiController:
     """Tests for controllers."""
