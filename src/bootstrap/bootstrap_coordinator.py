@@ -122,10 +122,10 @@ class BootstrapCoordinator:
                 )
             server = self.server_factory(self.instance)
             if not server.listen(SINGLE_INSTANCE_KEY):
-                error_msg = tr("errors.single_instance_error")
-                logger.error(f"STARTUP ERROR: {error_msg}")
-                self._safe_critical(tr("errors.error"), error_msg)
-                sys.exit(1)
+                logger.info("Another G3M instance claimed the local server")
+                self.splash.close()
+                QTimer.singleShot(0, self.app.quit)
+                return
             self.instance.server = server
             self.instance.initialization_finished.connect(
                 self._on_initialization_finished

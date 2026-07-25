@@ -83,9 +83,9 @@ class BaseModWidget(QFrame):
             self.title_layout.setSpacing(title_spacing)
         if hasattr(self, "metadata_layout") and self.metadata_layout:
             self.metadata_layout.setSpacing(metadata_spacing)
-        if hasattr(self, "icon_label") and self.icon_label:
+        if icon_size is not None and hasattr(self, "icon_label") and self.icon_label:
             self.icon_label.setFixedSize(icon_size, icon_size)
-        if getattr(self, "frame_selector", "") in ("modCard", "installedMod"):
+        if card_height is not None:
             self.setFixedHeight(card_height)
         self._metrics_cache_key = metrics_key
         return True

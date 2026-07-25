@@ -26,20 +26,7 @@ def begin_close_event(window, event, *, single_shot):
             app.setQuitOnLastWindowClosed(False)
     event.accept()
     window.hide()
-    window._pending_close_tasks = {"analytics": False, "cleanup": False}
-    if hasattr(window, "analytics_service") and window.analytics_service:
-        analytics_done = False
-        try:
-            analytics_done = window.analytics_service.shutdown_async(
-                lambda: window._mark_close_task_complete("analytics")
-            )
-        except Exception:
-            logger.exception("Analytics shutdown failed during close")
-            analytics_done = True
-        if analytics_done:
-            window._mark_close_task_complete("analytics")
-    else:
-        window._mark_close_task_complete("analytics")
+    window._pending_close_tasks = {"cleanup": False}
     single_shot(
         max(2000, int(THREAD_WAIT_TIMEOUT) * 2), window._force_finish_close_tasks
     )
@@ -80,16 +67,10 @@ def force_finish_close_tasks(window) -> None:
         return
     unfinished = [task_name for task_name, completed in pending.items() if not completed]
     unfinished_text = ", ".join(unfinished)
-    if unfinished == ["analytics"]:
-        logger.info(
-            "Completing application quit with pending close tasks: %s",
-            unfinished_text,
-        )
-    else:
-        logger.warning(
-            "Forcing application quit with unfinished close tasks: %s",
-            unfinished_text,
-        )
+    logger.warning(
+        "Forcing application quit with unfinished close tasks: %s",
+        unfinished_text,
+    )
     for task_name, completed in list(pending.items()):
         if not completed:
             pending[task_name] = True

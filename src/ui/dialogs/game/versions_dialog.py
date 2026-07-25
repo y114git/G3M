@@ -194,11 +194,15 @@ class _VersionRecordWidget(QFrame):
 
     def relocalize_ui(self):
         self._apply_btn.setText(tr("game_versions.action_apply"))
+        self._apply_btn.setToolTip(tr("tooltips.apply_game_version"))
         self._export_btn.setIcon(
             colored_icon("export", get_dialog_text_color(self._app_state))
         )
+        self._export_btn.setToolTip(tr("tooltips.export_game_version"))
         self._delete_btn.setText(tr("game_versions.action_delete"))
+        self._delete_btn.setToolTip(tr("tooltips.delete_game_version"))
         self._cancel_btn.setText(tr("game_versions.action_cancel"))
+        self._cancel_btn.setToolTip(tr("tooltips.cancel"))
         self._refresh()
 
     def refresh_theme(self):

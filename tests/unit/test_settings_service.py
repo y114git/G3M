@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 from services.localization_service import localization_service
 from services.settings_service import SettingsManager
+from services.user_data_root_service import DataRootChangeResult
 
 
 def test_write_json_suppresses_permission_dialog_failure(monkeypatch, tmp_path):
@@ -107,6 +108,90 @@ def test_select_executable_path_invalid_feedback_failure_returns_none(monkeypatc
 
     assert manager.select_executable_path("Select executable") is None
     manager.feedback_service.show_message.assert_called_once()
+
+
+def test_successful_data_root_change_writes_locator_and_requests_restart(
+    monkeypatch, tmp_path
+):
+    manager = SettingsManager(
+        app_state=SimpleNamespace(),
+        feedback_service=Mock(),
+        localization_service=localization_service,
+    )
+    write_locator = Mock()
+    monkeypatch.setattr("services.settings_service.write_selected_user_data_root", write_locator)
+    monkeypatch.setattr("services.settings_service.get_default_user_data_root", lambda: str(tmp_path / "default"))
+    restart = Mock()
+    manager.restart_required.connect(restart)
+
+    manager.complete_user_data_root_change(
+        DataRootChangeResult("ready", str(tmp_path / "custom"))
+    )
+
+    write_locator.assert_called_once_with(str(tmp_path / "default"), str(tmp_path / "custom"))
+    restart.assert_called_once()
+
+
+def test_failed_data_root_change_does_not_update_locator(monkeypatch, tmp_path):
+    feedback = Mock()
+    manager = SettingsManager(
+        app_state=SimpleNamespace(),
+        feedback_service=feedback,
+        localization_service=localization_service,
+    )
+    write_locator = Mock()
+    monkeypatch.setattr("services.settings_service.write_selected_user_data_root", write_locator)
+
+    manager.complete_user_data_root_change(
+        DataRootChangeResult("io_error", str(tmp_path / "custom"), "disk full")
+    )
+
+    write_locator.assert_not_called()
+    feedback.show_message.assert_called_once()
+
+
+def test_select_user_data_root_starts_requested_copy(monkeypatch, tmp_path):
+    current = tmp_path / "current"
+    selected = tmp_path / "selected"
+    current.mkdir()
+    manager = SettingsManager(
+        app_state=SimpleNamespace(),
+        feedback_service=Mock(),
+        localization_service=localization_service,
+    )
+    monkeypatch.setattr("services.settings_service.get_user_data_root", lambda: str(current))
+    monkeypatch.setattr(
+        "services.settings_service.get_existing_directory",
+        lambda *_args, **_kwargs: str(selected),
+    )
+    manager._ask_user_data_root_copy = Mock(return_value=True)
+    manager._start_user_data_root_change = Mock()
+
+    manager.select_user_data_root()
+
+    manager._start_user_data_root_change.assert_called_once_with(
+        str(selected), copy_data=True
+    )
+
+
+def test_reset_user_data_root_uses_platform_default(monkeypatch, tmp_path):
+    current = tmp_path / "current"
+    default = tmp_path / "default"
+    manager = SettingsManager(
+        app_state=SimpleNamespace(),
+        feedback_service=Mock(),
+        localization_service=localization_service,
+    )
+    monkeypatch.setattr("services.settings_service.get_user_data_root", lambda: str(current))
+    monkeypatch.setattr("services.settings_service.get_default_user_data_root", lambda: str(default))
+    manager._ask_user_data_root_copy = Mock(return_value=False)
+    manager._start_user_data_root_change = Mock()
+
+    manager.reset_user_data_root()
+
+    manager._start_user_data_root_change.assert_called_once_with(
+        str(default), copy_data=False
+    )
 
 
 def test_validate_selected_game_path_accepts_file_uri(monkeypatch, tmp_path):

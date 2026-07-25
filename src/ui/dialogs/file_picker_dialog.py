@@ -23,15 +23,15 @@ class GameBananaFilePickerDialog(QDialog):
         self, parent, files: list[dict], mod_name: str, homepage: str | None = None
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("dialogs.gamebanana_picker_title", mod_name=mod_name))
+        self.mod_name = mod_name
         self.files = files or []
         self.homepage = homepage
         self.selected_file: dict | None = None
         self.resize(720, 420)
         main_layout = QVBoxLayout(self)
-        hint_label = QLabel(tr("dialogs.gamebanana_picker_hint"))
-        hint_label.setWordWrap(True)
-        main_layout.addWidget(hint_label)
+        self.hint_label = QLabel()
+        self.hint_label.setWordWrap(True)
+        main_layout.addWidget(self.hint_label)
         content_layout = QHBoxLayout()
         self.list_widget = QListWidget()
         self.list_widget.itemSelectionChanged.connect(self._on_selection_changed)
@@ -52,17 +52,33 @@ class GameBananaFilePickerDialog(QDialog):
         button_row = QHBoxLayout()
         button_row.addStretch()
         if self.homepage:
-            open_btn = QPushButton(tr("dialogs.gamebanana_picker_open_page"))
-            open_btn.clicked.connect(self._open_homepage)
-            button_row.addWidget(open_btn)
+            self.open_button = QPushButton()
+            self.open_button.clicked.connect(self._open_homepage)
+            button_row.addWidget(self.open_button)
+        else:
+            self.open_button = None
         main_layout.addLayout(button_row)
-        button_box = QDialogButtonBox(
+        self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        button_box.accepted.connect(self._on_accept)
-        button_box.rejected.connect(self.reject)
-        main_layout.addWidget(button_box)
+        self.button_box.accepted.connect(self._on_accept)
+        self.button_box.rejected.connect(self.reject)
+        main_layout.addWidget(self.button_box)
         self._populate()
+        self.relocalize_ui()
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(
+            tr("dialogs.gamebanana_picker_title", mod_name=self.mod_name)
+        )
+        self.hint_label.setText(tr("dialogs.gamebanana_picker_hint"))
+        if self.open_button:
+            self.open_button.setText(tr("dialogs.gamebanana_picker_open_page"))
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("ui.ok"))
+        self.button_box.button(QDialogButtonBox.StandardButton.Cancel).setText(
+            tr("dialogs.cancel")
+        )
+        self._on_selection_changed()
 
     def _populate(self):
         self.files.sort(key=lambda f: f.get("timestamp") or 0, reverse=True)

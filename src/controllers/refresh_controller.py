@@ -58,6 +58,17 @@ class RefreshController:
         self.fetch_thread = None
         self.details_thread = None
 
+    def is_refreshing(self) -> bool:
+        thread = self.fetch_thread
+        if not thread:
+            return False
+        try:
+            return thread.isRunning()
+        except (RuntimeError, AttributeError):
+            if self.fetch_thread is thread:
+                self.fetch_thread = None
+            return False
+
     def cleanup(self):
         self._stop_fetch_thread()
 
@@ -77,8 +88,8 @@ class RefreshController:
                 thread.deleteLater()
             else:
                 thread.finished.connect(lambda: thread.deleteLater())
-        except (RuntimeError, TypeError, AttributeError):
-            pass
+        except (RuntimeError, TypeError, AttributeError) as error:
+            logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
     def _stop_worker_thread(
         self,
@@ -147,17 +158,19 @@ class RefreshController:
                     tr("status.cant_update_while_running"), UI_COLORS["status_warning"]
                 )
                 return
+            previous_fetch = self.fetch_thread
             self._stop_fetch_thread()
             try:
-                if self.fetch_thread:
+                if previous_fetch:
                     try:
-                        if self.fetch_thread.isRunning():
+                        if previous_fetch.isRunning():
                             logger.warning(
                                 "RefreshController: Previous fetch thread still running, ignoring new fetch"
                             )
                             return
                     except (RuntimeError, AttributeError):
-                        self.fetch_thread = None
+                        if self.fetch_thread is previous_fetch:
+                            self.fetch_thread = None
             except Exception as e:
                 logger.debug(f"RefreshController: Error checking fetch thread: {e}")
                 self.fetch_thread = None
@@ -172,20 +185,22 @@ class RefreshController:
             fetch_context = FetchContext(
                 self.app_state, self.mod_service, self.settings_service
             )
-            self.fetch_thread = FetchModsThread(
+            fetch_thread = FetchModsThread(
                 fetch_context, force_update=True, parent=None
             )
-            self.fetch_thread.status.connect(self._safe_update_status)
+            self.fetch_thread = fetch_thread
+            fetch_thread.status.connect(self._safe_update_status)
             finished_kwargs = on_fetch_finished_kwargs or {}
-            self.fetch_thread.result.connect(
-                lambda success: self._on_fetch_finished(
+            fetch_thread.result.connect(
+                lambda success, worker=fetch_thread: self._on_fetch_finished(
                     success,
                     is_initial=is_initial,
                     localization_callback=localization_callback,
+                    fetch_thread=worker,
                     **finished_kwargs,
                 )
             )
-            self.fetch_thread.start()
+            fetch_thread.start()
         except Exception as e:
             error_msg = f"Failed to refresh mods list: {e}"
             logger.error(
@@ -198,8 +213,13 @@ class RefreshController:
     def _stop_fetch_thread(self):
         if self.fetch_thread:
             fetch_thread = self.fetch_thread
-            self.fetch_thread = None
             self._stop_worker_thread(fetch_thread, error_label="fetch thread")
+            try:
+                if not fetch_thread.isRunning() and self.fetch_thread is fetch_thread:
+                    self.fetch_thread = None
+            except (RuntimeError, AttributeError):
+                if self.fetch_thread is fetch_thread:
+                    self.fetch_thread = None
         if self.details_thread:
             details_thread = self.details_thread
             self.details_thread = None
@@ -298,6 +318,8 @@ class RefreshController:
                 )
                 if fetch_thread_to_cleanup:
                     self._cleanup_thread_later(fetch_thread_to_cleanup)
+                    if self.fetch_thread is fetch_thread_to_cleanup:
+                        self.fetch_thread = None
                 self._cleanup_thread_later(self._post_fetch_worker)
                 self._post_fetch_worker = None
 

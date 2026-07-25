@@ -19,6 +19,7 @@ from config.config import (
     ICON_PNG_FILENAME,
     IS_WINDOWS_PLATFORM,
     META_JSON_FILENAME,
+    META_TOML_FILENAME,
     MOD_CONFIG_FILENAME,
 )
 from services.migration_service import LEGACY_MOD_ID_KEYS, migrate_legacy_chapter_id
@@ -230,8 +231,8 @@ def _cleanup_tmp(path: str) -> None:
     try:
         if os.path.exists(path):
             os.remove(path)
-    except OSError:
-        pass
+    except OSError as error:
+        logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
 
 def save_json(
@@ -445,7 +446,7 @@ def get_file_filter(filter_type: str) -> str:
 
 
 def find_deltamod_info_file(directory: str) -> str | None:
-    for name in (META_JSON_FILENAME, DELTAMOD_INFO_FILENAME):
+    for name in (META_TOML_FILENAME, META_JSON_FILENAME, DELTAMOD_INFO_FILENAME):
         path = os.path.join(directory, name)
         if os.path.exists(path):
             return path
@@ -453,12 +454,12 @@ def find_deltamod_info_file(directory: str) -> str | None:
 
 
 def has_deltamod_info_file(file_list: list[str] | set[str]) -> bool:
-    file_set = set(file_list)
-    return META_JSON_FILENAME in file_set or DELTAMOD_INFO_FILENAME in file_set
+    return any(check_filename_is_deltamod_info(name) for name in file_list)
 
 
 def check_filename_is_deltamod_info(filename: str) -> bool:
     return filename.lower() in {
+        META_TOML_FILENAME.lower(),
         META_JSON_FILENAME.lower(),
         DELTAMOD_INFO_FILENAME.lower(),
     }
@@ -537,8 +538,8 @@ def _rmtree_error_handler(func, path, _):
         try:
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
             func(path)
-        except OSError:
-            pass
+        except OSError as error:
+            logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
 
 class _DirectoryStillExistsError(PermissionError):

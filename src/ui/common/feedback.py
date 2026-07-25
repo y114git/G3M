@@ -265,10 +265,11 @@ class FeedbackManager(QObject):
         return _ScopedFeedbackManager(self, tr_func or self._tr)
 
 
-class _ScopedFeedbackManager:
+class _ScopedFeedbackManager(FeedbackManager):
     """Delegates feedback behavior while overriding translation scope."""
 
     def __init__(self, base_manager: FeedbackManager, tr_func) -> None:
+        QObject.__init__(self)
         self._base_manager = base_manager
         self._tr = tr_func
 

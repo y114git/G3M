@@ -309,7 +309,7 @@ class TestCreateVersionWorker:
         from workers.game_version_archive_worker import CreateVersionWorker
         results = []
         worker = CreateVersionWorker(archive_path, game_dir, protected)
-        worker.finished.connect(lambda *args: results.append(args))
+        worker.result_ready.connect(lambda *args: results.append(args))
         worker.run()
 
         assert len(results) == 1
@@ -331,7 +331,7 @@ class TestCreateVersionWorker:
         from workers.game_version_archive_worker import CreateVersionWorker
         results = []
         worker = CreateVersionWorker(archive_path, empty_dir, set())
-        worker.finished.connect(lambda *args: results.append(args))
+        worker.result_ready.connect(lambda *args: results.append(args))
         worker.run()
         assert len(results) == 1
         success, _error, _size, count = results[0]
@@ -339,18 +339,24 @@ class TestCreateVersionWorker:
         assert count == 0
 
     def test_create_archive_suppresses_emit_failure_after_error(
-        self, temp_dir, qapp, caplog
+        self, temp_dir, qapp, caplog, monkeypatch
     ):
         """Checks that archive errors cannot crash while notifying a dead UI."""
+        from functools import partial
+
+        from workers import game_version_archive_worker
         from workers.game_version_archive_worker import CreateVersionWorker
 
-        class _FailingSignal:
-            def emit(self, *_args, **_kwargs):
-                raise RuntimeError("receiver deleted")
+        def failing_safe_emit(*_args, **_kwargs):
+            raise RuntimeError("receiver deleted")
 
         archive_path = os.path.join(temp_dir, "missing", "version.zip")
         worker = CreateVersionWorker(archive_path, temp_dir, set())
-        worker.finished = _FailingSignal()
+        monkeypatch.setattr(
+            game_version_archive_worker,
+            "_safe_emit",
+            partial(game_version_archive_worker._safe_emit, emitter=failing_safe_emit),
+        )
 
         worker.run()
 
@@ -372,7 +378,7 @@ class TestApplyVersionWorker:
         from workers.game_version_archive_worker import ApplyVersionWorker
         results = []
         worker = ApplyVersionWorker(archive_path, game_dir, set(), full_replace=False)
-        worker.finished.connect(lambda *args: results.append(args))
+        worker.result_ready.connect(lambda *args: results.append(args))
         worker.run()
 
         assert len(results) == 1
@@ -395,7 +401,7 @@ class TestApplyVersionWorker:
         from workers.game_version_archive_worker import ApplyVersionWorker
         results = []
         worker = ApplyVersionWorker(archive_path, game_dir, {'game.exe'}, full_replace=True)
-        worker.finished.connect(lambda *args: results.append(args))
+        worker.result_ready.connect(lambda *args: results.append(args))
         worker.run()
 
         assert results[0][0] is True
@@ -408,7 +414,7 @@ class TestApplyVersionWorker:
         from workers.game_version_archive_worker import ApplyVersionWorker
         results = []
         worker = ApplyVersionWorker('/nonexistent.zip', temp_dir, set(), full_replace=False)
-        worker.finished.connect(lambda *args: results.append(args))
+        worker.result_ready.connect(lambda *args: results.append(args))
         worker.run()
         assert results[0][0] is False
         assert results[0][1] == tr("errors.file_not_found", path="/nonexistent.zip")
@@ -428,7 +434,7 @@ class TestExportImportWorkers:
         from workers.game_version_archive_worker import GameExportVersionWorker
         export_results = []
         ew = GameExportVersionWorker(source_archive, exported_path, manifest)
-        ew.finished.connect(lambda *args: export_results.append(args))
+        ew.result_ready.connect(lambda *args: export_results.append(args))
         ew.run()
         assert export_results[0][0] is True
         assert os.path.isfile(exported_path)
@@ -441,7 +447,7 @@ class TestExportImportWorkers:
         from workers.game_version_archive_worker import GameImportVersionWorker
         import_results = []
         iw = GameImportVersionWorker(exported_path, reimport_path)
-        iw.finished.connect(lambda *args: import_results.append(args))
+        iw.result_ready.connect(lambda *args: import_results.append(args))
         iw.run()
         assert import_results[0][0] is True
         assert import_results[0][2]['game'] == 'deltarune'
@@ -460,7 +466,7 @@ class TestExportImportWorkers:
         from workers.game_version_archive_worker import GameImportVersionWorker
         results = []
         iw = GameImportVersionWorker(source, dest)
-        iw.finished.connect(lambda *args: results.append(args))
+        iw.result_ready.connect(lambda *args: results.append(args))
         iw.run()
         assert results[0][0] is False
         assert 'manifest' in results[0][1].lower()

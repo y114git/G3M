@@ -406,8 +406,8 @@ class SearchDisplayController(QObject):
             try:
                 timer.stop()
                 timer.deleteLater()
-            except (RuntimeError, ValueError):
-                pass
+            except (RuntimeError, ValueError) as error:
+                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
         self._active_search_timers.clear()
 
     def _cleanup_load_thread(self, thread):
@@ -429,8 +429,8 @@ class SearchDisplayController(QObject):
                         )
 
                 thread.finished.connect(cleanup_when_really_finished)
-        except (RuntimeError, ValueError):
-            pass
+        except (RuntimeError, ValueError) as error:
+            logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
     def cleanup(self) -> None:
         """Stop active timers and GameBanana worker threads before shutdown."""
@@ -688,8 +688,6 @@ class SearchDisplayController(QObject):
                 self.app, tr("ui.search_tab"), tr("ui.search_in_name_description")
             )
             if ok and len(text.strip()) >= 2:
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mods_browser_search(text.strip())
                 self.app_state.search_text = text.strip()
                 self._set_search_btn_icon(True)
                 self.load_mods_for_selected_game()
@@ -1216,8 +1214,6 @@ class SearchDisplayController(QObject):
             return
         self.clear_all_selections(except_widget=target_widget)
         target_widget.set_selected(True)
-        if analytics := getattr(self.app, "analytics_service", None):
-            analytics.record_mod_opened("mods_browser", mod)
 
     def show_details(self, mod_data):
         source_card = None
@@ -1225,8 +1221,6 @@ class SearchDisplayController(QObject):
             if widget.mod_data == mod_data:
                 source_card = widget
                 break
-        if analytics := getattr(self.app, "analytics_service", None):
-            analytics.record_mod_details_opened("mods_browser", mod_data)
         show_mod_details_overlay(self.app, mod_data, source_card=source_card)
 
     def clear_all_selections(self, except_widget=None):

@@ -810,16 +810,10 @@ class TestAppWindow:
             window = AppWindow()
             try:
                 event = Mock()
-                with patch.object(
-                    window.analytics_service,
-                    "shutdown_async",
-                    side_effect=lambda cb: (cb(), False)[1],
-                ) as shutdown_async:
-                    window.closeEvent(event)
+                window.closeEvent(event)
 
                 event.accept.assert_called_once_with()
                 assert window.isHidden() is True
-                shutdown_async.assert_called_once()
                 assert scheduled, "expected deferred cleanup to be scheduled"
             finally:
                 for callback in scheduled:
@@ -850,13 +844,10 @@ class TestAppWindow:
         ):
             window = AppWindow()
             try:
-                window._pending_close_tasks = {"analytics": False, "cleanup": True}
+                window._pending_close_tasks = {"cleanup": False}
                 window._force_finish_close_tasks()
 
-                assert window._pending_close_tasks == {
-                    "analytics": True,
-                    "cleanup": True,
-                }
+                assert window._pending_close_tasks == {"cleanup": True}
                 app_mock.quit.assert_called_once_with()
             finally:
                 _close_app_window(qapp, window)
@@ -932,7 +923,8 @@ class TestTabBuilders:
         assert widgets["full_install_checkbox"].toolTip() == tr(
             "tooltips.full_install_toggle"
         )
-        assert widgets["priority_button"].toolTip() == tr("tooltips.mod_priority")
+        assert widgets["priority_button"].toolTip() == tr("tooltips.priority_steps")
+        assert widgets["priority_button"].text() == "Priority && Steps"
         assert (
             "QScrollBar::handle:horizontal"
             in widgets["filters_scroll"].horizontalScrollBar().styleSheet()
@@ -1060,6 +1052,122 @@ class TestTabBuilders:
             dialog.close()
             dialog.deleteLater()
 
+    def test_diagnostics_dialog_preserves_empty_explicit_section(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+        app_state.current_mode = "chapter"
+        app_state.selected_chapter_id = "deltarune_1"
+        used_mods_service = Mock()
+        used_mods_service.get_used_mods_list.return_value = []
+        used_mods_service.get_active_mod_selections.return_value = {
+            "deltarune_2": [_mod_stub("other", "Other", ("deltarune_2",))]
+        }
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = []
+
+        with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
+            dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
+        try:
+            used_mods_service.get_active_mod_selections.reset_mock()
+            assert dialog._initial_section_mods() == {"deltarune_1": []}
+            used_mods_service.get_active_mod_selections.assert_not_called()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_diagnostics_dialog_clears_preflight_progress(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+        used_mods_service = Mock()
+        used_mods_service.get_used_mods_list.return_value = []
+        used_mods_service.get_active_mod_selections.return_value = {}
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = []
+
+        with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
+            dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
+        try:
+            dialog._preflight_progress.setValue(73)
+            dialog._clear_preflight_result()
+            assert dialog._preflight_progress.value() == 0
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_diagnostics_dialog_shows_exact_preflight_issues(
+        self, qapp, app_state, feedback_service
+    ):
+        from services.diagnostics.preflight_service import PreflightReport
+        from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+        used_mods_service = Mock()
+        used_mods_service.get_used_mods_list.return_value = []
+        used_mods_service.get_active_mod_selections.return_value = {}
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = []
+
+        with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
+            dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
+        try:
+            report = PreflightReport(
+                False,
+                False,
+                0.1,
+                issues=("xdelta3: XD3_INVALID_INPUT", "PermissionError: access denied"),
+            )
+            dialog._populate_preflight_report(report)
+            assert "XD3_INVALID_INPUT" in dialog._inspector.toPlainText()
+            assert "access denied" in dialog._inspector.toPlainText()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_diagnostics_resource_comparison_does_not_mix_sections(
+        self, qapp, app_state, feedback_service
+    ):
+        from services.mod_diagnostics_service import (
+            DataImpact,
+            DiagnosticsReport,
+            DiagnosticsSummary,
+        )
+        from ui.dialogs.mod_diagnostics_dialog import ModDiagnosticsDialog
+
+        used_mods_service = Mock()
+        used_mods_service.get_used_mods_list.return_value = []
+        used_mods_service.get_active_mod_selections.return_value = {}
+        mod_service = Mock()
+        mod_service.get_installed_mods_list.return_value = []
+        entry = {"type": "code", "name": "shared_name"}
+
+        def impact(section_id, mod_id):
+            return DataImpact(
+                section_id=section_id,
+                mod_id=mod_id,
+                mod_name=mod_id,
+                patch_path=None,
+                patch_type="g3mpatch",
+                target_data_path=None,
+                deep_analysis_available=True,
+                resource_entries=(entry,),
+            )
+
+        first = impact("section_a", "first")
+        second = impact("section_b", "second")
+        with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
+            dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
+        try:
+            dialog._report = DiagnosticsReport(
+                DiagnosticsSummary(), (), (first, second), ()
+            )
+            assert dialog._resource_comparison_text(first, entry) == ""
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
     def test_mods_browser_tab_builder_creation(self, qapp, app_state, feedback_service):
         """Checks that modsing browser tab builder creation."""
         from PyQt6.QtWidgets import QGridLayout
@@ -1178,6 +1286,23 @@ class TestTabBuilders:
             assert widgets["settings_custom_portproton_button"].toolTip() == tr(
                 "tooltips.custom_portproton_binary"
             )
+        finally:
+            widget.deleteLater()
+
+    def test_settings_view_builder_exposes_user_data_root_controls(
+        self, qapp, app_state, feedback_service
+    ):
+        from ui.builders.settings_view_builder import SettingsViewBuilder
+
+        builder = SettingsViewBuilder(app_state, None)
+        widget = builder.build()
+        try:
+            widgets = builder.get_widgets()
+            assert widgets["settings_user_data_root_label"].text()
+            assert widgets["settings_user_data_root_edit"].full_text()
+            assert widgets["settings_user_data_root_edit"].isReadOnly()
+            assert widgets["settings_user_data_root_button"].text() == "..."
+            assert widgets["settings_user_data_root_reset_button"] is not None
         finally:
             widget.deleteLater()
 

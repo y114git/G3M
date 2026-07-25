@@ -48,22 +48,12 @@ class TestPathUtils:
             assert bundle_root in path
             assert "assets/icons/icon.ico" in path
 
-    def test_resource_path_development(self):
+    def test_resource_path_development(self, monkeypatch):
         """Checks that resource path development."""
-        frozen_attr = getattr(sys, "frozen", None)
-        meipass_attr = getattr(sys, "_MEIPASS", None)
-        try:
-            if hasattr(sys, "frozen"):
-                del sys.frozen
-            if hasattr(sys, "_MEIPASS"):
-                del sys._MEIPASS
-            path = resource_path("assets/icons/icon.ico")
-            assert "src" in path or "assets" in path
-        finally:
-            if frozen_attr is not None:
-                sys.frozen = frozen_attr
-            if meipass_attr is not None:
-                sys._MEIPASS = meipass_attr
+        monkeypatch.delattr(sys, "frozen", raising=False)
+        monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+        path = resource_path("assets/icons/icon.ico")
+        assert "src" in path or "assets" in path
 
     def test_replace_svg_color_tokens_matches_root_fill_without_required_space(self):
         """Checks that replaceing svg color tokens matches root fill without required space."""

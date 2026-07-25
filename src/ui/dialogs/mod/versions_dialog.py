@@ -8,7 +8,7 @@ import tempfile
 import time
 import zipfile
 
-from PyQt6.QtCore import QSize, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.config import MOD_VERSIONS_DIR
+from config.config import MOD_CONFIG_FILENAME, MOD_VERSIONS_DIR
 from presentation.drag_drop import (
     collect_drop_file_paths,
     collect_drop_urls,
@@ -34,6 +34,7 @@ from ui.common.dialog_theme import (
     get_dialog_text_color,
     get_dialog_theme_values,
 )
+from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from ui.utils.ui_utils import format_size
 from utils.mod.version_utils import (
     create_version_zip,
@@ -111,16 +112,37 @@ def _resolve_content_path(temp_dir: str) -> str:
 
 def _apply_version_zip(mod_folder: str, zip_path: str):
     """Apply version zip, converting deltamod contents if needed."""
+    from utils.file_utils import load_json, save_json
+
     temp_dir = tempfile.mkdtemp(prefix="mv_apply_")
     backup_dir = tempfile.mkdtemp(prefix="mv_backup_")
     staged_current = False
     try:
+        current_config = load_json(
+            os.path.join(mod_folder, MOD_CONFIG_FILENAME), persist_normalized=False
+        )
+        current_metadata = current_config.get("metadata", {})
+        current_mod_id = (
+            current_metadata.get("id")
+            if isinstance(current_metadata, dict)
+            else None
+        ) or current_config.get("id")
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
         content_path = _resolve_content_path(temp_dir)
         from utils.file_utils import normalize_mod_package
 
-        normalize_mod_package(content_path, require_mod_config=True)
+        package = normalize_mod_package(content_path, require_mod_config=True)
+        if current_mod_id:
+            staged_config_path = package["mod_config_path"]
+            if not staged_config_path:
+                raise FileNotFoundError("Staged mod configuration is missing")
+            staged_config = load_json(staged_config_path, persist_normalized=False)
+            staged_metadata = staged_config.get("metadata")
+            if isinstance(staged_metadata, dict):
+                staged_metadata["id"] = current_mod_id
+            staged_config["id"] = current_mod_id
+            save_json(staged_config_path, staged_config)
         for item in os.listdir(mod_folder):
             if item != MOD_VERSIONS_DIR:
                 shutil.move(os.path.join(mod_folder, item), os.path.join(backup_dir, item))
@@ -184,11 +206,11 @@ def _convert_archive_to_version_zip(
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-class _ModVersionWorker(QThread):
+class _ModVersionWorker(ManagedQThread):
     """Background worker for download + convert operations."""
 
     progress = pyqtSignal(int)
-    finished = pyqtSignal(bool, str)
+    result_ready = pyqtSignal(bool, str)
 
     def __init__(
         self, url: str, mod_folder: str, version_name: str, parent=None
@@ -225,8 +247,7 @@ class _ModVersionWorker(QThread):
                 for chunk in resp.iter_content(chunk_size=65536):
                     if self._cancelled:
                         tmp_path = tmp.name
-                        os.unlink(tmp_path)
-                        self.finished.emit(False, "cancelled")
+                        self.result_ready.emit(False, "cancelled")
                         return
                     tmp.write(chunk)
                     received += len(chunk)
@@ -235,16 +256,16 @@ class _ModVersionWorker(QThread):
                 tmp_path = tmp.name
             self.progress.emit(80)
             if self._cancelled:
-                self.finished.emit(False, "cancelled")
+                self.result_ready.emit(False, "cancelled")
                 return
             ok = _convert_archive_to_version_zip(
                 tmp_path, self._mod_folder, self._version_name
             )
             self.progress.emit(100)
-            self.finished.emit(ok, "" if ok else "convert_failed")
+            self.result_ready.emit(ok, "" if ok else "convert_failed")
         except Exception as e:
             logger.error("_ModVersionWorker: %s", e, exc_info=True)
-            self.finished.emit(False, format_network_error(e, url=self._url))
+            self.result_ready.emit(False, format_network_error(e, url=self._url))
         finally:
             if tmp_path:
                 with contextlib.suppress(OSError):
@@ -322,7 +343,7 @@ class ModVersionsDialog(QDialog):
         if hasattr(self._mod_data, "is_gamebanana_mod") and callable(
             self._mod_data.is_gamebanana_mod
         ):
-            return self._mod_data.is_gamebanana_mod()
+            return bool(self._mod_data.is_gamebanana_mod())
         key = (
             self._mod_data.get("id")
             if isinstance(self._mod_data, dict)
@@ -607,12 +628,12 @@ class ModVersionsDialog(QDialog):
             url, self._mod_folder, version_name, parent=self
         )
         self._worker.progress.connect(self._progress_bar.setValue)
-        self._worker.finished.connect(self._on_worker_finished)
+        self._worker.result_ready.connect(self._on_worker_finished)
         self._worker.start()
 
     def _on_worker_finished(self, success: bool, error: str):
         if self._worker:
-            self._worker.deleteLater()
+            retire_qthread(self._worker)
             self._worker = None
         self._set_busy(False)
         if success:
@@ -666,7 +687,7 @@ class ModVersionsDialog(QDialog):
         picker = GameBananaFilePickerDialog(
             self,
             all_files,
-            self._get_mod_attr("name", ""),
+            str(self._get_mod_attr("name", "") or ""),
             self._get_mod_attr("homepage"),
         )
         if picker.exec() != QDialog.DialogCode.Accepted:

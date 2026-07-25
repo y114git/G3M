@@ -516,8 +516,6 @@ QPushButton#cardButtonUninstall:disabled {{
             return
         if not self._entry_api_compatible(entry) and not self._confirm_incompatible_api_download(entry):
             return
-        if analytics := getattr(self.app, "analytics_service", None):
-            analytics.record_plugin_download_requested(entry)
         self.downloads_manager.enqueue_with_feedback(
             self.feedback_service,
             display_name=entry.name,
@@ -573,8 +571,6 @@ QPushButton#cardButtonUninstall:disabled {{
             self.plugin_runtime_service.scan_installed_plugins(
                 resolve_catalog=self.plugin_catalog_service.is_loaded()
             )
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_plugin_imported(source="manual")
             self.refresh_main_tabs(force_rebuild=True)
             self.render()
 
@@ -583,14 +579,6 @@ QPushButton#cardButtonUninstall:disabled {{
         if not plugin:
             return
         if plugin.enabled:
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_plugin_state_changed(
-                    plugin_id=plugin.plugin_id,
-                    plugin_name=plugin.manifest.name if plugin.manifest else plugin.plugin_id,
-                    version=plugin.manifest.version if plugin.manifest else "",
-                    enabled=False,
-                    source="installed",
-                )
             self.plugin_runtime_service.disable_plugin(plugin_id)
         else:
             success, error = self.plugin_runtime_service.enable_plugin(plugin_id)
@@ -600,14 +588,6 @@ QPushButton#cardButtonUninstall:disabled {{
                     "errors.error",
                     error or tr("plugins.enable_failed"),
                 )
-            elif analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_plugin_state_changed(
-                    plugin_id=plugin.plugin_id,
-                    plugin_name=plugin.manifest.name if plugin.manifest else plugin.plugin_id,
-                    version=plugin.manifest.version if plugin.manifest else "",
-                    enabled=True,
-                    source="installed",
-                )
         self.refresh_main_tabs(force_rebuild=True)
         self.render()
 
@@ -616,8 +596,6 @@ QPushButton#cardButtonUninstall:disabled {{
         entry = None if plugin else self.plugin_catalog_service.get_entry(plugin_id, load_if_needed=False)
         if not plugin and not entry:
             return
-        if analytics := getattr(self.app, "analytics_service", None):
-            analytics.record_plugin_details_opened(entry)
         if entry is not None:
             dialog = PluginDetailsDialog(
                 None,
@@ -667,13 +645,6 @@ QPushButton#cardButtonUninstall:disabled {{
             self.plugin_runtime_service.scan_installed_plugins(
                 resolve_catalog=self.plugin_catalog_service.is_loaded()
             )
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_plugin_deleted(
-                    plugin_id=plugin_id,
-                    plugin_name=plugin.manifest.name if plugin and plugin.manifest else plugin_id,
-                    version=plugin.manifest.version if plugin and plugin.manifest else "",
-                    source="installed",
-                )
         except Exception as e:
             logger.error("PluginsController: delete failed for %s: %s", plugin_id, e, exc_info=True)
             plugin_path = str(getattr(plugin, "path", "") or "")
@@ -770,8 +741,8 @@ QPushButton#cardButtonUninstall:disabled {{
             try:
                 self._catalog_worker.loaded.disconnect()
                 self._catalog_worker.finished.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            except (TypeError, RuntimeError) as error:
+                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
             worker = self._catalog_worker
             self._catalog_worker = None

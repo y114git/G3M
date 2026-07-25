@@ -135,16 +135,21 @@ class ThemeInstallWorker(BaseInstallWorker):
                     temp_archive_path = os.path.join(temp_dir, temp_archive_name)
                     try:
                         if not self._download_archive(url, temp_archive_path):
-                            self._safe_emit(self.finished, False, tr("themes.download_failed"))
+                            message = tr(
+                                "status.operation_cancelled"
+                                if self._cancelled
+                                else "themes.download_failed"
+                            )
+                            self._safe_emit(self.result_ready, False, message)
                             return
                     except Exception as e:
                         self._safe_emit(
-                            self.finished,
+                            self.result_ready,
                             False, tr("themes.download_error", error=format_network_error(e, url=url))
                         )
                         return
                     if self._cancelled:
-                        self._safe_emit(self.finished, False, tr("status.operation_cancelled"))
+                        self._safe_emit(self.result_ready, False, tr("status.operation_cancelled"))
                         return
                     self._safe_emit(
                         self.status,
@@ -152,12 +157,12 @@ class ThemeInstallWorker(BaseInstallWorker):
                     )
                     if self._install_theme_from_path(temp_archive_path):
                         self._safe_emit(self.status, tr("themes.theme_installed"), "success")
-                        self._safe_emit(self.finished, True, tr("themes.theme_installed_success"))
+                        self._safe_emit(self.result_ready, True, tr("themes.theme_installed_success"))
                     else:
-                        self._safe_emit(self.finished, False, tr("themes.installation_failed"))
+                        self._safe_emit(self.result_ready, False, tr("themes.installation_failed"))
             else:
                 if not os.path.exists(self.archive_path):
-                    self._safe_emit(self.finished, False, tr("themes.archive_not_found"))
+                    self._safe_emit(self.result_ready, False, tr("themes.archive_not_found"))
                     return
                 self._safe_emit(
                     self.status,
@@ -165,15 +170,15 @@ class ThemeInstallWorker(BaseInstallWorker):
                 )
                 if self._install_theme_from_path(self.archive_path):
                     self._safe_emit(self.status, tr("themes.theme_installed"), "success")
-                    self._safe_emit(self.finished, True, tr("themes.theme_installed_success"))
+                    self._safe_emit(self.result_ready, True, tr("themes.theme_installed_success"))
                 else:
-                    self._safe_emit(self.finished, False, tr("themes.installation_failed"))
+                    self._safe_emit(self.result_ready, False, tr("themes.installation_failed"))
         except Exception as e:
             logger.error(
                 f"ThemeInstallWorker: Installation failed: {e}", exc_info=True
             )
             self._safe_emit(
-                self.finished,
+                self.result_ready,
                 False,
                 tr(
                     "themes.installation_error",

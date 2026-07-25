@@ -33,6 +33,7 @@ class AboutDialog(QDialog):
         self.setWindowTitle(tr("ui.about_title"))
         self.setMinimumWidth(620)
         self._init_ui()
+        self.relocalize_ui()
 
     def _resolve_data_root(self) -> str:
         config_dir = getattr(self.app_state, "config_dir", "") or ""
@@ -57,7 +58,11 @@ class AboutDialog(QDialog):
         if system == "Windows":
             try:
                 import winreg
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+
+                with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+                ) as key:
                     product_name = winreg.QueryValueEx(key, "ProductName")[0]
                     build_number = winreg.QueryValueEx(key, "CurrentBuildNumber")[0]
                     display_version = winreg.QueryValueEx(key, "DisplayVersion")[0]
@@ -178,6 +183,26 @@ class AboutDialog(QDialog):
         actions_layout.addWidget(self.close_button)
         layout.addLayout(actions_layout)
 
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("ui.about_title"))
+        self.summary_label.setText(tr("ui.about_dialog_text"))
+        self.version_label.setText(tr("ui.about_version_label", version="").rstrip())
+        self.plugin_api_label.setText(
+            tr("ui.about_plugin_api_label", version="").rstrip()
+        )
+        self.language_label.setText(tr("ui.about_language_label", language="").rstrip())
+        self.language_value.setText(self._current_language_name())
+        self.os_label.setText(tr("ui.about_os_label"))
+        self.python_label.setText(tr("ui.about_python_label"))
+        self.data_folder_label.setText(tr("ui.about_data_folder"))
+        self.releases_button.setText(tr("ui.about_releases"))
+        self.wiki_button.setText(tr("ui.about_wiki"))
+        self.issues_button.setText(tr("ui.about_issues"))
+        self.open_folder_button.setText(tr("buttons.open_g3m_folder"))
+        self.telegram_button.setText(tr("buttons.telegram"))
+        self.discord_button.setText(tr("buttons.discord"))
+        self.close_button.setText(tr("buttons.close"))
+
     def _open_url(self, url: str):
         open_url_native(url)
 
@@ -186,4 +211,8 @@ class AboutDialog(QDialog):
             open_path_native(self.data_root)
 
     def _wiki_url(self) -> str:
-        return str((self.app_state.global_settings or {}).get("wiki_url", "https://github.com/y114git/G3M/")).strip()
+        return str(
+            (self.app_state.global_settings or {}).get(
+                "wiki_url", "https://github.com/y114git/G3M/"
+            )
+        ).strip()

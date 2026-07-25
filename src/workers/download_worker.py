@@ -16,8 +16,8 @@ def _cleanup_file(path: str):
     try:
         if path and os.path.exists(path):
             os.remove(path)
-    except OSError:
-        pass
+    except OSError as error:
+        logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
 
 def _safe_emit(owner: str, signal, *args) -> None:
@@ -74,7 +74,11 @@ class DownloadWorker(QThread):
                     )
 
             def on_response(r):
+                nonlocal total_size
                 self._active_response = r
+                if not total_size:
+                    with contextlib.suppress(TypeError, ValueError):
+                        total_size = int(r.headers.get("content-length", 0))
 
             os.makedirs(os.path.dirname(self._target_path), exist_ok=True)
             download_file(

@@ -71,7 +71,7 @@ class ModOperationsController:
 
     @staticmethod
     def _disconnect_task_signals(task) -> None:
-        for sig_name in ("progress", "status", "finished"):
+        for sig_name in ("progress", "status", "result_ready", "finished"):
             if hasattr(task, sig_name):
                 with contextlib.suppress(TypeError, RuntimeError):
                     getattr(task, sig_name).disconnect()
@@ -204,7 +204,7 @@ class ModOperationsController:
             install_thread.status.connect(
                 lambda msg, col, oid=op_id: self.on_install_status_token(msg, col, oid)
             )
-            install_thread.finished.connect(
+            install_thread.result_ready.connect(
                 lambda ok, oid=op_id: self._on_install_task_finished(ok, oid)
             )
             self.app.progress_bar.setVisible(True)
@@ -332,11 +332,6 @@ class ModOperationsController:
         try:
             if self.app_state.is_installing and (not force):
                 return
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_mod_install_requested(
-                    mod,
-                    mode="update" if is_update else "install",
-                )
             if (
                 hasattr(mod, "is_gamebanana_mod")
                 and callable(mod.is_gamebanana_mod)
@@ -442,23 +437,12 @@ class ModOperationsController:
             "Failed to update button state",
         )
         if not success:
-            analytics_mod = installed_mod_info
-            if analytics_mod is None and current_task:
-                install_tasks = getattr(current_task, "install_tasks", []) or []
-                if install_tasks:
-                    analytics_mod = install_tasks[0][0]
-            analytics_mode = "update" if was_installed_before else "install"
             is_cancelled = (
                 message == tr("status.operation_cancelled")
                 or "cancelled" in message.lower()
                 or self.app_state.operation_cancelled
             )
             if is_cancelled:
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_install_cancelled(
-                        analytics_mod,
-                        mode=analytics_mode,
-                    )
                 logger.info("ModOperationsController: Installation was cancelled")
                 self._safe_execute(
                     lambda: setattr(self.app_state, "operation_cancelled", False),
@@ -468,11 +452,6 @@ class ModOperationsController:
                     tr("status.operation_cancelled"), UI_COLORS["status_warning"]
                 )
             else:
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_install_failed(
-                        analytics_mod,
-                        mode=analytics_mode,
-                    )
                 self._safe_update_status(
                     tr("status.mod_install_error"), UI_COLORS["status_error"]
                 )
@@ -569,13 +548,6 @@ class ModOperationsController:
             self.refresh_specific_mod_widget_after_update(installed_mod_info)
         elif current_task and not installed_mod_info:
             logger.debug("ModOperationsController: current_task.mod_info was missing")
-        if installed_mod_info and (
-            analytics := getattr(self.app, "analytics_service", None)
-        ):
-            analytics.record_mod_install_completed(
-                installed_mod_info,
-                mode="update" if was_installed_before else "install",
-            )
         self._update_debounce_short.call(check_cache_and_update)
         self._update_debounce_short.call(update_filtered_mods)
         self._update_debounce_short.call(update_cards_with_retry)
@@ -676,8 +648,6 @@ class ModOperationsController:
             self.mod_service.delete_mod_files(mod)
             if used_mods_service := getattr(self.app, "used_mods_service", None):
                 used_mods_service.remove_mod_from_all_chapters(mod)
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_mod_removed(mod, action="uninstall")
             if hasattr(self.app, "search_display"):
                 self.app.search_display.update_search_cards()
                 self.app.search_display.update_filtered_mods(preserve_page=True)

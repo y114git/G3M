@@ -2,12 +2,14 @@
 
 import logging
 import time
+from typing import Any, cast
 
-from PyQt6.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from utils.network_utils import cloud_function_request, get_session
 
 logger = logging.getLogger(__name__)
@@ -17,10 +19,10 @@ UPDATE_PROMPT_MAX_RETRIES = 15
 GLOBAL_SETTINGS_CACHE_TTL_SECONDS = 300
 
 
-class _GlobalSettingsWorker(QThread):
+class _GlobalSettingsWorker(ManagedQThread):
     """Reloads global settings without blocking the UI."""
 
-    finished = pyqtSignal(bool, dict)
+    result_ready = pyqtSignal(bool, dict)
 
     def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent if isinstance(parent, QObject) else None)
@@ -35,11 +37,11 @@ class _GlobalSettingsWorker(QThread):
                 timeout=5,
             )
             if response and response.status_code == 200:
-                self.finished.emit(True, response.json() or {})
+                self.result_ready.emit(True, response.json() or {})
                 return
         except Exception as e:
             logger.warning("reload_global_settings: %s", e)
-        self.finished.emit(False, {})
+        self.result_ready.emit(False, {})
 
 
 def _run_global_settings_callback(callback, success: bool) -> None:
@@ -67,6 +69,16 @@ def _safe_warning(parent, title: str, message: str) -> None:
         QMessageBox.warning(parent, title, message)
     except Exception:
         logger.exception("Update presenter: warning dialog failed")
+
+
+def apply_synced_global_settings(app, data: dict) -> None:
+    if not isinstance(data, dict):
+        return
+    changed = data != app.app_state.global_settings
+    app.app_state.global_settings = data
+    app.app_state.global_settings_loaded_at = time.time()
+    if changed and app.app_state.initialization_completed:
+        check_and_show_announce(app, force_check=True)
 
 
 def handle_update_info(app, update_info, retry_count=0):
@@ -109,6 +121,7 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
         return
     app.app_state.global_settings_load_in_progress = True
     if not isinstance(app, QObject):
+        success = False
         try:
             response = cloud_function_request(
                 "get",
@@ -117,7 +130,7 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
                 timeout=5,
             )
             success = bool(response and response.status_code == 200)
-            if success:
+            if success and response is not None:
                 app.app_state.global_settings = response.json() or {}
                 app.app_state.global_settings_loaded_at = time.time()
         except Exception as e:
@@ -127,19 +140,20 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
             _run_global_settings_callback(callback, success)
             app.app_state.global_settings_load_in_progress = False
         return
-    worker = _GlobalSettingsWorker(app.app_state, parent=app)
+    dynamic_app = cast(Any, app)
+    worker = _GlobalSettingsWorker(dynamic_app.app_state, parent=app)
 
     def _on_finished(success, data):
         try:
             if success:
-                app.app_state.global_settings = data
-                app.app_state.global_settings_loaded_at = time.time()
+                dynamic_app.app_state.global_settings = data
+                dynamic_app.app_state.global_settings_loaded_at = time.time()
             _run_global_settings_callback(callback, success)
         finally:
-            app.app_state.global_settings_load_in_progress = False
-            worker.deleteLater()
+            dynamic_app.app_state.global_settings_load_in_progress = False
+            retire_qthread(worker)
 
-    worker.finished.connect(_on_finished)
+    worker.result_ready.connect(_on_finished)
     worker.start()
 
 

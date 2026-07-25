@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -318,8 +319,20 @@ class GameRegistryService(QObject):
         return result
 
     def _validate_gamebanana_id(self, value: str) -> int | None:
-        numeric = self._validate_numeric_id(value, "games.validation_gamebanana_id")
-        return int(numeric) if numeric else None
+        candidate = value.strip()
+        if not candidate:
+            return None
+        if candidate.isdigit():
+            return int(candidate)
+        parsed = urlparse(candidate)
+        match = re.fullmatch(r"/games/(\d+)/?", parsed.path)
+        if (
+            parsed.scheme == "https"
+            and parsed.hostname in {"gamebanana.com", "www.gamebanana.com"}
+            and match
+        ):
+            return int(match.group(1))
+        raise GameRegistryValidationError("games.validation_gamebanana_id")
 
     @staticmethod
     def _read_data_file_name(item: dict) -> str:

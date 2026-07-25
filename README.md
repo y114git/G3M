@@ -118,7 +118,6 @@ The current codebase is focused on DELTARUNE, DELTARUNE Demo, UNDERTALE, UNDERTA
 - Change UI scale, border radius, theme colors, background media, startup sound behavior, and related appearance options from settings.
 - Hide the Library tab if you want a slimmer layout for browsing and tool-focused use.
 - Use bundled language packs or add external language files. G3M currently ships with English, Russian, Spanish, Korean, Japanese, Chinese Simplified, and Chinese Traditional.
-- Anonymous analytics use two tiers. A small aggregate tier is always recorded; the extra-detail tier is disabled unless the local opt-in flag is enabled.
 
 ## Supported Games
 

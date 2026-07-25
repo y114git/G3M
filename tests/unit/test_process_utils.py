@@ -4,12 +4,34 @@ import requests
 
 from services.localization_service import tr
 from utils.process_utils import (
+    bounded_output_preview,
     build_external_process_env,
     format_filesystem_error,
     format_network_error,
     format_plugin_error,
     resolve_portproton_command,
 )
+
+
+def test_bounded_output_preview_keeps_prefix_suffix_and_marks_omission():
+    text = "prefix-" + ("x" * 5000) + "-suffix"
+
+    preview = bounded_output_preview(text, limit=200)
+
+    assert len(preview) == 200
+    assert preview.startswith("prefix-")
+    assert preview.endswith("-suffix")
+    assert "characters omitted" in preview
+
+
+def test_bounded_output_preview_never_exceeds_tiny_limit():
+    assert len(bounded_output_preview("x" * 100, limit=5)) == 5
+
+
+def test_bounded_output_preview_marker_counts_all_unretained_characters():
+    preview = bounded_output_preview("x" * 100, limit=40)
+    retained = preview.count("x")
+    assert f"[{100 - retained} characters omitted]" in preview
 
 
 def test_build_external_process_env_restores_ld_library_path_from_orig():

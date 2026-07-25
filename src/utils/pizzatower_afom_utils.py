@@ -65,19 +65,43 @@ def _copy_tree_contents(
     logger=None,
 ) -> bool:
     try:
-        for root, _dirs, files in os.walk(source_root):
-            rel_root = os.path.relpath(root, source_root)
-            rel_root = "" if rel_root == "." else rel_root
-            for file_name in files:
-                source_file = os.path.join(root, file_name)
-                target_file = (
-                    os.path.join(target_root, file_name)
-                    if not rel_root
-                    else os.path.join(target_root, rel_root, file_name)
-                )
-                os.makedirs(os.path.dirname(target_file), exist_ok=True)
-                backup_or_mark(target_file)
-                shutil.copy2(source_file, target_file)
+        resolved_root = os.path.normcase(os.path.realpath(source_root))
+        pending = [(source_root, "")]
+        visited_dirs: set[str] = set()
+        while pending:
+            source_dir, rel_dir = pending.pop()
+            real_dir = os.path.normcase(os.path.realpath(source_dir))
+            if real_dir in visited_dirs:
+                continue
+            visited_dirs.add(real_dir)
+            with os.scandir(source_dir) as entries:
+                for entry in entries:
+                    rel_path = os.path.join(rel_dir, entry.name)
+                    try:
+                        if entry.is_symlink():
+                            if logger:
+                                logger.debug("Skipping symlink: %s", entry.path)
+                            continue
+                        resolved_entry = os.path.normcase(os.path.realpath(entry.path))
+                        if os.path.commonpath((resolved_root, resolved_entry)) != resolved_root:
+                            if logger:
+                                logger.warning("Skipping path outside source root: %s", entry.path)
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append((entry.path, rel_path))
+                            continue
+                        if not entry.is_file(follow_symlinks=False):
+                            if logger:
+                                logger.debug("Skipping broken link: %s", entry.path)
+                            continue
+                    except OSError:
+                        if logger:
+                            logger.debug("Skipping inaccessible link: %s", entry.path)
+                        continue
+                    target_file = os.path.join(target_root, rel_path)
+                    os.makedirs(os.path.dirname(target_file), exist_ok=True)
+                    backup_or_mark(target_file)
+                    shutil.copy2(entry.path, target_file)
         return True
     except Exception as e:
         if logger:

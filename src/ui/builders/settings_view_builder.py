@@ -1,7 +1,8 @@
 """Builds the Settings view UI."""
 
+import os
 import platform
-from typing import Any
+from typing import Any, cast
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QFocusEvent, QResizeEvent
@@ -44,7 +45,11 @@ from ui.common.styling import (
 )
 from ui.utils.ui_utils import UIAnimator
 from ui.widgets.shared.custom_controls import NoScrollComboBox
-from utils.path_utils import colored_icon
+from utils.path_utils import (
+    colored_icon,
+    get_default_user_data_root,
+    get_user_data_root,
+)
 
 
 class _FilesDropWidget(QWidget):
@@ -54,13 +59,15 @@ class _FilesDropWidget(QWidget):
         super().__init__(parent)
         self.setAcceptDrops(True)
 
-    def dragEnterEvent(self, event):
+    def dragEnterEvent(self, a0):
+        event = cast(Any, a0)
         if event.mimeData().hasUrls() and any(
             u.isLocalFile() for u in event.mimeData().urls()
         ):
             event.acceptProposedAction()
 
-    def dragMoveEvent(self, event):
+    def dragMoveEvent(self, a0):
+        event = cast(Any, a0)
         if event.mimeData().hasUrls() and any(
             u.isLocalFile() for u in event.mimeData().urls()
         ):
@@ -68,7 +75,8 @@ class _FilesDropWidget(QWidget):
         else:
             event.ignore()
 
-    def dropEvent(self, event):
+    def dropEvent(self, a0):
+        event = cast(Any, a0)
         if event.mimeData().hasUrls():
             paths = [
                 u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()
@@ -100,18 +108,21 @@ class _ElidedPathLineEdit(QLineEdit):
             return self.text().strip()
         return self._full_text.strip()
 
-    def focusInEvent(self, event: QFocusEvent) -> None:  # noqa: N802
+    def focusInEvent(self, a0: QFocusEvent | None) -> None:  # noqa: N802
+        event = cast(QFocusEvent, a0)
         self._show_full_text()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         super().focusInEvent(event)
 
-    def focusOutEvent(self, event: QFocusEvent) -> None:
+    def focusOutEvent(self, a0: QFocusEvent | None) -> None:
+        event = cast(QFocusEvent, a0)
         self._full_text = self.text()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         super().focusOutEvent(event)
         self._apply_elided_text()
 
-    def resizeEvent(self, event: QResizeEvent) -> None:
+    def resizeEvent(self, a0: QResizeEvent | None) -> None:
+        event = cast(QResizeEvent, a0)
         super().resizeEvent(event)
         if not self.hasFocus():
             self._apply_elided_text()
@@ -218,7 +229,7 @@ class SettingsViewBuilder:
         self._dynamic_style_signal_connected = True
 
     def _wrap_in_scroll(
-        self, content_widget: QWidget, parent: QWidget = None
+        self, content_widget: QWidget, parent: QWidget | None = None
     ) -> QScrollArea:
         scroll = QScrollArea(parent)
         scroll.setWidgetResizable(True)
@@ -236,13 +247,13 @@ class SettingsViewBuilder:
         return page, layout
 
     @staticmethod
-    def _mark_reset(
-        widget: QWidget,
+    def _mark_reset[T: QWidget](
+        widget: T,
         *,
         config_key: str = "",
         reset_action: str = "",
         reset_value=None,
-    ) -> QWidget:
+    ) -> T:
         if config_key:
             widget.setProperty("reset_config_key", config_key)
         if reset_action:
@@ -252,7 +263,11 @@ class SettingsViewBuilder:
         return widget
 
     def _collapsible_section(
-        self, title: str, section_key: str, lang_key: str = "", parent: QWidget = None
+        self,
+        title: str,
+        section_key: str,
+        lang_key: str = "",
+        parent: QWidget | None = None,
     ) -> tuple:
         """Create a collapsible section. Returns (section_widget, content_layout)."""
         collapsed_map = self.app_state.local_config.get(
@@ -322,7 +337,7 @@ class SettingsViewBuilder:
             cm[section_key] = not vis
             self.app_state.local_config["settings_collapsed_sections"] = cm
 
-        header.mousePressEvent = toggle_section
+        cast(Any, header).mousePressEvent = toggle_section
 
         section_layout.addWidget(header)
         section_layout.addWidget(content)
@@ -376,12 +391,12 @@ class SettingsViewBuilder:
     ) -> QPushButton:
         btn = QPushButton()
         btn.setObjectName(obj_name)
-        btn._scaled_icon_button = True
+        cast(Any, btn)._scaled_icon_button = True
         button_size = self._scaled_icon_button_size()
         btn.setFixedSize(button_size, button_size)
         icon_name = self._EMOJI_TO_ICON.get(icon_text)
         if icon_name and app_state:
-            btn._themed_icon_name = icon_name
+            cast(Any, btn)._themed_icon_name = icon_name
 
             def _apply_icon(b=btn, i=icon_name, s=app_state, builder=self):
                 b.setIcon(colored_icon(i, get_theme_color(s.local_config, "main_text")))
@@ -400,7 +415,7 @@ class SettingsViewBuilder:
             btn.setText(icon_text)
         return btn
 
-    def _create_color_row(self, label_text: str, parent: QWidget = None):
+    def _create_color_row(self, label_text: str, parent: QWidget | None = None):
         row = QHBoxLayout()
         row.setSpacing(15)
         label = QLabel(label_text, parent)
@@ -467,7 +482,7 @@ class SettingsViewBuilder:
         row_layout.addWidget(reset_button)
         return row_widget, row_label, path_edit, browse_button, reset_button
 
-    def _build_general_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_general_tab(self, parent: QWidget | None = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(
@@ -536,18 +551,29 @@ class SettingsViewBuilder:
             config_key="show_reset_buttons",
             reset_value=False,
         )
-        analytics_opt_in_checkbox = self._styled_checkbox(
-            tr("ui.analytics_opt_in"),
-            tr("tooltips.analytics_opt_in"),
-            "analytics_opt_in_enabled",
-            reset_value=False,
-        )
         cl_adv.addWidget(
             show_reset_buttons_checkbox, alignment=Qt.AlignmentFlag.AlignCenter
         )
-        cl_adv.addWidget(
-            analytics_opt_in_checkbox, alignment=Qt.AlignmentFlag.AlignCenter
+        (
+            data_root_row,
+            data_root_label,
+            data_root_edit,
+            data_root_button,
+            data_root_reset_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_user_data_root",
+            label_text=tr("data_root.path_label"),
+            browse_tooltip=tr("data_root.browse_tooltip"),
         )
+        active_data_root = get_user_data_root()
+        data_root_edit.set_full_text(active_data_root)
+        data_root_edit.setReadOnly(True)
+        data_root_reset_button.setVisible(
+            bool(self.app_state.local_config.get("show_reset_buttons", False))
+            and os.path.normcase(os.path.abspath(active_data_root))
+            != os.path.normcase(os.path.abspath(get_default_user_data_root()))
+        )
+        cl_adv.addWidget(data_root_row, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec_adv)
 
         layout.addStretch()
@@ -557,12 +583,15 @@ class SettingsViewBuilder:
         self.widgets["beta_updates_checkbox"] = beta_updates_checkbox
         self.widgets["fullscreen_checkbox"] = fullscreen_checkbox
         self.widgets["show_reset_buttons_checkbox"] = show_reset_buttons_checkbox
-        self.widgets["analytics_opt_in_checkbox"] = analytics_opt_in_checkbox
         self.widgets["ui_scale_label"] = ui_scale_label
         self.widgets["ui_scale_spinbox"] = ui_scale_spinbox
+        self.widgets["settings_user_data_root_label"] = data_root_label
+        self.widgets["settings_user_data_root_edit"] = data_root_edit
+        self.widgets["settings_user_data_root_button"] = data_root_button
+        self.widgets["settings_user_data_root_reset_button"] = data_root_reset_button
         return self._wrap_in_scroll(page, parent)
 
-    def _build_appearance_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_appearance_tab(self, parent: QWidget | None = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(
@@ -764,7 +793,7 @@ class SettingsViewBuilder:
         self.widgets["border_radius_spinbox"] = border_radius_spinbox
         return self._wrap_in_scroll(page, parent)
 
-    def _build_mods_browser_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_mods_browser_tab(self, parent: QWidget | None = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(
@@ -816,7 +845,7 @@ class SettingsViewBuilder:
         )
         return self._wrap_in_scroll(page, parent)
 
-    def _build_library_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_library_tab(self, parent: QWidget | None = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(
@@ -872,7 +901,7 @@ class SettingsViewBuilder:
         )
         return self._wrap_in_scroll(page, parent)
 
-    def _build_game_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_game_tab(self, parent: QWidget | None = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         sec, cl = self._collapsible_section(
@@ -895,13 +924,14 @@ class SettingsViewBuilder:
         gs_layout.addWidget(settings_game_combo)
         games_manager_button = QPushButton()
         games_manager_button.setObjectName("games_manager_button")
-        games_manager_button._themed_icon_name = "settings"
-        games_manager_button._themed_icon_app_state = self.app_state
-        games_manager_button._scaled_icon_button = True
-        games_manager_button._themed_icon_size = QSize(
+        themed_button = cast(Any, games_manager_button)
+        themed_button._themed_icon_name = "settings"
+        themed_button._themed_icon_app_state = self.app_state
+        themed_button._scaled_icon_button = True
+        themed_button._themed_icon_size = QSize(
             self._scaled_icon_size(), self._scaled_icon_size()
         )
-        games_manager_button.setIconSize(games_manager_button._themed_icon_size)
+        games_manager_button.setIconSize(themed_button._themed_icon_size)
         games_manager_button.setFixedSize(
             self._scaled_icon_button_size(), self._scaled_icon_button_size()
         )
@@ -1109,7 +1139,7 @@ class SettingsViewBuilder:
         self.widgets["settings_reset_portproton_button"] = portproton_reset_button
         return self._wrap_in_scroll(page, parent)
 
-    def _build_plugins_tab(self, parent: QWidget = None) -> QWidget:
+    def _build_plugins_tab(self, parent: QWidget | None = None) -> QWidget:
         page, layout = self._build_simple_tab_page()
 
         filters = QWidget(page)
@@ -1155,7 +1185,9 @@ class SettingsViewBuilder:
         plugins_layout.setSpacing(12)
         plugins_layout.addStretch()
         plugins_scroll.setWidget(plugins_widget)
-        plugins_scroll.viewport().setAcceptDrops(True)
+        viewport = plugins_scroll.viewport()
+        if viewport is not None:
+            viewport.setAcceptDrops(True)
         plugins_container_layout.addWidget(plugins_scroll)
         layout.addWidget(plugins_container)
         layout.addStretch()

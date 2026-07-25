@@ -13,7 +13,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 import models.mod_models as mod_models
 from config.config import MOD_CONFIG_FILENAME
 from models.exceptions import ModUninstallationError
-from models.mod_models import LocalModInfo, ModFileData
+from models.mod_models import BrowserModInfo, LocalModInfo, ModFileData
 from services.localization_service import tr
 from services.migration_service import migrate_mod_metadata
 from utils.file_utils import (
@@ -641,7 +641,7 @@ class ModManager(QObject):
         url_install_thread = UrlInstallThread(self.parent(), url)
         url_install_thread.progress.connect(self.progress_updated.emit)
         url_install_thread.status.connect(self.status_changed.emit)
-        url_install_thread.finished.connect(self._on_url_install_finished)
+        url_install_thread.result_ready.connect(self._on_url_install_finished)
         url_install_thread.prompt_required.connect(self.url_prompt_required.emit)
         url_install_thread.manual_install_required.connect(
             self._on_manual_install_required
@@ -766,6 +766,35 @@ class ModManager(QObject):
             raise
         return False
 
+    def _forget_deleted_mod(self, mod_id: str) -> None:
+        """Remove an uninstalled mod from in-memory indexes and local metadata."""
+        if not mod_id:
+            return
+        with self._cache_lock:
+            self._mods_cache.pop(mod_id, None)
+            self._mods_by_name = {
+                name: mapped_id
+                for name, mapped_id in self._mods_by_name.items()
+                if mapped_id != mod_id
+            }
+            self._mods_cache_valid = False
+
+        def keep_mod(mod) -> bool:
+            return get_mod_id(mod) != mod_id or isinstance(mod, BrowserModInfo)
+
+        self.app_state.all_mods = [
+            mod for mod in self.app_state.all_mods if keep_mod(mod)
+        ]
+        if hasattr(self.app_state, "filtered_mods"):
+            self.app_state.filtered_mods = [
+                mod for mod in self.app_state.filtered_mods if keep_mod(mod)
+            ]
+
+        metadata = self._read_metadata()
+        if mod_id in metadata:
+            del metadata[mod_id]
+            self._write_metadata(metadata)
+
     def _resolve_mod_info_from_cache(
         self, cache: dict, mod_id: str, mod_name: str | None
     ):
@@ -842,6 +871,8 @@ class ModManager(QObject):
             ]
             for path, label in candidate_paths:
                 if self._try_delete_folder(path, label):
+                    if mod_id:
+                        self._forget_deleted_mod(mod_id)
                     return
             if not mod_id:
                 logger.error(
@@ -851,9 +882,10 @@ class ModManager(QObject):
             cache = self._get_mods_cache()
             mod_info = self._resolve_mod_info_from_cache(cache, mod_id, mod_name)
             if mod_info:
-                self._try_delete_folder(mod_info.folder_path, "cache_info")
-                self.invalidate_mods_cache()
-                return
+                deleted = self._try_delete_folder(mod_info.folder_path, "cache_info")
+                if deleted or not os.path.exists(mod_info.folder_path):
+                    self._forget_deleted_mod(mod_id)
+                    return
             last_resort_paths = [
                 (os.path.join(self.app_state.mods_dir, mod_id), "id_as_folder"),
                 (
@@ -865,6 +897,7 @@ class ModManager(QObject):
             ]
             for path, label in last_resort_paths:
                 if self._try_delete_folder(path, label):
+                    self._forget_deleted_mod(mod_id)
                     return
             logger.error(
                 f"delete_mod_files: Cannot delete mod - not found in cache and folder paths do not exist. id = {mod_id}, mod_name={mod_name or 'None'}"
@@ -878,6 +911,8 @@ class ModManager(QObject):
             return "ready"
         cache = self._get_mods_cache()
         mod_id = get_mod_id(mod)
+        if not mod_id:
+            return "install"
         mod_info = cache.get(mod_id)
         if not mod_info:
             return "install"
@@ -1170,6 +1205,7 @@ class ModManager(QObject):
 
         if cache_snapshot is not None:
             for cached_mod_id, info in cache_snapshot.items():
+                config_data = {}
                 try:
                     if isinstance(info, ModFolderInfo):
                         config_data = info.config_data or {}
@@ -1182,11 +1218,7 @@ class ModManager(QObject):
                     _append_from_config(config_data, folder_name)
                 except Exception as e:
                     config_read_errors = True
-                    config_mod_id = (
-                        config_data.get("id", "")
-                        if "config_data" in locals()
-                        else cached_mod_id
-                    )
+                    config_mod_id = config_data.get("id", "") or cached_mod_id
                     logger.warning(
                         f"Failed to build installed mod from cache for id {config_mod_id}: {e}",
                         exc_info=True,

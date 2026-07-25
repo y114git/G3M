@@ -1,8 +1,7 @@
 """Headless shortcut runner - patches mods and launches the game without GUI.
 
-Uses G3MToolManager and BackupManager directly (plain classes) so no
-QApplication is needed. Supports multi-chapter mod selections via the
-``chapter_mods`` dict embedded in the shortcut config.
+Uses the canonical patching service without constructing a QApplication.
+Supports multi-chapter sequential patch plans embedded in shortcut configs.
 """
 
 import atexit
@@ -14,13 +13,17 @@ import platform
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 
+from models.execution_plan import LaunchPlan
 from models.game_modes import get_game
 from services.game_detection_service import (
+    GAME_PROCESS_EXIT_CONFIRMATION_CHECKS,
+    GAME_PROCESS_POLL_SECONDS,
+    GAME_PROCESS_START_TIMEOUT_SECONDS,
+    GameProcessTracker,
     get_executable_name_for_game,
-    is_game_running,
+    get_matching_process_identities,
 )
 from services.plugins.shortcut_service import (
     ShortcutPluginContext,
@@ -123,309 +126,77 @@ def _find_mod_source_dir(mod_id: str, local_config: dict) -> str | None:
     return None
 
 
-def _resolve_chapter_source_dir(mod_source_dir: str, chapter_id: str) -> str | None:
-    """Given a mod's root directory, find the subfolder for a specific chapter."""
-    if not mod_source_dir or not os.path.isdir(mod_source_dir):
+def _load_installed_mod(mod_id: str, local_config: dict):
+    """Load one installed mod for a headless plan without constructing the GUI."""
+    from models.mod_models import LocalModInfo
+    from utils.mod.config_parser import normalize_mod_config_data
+
+    mod_root = _find_mod_source_dir(mod_id, local_config)
+    if not mod_root:
         return None
-    from utils.file_utils import get_chapter_folder_name
-
-    for subdir in (get_chapter_folder_name(chapter_id), "universal"):
-        candidate = os.path.join(mod_source_dir, subdir)
-        if os.path.isdir(candidate):
-            return candidate
-    return mod_source_dir
-
-
-def _load_chapter_config_entry(mod_root_dir: str, chapter_id: str) -> dict:
-    config_path = os.path.join(mod_root_dir, "mod_config.json")
-    if not os.path.isfile(config_path):
-        return {}
+    config_path = os.path.join(mod_root, "mod_config.json")
     try:
         with open(config_path, encoding="utf-8") as handle:
             config_data = json.load(handle)
-        from utils.mod.config_parser import normalize_mod_config_data
-
-        normalize_mod_config_data(config_data, mod_root_path=mod_root_dir)
-        files_data = config_data.get("files", {})
-        chapter_info = files_data.get(chapter_id)
-        return chapter_info if isinstance(chapter_info, dict) else {}
-    except Exception as e:
-        logger.debug(
-            "_load_chapter_config_entry: failed to inspect %s: %s",
-            config_path,
-            e,
-            exc_info=True,
-        )
-        return {}
+        if not isinstance(config_data, dict):
+            return None
+        normalize_mod_config_data(config_data, mod_root_path=mod_root)
+        return LocalModInfo.from_dict(config_data)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as e:
+        logger.error('Failed to load mod "%s": %s', mod_id, e, exc_info=True)
+        return None
 
 
-def _classify_mod(mod_source_dir: str):
-    """Classify a mod chapter dir and return (patch_file, mod_type)."""
-    from utils.patching import mod_content_utils as mod_content
+class _HeadlessModService:
+    def __init__(self, local_config: dict) -> None:
+        self._local_config = local_config
 
-    if not os.path.isdir(mod_source_dir):
-        return (None, "overrides_only")
-    g3m_patches = mod_content.find_g3m_patches(mod_source_dir)
-    if g3m_patches:
-        return (g3m_patches[0], "g3mpatch")
-    for f in os.listdir(mod_source_dir):
-        fl = f.lower()
-        if fl.endswith((".xdelta", ".vcdiff")):
-            return (os.path.join(mod_source_dir, f), "xdelta")
-    csx_scripts = mod_content.find_csx_scripts(mod_source_dir)
-    if csx_scripts:
-        return (csx_scripts[0], "csx")
-    ready_files = mod_content.find_ready_data_win_files(mod_source_dir)
-    if ready_files:
-        return (ready_files[0], "datafile")
-    return (None, "overrides_only")
+    def get_mod_folder_path(self, mod_id: str) -> str | None:
+        return _find_mod_source_dir(mod_id, self._local_config)
 
 
-def _apply_file_overrides(
-    mod_root_dir: str,
-    mod_source_dir: str,
-    target_dir: str,
-    backup_mgr,
-    chapter_id: str,
-    g3mtool,
-):
-    """Copy non-patch files from mod source into game target, with backup."""
-    from utils.patching.file_override_utils import apply_file_overrides
+def _execute_patch_plan(plan, game_path: str, game_mode, local_config: dict):
+    """Execute a shortcut plan through the same patcher used by GUI launches."""
+    from types import SimpleNamespace
 
-    if not os.path.isdir(mod_source_dir):
+    from services.g3mtool_patching_service import G3MToolPatchingService
+
+    app_state = SimpleNamespace(
+        game_mode=game_mode,
+        local_config=local_config,
+        config_dir=os.path.join(get_user_data_root(), "settings"),
+    )
+    patcher = G3MToolPatchingService(
+        app_state, _HeadlessModService(local_config), None
+    )
+    patcher.set_override_game_path(game_path)
+    patcher._session_manifest_path = os.path.join(app_state.config_dir, "session.lock")
+    cache = {}
+
+    def resolve(mod_id: str):
+        if mod_id not in cache:
+            cache[mod_id] = _load_installed_mod(mod_id, local_config)
+        return cache[mod_id]
+
+    if not patcher.process_patch_plan(plan, resolve, is_modpack=False):
+        patcher.restore_all_backups()
+        patcher.cleanup(force=True)
+        return None
+    return patcher
+
+
+def _restore_patch_session(patcher) -> None:
+    """Restore a completed/failed shortcut session exactly once."""
+    if patcher is None:
         return
-
-    class _ShortcutPatcher:
-        def __init__(self) -> None:
-            self.xdelta_modpack = False
-            self.patching_logger = logger
-
-        def _backup_or_mark_file(self, chapter_key, target_file: str) -> None:
-            if os.path.exists(target_file):
-                backup_mgr.backup_file(chapter_key, target_file)
-            else:
-                backup_mgr.mark_file_added(chapter_key, target_file)
-
-        def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:
-            temp_out = target_file + ".tmp"
-            returncode, _stdout, _stderr = g3mtool.xpatch_apply(
-                target_file, patch_path, temp_out
-            )
-            if returncode == 0 and os.path.exists(temp_out):
-                shutil.move(temp_out, target_file)
-                return True
-            if os.path.exists(temp_out):
-                os.remove(temp_out)
-            return False
-
-        def _request_warning(
-            self,
-            message_text: str,
-            details_text: str = "",
-            report_path: str | None = None,
-        ):
-            del message_text, details_text, report_path
-            return True
-
-    chapter_info = _load_chapter_config_entry(mod_root_dir, chapter_id)
-    configured_paths = (
-        chapter_info.get("extra_files", []) if isinstance(chapter_info, dict) else None
-    )
-    apply_file_overrides(
-        _ShortcutPatcher(),
-        mod_source_dir,
-        target_dir,
-        set(),
-        False,
-        chapter_id,
-        mod_name=os.path.basename(mod_root_dir),
-        game_id="deltarune",
-        configured_paths=configured_paths,
-        mod_root_dir=mod_root_dir,
-    )
-
-
-def _patch_chapter(
-    chapter_id: str,
-    mod_root_dir: str,
-    mod_source_dir: str,
-    game_path: str,
-    game_mode,
-    g3mtool,
-    backup_mgr,
-    temp_dir: str,
-) -> bool:
-    """Patch a single chapter: backup data.win, apply patch, copy overrides."""
-    from utils.patching import mod_content_utils as mod_content
-
-    target_dir = find_chapter_resource_dir(game_path, chapter_id)
-    if not target_dir or not os.path.isdir(target_dir):
-        logger.error(f"Target directory not found for chapter {chapter_id}")
-        return False
-
-    data_win_path = mod_content.find_data_win(target_dir, game_id=game_mode.game_id)
-    patch_file, mod_type = _classify_mod(mod_source_dir)
-
-    if mod_type == "overrides_only" or not data_win_path:
-        if data_win_path and not patch_file:
-            logger.info(f"Chapter {chapter_id}: overrides only (no patch file)")
-        elif not data_win_path:
-            logger.warning(
-                f"Chapter {chapter_id}: no game data file found, applying overrides only"
-            )
-        _apply_file_overrides(
-            mod_root_dir, mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
-        )
-        return True
-
-    if not backup_mgr.backup_file(chapter_id, data_win_path):
-        logger.error(f"CRITICAL: Failed to backup {data_win_path}")
-        return False
-
-    logs_dir = os.path.join(get_user_data_root(), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    log_path = os.path.join(logs_dir, "g3mtool.log")
-    temp_output = os.path.join(
-        temp_dir, f"output_{chapter_id}_{os.path.basename(data_win_path)}"
-    )
-
-    success = False
-    if mod_type == "g3mpatch":
-        logger.info(f"Applying g3mpatch: {patch_file}")
-        returncode, stdout, stderr = g3mtool.apply_patch(
-            data_win_path, patch_file, temp_output, log_path=log_path
-        )
-        if returncode != 0:
-            logger.error(f"G3MTool patch apply failed: {(stderr or stdout)[:500]}")
-            return False
-        success = True
-    elif mod_type == "xdelta":
-        logger.info(f"Applying xdelta patch: {patch_file}")
-        returncode, stdout, stderr = g3mtool.xpatch_apply(
-            data_win_path, patch_file, temp_output
-        )
-        if returncode != 0:
-            logger.error(f"xpatch apply failed: {(stderr or stdout)[:500]}")
-            return False
-        success = True
-    elif mod_type == "datafile":
-        logger.info(f"Copying replacement data file: {patch_file}")
-        try:
-            shutil.copy2(patch_file, temp_output)
-            success = True
-        except Exception as e:
-            logger.error(f"Failed to copy data file: {e}")
-            return False
-    elif mod_type == "csx":
-        logger.info(f"Executing csx script: {patch_file}")
-        returncode, stdout, stderr = g3mtool.execute(
-            patch_file,
-            data_file=data_win_path,
-            output_path=temp_output,
-        )
-        if returncode != 0:
-            logger.error(f"g3mtool execute failed: {(stderr or stdout)[:500]}")
-            return False
-        success = os.path.exists(temp_output)
-        if not success:
-            logger.error(f"CSX script produced no output file: {temp_output}")
-            return False
-
-    if success:
-        try:
-            shutil.move(temp_output, data_win_path)
-            logger.info(f"Patched game data file placed at {data_win_path}")
-        except Exception as e:
-            logger.error(f"Failed to move patched file: {e}")
-            return False
-
-    _apply_file_overrides(
-        mod_root_dir, mod_source_dir, target_dir, backup_mgr, chapter_id, g3mtool
-    )
-    return True
-
-
-def _patch_all_chapters(
-    chapter_mods: dict[str, str],
-    game_path: str,
-    game_mode,
-    local_config: dict,
-) -> object | None:
-    """Patch all chapters and return the BackupManager for later restore.
-
-    ``chapter_mods`` maps chapter_id -> mod_id.
-    Returns None on failure (backups already restored).
-    """
-    from adapters.g3mtool_adapter import G3MToolManager
-    from services.backup_service import BackupManager
-
-    g3mtool = G3MToolManager()
-    if not g3mtool.is_available():
-        logger.error("G3MTool not available")
-        return None
-
-    backup_dir = os.path.join(get_user_data_root(), "patching_backups")
-    backup_mgr = BackupManager(backup_dir, patching_logger=logger)
-    manifest_path = os.path.join(get_user_data_root(), "settings", "session.lock")
-    temp_dir = tempfile.mkdtemp(prefix="g3m_shortcut_patch_")
-
+    logger.info("Restoring backups...")
     try:
-        for chapter_id, mod_id in sorted(chapter_mods.items()):
-            if not mod_id:
-                continue
-
-            mod_source_dir = _find_mod_source_dir(mod_id, local_config)
-            if not mod_source_dir:
-                logger.error(f'Mod "{mod_id}" not found on disk')
-                _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
-                return None
-
-            chapter_source_dir = _resolve_chapter_source_dir(mod_source_dir, chapter_id)
-            if not chapter_source_dir:
-                logger.error(f"No chapter data for {chapter_id} in {mod_source_dir}")
-                _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
-                return None
-
-            logger.info(
-                f'Patching chapter {chapter_id} with mod "{mod_id}" from {chapter_source_dir}'
-            )
-
-            ok = _patch_chapter(
-                chapter_id,
-                mod_source_dir,
-                chapter_source_dir,
-                game_path,
-                game_mode,
-                g3mtool,
-                backup_mgr,
-                temp_dir,
-            )
-            if not ok:
-                logger.error(f"Patching failed for chapter {chapter_id}")
-                _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
-                return None
-
-            backup_mgr.save_backups_to_manifest(manifest_path)
-
-        return backup_mgr
+        patcher.restore_all_backups()
+        logger.info("Backups restored successfully")
     except Exception as e:
-        logger.error(f"Patching failed: {e}", exc_info=True)
-        _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path)
-        return None
+        logger.error("Failed to restore backups: %s", e, exc_info=True)
     finally:
-        if os.path.isdir(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-def _restore_and_cleanup(backup_mgr, chapter_mods, temp_dir, manifest_path):
-    """Restore all backups and clean up temp files after a failure."""
-    try:
-        backup_mgr.restore_all_backups()
-        backup_mgr.clear_backup_dir()
-    except Exception as e:
-        logger.error(f"Failed to restore backups: {e}", exc_info=True)
-    if os.path.isdir(temp_dir):
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        patcher.cleanup(force=True)
 
 
 def _get_executable_path(game_mode, local_config: dict, game_path: str) -> str | None:
@@ -438,20 +209,33 @@ def _get_executable_path(game_mode, local_config: dict, game_path: str) -> str |
 
 
 def _wait_for_game_exit(
-    process: subprocess.Popen | None = None, wait_for_start: bool = False
-):
-    """Wait for the game process to finish."""
-    if process:
-        process.wait()
-    if wait_for_start:
-        logger.info("Waiting for game process to appear...")
-        for _ in range(30):
-            if is_game_running():
-                logger.info("Game process detected")
-                break
-            time.sleep(2)
-    while is_game_running():
-        time.sleep(2)
+    process: subprocess.Popen | None,
+    process_names: tuple[str, ...],
+    baseline_processes: set[tuple[int, float]],
+) -> None:
+    """Wait for one launched game, including wrapper and Steam process hand-offs."""
+    root_pid = getattr(process, "pid", None)
+    tracker = GameProcessTracker(root_pid, process_names, baseline_processes)
+    startup_checks = int(
+        GAME_PROCESS_START_TIMEOUT_SECONDS / GAME_PROCESS_POLL_SECONDS
+    )
+    for _ in range(startup_checks):
+        if tracker.refresh():
+            logger.info("Game process detected")
+            break
+        time.sleep(GAME_PROCESS_POLL_SECONDS)
+    else:
+        logger.warning("Game process did not appear after launch")
+        return
+
+    missing_checks = 0
+    while missing_checks < GAME_PROCESS_EXIT_CONFIRMATION_CHECKS:
+        if tracker.refresh():
+            missing_checks = 0
+        else:
+            missing_checks += 1
+        if missing_checks < GAME_PROCESS_EXIT_CONFIRMATION_CHECKS:
+            time.sleep(GAME_PROCESS_POLL_SECONDS)
 
 
 def _launch_game(
@@ -460,6 +244,18 @@ def _launch_game(
     use_steam = shortcut_config.get("launch_via_steam", False)
     direct_launch_chapter = shortcut_config.get("direct_launch_chapter", "")
     is_chapter_mode = shortcut_config.get("chapter_mode", False)
+    process_names = [
+        name
+        for name in game_mode.get_process_names()
+        if name.casefold() != "runner"
+    ]
+    custom_path = local_config.get(game_mode.get_custom_exec_config_key(), "")
+    if custom_path:
+        custom_name = os.path.basename(str(custom_path))
+        custom_stem, _ = os.path.splitext(custom_name)
+        process_names.extend((custom_name, custom_stem))
+    process_names = tuple(name for name in dict.fromkeys(process_names) if name)
+    baseline_processes = get_matching_process_identities(process_names)
 
     if use_steam and game_mode.steam_app_id:
         steam_url = f"steam://rungameid/{game_mode.steam_app_id}"
@@ -472,7 +268,7 @@ def _launch_game(
         else:
             open_url_native(steam_url)
         logger.info(f"Launched via Steam: {steam_url}")
-        _wait_for_game_exit(wait_for_start=True)
+        _wait_for_game_exit(None, process_names, baseline_processes)
         return None
 
     is_direct = (
@@ -552,7 +348,14 @@ def _launch_game(
         f"Game launched: {launch_target} (pid={process.pid if process else '?'})"
     )
 
-    _wait_for_game_exit(process)
+    target_name = os.path.basename(launch_target)
+    target_stem, _ = os.path.splitext(target_name)
+    process_names = tuple(
+        name
+        for name in dict.fromkeys((*process_names, target_name, target_stem))
+        if name
+    )
+    _wait_for_game_exit(process, process_names, baseline_processes)
     if cleanup_info:
         target_exe = cleanup_info["target_exe"]
         if os.path.exists(target_exe):
@@ -595,9 +398,9 @@ def run_shortcut(shortcut_arg: str):
         "launch_via_steam": false,
         "use_portproton": false,
         "direct_launch_chapter": "",
-        "chapter_mods": {"deltarune_0": "mod_id_1", "deltarune_2": "mod_id_2", ...}
+        "launch_plan": {"patch_plan": {"sections": {...}}}
       }
-    Chapters with null/empty values are vanilla (no patching).
+    Legacy ``chapter_mods`` configs remain supported.
     """
     _configure_logging()
     logger.info("=== G3M Shortcut Runner ===")
@@ -608,14 +411,19 @@ def run_shortcut(shortcut_arg: str):
         logger.error(f"Invalid shortcut config: {e}")
         sys.exit(1)
 
-    game_id = shortcut_config.get("game_id", "deltarune")
-    chapter_mods_raw = shortcut_config.get("chapter_mods", {})
-    is_chapter_mode = shortcut_config.get("chapter_mode", False)
-
-    chapter_mods = {cid: mk for cid, mk in chapter_mods_raw.items() if mk}
+    try:
+        launch_plan = LaunchPlan.from_shortcut_config(shortcut_config)
+    except (TypeError, ValueError) as e:
+        logger.error("Invalid launch plan: %s", e)
+        sys.exit(1)
+    game_id = launch_plan.game_id
+    is_chapter_mode = launch_plan.chapter_mode
 
     logger.info(
-        f"Config: game={game_id}, chapter_mode={is_chapter_mode}, chapter_mods={chapter_mods or 'vanilla'}"
+        "Config: game=%s, chapter_mode=%s, patch_plan=%s",
+        game_id,
+        is_chapter_mode,
+        launch_plan.patch_plan.to_dict()["sections"] or "vanilla",
     )
 
     game_mode = get_game(game_id)
@@ -650,12 +458,12 @@ def run_shortcut(shortcut_arg: str):
         logger.warning("Shortcut launch blocked by a plugin before mod apply")
         sys.exit(1)
 
-    backup_mgr = None
-    if chapter_mods:
-        backup_mgr = _patch_all_chapters(
-            chapter_mods, game_path, game_mode, local_config
+    patcher = None
+    if launch_plan.patch_plan.sections:
+        patcher = _execute_patch_plan(
+            launch_plan.patch_plan, game_path, game_mode, local_config
         )
-        if backup_mgr is None:
+        if patcher is None:
             sys.exit(1)
         logger.info("All chapters patched successfully")
 
@@ -666,19 +474,18 @@ def run_shortcut(shortcut_arg: str):
         shortcut_config,
     ):
         logger.warning("Shortcut launch blocked by a plugin after mod apply")
-        if backup_mgr:
-            backup_mgr.restore_all_backups()
-            backup_mgr.clear_backup_dir()
+        _restore_patch_session(patcher)
         sys.exit(1)
 
     logger.info("Launching game...")
+    launch_failed = False
     try:
         _launch_game(shortcut_config, game_mode, local_config, game_path)
     except Exception as e:
         logger.error("Shortcut launch failed: %s", e, exc_info=True)
-        sys.exit(1)
-
-    logger.info("Game exited")
+        launch_failed = True
+    else:
+        logger.info("Game exited")
 
     execute_shortcut_plugin_hook(
         runtime_service,
@@ -686,14 +493,7 @@ def run_shortcut(shortcut_arg: str):
         shortcut_plugin_context,
         shortcut_config,
     )
-    if backup_mgr:
-        logger.info("Restoring backups...")
-        try:
-            backup_mgr.restore_all_backups()
-            backup_mgr.clear_backup_dir()
-            logger.info("Backups restored successfully")
-        except Exception as e:
-            logger.error(f"Failed to restore backups: {e}", exc_info=True)
+    _restore_patch_session(patcher)
 
     execute_shortcut_plugin_hook(
         runtime_service,
@@ -701,5 +501,8 @@ def run_shortcut(shortcut_arg: str):
         shortcut_plugin_context,
         shortcut_config,
     )
+
+    if launch_failed:
+        sys.exit(1)
 
     logger.info("=== Shortcut Runner finished ===")

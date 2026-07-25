@@ -111,3 +111,44 @@ class TestGameBananaConverter:
             assert converter is not None
         finally:
             os.unlink(archive_path)
+
+    def test_convert_gamebanana_revision_four_deltamod(self, temp_mods_dir, tmp_path):
+        import json
+        import zipfile
+
+        from adapters.gamebanana_converter import GameBananaConverter
+
+        archive_path = tmp_path / "revision4.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr(
+                "meta.toml",
+                """
+[metadata]
+name = "Current Deltamod"
+version = "1.0.0"
+author = ["Author"]
+game = "toby.deltarune"
+packageID = "example.current.author"
+""",
+            )
+            archive.writestr(
+                "modding.xml",
+                '<patch type="g3mpatch" patch="./mod.g3mpatch" '
+                'to="./chapter1_windows/data.win" />',
+            )
+            archive.writestr("mod.g3mpatch", b"patch")
+
+        result = GameBananaConverter(
+            archive_path=str(archive_path),
+            mods_dir=temp_mods_dir,
+            gamebanana_metadata={"mod_id": 12345},
+        ).convert()
+
+        assert result is not None
+        config_path = os.path.join(result, "mod_config.json")
+        with open(config_path, encoding="utf-8") as config_file:
+            config = json.load(config_file)
+        assert config["metadata"]["id"] == "gb_mod_12345"
+        assert (
+            config["files"]["deltarune_1"]["data_file_path"] == "mod.g3mpatch"
+        )

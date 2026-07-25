@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 class CustomTitleBar(QWidget):
     log_viewer_requested = pyqtSignal()
     changelog_requested = pyqtSignal()
+    onboarding_requested = pyqtSignal()
     about_requested = pyqtSignal()
     minimize_requested = pyqtSignal()
     maximize_restore_requested = pyqtSignal()
@@ -58,6 +59,9 @@ class CustomTitleBar(QWidget):
         self.changelog_action = QAction(self.help_menu)
         self.changelog_action.triggered.connect(self.changelog_requested.emit)
         self.help_menu.addAction(self.changelog_action)
+        self.onboarding_action = QAction(self.help_menu)
+        self.onboarding_action.triggered.connect(self.onboarding_requested.emit)
+        self.help_menu.addAction(self.onboarding_action)
         self.about_action = QAction(self.help_menu)
         self.about_action.triggered.connect(self.about_requested.emit)
         self.help_menu.addAction(self.about_action)
@@ -142,6 +146,7 @@ class CustomTitleBar(QWidget):
         log_viewer_text: str,
         help_text: str,
         changelog_text: str,
+        onboarding_text: str,
         about_text: str,
         minimize_tooltip: str,
         maximize_tooltip: str,
@@ -154,6 +159,8 @@ class CustomTitleBar(QWidget):
         self.help_button.setText(help_text)
         self.changelog_action.setText(changelog_text)
         self.changelog_action.setToolTip(changelog_text)
+        self.onboarding_action.setText(onboarding_text)
+        self.onboarding_action.setToolTip(onboarding_text)
         self.about_action.setText(about_text)
         self.about_action.setToolTip(about_text)
         self.minimize_button.setToolTip(minimize_tooltip)

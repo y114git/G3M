@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from services.migration_service import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
 
@@ -74,12 +74,12 @@ def _parse_files_dict(data_dict: dict[str, Any]) -> dict[str, ModFileData]:
     return files_dict
 
 
-def _get_metadata_value(data_dict: dict[str, Any], key: str, default=None):
+def _get_metadata_value[T](data_dict: dict[str, Any], key: str, default: T) -> T:
     if key in data_dict and data_dict.get(key) not in (None, "", [], {}):
-        return data_dict.get(key)
+        return cast(T, data_dict.get(key))
     metadata = data_dict.get("metadata")
     if isinstance(metadata, dict):
-        return metadata.get(key, default)
+        return cast(T, metadata.get(key, default))
     return default
 
 
@@ -169,7 +169,7 @@ class LocalModInfo(BaseModInfo):
             ),
             icon=_get_metadata_value(data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)),
             tags=_get_metadata_value(data_dict, "tags", []),
-            homepage=_get_metadata_value(data_dict, "homepage"),
+            homepage=_get_metadata_value(data_dict, "homepage", None),
             files=_parse_files_dict(data_dict),
             playtime_hours=data_dict.get("playtime_hours", 0.0),
             added_date=data_dict.get("added_date"),
@@ -227,7 +227,7 @@ class BrowserModInfo(BaseModInfo):
             ),
             icon=_get_metadata_value(data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)),
             tags=_get_metadata_value(data_dict, "tags", []),
-            homepage=_get_metadata_value(data_dict, "homepage"),
+            homepage=_get_metadata_value(data_dict, "homepage", None),
             files=_parse_files_dict(data_dict),
             description_url=_get_metadata_value(data_dict, "description_url", ""),
             downloads=data_dict.get("downloads"),

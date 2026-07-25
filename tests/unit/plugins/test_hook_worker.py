@@ -26,7 +26,7 @@ def test_plugin_hook_worker_maps_progress_and_executes_hook():
     finished = []
     thread.progress_update.connect(lambda value, message: progress.append((value, message)))
     thread.status_update.connect(lambda message, level: status.append((message, level)))
-    thread.finished.connect(lambda ok: finished.append(ok))
+    thread.result_ready.connect(lambda ok: finished.append(ok))
 
     thread.run()
 
@@ -54,7 +54,7 @@ def test_plugin_hook_worker_calls_cancel_hook_when_cancelled():
         progress_span=100,
     )
     finished = []
-    thread.finished.connect(lambda ok: finished.append(ok))
+    thread.result_ready.connect(lambda ok: finished.append(ok))
 
     thread.run()
 
@@ -78,7 +78,7 @@ def test_plugin_hook_worker_logs_failed_emit_after_hook_error(caplog):
             raise RuntimeError("receiver deleted")
 
     thread.status_update = _FailingSignal()
-    thread.finished = _FailingSignal()
+    thread.result_ready = _FailingSignal()
 
     thread.run()
 

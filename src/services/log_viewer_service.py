@@ -8,7 +8,6 @@ from dataclasses import dataclass
 
 from utils.path_utils import get_user_data_root
 
-_MAX_LOG_CHARS = 200_000
 _ARCHIVE_TIMESTAMP_RE = re.compile(r"_(\d{8})_(\d{6})$")
 
 
@@ -41,11 +40,8 @@ class LogSnapshot:
 class LogViewerService:
     """Resolve current log files and read them incrementally."""
 
-    def __init__(
-        self, user_data_root: str | None = None, max_log_chars: int = _MAX_LOG_CHARS
-    ) -> None:
+    def __init__(self, user_data_root: str | None = None) -> None:
         self._user_data_root = user_data_root or get_user_data_root()
-        self._max_log_chars = max(10_000, int(max_log_chars))
 
     @property
     def logs_dir(self) -> str:
@@ -139,17 +135,20 @@ class LogViewerService:
         except OSError:
             return LogSnapshot("", None)
 
-        same_file = bool(previous_state and previous_state.path == path)
-        append_only = same_file and current_size >= previous_state.position
+        append_only = bool(
+            previous_state
+            and previous_state.path == path
+            and current_size >= previous_state.position
+        )
 
-        if append_only:
+        if append_only and previous_state is not None:
             try:
                 with open(path, encoding="utf-8", errors="replace") as handle:
                     handle.seek(previous_state.position)
                     appended_text = handle.read()
             except OSError:
                 appended_text = ""
-            full_text = self._clip_text(previous_state.full_text + appended_text)
+            full_text = previous_state.full_text + appended_text
             return LogSnapshot(
                 full_text=full_text,
                 state=LogSnapshotState(
@@ -161,7 +160,7 @@ class LogViewerService:
 
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
-                full_text = self._clip_text(handle.read())
+                full_text = handle.read()
         except OSError:
             return LogSnapshot("", None)
 
@@ -173,11 +172,6 @@ class LogViewerService:
                 full_text=full_text,
             ),
         )
-
-    def _clip_text(self, text: str) -> str:
-        if len(text) <= self._max_log_chars:
-            return text
-        return text[-self._max_log_chars :]
 
     @staticmethod
     def format_archive_label(path: str | None) -> str:

@@ -58,11 +58,11 @@ DEFAULT_APP_SETTINGS = {
     "hide_library_filters": False,
     "show_reset_buttons": False,
     "custom_border_radius": 7,
-    "analytics_opt_in_enabled": False,
     "disable_discord_rich_presence": False,
     "downloads_no_auto_use": False,
     "downloads_delete_after_use": False,
     "downloads_save_local_imports": False,
+    "onboarding_completed": False,
 }
 
 

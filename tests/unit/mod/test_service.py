@@ -7,7 +7,7 @@ import pytest
 from models.exceptions import ModUninstallationError
 from models.mod_models import BrowserModInfo, LocalModInfo, ModFileData
 from services.mod.service import ModManager
-from utils.file_utils import save_json
+from utils.file_utils import load_json, save_json
 
 
 def test_create_mod_object_from_info_refreshes_existing_local_mod_fields_and_playtime():
@@ -105,6 +105,56 @@ def test_uninstall_mod_preserves_uninstall_error_if_feedback_fails(
 
     with pytest.raises(ModUninstallationError):
         manager.uninstall_mod(SimpleNamespace(id="ghost_mod", name="Ghost Mod"))
+
+
+def test_delete_mod_files_immediately_forgets_local_state_and_metadata(
+    app_state, feedback_service
+):
+    """Uninstalling removes stale local identity without dropping a browser result."""
+    import os
+
+    mod_folder = os.path.join(app_state.mods_dir, "MausTweaks")
+    os.makedirs(mod_folder, exist_ok=True)
+    save_json(
+        os.path.join(mod_folder, "mod_config.json"),
+        {"id": "maustweaks", "name": "MausTweaks", "files": {}},
+        indent=2,
+    )
+    save_json(
+        app_state.mods_metadata_path,
+        {"maustweaks": {"playtime_hours": 1}, "other": {"playtime_hours": 2}},
+        indent=2,
+    )
+    local_mod = LocalModInfo(
+        id="maustweaks",
+        name="MausTweaks",
+        version="1.0.0",
+        author="Author",
+        description="Local",
+        game="deltarune",
+    )
+    browser_mod = BrowserModInfo(
+        id="maustweaks",
+        name="MausTweaks Browser Result",
+        version="1.0.0",
+        author="Author",
+        description="Remote",
+        game="deltarune",
+    )
+    app_state.all_mods = [local_mod, browser_mod]
+    app_state.filtered_mods = [local_mod, browser_mod]
+    manager = ModManager(app_state, feedback_service)
+    manager._get_mods_cache()
+
+    manager.delete_mod_files(local_mod)
+
+    assert not os.path.exists(mod_folder)
+    assert app_state.all_mods == [browser_mod]
+    assert app_state.filtered_mods == [browser_mod]
+    assert "maustweaks" not in manager._mods_cache
+    assert load_json(app_state.mods_metadata_path) == {
+        "other": {"playtime_hours": 2}
+    }
 
 
 def test_get_installed_mods_list_handles_iter_and_cache_paths_without_folder_path_error(

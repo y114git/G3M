@@ -2,7 +2,11 @@
 
 import json
 import logging
+import os
+import zipfile
 from pathlib import Path
+
+import pytest
 
 from services.backup_service import BackupManager
 from utils.patching.file_override_utils import apply_file_overrides
@@ -14,7 +18,7 @@ def _write_text(path: Path, content: str) -> None:
 
 
 class _DummyPatcher:
-    def __init__(self, backup_service):
+    def __init__(self, backup_service) -> None:
         self.backup_service = backup_service
         self.patching_logger = logging.getLogger("test_frickbears3_overrides")
         self.xdelta_modpack = False
@@ -74,3 +78,64 @@ def test_apply_file_overrides_splits_frickbears3_addons_from_regular_extra_files
     assert (
         localappdata_dir / "Frickbears3" / "addons" / "Goomba" / "extras_info.txt"
     ).read_text("utf-8") == "oldguard"
+
+
+def test_configured_addons_skip_broken_links(tmp_path, monkeypatch):
+    mod_root = tmp_path / "mod"
+    icon = mod_root / "addons" / "Guard" / "icon.png"
+    icon.parent.mkdir(parents=True)
+    icon.write_bytes(b"icon")
+    broken_link = icon.parent / "optional.png"
+    try:
+        os.symlink(icon.parent / "missing.png", broken_link)
+    except OSError as exc:
+        pytest.skip(f"File symlinks are unavailable: {exc}")
+    localappdata_dir = tmp_path / "localappdata"
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata_dir))
+
+    ok = apply_file_overrides(
+        _DummyPatcher(None),
+        str(mod_root),
+        str(tmp_path / "game"),
+        used_archive_names=set(),
+        is_modpack=False,
+        chapter_id="frickbears3",
+        game_id="frickbears3",
+        configured_paths=["addons/"],
+        mod_root_dir=str(mod_root),
+    )
+
+    installed = localappdata_dir / "Frickbears3" / "addons" / "Guard"
+    assert ok is True
+    assert (installed / "icon.png").read_bytes() == b"icon"
+    assert not os.path.lexists(installed / "optional.png")
+
+
+def test_configured_addons_archive_extracts_into_addons_directory(
+    tmp_path, monkeypatch
+):
+    mod_root = tmp_path / "mod"
+    mod_root.mkdir()
+    with zipfile.ZipFile(mod_root / "addons.zip", "w") as archive:
+        archive.writestr("Guard/extras_info.txt", '{"FULL_NAME":"Guard"}')
+        archive.writestr("Guard/icon.png", b"icon")
+    localappdata_dir = tmp_path / "localappdata"
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata_dir))
+
+    ok = apply_file_overrides(
+        _DummyPatcher(None),
+        str(mod_root),
+        str(tmp_path / "game"),
+        used_archive_names=set(),
+        is_modpack=False,
+        chapter_id="frickbears3",
+        game_id="frickbears3",
+        configured_paths=["addons.zip"],
+        mod_root_dir=str(mod_root),
+    )
+
+    installed = localappdata_dir / "Frickbears3" / "addons" / "Guard"
+    assert ok is True
+    assert (installed / "extras_info.txt").is_file()
+    assert (installed / "icon.png").read_bytes() == b"icon"
+    assert not (localappdata_dir / "Frickbears3" / "Guard").exists()

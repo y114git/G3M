@@ -318,7 +318,7 @@ class ModSummaryPanel(QFrame):
             if icon_name in self._action_buttons:
                 self._action_buttons[icon_name].setVisible(is_local_mod)
         self._actions_widget.setVisible(
-            any(button.isVisible() for button in self._action_buttons.values())
+            any(not button.isHidden() for button in self._action_buttons.values())
         )
         self._readme_button.setVisible(is_local_mod and bool(self._current_readme_files))
 
@@ -554,8 +554,8 @@ class ModSummaryPanel(QFrame):
                 if ch_id == 0:
                     return tr("tabs.menu_root")
                 return tr("ui.chapter_title", chapter_num=ch_id)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as error:
+                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
         if chapter_key == "deltarune":
             return tr("tabs.menu_root")
         try:
@@ -583,11 +583,11 @@ class ModSummaryPanel(QFrame):
             if resolved and os.path.isfile(resolved):
                 return resolved
         except ImportError as e:
-            from utils.logging_utils import log_warning
-            log_warning(f"resolve_mod_file_path not available: {e}")
+            logger.warning("resolve_mod_file_path not available: %s", e)
         except Exception as e:
-            from utils.logging_utils import log_warning
-            log_warning(f"Failed to resolve chapter folder for {chapter_key}: {e}")
+            logger.warning(
+                "Failed to resolve chapter folder for %s: %s", chapter_key, e
+            )
         file_name = os.path.basename(data_file_str.replace("\\", "/"))
         for root, _, files in os.walk(mod_folder):
             if file_name in files:

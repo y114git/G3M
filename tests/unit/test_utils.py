@@ -134,6 +134,8 @@ class TestFileUtils:
         assert has_deltamod_info_file(file_list) is True
         file_list = ['file1.txt', 'meta.json', 'file2.txt']
         assert has_deltamod_info_file(file_list) is True
+        file_list = ['file1.txt', 'META.TOML', 'file2.txt']
+        assert has_deltamod_info_file(file_list) is True
         file_list = ['file1.txt', 'file2.txt', 'mod_config.json']
         assert has_deltamod_info_file(file_list) is False
         assert has_deltamod_info_file([]) is False

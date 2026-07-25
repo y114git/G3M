@@ -315,6 +315,50 @@ class TestSettingsManager:
             ),
         )
 
+    def test_install_theme_from_file_reports_actual_locked_path(
+        self, app_state, feedback_service, qapp, tmp_path
+    ):
+        from services.localization_service import localization_service, tr
+        from services.settings_service import SettingsManager
+
+        manager = SettingsManager(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            localization_service=localization_service,
+            parent=qapp,
+        )
+        manager.feedback_service.show_message = Mock()
+        manager.parent_widget = Mock()
+        manager.parent_widget.do_not_save_theme_checkbox = Mock(
+            isChecked=Mock(return_value=True)
+        )
+        archive_path = tmp_path / "theme.zip"
+        archive_path.write_bytes(b"archive")
+        locked_path = tmp_path / "config" / "custom_font.ttf"
+
+        with (
+            patch(
+                "services.settings_service.theme_archive_contains_config",
+                return_value=True,
+            ),
+            patch(
+                "services.settings_service.apply_theme_archive",
+                side_effect=PermissionError(
+                    13, "Permission denied", str(locked_path)
+                ),
+            ),
+        ):
+            manager._install_theme_from_file(str(archive_path))
+
+        manager.feedback_service.show_message.assert_called_once_with(
+            "error",
+            "dialogs.error",
+            tr(
+                "dialogs.theme_import_failed",
+                error=tr("errors.permission_denied", path=str(locked_path)),
+            ),
+        )
+
     def test_validate_executable_path_accepts_unix_script_signature(
         self, app_state, feedback_service, qapp, monkeypatch, tmp_path
     ):
@@ -602,6 +646,25 @@ class TestSettingsManager:
 
 class TestLocalizationManager:
     """Tests for managers."""
+    def test_custom_font_is_loaded_from_memory(self, tmp_path):
+        from services.localization_service import add_application_font_from_file
+
+        font_path = tmp_path / "custom_font.ttf"
+        font_path.write_bytes(b"font data")
+
+        with patch(
+            "services.localization_service.QFontDatabase.addApplicationFontFromData",
+            return_value=42,
+        ) as add_from_data:
+            assert add_application_font_from_file(str(font_path)) == 42
+
+        add_from_data.assert_called_once_with(b"font data")
+
+    def test_custom_font_open_failure_returns_invalid_id(self, tmp_path):
+        from services.localization_service import add_application_font_from_file
+
+        assert add_application_font_from_file(str(tmp_path / "missing.ttf")) == -1
+
     def test_localization_service_tr(self):
         """Checks that localization service tr."""
         from services.localization_service import tr
@@ -775,13 +838,23 @@ class TestLaunchManager:
         launcher._cleanup_direct_launch_files = Mock()
         launcher.monitor_thread = None
 
+        callbacks = []
         with (
             patch.object(launcher, "parent", return_value=parent),
-            patch("services.launch_service.is_game_running", return_value=False),
+            patch(
+                "services.launch_service.QTimer.singleShot",
+                side_effect=lambda _delay, callback: callbacks.append(callback),
+            ),
         ):
             launcher._check_game_running(False)
 
-        launcher.restore_window_callback.assert_called_once()
+            launcher.restore_window_callback.assert_called_once()
+            launcher._cleanup_direct_launch_files.assert_not_called()
+            assert app_state.is_patching is True
+            assert app_state.progress_bar_visible is True
+
+            callbacks[0]()
+
         launcher._cleanup_direct_launch_files.assert_called_once()
         assert app_state.is_patching is False
         assert app_state.progress_bar_visible is False

@@ -122,6 +122,8 @@ class _ReadmeTab(QWidget):
             self._loaded = True
             return
         content = read_mod_readme(self.file_path)
+        if self.viewer is None:
+            return
         if is_markdown_file(self.file_path):
             self.viewer.setMarkdown(_normalize_markdown_source(content))
             _normalize_markdown_heading_formats(self.viewer)

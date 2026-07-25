@@ -3,6 +3,7 @@
 import contextlib
 import logging
 from collections.abc import Callable
+from typing import Any, cast
 
 from PyQt6.QtCore import (
     QAbstractAnimation,
@@ -96,7 +97,7 @@ def refresh_ui_after_mod_install(main_window, mod_service=None):
 
 
 def safe_stop_thread(thread, timeout=2000, blocking=True):
-    """Safely stop a QThread with timeout and fallback termination.
+    """Request cooperative QThread shutdown without unsafe termination.
 
     Args:
         thread: Thread to stop.
@@ -113,18 +114,10 @@ def safe_stop_thread(thread, timeout=2000, blocking=True):
             thread.quit()
             if blocking and not thread.wait(timeout):
                 logger.warning(
-                    f"safe_stop_thread: thread {type(thread).__name__} did not stop in {timeout}ms. Thread may be blocked. Consider checking isInterruptionRequested() in worker loops."
+                    f"safe_stop_thread: thread {type(thread).__name__} did not stop in {timeout}ms; retaining it until cooperative completion"
                 )
-                try:
-                    thread.terminate()
-                    thread.wait(500)
-                except Exception as e:
-                    logger.debug(
-                        f"safe_stop_thread: failed to terminate thread {type(thread).__name__}: {e}",
-                        exc_info=True,
-                    )
-        except (RuntimeError, AttributeError):
-            pass
+        except (RuntimeError, AttributeError) as error:
+            logger.debug("Best-effort operation failed: %s", error, exc_info=True)
         except Exception as e:
             logger.error(
                 f"safe_stop_thread: error stopping thread {type(thread).__name__}: {e}",
@@ -147,13 +140,14 @@ class UIAnimator:
 
     @staticmethod
     def _stop_existing_fade(widget: QWidget) -> None:
+        dynamic_widget = cast(Any, widget)
         anim = getattr(widget, "_fade_anim", None)
         if not anim:
             return
         with contextlib.suppress(RuntimeError, AttributeError):
             anim.stop()
         if getattr(widget, "_fade_anim", None) is anim:
-            widget._fade_anim = None
+            dynamic_widget._fade_anim = None
         with contextlib.suppress(RuntimeError, AttributeError):
             anim.deleteLater()
 
@@ -179,13 +173,13 @@ class UIAnimator:
         else:
             effect = QGraphicsOpacityEffect(widget)
             widget.setGraphicsEffect(effect)
-        widget._fade_effect = effect
+        cast(Any, widget)._fade_effect = effect
         return effect
 
     @staticmethod
     def fade_in(
         widget: QWidget, duration: int = 200, app_state=None
-    ) -> QPropertyAnimation:
+    ) -> QPropertyAnimation | None:
         """Fade in a widget by animating opacity."""
 
         should_show = (
@@ -215,26 +209,28 @@ class UIAnimator:
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
+        dynamic_widget = cast(Any, widget)
+
         def cleanup():
             if preserve_effect:
                 effect.setOpacity(1.0)
             else:
                 if hasattr(widget, "setGraphicsEffect"):
                     widget.setGraphicsEffect(None)
-                widget._fade_effect = None
-            widget._fade_anim = None
+                dynamic_widget._fade_effect = None
+            dynamic_widget._fade_anim = None
 
         anim.finished.connect(cleanup)
         anim.start(QAbstractAnimation.DeletionPolicy.KeepWhenStopped)
 
-        widget._fade_effect = effect
-        widget._fade_anim = anim
+        dynamic_widget._fade_effect = effect
+        dynamic_widget._fade_anim = anim
         return anim
 
     @staticmethod
     def fade_out(
         widget: QWidget, duration: int = 200, app_state=None
-    ) -> QPropertyAnimation:
+    ) -> QPropertyAnimation | None:
         """Fade out a widget by animating opacity."""
         preserve_effect = UIAnimator._preserve_fade_effect(widget)
         if not UIAnimator._animations_enabled(app_state):
@@ -251,6 +247,8 @@ class UIAnimator:
         anim.setEndValue(0.0)
         anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
+        dynamic_widget = cast(Any, widget)
+
         def cleanup():
             widget.hide()
             if preserve_effect:
@@ -258,14 +256,14 @@ class UIAnimator:
             else:
                 if hasattr(widget, "setGraphicsEffect"):
                     widget.setGraphicsEffect(None)
-                widget._fade_effect = None
-            widget._fade_anim = None
+                dynamic_widget._fade_effect = None
+            dynamic_widget._fade_anim = None
 
         anim.finished.connect(cleanup)
         anim.start(QAbstractAnimation.DeletionPolicy.KeepWhenStopped)
 
-        widget._fade_effect = effect
-        widget._fade_anim = anim
+        dynamic_widget._fade_effect = effect
+        dynamic_widget._fade_anim = anim
         return anim
 
     @staticmethod
@@ -299,5 +297,5 @@ class UIAnimator:
 
         anim.start(QAbstractAnimation.DeletionPolicy.KeepWhenStopped)
 
-        widget._collapse_anim = anim
+        cast(Any, widget)._collapse_anim = anim
         return anim

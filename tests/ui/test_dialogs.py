@@ -218,16 +218,133 @@ class TestPluginDetailsDialog:
         _close_dialog(qapp, dialog)
 
 
-class TestModPriorityDialog:
+class TestModPriorityStepsDialog:
     """Tests for dialogs."""
-    def test_mod_priority_dialog_creation(self, qapp, app_state):
-        """Checks that mod priority dialog creation."""
+    def test_mod_priority_steps_dialog_groups_mods(self, qapp, app_state):
         from models.mod_models import ModInfo
-        from ui.dialogs.mod.priority_dialog import ModPriorityDialog
-        mods_list = [ModInfo(id='test_mod_1', name='Test Mod 1', version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune')]
-        dialog = ModPriorityDialog(mods_list, 1, app_state, None)
-        assert dialog is not None
-        assert isinstance(dialog, QDialog)
+        from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+        mods = [
+            ModInfo(id=f"test_mod_{index}", name=f"Test Mod {index}", version='1.0.0', author='Author', description='', game_version='', description_url='', downloads=0, game='deltarune')
+            for index in (1, 2)
+        ]
+        dialog = ModPriorityStepsDialog([mods], app_state, None)
+
+        dialog._add_step()
+        dialog._move_mod_to_step(mods[1], 1)
+
+        assert dialog.get_result() == [[mods[0]], [mods[1]]]
+        assert dialog._active_step_index == 1
+        _close_dialog(qapp, dialog)
+
+    def test_mod_movement_uses_actively_interacted_step(self, qapp, app_state):
+        from models.mod_models import ModInfo
+        from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+
+        mods = [
+            ModInfo(id=str(index), name=str(index), version="1", author="", description="", game_version="", description_url="", downloads=0, game="deltarune")
+            for index in range(4)
+        ]
+        dialog = ModPriorityStepsDialog(
+            [[mods[0], mods[1]], [mods[2], mods[3]]], app_state
+        )
+        dialog._step_lists[0].setCurrentRow(0)
+        dialog._step_lists[1].setCurrentRow(1)
+        dialog._set_active_step(1)
+
+        dialog._move_selected_mod(-1)
+
+        assert dialog.get_result() == [[mods[0], mods[1]], [mods[3], mods[2]]]
+        _close_dialog(qapp, dialog)
+
+    def test_selected_step_can_be_moved_and_removed(self, qapp, app_state):
+        from models.mod_models import ModInfo
+        from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+
+        mods = [
+            ModInfo(id=str(index), name=str(index), version="1", author="", description="", game_version="", description_url="", downloads=0, game="deltarune")
+            for index in range(3)
+        ]
+        dialog = ModPriorityStepsDialog([[mods[0]], [mods[1]], [mods[2]]], app_state)
+
+        dialog._set_active_step(1)
+        dialog._move_step(-1)
+        assert dialog.get_result() == [[mods[1]], [mods[0]], [mods[2]]]
+        assert dialog._active_step_index == 0
+
+        dialog._set_active_step(1)
+        dialog._remove_selected_step()
+        assert dialog.get_result() == [[mods[1], mods[0]], [mods[2]]]
+        assert dialog._active_step_index == 0
+        _close_dialog(qapp, dialog)
+
+    def test_mod_selection_is_exclusive_across_steps(self, qapp, app_state):
+        from models.mod_models import ModInfo
+        from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+
+        mods = [
+            ModInfo(id=str(index), name=str(index), version="1", author="", description="", game_version="", description_url="", downloads=0, game="deltarune")
+            for index in range(2)
+        ]
+        dialog = ModPriorityStepsDialog([[mods[0]], [mods[1]]], app_state)
+
+        dialog._step_lists[0].setCurrentRow(0)
+        assert dialog._step_lists[0].selectedItems()
+        dialog._step_lists[1].setCurrentRow(0)
+
+        assert not dialog._step_lists[0].selectedItems()
+        assert dialog._step_lists[0].currentItem() is None
+        assert dialog._step_lists[1].selectedItems()
+        assert dialog._active_step_index == 1
+        _close_dialog(qapp, dialog)
+
+    def test_step_selection_is_visible_and_dialog_is_at_least_550_pixels_wide(
+        self, qapp, app_state
+    ):
+        from PyQt6.QtCore import QPoint, Qt
+        from PyQt6.QtTest import QTest
+
+        from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+
+        dialog = ModPriorityStepsDialog([[]], app_state)
+        dialog._add_step()
+        dialog.show()
+        qapp.processEvents()
+
+        QTest.mouseClick(
+            dialog._step_groups[1], Qt.MouseButton.LeftButton, pos=QPoint(8, 8)
+        )
+
+        assert dialog.minimumWidth() == 550
+        assert dialog.width() >= 550
+        assert dialog._step_groups[0].property("activeStep") is False
+        assert dialog._step_groups[1].property("activeStep") is True
+        _close_dialog(qapp, dialog)
+
+    def test_priority_steps_dialog_refreshes_theme_and_localization(
+        self, qapp, app_state, monkeypatch
+    ):
+        from ui.common.dialog_theme import get_dialog_theme_values
+        from ui.dialogs.mod import priority_steps_dialog as module
+
+        dialog = module.ModPriorityStepsDialog([[]], app_state)
+        dialog._add_step()
+        dialog.apply_theme()
+
+        assert dialog.styleSheet().count('QGroupBox[activeStep="true"]') == 1
+        assert "dashed" in dialog.styleSheet()
+        assert get_dialog_theme_values(app_state)["select"] in dialog.styleSheet()
+
+        monkeypatch.setattr(
+            module,
+            "tr",
+            lambda key, **kwargs: f"translated:{key}:{kwargs.get('number', '')}",
+        )
+        dialog.relocalize_ui()
+
+        assert dialog.windowTitle() == "translated:ui.priority_steps_title:"
+        assert dialog._step_groups[1].title() == "translated:ui.step_number:2"
+        assert dialog._localized_buttons["ui.add_step"].text() == "translated:ui.add_step:"
+        _close_dialog(qapp, dialog)
 
 
 class TestAboutDialog:

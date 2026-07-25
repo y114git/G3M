@@ -351,7 +351,7 @@ def test_batch_data_convert_worker_processes_all_jobs(tmp_path, monkeypatch):
 
     worker = _BatchDataConvertWorkerThread(_FakeG3M(), jobs, "g3mpatch")
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -371,7 +371,7 @@ def test_batch_data_convert_worker_warning_continue_skips_failed_job(monkeypatch
 
     class _FakeConvertWorker(QObject):
         progress = pyqtSignal(str)
-        finished = pyqtSignal(bool, str)
+        result_ready = pyqtSignal(bool, str)
 
         def __init__(self, _g3m, mod_folder, *_args, **_kwargs) -> None:
             super().__init__()
@@ -380,9 +380,9 @@ def test_batch_data_convert_worker_warning_continue_skips_failed_job(monkeypatch
         def run(self):
             calls.append(self._mod_folder)
             if self._mod_folder == "bad":
-                self.finished.emit(False, "xdelta failed")
+                self.result_ready.emit(False, "xdelta failed")
             else:
-                self.finished.emit(True, "ok")
+                self.result_ready.emit(True, "ok")
 
     monkeypatch.setattr(
         "ui.dialogs.modding_tools_dialog._DataConvertWorkerThread",
@@ -404,7 +404,7 @@ def test_batch_data_convert_worker_warning_continue_skips_failed_job(monkeypatch
             worker.confirm_warning(True),
         )
     )
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -469,7 +469,7 @@ def test_data_convert_creates_new_version_without_overwriting_mod(
         "g3mpatch",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -543,7 +543,7 @@ def test_data_convert_accepts_g3mpatch_zip_as_source(tmp_path, monkeypatch):
         "xdelta",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -608,7 +608,7 @@ def test_data_convert_can_output_game_win(tmp_path, monkeypatch):
         "game.win",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -673,7 +673,7 @@ def test_data_convert_accepts_csx_source(tmp_path, monkeypatch):
         "g3mpatch",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -740,7 +740,7 @@ def test_data_convert_preserves_chapter_relative_path_in_converted_config(
         "g3mpatch",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -781,7 +781,7 @@ def test_data_convert_reports_localized_filesystem_error(tmp_path, monkeypatch):
         "xdelta",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 
@@ -804,7 +804,7 @@ def test_convert_worker_keeps_generated_patch_even_if_roundtrip_would_fail(tmp_p
         False,
     )
     result = []
-    worker.finished.connect(lambda rc, out, err: result.append((rc, out, err)))
+    worker.result_ready.connect(lambda rc, out, err: result.append((rc, out, err)))
 
     worker.run()
 
@@ -828,7 +828,7 @@ def test_create_patch_worker_keeps_generated_patch_even_if_roundtrip_would_fail(
         False,
     )
     result = []
-    worker.finished.connect(lambda rc, out, err: result.append((rc, out, err)))
+    worker.result_ready.connect(lambda rc, out, err: result.append((rc, out, err)))
 
     worker.run()
 
@@ -886,7 +886,7 @@ def test_data_convert_allows_generated_patch_without_roundtrip_check(tmp_path, m
         "g3mpatch",
     )
     result = []
-    worker.finished.connect(lambda success, message: result.append((success, message)))
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
 
     worker.run()
 

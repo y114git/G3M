@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 from services.localization_service import tr
 from utils.path_utils import get_g3mtool_cache_dir, get_user_data_root, resource_path
-from utils.process_utils import format_external_process_error
+from utils.process_utils import bounded_output_preview, format_external_process_error
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +449,7 @@ class G3MToolManager:
             else:
                 progress_buffer += char
         progress = self._parse_progress(progress_buffer)
-        if progress:
+        if progress and progress_callback:
             progress_callback(*progress)
 
     def _run(
@@ -507,12 +507,20 @@ class G3MToolManager:
                     if process in self._active_processes:
                         self._active_processes.remove(process)
             logger.info(f"G3MTool completed with return code {returncode}")
+            stdout_text = stdout.strip()
             stderr_text = stderr.strip()
+            stdout_preview = bounded_output_preview(stdout_text)
+            stderr_preview = bounded_output_preview(stderr_text)
             if returncode != 0:
+                if stdout_text:
+                    logger.info("G3MTool stdout: %s", stdout_preview)
                 if stderr_text:
-                    logger.info(f"G3MTool stderr: {stderr_text[:500]}")
-            elif stderr_text:
-                logger.debug(f"G3MTool stderr (non-fatal): {stderr_text[:500]}")
+                    logger.info("G3MTool stderr: %s", stderr_preview)
+            else:
+                if stdout_text:
+                    logger.debug("G3MTool stdout: %s", stdout_preview)
+                if stderr_text:
+                    logger.debug("G3MTool stderr (non-fatal): %s", stderr_preview)
             return (returncode, stdout, stderr)
         except Exception as e:
             friendly_error = format_external_process_error(

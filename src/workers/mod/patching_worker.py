@@ -2,11 +2,14 @@
 
 import logging
 import threading
+from collections.abc import Iterable
 from typing import Any
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
+from models.execution_plan import PatchPlan
 from services.g3mtool_patching_service import G3MToolPatchingService
+from ui.utils.thread_lifetime import ManagedQThread
 
 logger = logging.getLogger(__name__)
 
@@ -18,26 +21,29 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class ModPatchingThread(QThread):
+class ModPatchingThread(ManagedQThread):
     """Background thread for mod patching operations."""
 
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
     warning_confirmation_needed = pyqtSignal(object, str, object)
-    finished = pyqtSignal(bool)
+    result_ready = pyqtSignal(bool)
 
     def __init__(
         self,
         app_state,
         mod_service,
-        chapter_mods: dict[int, list[Any]],
+        patch_plan: PatchPlan,
         session_manifest_path: str,
         parent=None,
+        *,
+        plan_mods: Iterable[Any] = (),
     ) -> None:
         super().__init__(parent)
         self.app_state = app_state
         self.mod_service = mod_service
-        self.chapter_mods = chapter_mods
+        self.patch_plan = patch_plan
+        self._plan_mods = tuple(plan_mods)
         self.session_manifest_path = session_manifest_path
         self.patcher: G3MToolPatchingService | None = None
         self._cancelled = False
@@ -90,7 +96,7 @@ class ModPatchingThread(QThread):
         success = False
         try:
             if self.isInterruptionRequested() or self._cancelled:
-                _safe_emit(self.__class__.__name__, self.finished, False)
+                _safe_emit(self.__class__.__name__, self.result_ready, False)
                 return
             self.patcher = G3MToolPatchingService(
                 self.app_state, self.mod_service, None
@@ -117,17 +123,29 @@ class ModPatchingThread(QThread):
             self.patcher._session_manifest_path = self.session_manifest_path
             self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
-                _safe_emit(self.__class__.__name__, self.finished, False)
+                _safe_emit(self.__class__.__name__, self.result_ready, False)
                 return
-            success = self.patcher.process_mod_patch(
-                self.chapter_mods, is_modpack=False
+            mods_by_id = {
+                str(getattr(mod, "id", "")): mod
+                for mod in getattr(self.app_state, "all_mods", ())
+                if getattr(mod, "id", None)
+            }
+            mods_by_id.update(
+                {
+                    str(getattr(mod, "id", "")): mod
+                    for mod in self._plan_mods
+                    if getattr(mod, "id", None)
+                }
+            )
+            success = self.patcher.process_patch_plan(
+                self.patch_plan, mods_by_id.get, is_modpack=False
             )
             if self.isInterruptionRequested() or self._cancelled:
                 self.patcher.cancel()
                 if self.patcher:
                     self._restore_backups()
                 success = False
-            _safe_emit(self.__class__.__name__, self.finished, success)
+            _safe_emit(self.__class__.__name__, self.result_ready, success)
         except Exception as e:
             logger.error(f"ModPatchingThread failed: {e}", exc_info=True)
             _safe_emit(
@@ -136,7 +154,7 @@ class ModPatchingThread(QThread):
                 f"Patching failed: {e!s}",
                 "error",
             )
-            _safe_emit(self.__class__.__name__, self.finished, False)
+            _safe_emit(self.__class__.__name__, self.result_ready, False)
         finally:
             if self.patcher:
                 failed = (

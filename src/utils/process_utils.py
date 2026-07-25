@@ -8,6 +8,29 @@ from collections.abc import Mapping
 from services.localization_service import tr
 
 
+def bounded_output_preview(value: object, limit: int = 4000) -> str:
+    """Return a marked prefix/suffix preview suitable for persistent UI logs."""
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    limit = max(0, limit)
+    if not limit:
+        return ""
+    omitted = len(text)
+    while True:
+        marker = f"... [{omitted} characters omitted] ..."
+        if len(marker) >= limit:
+            return marker[:limit]
+        retained = limit - len(marker)
+        new_omitted = len(text) - retained
+        if new_omitted == omitted:
+            break
+        omitted = new_omitted
+    prefix_length = retained * 2 // 3
+    suffix_length = retained - prefix_length
+    return text[:prefix_length] + marker + (text[-suffix_length:] if suffix_length else "")
+
+
 def build_external_process_env(
     *, system: str, base_env: Mapping[str, str] | None = None
 ) -> dict[str, str] | None:

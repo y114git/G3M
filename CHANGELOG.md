@@ -1,3 +1,43 @@
+### Version 3.3.0 — 25.07.26
+
+- **Getting Started Guide**
+
+  - An interactive first-run tour now opens the relevant screens and highlights the actual controls while explaining game setup, mod installation, profiles, Priority & Steps, diagnostics, Modding Tools, downloads, shortcuts, safe launch restoration, and common errors.
+  - The tour can be started again from *Help*.
+
+- **Mod Priority & Steps**
+
+  - Mod priority is no longer limited to one big merge. You can now split mods into steps: every step uses the result of the previous one as its base.
+  - This makes it possible to launch addons that require another mod, apply a version patch before an incompatible mod, or build longer mod chains while still merging compatible mods inside the same step.
+
+- **Launch Preflight Diagnostics**
+
+  - Diagnostics can now perform the same patching process as a real launch without starting the game or touching the original installation.
+  - The resulting report shows the planned steps, changed files and resources, winning conflicts, patch details, hashes, warnings, and errors for DATA files, `.g3mpatch`, `.xdelta`, `.csx`, and Extra files.
+  - You can inspect reports in G3M or export them as JSON or HTML for troubleshooting and bug reports.
+
+- **Custom G3M Data Location**
+
+  - The G3M data folder can now be moved from *Settings > App > Advanced*.
+  - You can move the existing profiles, mods, plugins, themes, and other data into the selected folder, or start there as if G3M was launched for the first time.
+  - The default location has not changed, so existing installations and shortcuts continue to work normally.
+
+- **Community**
+
+  - Community now shows GameBanana feeds for recent and featured submissions.
+  - You can browse New or Featured submissions for one supported game or all configured games together, including custom games with a GameBanana ID or link.
+
+- **Analytics Removed**
+
+  - Analytics and the related background requests were removed from G3M.
+
+- **Other Improvements and Bug Fixes**
+
+  - The new TOML-based DELTAMOD package format is now supported during import and conversion.
+  - Game launch and exit detection was improved for direct launches, Steam, Wine, PortProton, and macOS. The G3M window now returns much sooner after the game closes, before file restoration finishes.
+  - Mod deletion, immediate reimport, Mod Versions updates, download retries, archive cancellation, localization refresh, patch ordering, and error reporting were improved.
+  - A lot of crashes, stale interface states, silent patching failures, and problems involving DATA files, Extra files, worker shutdown, or backup restoration were fixed.
+
 ### Version 3.2.1 — 25.06.26
 
 - **Lot of stupid bugs fix, if you have 3.2.0, delete it and install 3.2.1. Really sorry for those bugs, hope you'll enjoy chapter 5 and new mods normally now!**

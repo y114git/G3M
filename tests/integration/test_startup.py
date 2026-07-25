@@ -104,7 +104,12 @@ def test_startup_from_environment():
     archive_path = pathlib.Path(os.environ["ARCHIVE_PATH"])
     startup_target = os.environ["STARTUP_TARGET"]
 
-    success = _test_startup_with_archive(archive_path, startup_target)
+    launch_target = os.environ.get("STARTUP_LAUNCH_TARGET")
+    success = _test_startup_with_archive(
+        archive_path,
+        startup_target,
+        pathlib.Path(launch_target).resolve() if launch_target else None,
+    )
     assert success, f"Startup test failed for {startup_target}"
 
 
@@ -522,7 +527,7 @@ def _connected_socket_factory():
     return _Socket, writes
 
 
-def test_run_app_second_instance_shows_localized_error_and_sends_activate(monkeypatch):
+def test_run_app_second_instance_activates_without_error_dialog(monkeypatch):
     from app import startup as startup_module
 
     socket_factory, writes = _connected_socket_factory()
@@ -533,23 +538,25 @@ def test_run_app_second_instance_shows_localized_error_and_sends_activate(monkey
         assert startup_module.run_app([]) == 0
 
     assert writes == [startup_module.SINGLE_INSTANCE_ACTIVATE]
-    warning.assert_called_once()
+    warning.assert_not_called()
 
 
-def test_run_app_second_instance_ignores_broken_warning_dialog(monkeypatch):
+def test_run_app_repeated_second_instances_activate_without_dialogs(monkeypatch):
     from app import startup as startup_module
 
     socket_factory, writes = _connected_socket_factory()
     monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
     monkeypatch.setattr(startup_module, "QLocalSocket", socket_factory)
 
-    with patch(
-        "app.startup.QMessageBox.warning",
-        side_effect=RuntimeError("warning dialog deleted"),
-    ):
+    with patch("app.startup.QMessageBox.warning") as warning:
+        assert startup_module.run_app([]) == 0
         assert startup_module.run_app([]) == 0
 
-    assert writes == [startup_module.SINGLE_INSTANCE_ACTIVATE]
+    assert writes == [
+        startup_module.SINGLE_INSTANCE_ACTIVATE,
+        startup_module.SINGLE_INSTANCE_ACTIVATE,
+    ]
+    warning.assert_not_called()
 
 
 def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeypatch):
@@ -605,7 +612,14 @@ def test_main_routes_shortcut_without_startup(monkeypatch):
     """Checks that main routes shortcut without startup."""
     main_module = _load_main_module()
 
-    run_shortcut = Mock()
+    calls = []
+    resolve_root = Mock(side_effect=lambda **_kwargs: calls.append("resolve"))
+    run_shortcut = Mock(side_effect=lambda *_args: calls.append("run"))
+    monkeypatch.setitem(
+        sys.modules,
+        "bootstrap.user_data_bootstrap",
+        types.SimpleNamespace(resolve_user_data_root_with_migration=resolve_root),
+    )
     monkeypatch.setitem(
         sys.modules,
         "services.game_runner",
@@ -613,7 +627,32 @@ def test_main_routes_shortcut_without_startup(monkeypatch):
     )
 
     assert main_module.main(["main.py", "--shortcut", "cfg"]) == 0
+    resolve_root.assert_called_once_with(interactive=False)
     run_shortcut.assert_called_once_with("cfg")
+    assert calls == ["resolve", "run"]
+
+
+def test_main_shortcut_reports_unavailable_data_root(monkeypatch, capsys):
+    main_module = _load_main_module()
+    run_shortcut = Mock()
+    monkeypatch.setitem(
+        sys.modules,
+        "bootstrap.user_data_bootstrap",
+        types.SimpleNamespace(
+            resolve_user_data_root_with_migration=Mock(
+                side_effect=RuntimeError("configured drive is unavailable")
+            )
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "services.game_runner",
+        types.SimpleNamespace(run_shortcut=run_shortcut),
+    )
+
+    assert main_module.main(["main.py", "--shortcut", "cfg"]) == 1
+    assert "configured drive is unavailable" in capsys.readouterr().err
+    run_shortcut.assert_not_called()
 
 
 def test_main_shortcut_requires_argument(capsys):
@@ -884,6 +923,34 @@ def test_bootstrap_startup_error_exits_even_if_error_dialog_fails():
     splash.close.assert_called_once_with()
 
 
+def test_bootstrap_server_collision_quits_without_error_dialog():
+    """A late second-instance race exits quietly after losing the server claim."""
+    from bootstrap.bootstrap_coordinator import BootstrapCoordinator
+
+    app = Mock()
+    splash = Mock()
+    server = Mock()
+    server.listen.return_value = False
+    coordinator = BootstrapCoordinator(
+        app=app,
+        user_root="",
+        initial_url=None,
+        window_factory=Mock(),
+        server_factory=Mock(return_value=server),
+    )
+    coordinator.splash = splash
+
+    with (
+        patch("bootstrap.bootstrap_coordinator.QMessageBox.critical") as critical,
+        patch("bootstrap.bootstrap_coordinator.QTimer.singleShot") as single_shot,
+    ):
+        coordinator._create_launcher()
+
+    splash.close.assert_called_once_with()
+    single_shot.assert_called_once_with(0, app.quit)
+    critical.assert_not_called()
+
+
 def test_play_startup_sound_skips_when_disabled():
     """Checks that playing startup sound skips when disabled."""
     from bootstrap.bootstrap_coordinator import BootstrapCoordinator
@@ -1050,9 +1117,14 @@ def test_startup_window_creation_smoke(qapp, tmp_path):
             window.close()
 
 
-def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) -> bool:
+def _test_startup_with_archive(
+    archive_path: pathlib.Path,
+    startup_target: str,
+    launch_target: pathlib.Path | None = None,
+) -> bool:
     try:
-        with tempfile.TemporaryDirectory() as extract_dir:
+        archive_parent = archive_path.resolve().parent
+        with tempfile.TemporaryDirectory(dir=archive_parent) as extract_dir:
             extract_path = pathlib.Path(extract_dir)
             with zipfile.ZipFile(archive_path) as archive:
                 archive.extractall(extract_path)
@@ -1061,9 +1133,13 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
             if not target.exists():
                 sys.stderr.write(f"Startup target not found: {target}\n")
                 return False
+            target_to_run = launch_target or target
+            if not target_to_run.is_file():
+                sys.stderr.write(f"Startup launch target not found: {target_to_run}\n")
+                return False
 
             if platform.system() != "Windows":
-                target.chmod(target.stat().st_mode | 0o111)
+                target_to_run.chmod(target_to_run.stat().st_mode | 0o111)
             cwd = str(extract_path)
 
             env = os.environ.copy()
@@ -1071,7 +1147,7 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
 
             if startup_target.endswith(".py"):
                 result = subprocess.run(
-                    [sys.executable, str(target), "--help"],
+                    [sys.executable, str(target_to_run), "--help"],
                     capture_output=True,
                     text=True,
                     timeout=TEST_TIMEOUT,
@@ -1080,7 +1156,9 @@ def _test_startup_with_archive(archive_path: pathlib.Path, startup_target: str) 
                 )
                 output = (result.stdout or "") + (result.stderr or "")
             else:
-                returncode, output = _run_packaged_binary_smoke(target, cwd, env)
+                returncode, output = _run_packaged_binary_smoke(
+                    target_to_run, cwd, env
+                )
             if startup_target.endswith(".py") and result.returncode != 0:
                 sys.stderr.write(
                     f"Startup command failed for {startup_target} with code {result.returncode}\n"
@@ -1118,7 +1196,12 @@ def main():
     archive_path = pathlib.Path(os.environ["ARCHIVE_PATH"])
     startup_target = os.environ["STARTUP_TARGET"]
 
-    success = _test_startup_with_archive(archive_path, startup_target)
+    launch_target = os.environ.get("STARTUP_LAUNCH_TARGET")
+    success = _test_startup_with_archive(
+        archive_path,
+        startup_target,
+        pathlib.Path(launch_target).resolve() if launch_target else None,
+    )
     if not success:
         sys.stderr.write(f"Startup test failed for {startup_target}\n")
         raise SystemExit(1)

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class ImageLoaderRunnable(QRunnable):
     _in_flight: set[str] = set()
     _in_flight_events: dict[str, threading.Event] = {}
-    _in_flight_results: dict[str, tuple[bool, object]] = {}
+    _in_flight_results: dict[str, tuple[bool, QImage | str]] = {}
     _in_flight_waiters: dict[str, int] = {}
     _in_flight_lock = threading.RLock()
 
@@ -51,7 +51,10 @@ class ImageLoaderRunnable(QRunnable):
             return
         success, value = outcome
         if success:
-            self._emit_result(value)
+            if isinstance(value, QImage):
+                self._emit_result(value)
+            else:
+                self._emit_error("network:InvalidImage")
         else:
             self._emit_error(str(value))
 

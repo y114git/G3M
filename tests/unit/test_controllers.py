@@ -102,7 +102,9 @@ class TestModOperationsController:
             author="Author",
             description="Desc",
             game="deltarune",
-            files={"deltarune_1": ModFileData(data_file_url="https://example.com/a.xdelta")},
+            files={
+                "deltarune_1": ModFileData(data_file_url="https://example.com/a.xdelta")
+            },
         )
         mod_service = Mock()
         mod_service.is_mod_installed.return_value = False
@@ -129,9 +131,7 @@ class TestModOperationsController:
         assert getattr(app_state, "_scan_blocked", False) is False
         feedback_service.show_message.assert_called_once()
 
-    def test_install_complete_success_ignores_broken_status_feedback(
-        self, app_state
-    ):
+    def test_install_complete_success_ignores_broken_status_feedback(self, app_state):
         from controllers.mod.operations_controller import ModOperationsController
 
         feedback_service = Mock()
@@ -593,13 +593,10 @@ class TestModImportExportController:
             Mock(mods_dir=temp_dir, all_mods=[]), Mock(), Mock()
         )
 
-        assert (
-            controller._format_import_exception(
-                FileNotFoundError(2, "No such file", os.path.join(temp_dir, "missing.zip")),
-                file_path=os.path.join(temp_dir, "missing.zip"),
-            )
-            == tr("errors.archive_not_found")
-        )
+        assert controller._format_import_exception(
+            FileNotFoundError(2, "No such file", os.path.join(temp_dir, "missing.zip")),
+            file_path=os.path.join(temp_dir, "missing.zip"),
+        ) == tr("errors.archive_not_found")
 
     def test_materialize_local_import_raises_localized_permission_error(self, temp_dir):
         from controllers.mod.import_export_controller import ModImportExportController
@@ -622,7 +619,9 @@ class TestModImportExportController:
         ):
             with pytest.raises(ValueError) as exc_info:
                 controller._materialize_local_import(source_file, extract_dir)
-            assert str(exc_info.value) == tr("errors.permission_denied", path=source_file)
+            assert str(exc_info.value) == tr(
+                "errors.permission_denied", path=source_file
+            )
 
     def test_manual_import_error_dialog_failure_is_suppressed(self, temp_dir):
         from controllers.mod.import_export_controller import ModImportExportController
@@ -656,14 +655,10 @@ class TestModImportExportController:
         )
         controller = ModImportExportController(app_state, Mock(), app_window)
         controller._active_remote_import_source = "url"
-        controller._record_import_analytics = Mock()
 
         controller._on_mod_install_finished(False, "download failed")
 
         app_state.reset_install_state.assert_called_once()
-        controller._record_import_analytics.assert_called_once_with(
-            source="url", outcome="failed"
-        )
 
     def test_remote_import_success_information_failure_is_suppressed(self, temp_dir):
         from controllers.mod.import_export_controller import ModImportExportController
@@ -672,7 +667,6 @@ class TestModImportExportController:
         app_state.reset_install_state = Mock()
         controller = ModImportExportController(app_state, Mock(), Mock())
         controller._active_remote_import_source = "url"
-        controller._record_import_analytics = Mock()
         controller._refresh_mod_list = Mock()
 
         with patch(
@@ -683,9 +677,6 @@ class TestModImportExportController:
 
         app_state.reset_install_state.assert_called_once()
         controller._refresh_mod_list.assert_called_once()
-        controller._record_import_analytics.assert_called_once_with(
-            source="url", outcome="success"
-        )
 
     def test_show_mod_details_config_error_dialog_failure_is_suppressed(self, temp_dir):
         from controllers.mod.import_export_controller import ModImportExportController
@@ -693,7 +684,9 @@ class TestModImportExportController:
         mod_data = SimpleNamespace(id="broken_mod", name="Broken Mod")
         mod_folder = os.path.join(temp_dir, "broken_mod")
         os.makedirs(mod_folder, exist_ok=True)
-        with open(os.path.join(mod_folder, "mod_config.json"), "w", encoding="utf-8") as handle:
+        with open(
+            os.path.join(mod_folder, "mod_config.json"), "w", encoding="utf-8"
+        ) as handle:
             handle.write("{bad json")
         mod_service = Mock(get_mod_folder_path=Mock(return_value=mod_folder))
         controller = ModImportExportController(
@@ -727,11 +720,12 @@ class TestModImportExportController:
             },
             indent=2,
         )
-        with open(os.path.join(content_path, "patch.xdelta"), "w", encoding="utf-8") as handle:
+        with open(
+            os.path.join(content_path, "patch.xdelta"), "w", encoding="utf-8"
+        ) as handle:
             handle.write("patch")
         controller._materialize_local_import = Mock(return_value=content_path)
         controller._refresh_mod_list = Mock()
-        controller._record_import_analytics = Mock()
         controller._show_import_error_with_manual_install = Mock()
 
         with (
@@ -749,11 +743,6 @@ class TestModImportExportController:
         assert os.path.isdir(os.path.join(temp_dir, "Success Mod"))
         controller._refresh_mod_list.assert_called_once()
         controller._show_import_error_with_manual_install.assert_not_called()
-        controller._record_import_analytics.assert_called_once_with(
-            source="file",
-            outcome="success",
-            file_path=os.path.join(temp_dir, "success.zip"),
-        )
 
     def test_url_import_start_failure_feedback_failure_is_suppressed(self, temp_dir):
         from controllers.mod.import_export_controller import ModImportExportController
@@ -764,7 +753,6 @@ class TestModImportExportController:
             "toast deleted"
         )
         controller = ModImportExportController(app_state, Mock(), app_window)
-        controller._record_import_analytics = Mock()
 
         with patch(
             "workers.install.url_install_worker.UrlInstallThread",
@@ -772,9 +760,6 @@ class TestModImportExportController:
         ):
             controller._install_mod_from_url("https://example.com/mod.zip")
 
-        controller._record_import_analytics.assert_called_once_with(
-            source="url", outcome="failed"
-        )
         app_window.feedback_service.show_message.assert_called_once()
 
     def test_url_import_worker_status_uses_safe_feedback(self, temp_dir):
@@ -791,7 +776,7 @@ class TestModImportExportController:
             def __init__(self, *_args) -> None:
                 self.status = Signal()
                 self.progress = Signal()
-                self.finished = Signal()
+                self.result_ready = Signal()
                 self.manual_install_required = Signal()
                 self.started = False
 
@@ -848,12 +833,9 @@ class TestModManagerErrorFormatting:
         from services.localization_service import tr
         from services.mod.service import ModManager
 
-        assert (
-            ModManager._describe_uninstall_error(
-                FileNotFoundError(2, "No such file", "C:/mods/missing")
-            )
-            == tr("errors.file_not_found", path="C:/mods/missing")
-        )
+        assert ModManager._describe_uninstall_error(
+            FileNotFoundError(2, "No such file", "C:/mods/missing")
+        ) == tr("errors.file_not_found", path="C:/mods/missing")
 
     def test_materialize_local_import_keeps_plain_files(self, temp_dir):
         """Checks that materializeing local import keeps plain files."""
@@ -916,6 +898,51 @@ class TestModManagerErrorFormatting:
 
         assert os.path.isdir(os.path.join(temp_dir, "Real Mod Name"))
         assert not os.path.exists(os.path.join(temp_dir, "archive-name"))
+
+    def test_local_import_ignores_stale_in_memory_mod_with_missing_folder(
+        self, temp_dir
+    ):
+        """A deleted mod id can be imported again without a manual refresh."""
+        from controllers.mod.import_export_controller import ModImportExportController
+
+        stale_mod = SimpleNamespace(id="maustweaks", name="MausTweaks")
+        app_state = Mock(mods_dir=temp_dir, all_mods=[stale_mod])
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = None
+        controller = ModImportExportController(app_state, mod_service, Mock())
+        content_path = os.path.join(temp_dir, "extracted")
+        os.makedirs(content_path, exist_ok=True)
+        save_json(
+            os.path.join(content_path, "mod_config.json"),
+            {
+                "id": "maustweaks",
+                "name": "MausTweaks",
+                "version": "1.0.0",
+                "author": "Y114",
+                "game": "deltarune",
+                "files": {"deltarune_1": {"data_file_path": "patch.g3mpatch"}},
+            },
+            indent=2,
+        )
+        with open(
+            os.path.join(content_path, "patch.g3mpatch"), "wb"
+        ) as patch_file:
+            patch_file.write(b"patch")
+        controller._materialize_local_import = Mock(return_value=content_path)
+        controller._refresh_mod_list = Mock()
+        controller._merge_into_existing_mod = Mock()
+
+        with (
+            patch("controllers.mod.import_export_controller.QMessageBox.information"),
+            patch(
+                "controllers.mod.import_export_controller.find_deltamod_info_file",
+                return_value=False,
+            ),
+        ):
+            controller._install_mod_from_file(os.path.join(temp_dir, "maus.zip"))
+
+        controller._merge_into_existing_mod.assert_not_called()
+        assert os.path.isdir(os.path.join(temp_dir, "MausTweaks"))
 
     def test_install_mod_from_file_uses_metadata_name_for_target_folder(self, temp_dir):
         """Checks that nested metadata configs import with the normalized mod name."""
@@ -1454,7 +1481,6 @@ class TestLibraryCyopAfomFilter:
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
-        app_window.analytics_service = Mock()
         mod_service = Mock()
         mod_service.get_mod_folder_path.return_value = temp_dir
         controller = LibraryDisplayController(
@@ -1485,17 +1511,12 @@ class TestLibraryCyopAfomFilter:
 
         controller._on_summary_readme(mod_data)
 
-        app_window.analytics_service.record_dialog_opened.assert_called_once_with(
-            "mod_readme"
-        )
-
     def test_library_summary_readme_passes_mod_name_into_dialog(
         self, app_state, feedback_service, monkeypatch, temp_dir, caplog
     ):
         from controllers.library_display_controller import LibraryDisplayController
 
         app_window = Mock()
-        app_window.analytics_service = Mock()
         mod_service = Mock()
         mod_service.get_mod_folder_path.return_value = temp_dir
         controller = LibraryDisplayController(
@@ -1513,7 +1534,9 @@ class TestLibraryCyopAfomFilter:
         captured = {}
 
         class _Dialog:
-            def __init__(self, app_state_arg, mod_name_arg, readme_files_arg, parent=None) -> None:
+            def __init__(
+                self, app_state_arg, mod_name_arg, readme_files_arg, parent=None
+            ) -> None:
                 captured["app_state"] = app_state_arg
                 captured["mod_name"] = mod_name_arg
                 captured["readme_files"] = readme_files_arg
@@ -1978,15 +2001,47 @@ class TestThemeController:
         )
         with (
             patch("PyQt6.QtGui.QFontDatabase.removeApplicationFont") as remove_mock,
-            patch("PyQt6.QtGui.QFontDatabase.addApplicationFont") as add_mock,
+            patch(
+                "controllers.theme_controller.add_application_font_from_file"
+            ) as add_mock,
         ):
             controller._reload_custom_font()
         remove_mock.assert_not_called()
         add_mock.assert_not_called()
 
-    def test_theme_save_success_ignores_broken_feedback(
-        self, app_state, tmp_path
+    def test_reload_custom_font_unregisters_removed_font(
+        self, app_state, feedback_service
     ):
+        from controllers.theme_controller import ThemeController
+
+        customization_service = Mock()
+        customization_service.get_custom_font_path.return_value = None
+        app_window = Mock()
+        app_window._custom_font_id = 7
+        controller = ThemeController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            settings_service=Mock(),
+            customization_service=customization_service,
+            app_window=app_window,
+        )
+
+        with (
+            patch(
+                "PyQt6.QtGui.QFontDatabase.removeApplicationFont"
+            ) as remove_mock,
+            patch(
+                "controllers.theme_controller.localization_service.load_font",
+                return_value="Default Font",
+            ),
+        ):
+            controller._reload_custom_font()
+
+        remove_mock.assert_called_once_with(7)
+        assert app_window._custom_font_id is None
+        assert app_window.custom_font_family == "Default Font"
+
+    def test_theme_save_success_ignores_broken_feedback(self, app_state, tmp_path):
         """Checks theme export remains complete when success feedback is gone."""
         from controllers.theme_controller import ThemeController
 
@@ -2180,6 +2235,51 @@ class TestGameLaunchController:
         game_launcher.launch_game_with_all_mods.assert_not_called()
         qapp.processEvents()
 
+    def test_external_game_process_status_clears_after_exit(self, qapp):
+        from config.config import UI_COLORS
+        from controllers.game_launch_controller import GameLaunchController
+        from services.localization_service import tr
+
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            external_game_process_name="DELTARUNE.exe",
+            is_installing=False,
+            operation_cancelled=False,
+            is_patching=False,
+            initialization_completed=True,
+            local_config={},
+            action_button_text=None,
+            action_button_enabled=True,
+        )
+        feedback_service = Mock()
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=Mock(),
+            customization_service=Mock(),
+            app_window=Mock(),
+        )
+
+        with patch(
+            "controllers.game_launch_controller.get_running_game_process_name",
+            return_value=None,
+        ):
+            controller.refresh_external_game_process()
+
+        assert app_state.external_game_process_name is None
+        assert app_state.action_button_enabled is True
+        feedback_service.update_status.assert_called_with(
+            tr("status.ready"), UI_COLORS["status_info"]
+        )
+        controller._external_game_timer.stop()
+        qapp.processEvents()
+
     def test_hide_window_with_dont_hide_updates_close_text_and_border_status_color(
         self,
     ):
@@ -2239,7 +2339,9 @@ class TestGameLaunchController:
         app_state.local_config = {}
         app_state.clear_current_task = Mock()
         feedback_service = Mock()
-        feedback_service.update_status.side_effect = RuntimeError("status widget deleted")
+        feedback_service.update_status.side_effect = RuntimeError(
+            "status widget deleted"
+        )
         settings_service = Mock()
         app_window = Mock()
         app_window.full_install_checkbox = Mock()
@@ -2313,3 +2415,60 @@ class TestAppWindowRestore:
 
         window.main_tab_widget.setCurrentIndex.assert_called_once_with(1)
         assert window.previous_tab_index == 1
+
+
+@pytest.mark.parametrize("mode", ["chapter", "normal"])
+def test_modpack_step_plans_do_not_add_unrelated_chapters(
+    app_state, feedback_service, tmp_path, monkeypatch, mode
+):
+    from PyQt6.QtWidgets import QDialog
+
+    from controllers.library_display_controller import LibraryDisplayController
+    from models.game_modes import get_game
+
+    selected = [SimpleNamespace(id="a"), SimpleNamespace(id="b")]
+    app_state.game_mode = get_game("deltarune")
+    app_state.current_mode = mode
+    app_state.mods_dir = str(tmp_path)
+    used = Mock()
+    used.get_used_mods_list.return_value = selected
+    used.get_active_mod_steps.return_value = {
+        "deltarune_1": [selected],
+        "deltarune_5": [[SimpleNamespace(id="stale")]],
+    }
+    app = Mock()
+    app.create_modpack_button = object()
+    controller = LibraryDisplayController(app_state, feedback_service, Mock(), used, app)
+    monkeypatch.setattr(controller, "_get_current_chapter_id", lambda: "deltarune_1")
+    monkeypatch.setattr(
+        controller,
+        "_distribute_mods_across_chapters",
+        lambda _mods: {"deltarune_1": selected},
+    )
+    dialog = Mock()
+    dialog.exec.return_value = QDialog.DialogCode.Accepted
+    dialog.get_modpack_name.return_value = "Pack"
+    dialog.get_xdelta_modpack.return_value = False
+    monkeypatch.setattr(
+        "ui.dialogs.mod.pack_create_dialog.CreateModpackDialog",
+        lambda *_args, **_kwargs: dialog,
+    )
+    created = {}
+
+    class FakeThread:
+        progress_update = Mock()
+        status_update = Mock()
+        warning_confirmation_needed = Mock()
+        result_ready = Mock()
+
+        def __init__(self, chapter_mods, *_args, **_kwargs) -> None:
+            created.update(chapter_mods)
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr("workers.modpack_create_worker.CreateModpackThread", FakeThread)
+
+    controller.on_create_modpack_button_click()
+
+    assert set(created) == {"deltarune_1"}

@@ -7,6 +7,7 @@ import os
 import platform
 import stat
 import sys
+from typing import Any, cast
 
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -20,13 +21,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from models.execution_plan import LaunchPlan, PatchPlan
 from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
 from services.plugins.shortcut_service import (
     ShortcutPluginContext,
 )
 from ui.common.styling import get_border_radius
-from utils.mod.utils import get_mod_id, get_mod_name
+from utils.mod.utils import get_mod_name
 from utils.native_integration import get_save_file_name
 from utils.process_utils import format_filesystem_error
 
@@ -37,63 +39,77 @@ def _get_platform_extension() -> str:
     return {"Windows": ".vbs", "Darwin": ".command"}.get(platform.system(), ".sh")
 
 
-def _collect_chapter_data(
+def _collect_section_data(
     used_mods_service, app_state
-) -> tuple[dict[str, str | None], dict] | None:
-    """Collect mod selections for ALL chapters. Returns (chapter_mods, chapter_mod_objects) or None if >1 mod per chapter."""
+) -> tuple[PatchPlan, dict] | None:
+    """Collect ordered patch steps and summary mods for every content section."""
     game_mode = app_state.game_mode
     is_chapter_mode = app_state.current_mode == "chapter"
-    chapter_mods, chapter_objs = {}, {}
+    section_steps, section_objects = {}, {}
+
+    def selected_steps(chapter_id: str) -> list[list[Any]]:
+        get_steps = getattr(used_mods_service, "get_mod_steps", None)
+        steps = get_steps(chapter_id) if callable(get_steps) else None
+        if steps and isinstance(steps, list):
+            return [list(step) for step in steps if step]
+        mods = used_mods_service.get_used_mods_list(chapter_id)
+        return [list(mods)] if mods else []
 
     if is_chapter_mode and game_mode.is_multi_tab:
         for tab in game_mode.tabs:
-            mods = used_mods_service.get_used_mods_list(tab.tab_id)
-            if len(mods) > 1:
-                return None
-            chapter_objs[tab.tab_id] = mods[0] if mods else None
-            chapter_mods[tab.tab_id] = get_mod_id(mods[0]) if mods else None
+            steps = selected_steps(tab.tab_id)
+            section_steps[tab.tab_id] = steps
+            section_objects[tab.tab_id] = [mod for step in steps for mod in step]
     elif not is_chapter_mode and game_mode.is_multi_tab:
         default_id = get_chapter_id_for_game_mode(game_mode)
-        mods = used_mods_service.get_used_mods_list(default_id)
-        if len(mods) > 1:
-            return None
-        mod = mods[0] if mods else None
+        steps = selected_steps(default_id)
         for tab in game_mode.tabs:
-            has_data = (
-                mod
-                and hasattr(mod, "get_chapter_data")
-                and mod.get_chapter_data(tab.tab_id)
-            )
-            chapter_objs[tab.tab_id] = mod if has_data else None
-            chapter_mods[tab.tab_id] = get_mod_id(mod) if has_data else None
+            tab_steps = [
+                [
+                    mod
+                    for mod in step
+                    if hasattr(mod, "get_chapter_data")
+                    and cast(Any, mod).get_chapter_data(tab.tab_id)
+                ]
+                for step in steps
+            ]
+            tab_steps = [step for step in tab_steps if step]
+            section_steps[tab.tab_id] = tab_steps
+            section_objects[tab.tab_id] = [mod for step in tab_steps for mod in step]
     else:
         default_id = get_chapter_id_for_game_mode(game_mode)
-        mods = used_mods_service.get_used_mods_list(default_id)
-        if len(mods) > 1:
-            return None
-        chapter_objs[default_id] = mods[0] if mods else None
-        chapter_mods[default_id] = get_mod_id(mods[0]) if mods else None
+        steps = selected_steps(default_id)
+        section_steps[default_id] = steps
+        section_objects[default_id] = [mod for step in steps for mod in step]
 
-    return chapter_mods, chapter_objs
+    patch_plan = PatchPlan.from_runtime(section_steps)
+    try:
+        patch_plan.require_single_mod_steps()
+    except ValueError:
+        return None
+    return patch_plan, section_objects
 
 
 def _build_shortcut_config(
     app_state,
-    chapter_mods: dict[str, str | None],
+    patch_plan: PatchPlan,
     plugin_context: ShortcutPluginContext | None = None,
 ) -> dict:
     """Build the JSON config dict from current app state."""
     is_chapter_mode = app_state.current_mode == "chapter"
-    config = {
-        "game_id": app_state.game_mode.game_id,
-        "chapter_mode": is_chapter_mode,
-        "launch_via_steam": app_state.local_config.get("launch_via_steam", False),
-        "use_portproton": app_state.local_config.get("use_portproton", False),
-        "direct_launch_chapter": app_state.local_config.get("direct_launch_chapter", "")
-        if is_chapter_mode
-        else "",
-        "chapter_mods": chapter_mods,
-    }
+    launch_plan = LaunchPlan(
+        game_id=app_state.game_mode.game_id,
+        patch_plan=patch_plan,
+        chapter_mode=is_chapter_mode,
+        launch_via_steam=app_state.local_config.get("launch_via_steam", False),
+        use_portproton=app_state.local_config.get("use_portproton", False),
+        direct_launch_chapter=(
+            app_state.local_config.get("direct_launch_chapter", "")
+            if is_chapter_mode
+            else ""
+        ),
+    )
+    config = launch_plan.to_shortcut_config()
     if plugin_context and plugin_context.enabled:
         config["plugins_enabled"] = True
         config["plugin_states"] = plugin_context.export_states()
@@ -123,10 +139,17 @@ def _collect_shortcut_plugin_blocks(
     return blocks
 
 
-def _generate_shortcut_filename(game_mode, chapter_mod_objects: dict) -> str:
+def _generate_shortcut_filename(game_mode, section_mod_objects: dict) -> str:
     """Generate a safe default filename for the shortcut (without extension)."""
     game_name = game_mode.display_name.replace(" ", "_")
-    selected_mod = next((m for m in chapter_mod_objects.values() if m), None)
+    selected_mod = next(
+        (
+            mods[0] if isinstance(mods, list) else mods
+            for mods in section_mod_objects.values()
+            if mods
+        ),
+        None,
+    )
     mod_part = (
         get_mod_name(selected_mod, "mod").replace(" ", "_")
         if selected_mod
@@ -176,7 +199,7 @@ class ShortcutDialog(QDialog):
     def __init__(
         self,
         game_mode,
-        chapter_mod_objects: dict,
+        section_mod_objects: dict,
         shortcut_config: dict,
         plugin_context: ShortcutPluginContext | None = None,
         plugin_blocks: list[dict] | None = None,
@@ -184,7 +207,7 @@ class ShortcutDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._game_mode = game_mode
-        self._chapter_mod_objects = chapter_mod_objects
+        self._section_mod_objects = section_mod_objects
         self._shortcut_config = shortcut_config
         self._plugin_context = plugin_context
         self._plugin_blocks = list(plugin_blocks or [])
@@ -206,7 +229,7 @@ class ShortcutDialog(QDialog):
         )
 
         self.summary_label = QLabel(
-            self._build_summary(game_mode, chapter_mod_objects, shortcut_config)
+            self._build_summary(game_mode, section_mod_objects, shortcut_config)
         )
         self.summary_label.setWordWrap(True)
         cfg = (
@@ -250,15 +273,23 @@ class ShortcutDialog(QDialog):
 
         if cfg.get("chapter_mode") and gm.is_multi_tab:
             for tab in gm.tabs:
-                mod = chapter_objs.get(tab.tab_id)
+                mods = chapter_objs.get(tab.tab_id) or []
+                if not isinstance(mods, list):
+                    mods = [mods]
                 mod_name = (
-                    get_mod_name(mod, "Unknown") if mod else tr("shortcut.vanilla")
+                    " → ".join(get_mod_name(mod, "Unknown") for mod in mods)
+                    if mods
+                    else tr("shortcut.vanilla")
                 )
                 lines.append(f" {tr(tab.name_key)}: {mod_name}")
         else:
-            any_mod = next((m for m in chapter_objs.values() if m), None)
+            selected = next((mods for mods in chapter_objs.values() if mods), [])
+            if not isinstance(selected, list):
+                selected = [selected]
             mod_name = (
-                get_mod_name(any_mod, "Unknown") if any_mod else tr("shortcut.vanilla")
+                " → ".join(get_mod_name(mod, "Unknown") for mod in selected)
+                if selected
+                else tr("shortcut.vanilla")
             )
             lines.append(f"{tr('shortcut.dialog_mod')}: {mod_name}")
 
@@ -295,6 +326,8 @@ class ShortcutDialog(QDialog):
     def _build_plugin_section(self) -> None:
         while self.plugin_section_layout.count():
             item = self.plugin_section_layout.takeAt(0)
+            if item is None:
+                continue
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
@@ -347,7 +380,7 @@ class ShortcutDialog(QDialog):
         self.summary_label.setText(
             self._build_summary(
                 self._game_mode,
-                self._chapter_mod_objects,
+                self._section_mod_objects,
                 self._shortcut_config,
             )
         )
@@ -360,7 +393,7 @@ class ShortcutDialog(QDialog):
         self.summary_label.setText(
             self._build_summary(
                 self._game_mode,
-                self._chapter_mod_objects,
+                self._section_mod_objects,
                 self._shortcut_config,
             )
         )
@@ -380,7 +413,9 @@ class ShortcutDialog(QDialog):
         )
 
     def scale_ui(self) -> None:
-        self.layout().activate()
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
         self.adjustSize()
         self.resize(self.sizeHint())
 
@@ -431,25 +466,18 @@ def on_shortcut_button_click(
     if not app_state.initialization_completed:
         return
 
-    result = _collect_chapter_data(used_mods_service, app_state)
+    result = _collect_section_data(used_mods_service, app_state)
     if result is None:
-        if analytics := getattr(parent_widget, "analytics_service", None):
-            analytics.record_action("shortcut_create_blocked", reason="too_many_mods")
         _safe_show_message(
             feedback_service,
-            "warning", "common.warning", tr("shortcut.too_many_mods")
+            "warning",
+            "common.warning",
+            tr("shortcut.too_many_mods"),
         )
         return
-
-    chapter_mods, chapter_mod_objects = result
-    error = _validate_shortcut_prerequisites(app_state, any(chapter_mods.values()))
+    patch_plan, section_mod_objects = result
+    error = _validate_shortcut_prerequisites(app_state, bool(patch_plan.sections))
     if error:
-        if analytics := getattr(parent_widget, "analytics_service", None):
-            analytics.record_action(
-                "shortcut_create_blocked",
-                reason="prerequisite_failed",
-                game=app_state.game_mode.game_id,
-            )
         _safe_show_message(feedback_service, "warning", "common.warning", error)
         return
 
@@ -460,10 +488,10 @@ def on_shortcut_button_click(
         phase="capture",
     )
     plugin_blocks = _collect_shortcut_plugin_blocks(plugin_runtime_service, plugin_context)
-    shortcut_config = _build_shortcut_config(app_state, chapter_mods, None)
+    shortcut_config = _build_shortcut_config(app_state, patch_plan, None)
     dialog = ShortcutDialog(
         app_state.game_mode,
-        chapter_mod_objects,
+        section_mod_objects,
         shortcut_config,
         plugin_context,
         plugin_blocks,
@@ -473,22 +501,17 @@ def on_shortcut_button_click(
         dialog.exec()
         != QDialog.DialogCode.Accepted
     ):
-        if analytics := getattr(parent_widget, "analytics_service", None):
-            analytics.record_action(
-                "shortcut_create_cancelled",
-                game=app_state.game_mode.game_id,
-            )
         return
     if dialog.plugin_actions_enabled():
         for plugin_id, payload in dialog.collect_plugin_values().items():
             plugin_context.set_plugin_state(plugin_id, payload)
-        shortcut_config = _build_shortcut_config(app_state, chapter_mods, plugin_context)
+        shortcut_config = _build_shortcut_config(app_state, patch_plan, plugin_context)
     else:
-        shortcut_config = _build_shortcut_config(app_state, chapter_mods, None)
+        shortcut_config = _build_shortcut_config(app_state, patch_plan, None)
 
     ext = _get_platform_extension()
     default_name = (
-        _generate_shortcut_filename(app_state.game_mode, chapter_mod_objects) + ext
+        _generate_shortcut_filename(app_state.game_mode, section_mod_objects) + ext
     )
     ext_label = {"vbs": "VBScript", "command": "Command", "sh": "Shell Script"}.get(
         ext.lstrip("."), "Script"
@@ -501,22 +524,11 @@ def on_shortcut_button_click(
         f"{ext_label} (*{ext})",
     )
     if not filepath:
-        if analytics := getattr(parent_widget, "analytics_service", None):
-            analytics.record_action(
-                "shortcut_save_cancelled",
-                game=app_state.game_mode.game_id,
-            )
         return
 
     try:
         _write_shortcut_file(filepath, shortcut_config)
     except Exception as e:
-        if analytics := getattr(parent_widget, "analytics_service", None):
-            analytics.record_action(
-                "shortcut_create_failed",
-                game=app_state.game_mode.game_id,
-                reason="write_failed",
-            )
         logger.error(f"Failed to create shortcut: {e}", exc_info=True)
         _safe_show_message(
             feedback_service,
@@ -526,18 +538,6 @@ def on_shortcut_button_click(
         )
         return
 
-    if analytics := getattr(parent_widget, "analytics_service", None):
-        analytics.record_action(
-            "shortcut_created",
-            game=app_state.game_mode.game_id,
-            chapter_mode="yes" if shortcut_config.get("chapter_mode") else "no",
-            launch="steam"
-            if shortcut_config.get("launch_via_steam")
-            else "portproton"
-            if shortcut_config.get("use_portproton")
-            else "direct",
-            plugins="yes" if shortcut_config.get("plugins_enabled") else "no",
-        )
     logger.info(f"Shortcut created: {filepath}")
     _safe_show_message(
         feedback_service,

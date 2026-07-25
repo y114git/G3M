@@ -286,8 +286,8 @@ class BackupManager:
                         self._remove_empty_parent_dirs(
                             parent_dir, chapter_id, removed_dirs
                         )
-                except OSError:
-                    pass
+                except OSError as error:
+                    logger.debug("Best-effort operation failed: %s", error, exc_info=True)
         except Exception as e:
             self.patching_logger.debug(
                 f"[RESTORE] Could not remove parent directory for {file_path}: {e}"

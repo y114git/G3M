@@ -33,3 +33,17 @@ def test_download_record_delete_confirmation_failure_does_not_delete(monkeypatch
     manager.action_delete.assert_not_called()
     widget.deleteLater()
     app.processEvents()
+
+
+def test_unknown_size_download_uses_busy_progress_indicator(qapp):
+    record = DownloadRecord(
+        id="download-2",
+        display_name="Unknown size",
+        download_status=DownloadStatus.DOWNLOADING,
+        bytes_total=0,
+    )
+    widget = _RecordWidget(record, Mock(), app_state=Mock())
+
+    assert widget._progress_bar.minimum() == 0
+    assert widget._progress_bar.maximum() == 0
+    widget.deleteLater()

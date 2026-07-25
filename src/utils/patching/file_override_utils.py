@@ -74,7 +74,7 @@ def _target_relative_override_path(
     return normalized
 
 
-def _iter_configured_override_entries(
+def iter_configured_override_entries(
     mod_root_dir: str,
     configured_paths: list[str] | None,
     chapter_id: str | None,
@@ -129,7 +129,7 @@ def _copy_override_file(
     source_path: str,
     target_path: str,
     target_dir: str,
-    chapter_id: int | None,
+    chapter_id: str | int | None,
     is_modpack: bool,
     processed_archives: set,
     progress_callback,
@@ -223,10 +223,16 @@ def _copy_override_file(
                     },
                 )
         else:
+            archive_target = (
+                target_dir
+                if os.path.normcase(os.path.normpath(target_path))
+                == os.path.normcase(os.path.normpath(target_dir))
+                else os.path.dirname(target_path)
+            )
             if not extract_archive_to_target(
                 patcher,
                 source_path,
-                os.path.dirname(target_path) if target_path else target_dir,
+                archive_target,
                 chapter_id,
                 progress_callback=progress_callback,
                 mod_name=mod_name,
@@ -264,7 +270,7 @@ def _apply_configured_override_entries(
     patcher,
     entries,
     target_dir: str,
-    chapter_id: int | None,
+    chapter_id: str | int | None,
     is_modpack: bool,
     progress_callback=None,
     mod_name: str = "",
@@ -298,8 +304,6 @@ def _apply_configured_override_entries(
             for root, _dirs, files in os.walk(source_path):
                 rel_root = os.path.relpath(root, source_path)
                 for file in files:
-                    if file.lower() in SKIP_FILES:
-                        continue
                     file_source = os.path.join(root, file)
                     rel_file = file if rel_root == "." else os.path.join(rel_root, file)
                     target_path = os.path.join(
@@ -365,7 +369,7 @@ def apply_xdelta_override(
     file_name: str,
     source_path: str,
     target_dir: str,
-    chapter_id: int | None,
+    chapter_id: str | int | None,
     fallback_target: str | None = None,
     label: str = "",
 ) -> bool | None:
@@ -423,7 +427,7 @@ def extract_archive_to_target(
     patcher,
     archive_path: str,
     target_dir: str,
-    chapter_id: int | None = None,
+    chapter_id: str | int | None = None,
     progress_callback=None,
     mod_name: str = "",
 ) -> bool:
@@ -510,7 +514,7 @@ def apply_file_overrides(
     target_dir: str,
     used_archive_names: set,
     is_modpack: bool,
-    chapter_id: int | None = None,
+    chapter_id: str | int | None = None,
     progress_callback=None,
     mod_name: str = "",
     game_id: str | None = None,
@@ -541,7 +545,11 @@ def apply_file_overrides(
             extract_archive=extract_any_archive,
         ):
             return False
-    if (not is_modpack) and (game_id or "").strip().lower() == "frickbears3":
+    if (
+        not is_modpack
+        and configured_paths is None
+        and (game_id or "").strip().lower() == "frickbears3"
+    ):
         from utils.archive_utils import extract_any_archive
 
         if not apply_frickbears3_addons_from_mod_source(
@@ -555,7 +563,7 @@ def apply_file_overrides(
             return False
     if configured_paths is not None:
         configured_entries = list(
-            _iter_configured_override_entries(
+            iter_configured_override_entries(
                 mod_root_dir or mod_source_dir,
                 configured_paths,
                 str(chapter_id or ""),

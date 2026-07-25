@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 
-def test_open_community_dialog_records_analytics_and_executes(monkeypatch):
+def test_open_community_dialog_executes(monkeypatch):
     """Checks the community placeholder dialog opens through the public callback."""
     from app import dialogs
 
@@ -16,34 +16,42 @@ def test_open_community_dialog_records_analytics_and_executes(monkeypatch):
         dialog_class,
         raising=False,
     )
-    window = SimpleNamespace(
-        app_state=SimpleNamespace(),
-        analytics_service=Mock(),
-    )
+    window = SimpleNamespace(app_state=SimpleNamespace())
 
     dialogs.open_community_dialog(window)
 
-    window.analytics_service.record_dialog_opened.assert_called_once_with("community")
     dialog_class.assert_called_once_with(window, window.app_state)
     dialog.exec.assert_called_once_with()
 
 
-def test_community_dialog_keeps_close_button_on_separate_bottom_row(qapp):
-    """Checks close stays separate from the centered community links row."""
+def test_community_dialog_builds_gamebanana_feed_filters(qapp):
+    """Checks the community view exposes both feed filters without loading early."""
     from ui.dialogs.community_dialog import CommunityDialog
 
     dialog = CommunityDialog(None, SimpleNamespace(global_settings={}))
 
-    root_layout = dialog.layout()
-    assert dialog.heading_label.text()
-    links_row = root_layout.itemAt(5).layout()
-    close_row = root_layout.itemAt(6).layout()
+    assert dialog.game_combo.itemData(0) is None
+    assert dialog.feed_combo.itemData(0) == "New"
+    assert dialog.feed_combo.itemData(1) == "Featured"
+    assert dialog._worker is None
 
-    assert links_row.count() == 4
-    assert links_row.itemAt(1).widget() is dialog.telegram_button
-    assert links_row.itemAt(2).widget() is dialog.discord_button
-    assert close_row.count() == 2
-    assert close_row.itemAt(1).widget() is dialog.close_button
+
+def test_community_dialog_does_not_retire_stopped_worker_twice(qapp, monkeypatch):
+    from ui.dialogs import community_dialog
+
+    dialog = community_dialog.CommunityDialog(
+        None, SimpleNamespace(global_settings={})
+    )
+    worker = Mock()
+    retired = []
+    monkeypatch.setattr(community_dialog, "retire_qthread", retired.append)
+    dialog._worker = worker
+
+    dialog._stop_worker()
+    monkeypatch.setattr(dialog, "sender", lambda: worker)
+    dialog._on_finished()
+
+    assert retired == [worker]
 
 
 def test_download_record_update_ignores_broken_status_feedback():
@@ -99,7 +107,9 @@ def test_invalid_executable_feedback_failure_still_refreshes_and_clears_focus():
     focus = Mock()
     window = SimpleNamespace(
         feedback_service=Mock(),
-        settings_service=SimpleNamespace(validate_executable_path=Mock(return_value=False)),
+        settings_service=SimpleNamespace(
+            validate_executable_path=Mock(return_value=False)
+        ),
         focusWidget=Mock(return_value=focus),
     )
     window.feedback_service.show_message.side_effect = RuntimeError("toast deleted")

@@ -1,7 +1,6 @@
 """Window-local runtime state initialization."""
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QPixmap
 
 
 def initialize_window_runtime(window) -> None:
@@ -17,7 +16,7 @@ def initialize_window_runtime(window) -> None:
     window.resize(875, 750)
     window._initial_size = window.size()
     window.background_movie = None
-    window.background_pixmap: QPixmap | None = None
+    window.background_pixmap = None
     window.custom_font_family = None
     window._suppress_tab_handlers = False
     window._last_status_translation = None

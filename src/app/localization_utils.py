@@ -4,6 +4,8 @@ import contextlib
 import logging
 import os
 
+from PyQt6.QtWidgets import QApplication
+
 from app.game_ui import (
     full_install_tooltip,
     refresh_game_lists,
@@ -20,6 +22,7 @@ from config.config import (
     WIDGET_LOCALIZATIONS,
 )
 from services.localization_service import (
+    add_application_font_from_file,
     get_library_tab_title,
     get_settings_library_tab_title,
     localization_service,
@@ -27,6 +30,36 @@ from services.localization_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _relocalize_widgets(main_window) -> None:
+    """Refresh every live G3M widget that exposes a localization contract."""
+    for widget in QApplication.allWidgets():
+        if widget is main_window:
+            continue
+        callback = getattr(widget, "relocalize_ui", None)
+        if not callable(callback):
+            callback = getattr(widget, "update_labels_text", None)
+        if callable(callback):
+            try:
+                callback()
+            except RuntimeError as exc:
+                if "deleted" in str(exc).casefold():
+                    continue
+                logger.exception(
+                    "Failed to relocalize widget %s",
+                    type(widget).__name__,
+                )
+            except AttributeError:
+                logger.exception(
+                    "Failed to relocalize widget %s",
+                    type(widget).__name__,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to relocalize widget %s",
+                    type(widget).__name__,
+                )
 
 
 def relocalize_texts(w):
@@ -49,6 +82,8 @@ def relocalize_texts(w):
         if idx >= 0:
             w.main_tab_widget.setTabText(idx, label)
     w._apply_widget_localizations(WIDGET_LOCALIZATIONS)
+    if hasattr(w, "priority_button") and w.priority_button:
+        w.priority_button.setText(tr("ui.priority_steps").replace("&", "&&"))
     update_path_input_localizations(w)
     for combo_name, keys in COMBO_LOCALIZATIONS.items():
         w._apply_combo_localizations(combo_name, keys)
@@ -81,7 +116,9 @@ def relocalize_texts(w):
         if hasattr(w, "plugins_tab"):
             plugins_index = w.settings_tab_widget.indexOf(w.plugins_tab)
             if plugins_index >= 0:
-                w.settings_tab_widget.setTabText(plugins_index, tr("ui.settings_tab_plugins"))
+                w.settings_tab_widget.setTabText(
+                    plugins_index, tr("ui.settings_tab_plugins")
+                )
     update_settings_library_tab(w)
     if hasattr(w, "_section_headers"):
         for lbl, key in w._section_headers:
@@ -128,6 +165,7 @@ def relocalize_texts(w):
             tr("ui.log_viewer"),
             tr("ui.help_menu"),
             tr("buttons.changelog"),
+            tr("onboarding.menu_action"),
             tr("ui.about_title"),
             tr("ui.minimize_window"),
             tr("ui.maximize_window"),
@@ -152,42 +190,6 @@ def relocalize_texts(w):
             btn.setToolTip(tr("downloads.title"))
     if hasattr(w, "downloads_manager"):
         w.downloads_manager._emit_badge()
-    if (
-        hasattr(w, "_downloads_dialog")
-        and w._downloads_dialog
-        and w._downloads_dialog.isVisible()
-    ):
-        w._downloads_dialog.relocalize_ui()
-    if (
-        hasattr(w, "_game_versions_dialog")
-        and w._game_versions_dialog
-        and w._game_versions_dialog.isVisible()
-    ):
-        w._game_versions_dialog.relocalize_ui()
-    if (
-        hasattr(w, "_modding_tools_dialog")
-        and w._modding_tools_dialog
-        and w._modding_tools_dialog.isVisible()
-    ):
-        w._modding_tools_dialog.relocalize_ui()
-    if (
-        hasattr(w, "_diagnostics_dialog")
-        and w._diagnostics_dialog
-        and w._diagnostics_dialog.isVisible()
-    ):
-        w._diagnostics_dialog.relocalize_ui()
-    if (
-        hasattr(w, "_log_viewer_dialog")
-        and w._log_viewer_dialog
-        and w._log_viewer_dialog.isVisible()
-    ):
-        w._log_viewer_dialog.relocalize_ui()
-    if (
-        hasattr(w, "_announce_dialog")
-        and w._announce_dialog
-        and w._announce_dialog.isVisible()
-    ):
-        w._announce_dialog.relocalize_ui()
     for btn_attr in ("library_modding_tools_button",):
         btn = getattr(w, btn_attr, None)
         if btn:
@@ -222,15 +224,37 @@ def relocalize_ui(w):
         w.custom_font_family = localization_service.load_font()
         cs = getattr(w, "customization_service", None)
         if cs:
+            from PyQt6.QtGui import QFontDatabase
+
+            old_font_id = getattr(w, "_custom_font_id", None)
+            if old_font_id is not None and old_font_id != -1:
+                QFontDatabase.removeApplicationFont(old_font_id)
+            w._custom_font_id = None
+            w._custom_font_file_key = None
+
             cfp = cs.get_custom_font_path()
             if cfp and os.path.exists(cfp):
-                from PyQt6.QtGui import QFontDatabase
-
-                families = QFontDatabase.applicationFontFamilies(
-                    QFontDatabase.addApplicationFont(cfp)
+                font_id = add_application_font_from_file(cfp)
+                families = (
+                    QFontDatabase.applicationFontFamilies(font_id)
+                    if font_id != -1
+                    else []
                 )
                 if families:
-                    w.custom_font_family = families[0]
+                    try:
+                        stat_result = os.stat(cfp)
+                    except OSError:
+                        QFontDatabase.removeApplicationFont(font_id)
+                    else:
+                        w._custom_font_id = font_id
+                        w._custom_font_file_key = (
+                            cfp,
+                            stat_result.st_mtime_ns,
+                            stat_result.st_size,
+                        )
+                        w.custom_font_family = families[0]
+                elif font_id != -1:
+                    QFontDatabase.removeApplicationFont(font_id)
         if (
             hasattr(w, "main_tab_widget")
             and current_index >= 0
@@ -238,6 +262,7 @@ def relocalize_ui(w):
         ):
             w.main_tab_widget.setCurrentIndex(current_index)
         relocalize_texts(w)
+        _relocalize_widgets(w)
         w.theme.apply_theme()
         try:
             if hasattr(w, "online_label"):

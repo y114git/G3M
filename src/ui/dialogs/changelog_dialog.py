@@ -14,6 +14,8 @@ class ChangelogDialog(QDialog):
         self._thread = None
         self._worker = None
         self._source = (source or "").strip()
+        self._showing_loading = True
+        self._load_failed = False
         self.setWindowTitle(tr("buttons.changelog"))
         self.resize(820, 620)
         self._init_ui()
@@ -31,6 +33,8 @@ class ChangelogDialog(QDialog):
 
     def _load_changelog(self):
         if not self._source:
+            self._showing_loading = False
+            self._load_failed = True
             self.text_browser.setMarkdown(tr("status.changelog_load_failed"))
             return
         self._thread = QThread(self)
@@ -43,7 +47,16 @@ class ChangelogDialog(QDialog):
         self._thread.start()
 
     def _on_changelog_loaded(self, text: str):
+        self._showing_loading = False
         self.text_browser.setMarkdown(text)
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("buttons.changelog"))
+        self.close_button.setText(tr("buttons.close"))
+        if self._showing_loading:
+            self.text_browser.setMarkdown(f"<i>{tr('status.loading')}</i>")
+        elif self._load_failed:
+            self.text_browser.setMarkdown(tr("status.changelog_load_failed"))
 
     def _cleanup_thread(self):
         if self._worker:

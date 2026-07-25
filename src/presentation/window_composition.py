@@ -18,7 +18,10 @@ from controllers.theme_controller import ThemeController
 from presentation.pizza_oven_conversion_presenter import (
     PizzaOvenConversionPresenter,
 )
-from presentation.update_presenter import handle_update_info
+from presentation.update_presenter import (
+    apply_synced_global_settings,
+    handle_update_info,
+)
 from ui.utils.ui_utils import DebounceTimer
 
 logger = logging.getLogger(__name__)
@@ -104,6 +107,9 @@ class WindowComposition:
                 window.discord_rich_presence_service.on_profile_changed
             )
         window.session_manager.online_count_changed.connect(window._update_online_label)
+        window.session_manager.global_settings_received.connect(
+            lambda data: apply_synced_global_settings(window, data)
+        )
         window._load_used_mods_debounce = DebounceTimer(delay_ms=200)
         window.mod_ops = ModOperationsController(
             window.app_state,

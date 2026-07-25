@@ -110,7 +110,9 @@ class ModEditorDialog(QDialog):
                 self.mod_data,
                 mod_root_path=self.mod_data.get("folder_path"),
             )
-        self.mod_id = self.mod_data.get("id") if isinstance(self.mod_data, dict) else None
+        self.mod_id = (
+            self.mod_data.get("id") if isinstance(self.mod_data, dict) else None
+        )
         self._last_browse_dir = os.path.expanduser("~")
         self._cfg = getattr(self._app_state, "local_config", None)
         self.setWindowTitle(tr("ui.create_mod") if is_creating else tr("ui.edit_mod"))
@@ -119,11 +121,14 @@ class ModEditorDialog(QDialog):
         self.resize(round(1165 * scale), round(700 * scale))
         self.setMinimumSize(round(700 * scale), round(500 * scale))
         self._section_widgets = {}
+        self._localized_labels: list[tuple[QLabel, str]] = []
         self._init_ui()
         if not is_creating and mod_data:
             self._populate_fields()
         else:
-            self._populate_info_files(self.mod_data if isinstance(self.mod_data, dict) else {})
+            self._populate_info_files(
+                self.mod_data if isinstance(self.mod_data, dict) else {}
+            )
         self.relocalize_ui()
         self.apply_theme()
 
@@ -148,7 +153,10 @@ class ModEditorDialog(QDialog):
         while current is not None and id(current) not in visited:
             visited.add(id(current))
             app_state = getattr(current, "app_state", None)
-            if app_state is not None and getattr(app_state, "local_config", None) is not None:
+            if (
+                app_state is not None
+                and getattr(app_state, "local_config", None) is not None
+            ):
                 return app_state
             parent_getter = getattr(current, "parent", None)
             if callable(parent_getter):
@@ -211,7 +219,11 @@ class ModEditorDialog(QDialog):
         self._center_on_screen()
 
     def _center_on_screen(self):
-        screen = self.screen() or self.windowHandle().screen() if self.windowHandle() else None
+        screen = self.screen()
+        if screen is None:
+            window_handle = self.windowHandle()
+            if window_handle is not None:
+                screen = window_handle.screen()
         if screen is None and self.parentWidget():
             screen = self.parentWidget().screen()
         if screen is None:
@@ -244,7 +256,7 @@ class ModEditorDialog(QDialog):
 
         game_row = QHBoxLayout()
         game_row.addStretch()
-        game_row.addWidget(QLabel(tr("ui.mod_type_label")))
+        game_row.addWidget(self._tr_label("ui.mod_type_label"))
         self.game_combo = QComboBox()
         self.game_combo.setToolTip(tr("tooltips.mod_editor_game"))
         self._visible_game_ids = set()
@@ -290,6 +302,11 @@ class ModEditorDialog(QDialog):
         self._build_action_buttons(main_layout)
 
         self._apply_theme_styles()
+
+    def _tr_label(self, key: str) -> QLabel:
+        label = QLabel(tr(key))
+        self._localized_labels.append((label, key))
+        return label
 
     def _apply_theme_styles(self) -> None:
         border = self._color("border", "#039d5b")
@@ -355,7 +372,9 @@ class ModEditorDialog(QDialog):
             for line in section["lines"]:
                 line.setStyleSheet(f"color: {border};")
 
-    def _build_collapsible_section(self, section_key: str, title_key: str, content: QWidget):
+    def _build_collapsible_section(
+        self, section_key: str, title_key: str, content: QWidget
+    ):
         container = QWidget(self)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 6, 0, 6)
@@ -410,21 +429,21 @@ class ModEditorDialog(QDialog):
         self._metadata_hint = hint
         parent.addWidget(hint)
 
-        parent.addWidget(QLabel(tr("ui.mod_name_label")))
+        parent.addWidget(self._tr_label("ui.mod_name_label"))
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(tr("ui.enter_mod_name"))
         self.name_edit.setToolTip(tr("tooltips.mod_editor_name"))
         parent.addWidget(self.name_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr("ui.mod_author")))
+        parent.addWidget(self._tr_label("ui.mod_author"))
         self.author_edit = QLineEdit()
         self.author_edit.setPlaceholderText(tr("ui.enter_author_name"))
         self.author_edit.setToolTip(tr("tooltips.mod_editor_author"))
         parent.addWidget(self.author_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr("ui.short_description")))
+        parent.addWidget(self._tr_label("ui.short_description"))
         self.description_edit = QLineEdit()
         self.description_edit.setMaxLength(200)
         self.description_edit.setPlaceholderText(tr("ui.short_description_placeholder"))
@@ -432,13 +451,13 @@ class ModEditorDialog(QDialog):
         parent.addWidget(self.description_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr("ui.homepage")))
+        parent.addWidget(self._tr_label("ui.homepage"))
         self.homepage_edit = QLineEdit()
         self.homepage_edit.setPlaceholderText("https://example.com/mod-page")
         self.homepage_edit.setToolTip(tr("tooltips.mod_editor_homepage"))
         parent.addWidget(self.homepage_edit)
 
-        parent.addWidget(QLabel(tr("files.icon_label")))
+        parent.addWidget(self._tr_label("files.icon_label"))
         icon_row = QHBoxLayout()
         self.icon_browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
@@ -465,7 +484,7 @@ class ModEditorDialog(QDialog):
         parent.addLayout(icon_row)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr("ui.mod_tags_label")))
+        parent.addWidget(self._tr_label("ui.mod_tags_label"))
         tags_row = QHBoxLayout()
         self.tag_textedit = QCheckBox(tr("tags.textedit_text"))
         self.tag_customization = QCheckBox(tr("tags.customization"))
@@ -484,14 +503,14 @@ class ModEditorDialog(QDialog):
             self.tag_other.setChecked(True)
 
         parent.addSpacing(6)
-        parent.addWidget(QLabel(tr("ui.overall_mod_version")))
+        parent.addWidget(self._tr_label("ui.overall_mod_version"))
         self.version_edit = QLineEdit()
         self.version_edit.setPlaceholderText("1.0.0")
         self.version_edit.setToolTip(tr("tooltips.mod_editor_version"))
         parent.addWidget(self.version_edit)
         parent.addSpacing(6)
 
-        parent.addWidget(QLabel(tr("ui.game_version_label")))
+        parent.addWidget(self._tr_label("ui.game_version_label"))
         self.game_version_edit = QLineEdit()
         self.game_version_edit.setPlaceholderText("1.04")
         self.game_version_edit.setToolTip(tr("tooltips.mod_editor_game_version"))
@@ -512,7 +531,9 @@ class ModEditorDialog(QDialog):
         layout.addWidget(hint)
 
         self._info_files_list = QListWidget(frame)
-        self._info_files_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self._info_files_list.setSelectionMode(
+            QListWidget.SelectionMode.SingleSelection
+        )
         layout.addWidget(self._info_files_list)
 
         buttons = QHBoxLayout()
@@ -525,9 +546,13 @@ class ModEditorDialog(QDialog):
             None, tr("ui.info_file_toggle_visibility")
         )
         self._info_toggle_button.clicked.connect(self._toggle_selected_info_file)
-        self._info_up_button = self._make_icon_text_button("arrow_up.svg", tr("ui.move_up"))
+        self._info_up_button = self._make_icon_text_button(
+            "arrow_up.svg", tr("ui.move_up")
+        )
         self._info_up_button.clicked.connect(lambda: self._move_selected_info_file(-1))
-        self._info_down_button = self._make_icon_text_button("arrow_down.svg", tr("ui.move_down"))
+        self._info_down_button = self._make_icon_text_button(
+            "arrow_down.svg", tr("ui.move_down")
+        )
         self._info_down_button.clicked.connect(lambda: self._move_selected_info_file(1))
         self._info_reset_button = self._make_icon_text_button(
             "cross_icon.svg", tr("ui.info_file_remove_custom")
@@ -613,7 +638,11 @@ class ModEditorDialog(QDialog):
             self._info_files_list.addItem(item)
 
     def _add_info_file_entry(
-        self, file_path: str, visible: bool = True, custom: bool = True, source_path: str | None = None
+        self,
+        file_path: str,
+        visible: bool = True,
+        custom: bool = True,
+        source_path: str | None = None,
     ) -> None:
         entries = merge_info_file_entry(
             self._iter_info_file_entries(),
@@ -645,7 +674,9 @@ class ModEditorDialog(QDialog):
         index = self._selected_info_file_index()
         if index is None:
             return
-        entries, index = toggle_selected_info_file(self._iter_info_file_entries(), index)
+        entries, index = toggle_selected_info_file(
+            self._iter_info_file_entries(), index
+        )
         self._set_info_file_entries(entries)
         self._info_files_list.setCurrentRow(index)
 
@@ -687,7 +718,10 @@ class ModEditorDialog(QDialog):
             if not self._is_info_file_inside_mod_folder(source_path):
                 self._safe_critical(
                     tr("errors.error"),
-                    tr("errors.delete_info_file_failed", error="path_outside_mod_folder"),
+                    tr(
+                        "errors.delete_info_file_failed",
+                        error="path_outside_mod_folder",
+                    ),
                 )
                 return
             try:
@@ -792,9 +826,7 @@ class ModEditorDialog(QDialog):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
-        data_btn = self._make_icon_text_button(
-            "add_icon.svg", tr("ui.add_data_file")
-        )
+        data_btn = self._make_icon_text_button("add_icon.svg", tr("ui.add_data_file"))
         data_btn.setToolTip(tr("tooltips.mod_editor_add_data"))
         data_btn.setProperty("is_data_button", True)
         data_btn.clicked.connect(lambda: self._on_add_data(tab, layout))
@@ -882,11 +914,13 @@ class ModEditorDialog(QDialog):
         path_edit.setProperty(
             "is_local_path" if file_type == "data" else "is_local_extra_path", True
         )
-        path_edit.textChanged.connect(lambda _text, edit=path_edit: self._clear_field_validation_error(edit))
+        path_edit.textChanged.connect(
+            lambda _text, edit=path_edit: self._clear_field_validation_error(edit)
+        )
         if file_type == "extra":
             path_edit.textChanged.connect(
-                lambda _text, layout=tab_layout, edit=path_edit, card=frame, hint=special_hint_lbl: self._update_extra_file_special_state(
-                    layout, edit, card, hint
+                lambda _text, layout=tab_layout, edit=path_edit, card=frame, hint=special_hint_lbl: (
+                    self._update_extra_file_special_state(layout, edit, card, hint)
                 )
             )
         fl.addWidget(path_edit)
@@ -978,9 +1012,15 @@ class ModEditorDialog(QDialog):
     def _iter_file_title_labels(self, layout, *, file_type: str):
         for i in range(layout.count()):
             widget = layout.itemAt(i).widget() if layout.itemAt(i) else None
-            if not widget or not hasattr(widget, "layout") or not (frame_layout := widget.layout()):
+            if (
+                not widget
+                or not hasattr(widget, "layout")
+                or not (frame_layout := widget.layout())
+            ):
                 continue
-            title = frame_layout.itemAt(0).widget() if frame_layout.count() > 0 else None
+            title = (
+                frame_layout.itemAt(0).widget() if frame_layout.count() > 0 else None
+            )
             if isinstance(title, QLabel) and title.property("file_type") == file_type:
                 yield title
 
@@ -995,7 +1035,9 @@ class ModEditorDialog(QDialog):
         normalized = self._normalize_config_path(str(raw_path or "").strip())
         if not normalized:
             return False
-        game_id = self.game_combo.currentData() or self.mod_data.get("game", "deltarune")
+        game_id = self.game_combo.currentData() or self.mod_data.get(
+            "game", "deltarune"
+        )
         if game_id == "pizzatower":
             lowered = normalized.lower().rstrip("/")
             if lowered == "towers" or lowered.startswith("towers/"):
@@ -1020,7 +1062,9 @@ class ModEditorDialog(QDialog):
         normalized = self._normalize_config_path(str(raw_path or "").strip())
         if not normalized:
             return ""
-        game_id = self.game_combo.currentData() or self.mod_data.get("game", "deltarune")
+        game_id = self.game_combo.currentData() or self.mod_data.get(
+            "game", "deltarune"
+        )
         lowered = normalized.lower().rstrip("/")
         base_name = os.path.basename(lowered)
         if game_id == "pizzatower" and (
@@ -1074,14 +1118,20 @@ class ModEditorDialog(QDialog):
                 continue
             for i in range(layout.count()):
                 widget = layout.itemAt(i).widget() if layout.itemAt(i) else None
-                if not widget or not hasattr(widget, "layout") or not (frame_layout := widget.layout()):
+                if (
+                    not widget
+                    or not hasattr(widget, "layout")
+                    or not (frame_layout := widget.layout())
+                ):
                     continue
                 path_edit = next(
                     (
                         frame_layout.itemAt(j).widget()
                         for j in range(frame_layout.count())
                         if isinstance(frame_layout.itemAt(j).widget(), QLineEdit)
-                        and frame_layout.itemAt(j).widget().property("is_local_extra_path")
+                        and frame_layout.itemAt(j)
+                        .widget()
+                        .property("is_local_extra_path")
                     ),
                     None,
                 )
@@ -1112,9 +1162,7 @@ class ModEditorDialog(QDialog):
             msg = QMessageBox(self)
             msg.setWindowTitle(tr("ui.select"))
             msg.setText(tr("ui.select_file_or_folder"))
-            file_btn = msg.addButton(
-                tr("ui.file"), QMessageBox.ButtonRole.AcceptRole
-            )
+            file_btn = msg.addButton(tr("ui.file"), QMessageBox.ButtonRole.AcceptRole)
             folder_btn = msg.addButton(
                 tr("ui.folder"), QMessageBox.ButtonRole.ActionRole
             )
@@ -1129,9 +1177,7 @@ class ModEditorDialog(QDialog):
                     self._last_browse_dir = os.path.dirname(path)
                     line_edit.setText(self._format_config_path(path))
             elif clicked == folder_btn:
-                path = get_existing_directory(
-                    self, title, self._last_browse_dir
-                )
+                path = get_existing_directory(self, title, self._last_browse_dir)
                 if path:
                     self._last_browse_dir = path
                     line_edit.setText(self._format_config_path(path, is_directory=True))
@@ -1349,7 +1395,10 @@ class ModEditorDialog(QDialog):
         if len(self.version_edit.text().strip()) > MOD_FIELD_LIMITS["version"]:
             self._safe_warning(tr("errors.error"), tr("dialogs.mod_version_too_long"))
             return False
-        if len((self.game_combo.currentData() or "").strip()) > MOD_FIELD_LIMITS["game"]:
+        if (
+            len((self.game_combo.currentData() or "").strip())
+            > MOD_FIELD_LIMITS["game"]
+        ):
             self._safe_warning(tr("errors.error"), tr("dialogs.mod_game_too_long"))
             return False
         if len(self.homepage_edit.text().strip()) > MOD_FIELD_LIMITS["homepage"]:
@@ -1358,7 +1407,10 @@ class ModEditorDialog(QDialog):
         if len(self.icon_edit.text().strip()) > MOD_FIELD_LIMITS["icon"]:
             self._safe_warning(tr("errors.error"), tr("dialogs.mod_icon_too_long"))
             return False
-        if len(self.game_version_edit.text().strip()) > MOD_FIELD_LIMITS["game_version"]:
+        if (
+            len(self.game_version_edit.text().strip())
+            > MOD_FIELD_LIMITS["game_version"]
+        ):
             self._safe_warning(
                 tr("errors.error"), tr("dialogs.mod_game_version_too_long")
             )
@@ -1482,7 +1534,11 @@ class ModEditorDialog(QDialog):
         )
         if missing:
             kind, tab_name, path = missing
-            key = "dialogs.tab_file_not_found" if kind == "data" else "dialogs.tab_extra_file_not_found"
+            key = (
+                "dialogs.tab_file_not_found"
+                if kind == "data"
+                else "dialogs.tab_extra_file_not_found"
+            )
             self._safe_warning(
                 tr("dialogs.validation_error"),
                 tr(key, tab_name=tab_name, path=path),
@@ -1497,7 +1553,9 @@ class ModEditorDialog(QDialog):
             ("gameplay", self.tag_gameplay),
             ("other", self.tag_other),
         ]
-        tags = [name for name, cb in tag_map if cb.isChecked() and name in MOD_ALLOWED_TAGS]
+        tags = [
+            name for name, cb in tag_map if cb.isChecked() and name in MOD_ALLOWED_TAGS
+        ]
         author = self.author_edit.text().strip() or tr("defaults.local_author")
         return {
             "name": self.name_edit.text().strip(),
@@ -2044,6 +2102,31 @@ class ModEditorDialog(QDialog):
         self.setWindowTitle(
             tr("ui.create_mod") if self.is_creating else tr("ui.edit_mod")
         )
+        for label, key in self._localized_labels:
+            label.setText(tr(key))
+        self.game_combo.setToolTip(tr("tooltips.mod_editor_game"))
+        self.name_edit.setPlaceholderText(tr("ui.enter_mod_name"))
+        self.name_edit.setToolTip(tr("tooltips.mod_editor_name"))
+        self.author_edit.setPlaceholderText(tr("ui.enter_author_name"))
+        self.author_edit.setToolTip(tr("tooltips.mod_editor_author"))
+        self.description_edit.setPlaceholderText(tr("ui.short_description_placeholder"))
+        self.description_edit.setToolTip(tr("tooltips.mod_editor_description"))
+        self.homepage_edit.setToolTip(tr("tooltips.mod_editor_homepage"))
+        self.icon_browse_btn.setToolTip(tr("ui.mod_editor_pick_icon_tooltip"))
+        self.icon_edit.setPlaceholderText(tr("ui.icon_file_path_placeholder"))
+        self.icon_edit.setToolTip(tr("tooltips.mod_editor_icon"))
+        if not self.icon_preview.pixmap():
+            self.icon_preview.setText(tr("ui.icon_preview"))
+        for checkbox, key in (
+            (self.tag_textedit, "tags.textedit_text"),
+            (self.tag_customization, "tags.customization"),
+            (self.tag_gameplay, "tags.gameplay"),
+            (self.tag_other, "tags.other"),
+        ):
+            checkbox.setText(tr(key))
+            checkbox.setToolTip(tr("tooltips.mod_editor_tags"))
+        self.version_edit.setToolTip(tr("tooltips.mod_editor_version"))
+        self.game_version_edit.setToolTip(tr("tooltips.mod_editor_game_version"))
         for section in self._section_widgets.values():
             section["title"].setText(tr(section["title_key"]))
         if hasattr(self, "_metadata_hint") and self._metadata_hint:
@@ -2057,6 +2140,23 @@ class ModEditorDialog(QDialog):
             layout = self._get_tab_file_layout(tab)
             if layout:
                 self._refresh_extra_file_titles(layout)
+            data_button = getattr(tab, "_data_button", None)
+            if data_button is not None:
+                data_button.setText(tr("ui.add_data_file"))
+                data_button.setToolTip(tr("tooltips.mod_editor_add_data"))
+            action_row = (
+                layout.itemAt(0).widget() if layout and layout.count() else None
+            )
+            if action_row and action_row.layout() and action_row.layout().count() > 1:
+                extra_button = action_row.layout().itemAt(1).widget()
+                if isinstance(extra_button, QPushButton):
+                    extra_button.setText(tr("ui.add_extra_files"))
+                    extra_button.setToolTip(tr("tooltips.mod_editor_add_extra"))
+        game_def = get_game(self.game_combo.currentData())
+        if game_def:
+            for index, tab in enumerate(game_def.tabs):
+                if index < self.file_tabs.count():
+                    self.file_tabs.setTabText(index, tr(tab.name_key))
         if hasattr(self, "_info_add_button"):
             self._info_add_button.setText(tr("ui.add_info_file"))
         if hasattr(self, "_info_toggle_button"):
@@ -2077,12 +2177,20 @@ class ModEditorDialog(QDialog):
             )
         if hasattr(self, "_delete_button"):
             self._delete_button.setText(tr("ui.delete_mod"))
+            self._delete_button.setToolTip(tr("tooltips.delete_mod"))
         if hasattr(self, "_export_button"):
             self._export_button.setText(tr("ui.export_mod"))
+            self._export_button.setToolTip(tr("tooltips.export_mod"))
         if hasattr(self, "_open_folder_button"):
             self._open_folder_button.setText(tr("ui.open_mod_folder"))
+            self._open_folder_button.setToolTip(tr("tooltips.open_mod_folder"))
         if hasattr(self, "_switch_version_button"):
-            self._switch_version_button.setText(tr("mod_versions.switch_version_button"))
+            self._switch_version_button.setText(
+                tr("mod_versions.switch_version_button")
+            )
+            self._switch_version_button.setToolTip(tr("tooltips.mod_versions"))
+        self._cancel_button.setToolTip(tr("tooltips.cancel"))
+        self._save_button.setToolTip(tr("tooltips.save_mod"))
         self._refresh_info_files_list()
         self._refresh_all_extra_file_special_states()
 

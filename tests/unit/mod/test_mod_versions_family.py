@@ -1,6 +1,7 @@
 """Tests for mod_versions_dialog utility functions."""
 
 import contextlib
+import json
 import os
 import tempfile
 import zipfile
@@ -117,6 +118,31 @@ class TestSnapshotAndApply:
         )
         _apply_version_zip(mod_folder, zp)
         assert os.path.isfile(marker)
+
+    def test_apply_preserves_installed_mod_identity(self, mod_folder, tmp_path):
+        from ui.dialogs.mod.versions_dialog import _apply_version_zip
+
+        config_path = os.path.join(mod_folder, "mod_config.json")
+        with open(config_path, "w", encoding="utf-8") as handle:
+            json.dump({"metadata": {"id": "gb_mod_123", "name": "Current"}}, handle)
+
+        version_zip = tmp_path / "imported-version.zip"
+        with zipfile.ZipFile(version_zip, "w") as archive:
+            archive.writestr(
+                "mod_config.json",
+                json.dumps(
+                    {"metadata": {"id": "local_other_mod", "name": "Version 2"}}
+                ),
+            )
+            archive.writestr("changed.txt", "version 2")
+
+        _apply_version_zip(mod_folder, str(version_zip))
+
+        with open(config_path, encoding="utf-8") as handle:
+            applied_config = json.load(handle)
+        assert applied_config["metadata"]["id"] == "gb_mod_123"
+        assert applied_config["id"] == "gb_mod_123"
+        assert applied_config["metadata"]["name"] == "Version 2"
 
     def test_apply_can_switch_between_xdelta_and_g3mpatch_versions_repeatedly(
         self, mod_folder

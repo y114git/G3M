@@ -143,6 +143,15 @@ class TestModWidgets:
             assert widget.updated_label.text() == '2024-05-01'
             assert widget.name_label.text()
             assert len(widget.name_label.text().splitlines()) <= 2
+            assert widget.name_label.minimumHeight() == widget.name_label.maximumHeight()
+            assert (
+                widget.name_label.minimumHeight()
+                >= widget.name_label.fontMetrics().lineSpacing() * 2
+            )
+            assert (
+                widget.name_label.geometry().top()
+                >= widget.icon_label.geometry().bottom()
+            )
             assert not hasattr(widget, 'gb_status_label')
             other.setFocus()
             qapp.processEvents()
@@ -186,17 +195,16 @@ class TestModWidgets:
         controller.clear_all_selections.assert_not_called()
         card.set_selected.assert_not_called()
 
-    def test_search_display_controller_records_analytics_for_new_selection(self):
-        """Checks that searching display controller records analytics for a newly selected card."""
+    def test_search_display_controller_selects_new_card(self):
+        """Checks that searching display controller selects a newly clicked card."""
         from unittest.mock import Mock
 
         from controllers.search_display_controller import SearchDisplayController
 
         mod = SimpleNamespace(name="Test Mod")
-        analytics = Mock()
         card = SimpleNamespace(mod_data=mod, is_selected=False, set_selected=Mock())
         controller = SearchDisplayController.__new__(SearchDisplayController)
-        controller.app = SimpleNamespace(analytics_service=analytics)
+        controller.app = SimpleNamespace()
         controller._iter_layout_cards = lambda: iter([card])
         controller.clear_all_selections = Mock()
 
@@ -204,7 +212,33 @@ class TestModWidgets:
 
         controller.clear_all_selections.assert_called_once_with(except_widget=card)
         card.set_selected.assert_called_once_with(True)
-        analytics.record_mod_opened.assert_called_once_with("mods_browser", mod)
+
+    def test_mod_summary_restores_local_actions_after_parent_was_hidden(
+        self, qapp, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        from PyQt6.QtWidgets import QWidget
+
+        from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
+
+        host = QWidget()
+        host.local_config = {}
+        panel = ModSummaryPanel(host)
+        host.show()
+        qapp.processEvents()
+        host.hide()
+        panel._actions_widget.hide()
+
+        panel._update_action_visibility(SimpleNamespace(homepage=""), str(tmp_path))
+
+        assert not panel._actions_widget.isHidden()
+        assert all(
+            not panel._action_buttons[name].isHidden()
+            for name in ("edit", "export", "folder", "filerestore", "delete")
+        )
+        panel.deleteLater()
+        host.deleteLater()
 
     def test_mod_card_widget_has_likes_label(self, qapp):
         """Checks that mod card widget has likes label."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from config.config import (
     PLUGIN_API_VERSION as CONFIG_PLUGIN_API_VERSION,
@@ -135,7 +135,7 @@ class PluginTaskRuntime:
 
     def copy_host_backups_to(self, destination_dir: str) -> list[str]:
         if callable(self.copy_backups_callback):
-            return self.copy_backups_callback(destination_dir)
+            return cast(list[str], self.copy_backups_callback(destination_dir))
         return []
 
 

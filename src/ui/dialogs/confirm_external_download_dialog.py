@@ -24,17 +24,27 @@ class ConfirmExternalDownloadDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         combined_text = f"{tr('downloads.confirm_external_message')}\n{tr('downloads.confirm_link', link=self._url)}"
-        msg = QLabel(combined_text)
-        msg.setWordWrap(True)
-        msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(msg)
+        self.message_label = QLabel(combined_text)
+        self.message_label.setWordWrap(True)
+        self.message_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        layout.addWidget(self.message_label)
         btns = QHBoxLayout()
         btns.addStretch()
-        no_btn = QPushButton(tr("downloads.confirm_no"))
-        no_btn.clicked.connect(self.reject)
-        btns.addWidget(no_btn)
-        yes_btn = QPushButton(tr("downloads.confirm_yes"))
-        yes_btn.setDefault(True)
-        yes_btn.clicked.connect(self.accept)
-        btns.addWidget(yes_btn)
+        self.no_button = QPushButton(tr("downloads.confirm_no"))
+        self.no_button.clicked.connect(self.reject)
+        btns.addWidget(self.no_button)
+        self.yes_button = QPushButton(tr("downloads.confirm_yes"))
+        self.yes_button.setDefault(True)
+        self.yes_button.clicked.connect(self.accept)
+        btns.addWidget(self.yes_button)
         layout.addLayout(btns)
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("downloads.confirm_external_title"))
+        self.message_label.setText(
+            f"{tr('downloads.confirm_external_message')}\n{tr('downloads.confirm_link', link=self._url)}"
+        )
+        self.no_button.setText(tr("downloads.confirm_no"))
+        self.yes_button.setText(tr("downloads.confirm_yes"))

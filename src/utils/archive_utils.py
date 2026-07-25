@@ -50,8 +50,8 @@ def _ensure_unrar_available():
             subprocess.run([tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             rarfile.UNRAR_TOOL = tool
             return
-        except FileNotFoundError:
-            pass
+        except FileNotFoundError as error:
+            logger.debug("Best-effort operation failed: %s", error, exc_info=True)
     expected = "UnRAR.exe" if os.name == "nt" else "unrar"
     raise FileNotFoundError(
         f"UnRAR binary not found. Place {expected} in src/assets/bin/unrar/ for local development."
@@ -99,7 +99,12 @@ def _extract_members_one_by_one(
         archive.extract(member, path=out_dir_abs)
 
 
-def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
+def _extract_archive_raw(
+    src_path: str,
+    fname_lower: str,
+    out_dir: str,
+    is_cancelled: Callable[[], bool] | None = None,
+) -> None:
     """Extract archive file to directory with format detection.
 
     Args:
@@ -125,7 +130,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
             targets = _collect_safe_members(zf.namelist(), lambda member: member, "ZIP")
             if targets:
                 try:
-                    _extract_members_one_by_one(zf, targets, out_dir_abs)
+                    _extract_members_one_by_one(zf, targets, out_dir_abs, is_cancelled)
                 except (ValueError, OSError) as e:
                     logger.warning(
                         f"_extract_archive_raw: Failed to extract ZIP archive: {e}"
@@ -140,7 +145,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
                     tf.getmembers(), lambda member: member.name, "TAR"
                 )
                 if targets:
-                    _extract_members_one_by_one(tf, targets, out_dir_abs)
+                    _extract_members_one_by_one(tf, targets, out_dir_abs, is_cancelled)
         except (ValueError, OSError, tarfile.TarError) as e:
             logger.warning(f"_extract_archive_raw: Failed to extract TAR archive: {e}")
         return
@@ -150,7 +155,7 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
             targets = _collect_safe_members(rf.namelist(), lambda member: member, "RAR")
             if targets:
                 try:
-                    _extract_members_one_by_one(rf, targets, out_dir_abs)
+                    _extract_members_one_by_one(rf, targets, out_dir_abs, is_cancelled)
                 except (ValueError, OSError, rarfile.RarCannotExec) as e:
                     logger.warning(
                         f"_extract_archive_raw: Failed to extract RAR archive: {e}"
@@ -161,7 +166,10 @@ def _extract_archive_raw(src_path: str, fname_lower: str, out_dir: str) -> None:
             targets = _collect_safe_members(zf.getnames(), lambda member: member, "7Z")
             if targets:
                 try:
-                    zf.extract(path=out_dir_abs, targets=targets)
+                    for target in targets:
+                        if is_cancelled and is_cancelled():
+                            break
+                        zf.extract(path=out_dir_abs, targets=[target])
                 except (ValueError, OSError) as e:
                     logger.warning(
                         f"_extract_archive_raw: Failed to extract 7z archive: {e}"
@@ -260,7 +268,11 @@ def _cleanup_extracted_archive(target_dir: str, is_game_installation: bool = Fal
 
 class ArchiveExtractor:
     @staticmethod
-    def extract(archive_path: str, target_dir: str) -> None:
+    def extract(
+        archive_path: str,
+        target_dir: str,
+        is_cancelled: Callable[[], bool] | None = None,
+    ) -> None:
         if not os.path.exists(archive_path):
             raise FileNotFoundError(f"Archive not found: {archive_path}")
         if not os.path.isfile(archive_path):
@@ -268,7 +280,7 @@ class ArchiveExtractor:
         os.makedirs(target_dir, exist_ok=True)
         fname_lower = os.path.basename(archive_path).lower()
         try:
-            _extract_archive_raw(archive_path, fname_lower, target_dir)
+            _extract_archive_raw(archive_path, fname_lower, target_dir, is_cancelled)
             logger.debug(
                 f"ArchiveExtractor: Successfully extracted {archive_path} to {target_dir}"
             )
@@ -286,13 +298,16 @@ class ArchiveExtractor:
         fname: str | None = None,
         is_game_installation: bool = False,
         size_cap_bytes: int | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> None:
         os.makedirs(target_dir, exist_ok=True)
         if size_cap_bytes is not None:
             with tempfile.TemporaryDirectory(prefix="g3m-extract-") as temp_out:
-                ArchiveExtractor.extract(archive_path, temp_out)
+                ArchiveExtractor.extract(archive_path, temp_out, is_cancelled)
                 total = 0
                 for root, ignored_dirs, files in os.walk(temp_out):
+                    if is_cancelled and is_cancelled():
+                        return
                     del ignored_dirs
                     for f in files:
                         with contextlib.suppress(OSError):
@@ -311,6 +326,7 @@ class ArchiveExtractor:
                 backup_file_callback=None,
                 update_manifest_callback=None,
                 status_callback=None,
+                is_cancelled=is_cancelled,
             )
 
     @staticmethod
@@ -323,14 +339,19 @@ class ArchiveExtractor:
         backup_file_callback: Callable | None = None,
         update_manifest_callback: Callable | None = None,
         status_callback: Callable | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> list[str]:
         extracted_files = []
         try:
             with tempfile.TemporaryDirectory(prefix="g3m-extract-") as temp_dir:
-                ArchiveExtractor.extract(archive_path, temp_dir)
+                ArchiveExtractor.extract(archive_path, temp_dir, is_cancelled)
+                if is_cancelled and is_cancelled():
+                    return extracted_files
                 _cleanup_extracted_archive(temp_dir, False)
                 for root, _dirs, files in os.walk(temp_dir):
                     for file in files:
+                        if is_cancelled and is_cancelled():
+                            return extracted_files
                         source_file = os.path.join(root, file)
                         rel_path = os.path.relpath(source_file, temp_dir)
                         target_file = os.path.join(target_dir, rel_path)
@@ -526,6 +547,23 @@ def extract_archive(
     )
 
 
+def extract_archive_content_root(
+    archive_path: str,
+    target_dir: str,
+    *,
+    size_cap_bytes: int | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
+) -> str:
+    """Safely extract an archive and return its unwrapped content root."""
+    ArchiveExtractor.extract_with_options(
+        archive_path,
+        target_dir,
+        size_cap_bytes=size_cap_bytes,
+        is_cancelled=is_cancelled,
+    )
+    return unwrap_single_directory_chain(target_dir)
+
+
 def extract_archive_with_backup(
     archive_path: str,
     target_dir: str,
@@ -535,6 +573,7 @@ def extract_archive_with_backup(
     backup_file_callback=None,
     update_manifest_callback=None,
     status_callback=None,
+    is_cancelled: Callable[[], bool] | None = None,
 ) -> list[str]:
     return ArchiveExtractor.extract_with_backup(
         archive_path,
@@ -545,4 +584,5 @@ def extract_archive_with_backup(
         backup_file_callback,
         update_manifest_callback,
         status_callback,
+        is_cancelled,
     )

@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import tomllib
 import uuid
 from typing import Any
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 DELTAMOD_GAME_MAP: dict[str, str] = {
     "toby.deltarune": "deltarune",
     "toby.deltarune.demo": "deltarunedemo",
+    "toby.deltarune.demolts": "deltarunedemo",
     "toby.undertale": "undertale",
     "fans.utyellow": "undertaleyellow",
     "other.pizzatower": "pizzatower",
@@ -181,8 +183,12 @@ class DeltamodConverter:
         if not os.path.exists(xml_path):
             return False
         try:
-            with open(info_path, encoding="utf-8") as f:
-                self.deltamod_info = json.load(f)
+            if info_path.lower().endswith(".toml"):
+                with open(info_path, "rb") as f:
+                    self.deltamod_info = tomllib.load(f)
+            else:
+                with open(info_path, encoding="utf-8") as f:
+                    self.deltamod_info = json.load(f)
         except Exception as e:
             logger.debug(
                 f"DeltamodConverter._validate_source: failed to read {info_path}: {e}"
@@ -274,7 +280,13 @@ class DeltamodConverter:
         meta = self.deltamod_info.get("metadata", {})
 
         if self.gamebanana_metadata and "mod_id" in self.gamebanana_metadata:
-            mod_id = f"gb_{self.gamebanana_metadata['mod_id']}"
+            item_type = (
+                "wip"
+                if str(self.gamebanana_metadata.get("item_type", "mod")).lower()
+                == "wip"
+                else "mod"
+            )
+            mod_id = f"gb_{item_type}_{self.gamebanana_metadata['mod_id']}"
         else:
             package_id = meta.get("packageID", "")
             if package_id and package_id != "und.und.und":
@@ -284,12 +296,15 @@ class DeltamodConverter:
 
         game_value = self._resolve_target_game(meta)
         self._target_game = game_value
+        authors = meta.get("author", [tr("defaults.unknown")])
+        if isinstance(authors, str):
+            authors = [authors]
         config = {
             "id": mod_id,
             "version": meta.get("version", "1.0.0"),
             "name": meta.get("name") or self._fallback_mod_name(),
             "description": meta.get("description", tr("defaults.no_description")),
-            "author": ", ".join(meta.get("author", [tr("defaults.unknown")])),
+            "author": ", ".join(str(author) for author in authors),
             "homepage": (
                 self.gamebanana_metadata.get("homepage")
                 or self.gamebanana_metadata.get("profile_url")
@@ -334,7 +349,7 @@ class DeltamodConverter:
         for patch in patches:
             to_path = patch.get("to", "")
             patch_file = patch.get("patch", "")
-            patch_type = patch.get("type", "")
+            patch_type = patch.get("type", "").strip().lower()
             if not to_path or not patch_file or (not patch_type):
                 logger.warning(
                     f"DeltamodConverter: skipping patch with missing fields (to={to_path}, patch={patch_file}, type={patch_type})"
@@ -349,11 +364,11 @@ class DeltamodConverter:
             content_key = self._normalize_content_key(chapter_key)
             if content_key not in files_structure:
                 files_structure[content_key] = {}
-            if patch_type == "xdelta":
+            if patch_type in {"xdelta", "g3mpatch"}:
                 files_structure[content_key]["data_file_path"] = os.path.basename(
                     patch_file.lstrip("./").replace("\\", "/")
                 )
-            elif patch_type == "override":
+            elif patch_type in {"override", "copy"}:
                 stored_path = self._build_stored_path(relative_path, filename)
                 files_structure[content_key].setdefault("extra_files", []).append(
                     stored_path
@@ -397,7 +412,7 @@ class DeltamodConverter:
         for patch in patches:
             to_path = patch.get("to", "")
             patch_file_rel = patch.get("patch", "").lstrip("./")
-            patch_type = patch.get("type", "")
+            patch_type = patch.get("type", "").strip().lower()
             if not to_path or not patch_type:
                 logger.warning(
                     f"DeltamodConverter: skipping patch with missing to or type: {to_path}, {patch_type}"
@@ -415,7 +430,7 @@ class DeltamodConverter:
             chapter_dir_name = get_chapter_folder_name(content_key, game=self._target_game)
             target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
             os.makedirs(target_chapter_dir, exist_ok=True)
-            if patch_type == "override":
+            if patch_type in {"override", "copy"}:
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
                     logger.error(
@@ -436,11 +451,11 @@ class DeltamodConverter:
                     chapter_key,
                     chapter_dir_name,
                 )
-            elif patch_type == "xdelta":
+            elif patch_type in {"xdelta", "g3mpatch"}:
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
                     logger.warning(
-                        f"DeltamodConverter: xdelta patch file not found: {patch_file_rel}"
+                        f"DeltamodConverter: data patch file not found: {patch_file_rel}"
                     )
                     continue
                 target_patch_path = os.path.join(
@@ -448,7 +463,7 @@ class DeltamodConverter:
                 )
                 shutil.copy2(patch_file_abs, target_patch_path)
                 logger.info(
-                    "Copied xdelta patch: %s for chapter %s into %s",
+                    "Copied data patch: %s for chapter %s into %s",
                     os.path.basename(patch_file_abs),
                     chapter_key,
                     chapter_dir_name,

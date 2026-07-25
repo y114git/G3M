@@ -31,7 +31,7 @@ class GameBananaConverter:
         self.archive_path = archive_path
         self.mods_dir = mods_dir
         self.gamebanana_metadata = gamebanana_metadata or {}
-        self.temp_extract_dir = None
+        self.temp_extract_dir: str | None = None
 
     def _cleanup_temp_dir(self) -> None:
         if self.temp_extract_dir and os.path.exists(self.temp_extract_dir):
@@ -82,8 +82,8 @@ class GameBananaConverter:
                         check_filename_is_deltamod_info(os.path.basename(name))
                         for name in zf.namelist()
                     )
-            except zipfile.BadZipFile:
-                pass
+            except zipfile.BadZipFile as error:
+                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
             from utils.archive_utils import _detect_archive_format_by_signature
 
             detected = _detect_archive_format_by_signature(self.archive_path)
@@ -127,19 +127,22 @@ class GameBananaConverter:
                 unwrap_single_directory_chain,
             )
 
-            extract_any_archive(self.archive_path, self.temp_extract_dir)
-            nested_root = unwrap_single_directory_chain(self.temp_extract_dir)
+            temp_extract_dir = self.temp_extract_dir
+            if temp_extract_dir is None:
+                raise RuntimeError("Temporary extraction directory is not initialized")
+            extract_any_archive(self.archive_path, temp_extract_dir)
+            nested_root = unwrap_single_directory_chain(temp_extract_dir)
             if os.path.normcase(os.path.normpath(nested_root)) != os.path.normcase(
-                os.path.normpath(self.temp_extract_dir)
+                os.path.normpath(temp_extract_dir)
             ):
                 for item in os.listdir(nested_root):
                     shutil.move(
                         os.path.join(nested_root, item),
-                        os.path.join(self.temp_extract_dir, item),
+                        os.path.join(temp_extract_dir, item),
                     )
                 current = nested_root
                 while os.path.normcase(os.path.normpath(current)) != os.path.normcase(
-                    os.path.normpath(self.temp_extract_dir)
+                    os.path.normpath(temp_extract_dir)
                 ):
                     parent = os.path.dirname(current)
                     os.rmdir(current)
@@ -149,8 +152,12 @@ class GameBananaConverter:
             raise
 
     def _update_deltamod_info_mod_id(self, target_mod_id: str) -> None:
+        if self.temp_extract_dir is None:
+            return
         deltamod_info_path = find_deltamod_info_file(self.temp_extract_dir)
         if not deltamod_info_path:
+            return
+        if deltamod_info_path.lower().endswith(".toml"):
             return
         try:
             with open(deltamod_info_path, encoding="utf-8") as f:

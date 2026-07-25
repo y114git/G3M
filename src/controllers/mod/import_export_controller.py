@@ -83,26 +83,6 @@ class ModImportExportController:
             return tr("errors.permission_denied", path=file_path or getattr(exc, "filename", "") or "?")
         return str(exc)
 
-    def _record_import_analytics(
-        self,
-        *,
-        source: str,
-        outcome: str,
-        file_path: str = "",
-        merged: bool = False,
-        manual: bool = False,
-    ) -> None:
-        analytics = getattr(self.app_window, "analytics_service", None)
-        if not analytics:
-            return
-        analytics.record_local_import(
-            source=source,
-            outcome=outcome,
-            file_ext=os.path.splitext(file_path)[1].lstrip(".").lower(),
-            merged=merged,
-            manual=manual,
-        )
-
     def show_add_mod_dialog(self):
         """Show dialog with Import Mod / Create Mod options."""
         dialog = QDialog(self.app_window)
@@ -210,11 +190,6 @@ class ModImportExportController:
                     converter = DeltamodConverter(content_path, self.app_state.mods_dir)
                     new_mod_path = converter.convert()
                     if new_mod_path:
-                        self._record_import_analytics(
-                            source="file",
-                            outcome="success",
-                            file_path=file_path,
-                        )
                         self._refresh_mod_list()
                         self._safe_show_information(
                             tr("dialogs.success"),
@@ -240,13 +215,16 @@ class ModImportExportController:
                         mod_id = f"local_{sanitize_filename(mod_name).lower().replace(' ', '_')}"
                         config["id"] = mod_id
                         save_json(config_path_to_read, config, indent=2)
+                    mod_id = str(mod_id)
 
-                    existing_mod_ids = {
-                        get_mod_id(m)
-                        for m in self.app_state.all_mods
-                        if get_mod_id(m)
-                    }
-                    if mod_id in existing_mod_ids:
+                    existing_mod_folder = self.mod_service.get_mod_folder_path(mod_id)
+                    if not isinstance(existing_mod_folder, (str, os.PathLike)) or not os.path.isdir(
+                        existing_mod_folder
+                    ):
+                        existing_mod_folder = self._find_mod_dir_by_id(
+                            mod_id, exclude_path=content_path
+                        )
+                    if existing_mod_folder:
                         self._merge_into_existing_mod(
                             mod_id, content_path, file_path, mod_name
                         )
@@ -285,11 +263,6 @@ class ModImportExportController:
                         ) or config_updated
                         if config_updated:
                             save_json(config_path, config, indent=2)
-                        self._record_import_analytics(
-                            source="file",
-                            outcome="success",
-                            file_path=file_path,
-                        )
                         self._refresh_mod_list()
                         self._safe_show_information(
                             tr("dialogs.success"),
@@ -305,22 +278,11 @@ class ModImportExportController:
                         safe_rmtree(target_mod_dir)
                         raise
                 else:
-                    self._record_import_analytics(
-                        source="file",
-                        outcome="manual_needed",
-                        file_path=file_path,
-                        manual=True,
-                    )
                     self._show_import_error_with_manual_install(
                         file_path, tr("errors.invalid_mod_format")
                     )
         except Exception as e:
             logger.error(f"[IMPORT] Mod import failed: {e}", exc_info=True)
-            self._record_import_analytics(
-                source="file",
-                outcome="failed",
-                file_path=file_path,
-            )
             self._show_import_error_with_manual_install(
                 file_path,
                 tr(
@@ -363,12 +325,6 @@ class ModImportExportController:
                 version_name,
                 ignore_versions_dir=True,
             )
-            self._record_import_analytics(
-                source="file",
-                outcome="merged",
-                file_path=file_path,
-                merged=True,
-            )
             self._refresh_mod_list()
             self._safe_show_information(
                 tr("dialogs.success"),
@@ -390,12 +346,15 @@ class ModImportExportController:
                 ),
             )
 
-    def _find_mod_dir_by_id(self, mod_id: str):
+    def _find_mod_dir_by_id(self, mod_id: str, exclude_path: str | None = None):
         """Find mod directory by id in mods_dir."""
         if not os.path.exists(self.app_state.mods_dir):
             return None
+        excluded = os.path.normcase(os.path.abspath(exclude_path)) if exclude_path else None
         for entry in os.scandir(self.app_state.mods_dir):
             if not entry.is_dir():
+                continue
+            if excluded and os.path.normcase(os.path.abspath(entry.path)) == excluded:
                 continue
             config_path = os.path.join(entry.path, MOD_CONFIG_FILENAME)
             if not os.path.exists(config_path):
@@ -423,7 +382,7 @@ class ModImportExportController:
             worker.progress.connect(
                 lambda p: setattr(self.app_state, "progress_bar_value", p)
             )
-            worker.finished.connect(self._on_mod_install_finished)
+            worker.result_ready.connect(self._on_mod_install_finished)
             worker.manual_install_required.connect(self._on_manual_install_required)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True
@@ -436,7 +395,6 @@ class ModImportExportController:
                 f"ModImportExportController: Error installing mod from URL: {e}",
                 exc_info=True,
             )
-            self._record_import_analytics(source="url", outcome="failed")
             self._safe_feedback_message(
                 "error",
                 tr("errors.error") or "Error",
@@ -451,12 +409,6 @@ class ModImportExportController:
     ):
         try:
             self.app_state.reset_install_state()
-            self._record_import_analytics(
-                source=self._active_remote_import_source or "url",
-                outcome="manual_needed",
-                file_path=archive_path,
-                manual=True,
-            )
             self._active_remote_import_source = None
 
             def _on_accept():
@@ -551,12 +503,7 @@ class ModImportExportController:
 
     def _on_mod_install_finished(self, success: bool, message: str):
         self.app_state.reset_install_state()
-        if self._active_remote_import_source:
-            self._record_import_analytics(
-                source=self._active_remote_import_source,
-                outcome="success" if success else "failed",
-            )
-            self._active_remote_import_source = None
+        self._active_remote_import_source = None
         if success:
             self._refresh_mod_list()
             self._safe_feedback_status(message, "green")

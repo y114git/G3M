@@ -33,8 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 class _GameEntryLike(Protocol):
-    id: str
-    display_name: str
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def display_name(self) -> str: ...
 
 
 class BlocklistDialog(QDialog):
@@ -128,11 +131,11 @@ class BlocklistDialog(QDialog):
         splitter.addWidget(right_widget)
         splitter.setSizes([250, 350])
         main_layout.addWidget(splitter)
-        close_button = QPushButton(tr("common.close"))
-        close_button.clicked.connect(self.accept)
+        self.close_button = QPushButton(tr("common.close"))
+        self.close_button.clicked.connect(self.accept)
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        button_layout.addWidget(close_button)
+        button_layout.addWidget(self.close_button)
         main_layout.addLayout(button_layout)
         self.blocklist_list.itemSelectionChanged.connect(self.on_selection_changed)
         self.apply_theme()
@@ -290,6 +293,8 @@ class BlocklistDialog(QDialog):
         if hasattr(self, "prefix_combo"):
             current_data = self.prefix_combo.currentData()
             self._populate_prefix_combo(current_data)
+        if hasattr(self, "close_button"):
+            self.close_button.setText(tr("common.close"))
 
     def _populate_prefix_combo(self, current_data: str | None = None) -> None:
         if not hasattr(self, "prefix_combo"):

@@ -6,6 +6,8 @@ import zipfile
 
 import pytest
 
+from services.profile_service import ProfileService, is_profile_key
+
 
 @pytest.fixture
 def profiles_dir(temp_dir):
@@ -18,7 +20,6 @@ def profiles_dir(temp_dir):
 def profile_service(
     app_state, feedback_service, profiles_dir, monkeypatch
 ):
-    from services.profile_service import ProfileService
     from services.settings_service import SettingsManager
 
     monkeypatch.setattr(
@@ -34,6 +35,10 @@ def profile_service(
         "some_other_setting": "keep_me",
     }
     return ProfileService(app_state, settings_service, parent=None)
+
+
+def test_mod_steps_are_profile_scoped():
+    assert is_profile_key("mod_steps_deltarune")
 
 
 def _profile_dir(profiles_dir, name):
@@ -250,6 +255,45 @@ class TestWriteLocalConfig:
         with open(_profile_json(profiles_dir, "Default"), encoding="utf-8") as f:
             default_data = json.loads(f.read())
         assert default_data["selected_game_type"] == "undertale"
+
+
+def test_cleanup_game_references_removes_mod_steps(profile_service, app_state, profiles_dir):
+    profile_service.initialize()
+    profile_service._write_profile(
+        "Default",
+        {
+            "selected_game_type": "deltarune",
+            "used_mods_custom": {"custom": ["mod"]},
+            "mod_steps_custom": {"custom": [["mod"]]},
+        },
+    )
+    app_state.local_config["mod_steps_custom"] = {"custom": [["mod"]]}
+
+    profile_service.cleanup_game_references("custom", "deltarune", remove_used_mods=True)
+
+    assert "mod_steps_custom" not in profile_service._read_profile("Default")
+    assert "mod_steps_custom" not in app_state.local_config
+
+
+def test_cleanup_game_references_does_not_remove_similarly_prefixed_game(profile_service, app_state):
+    profile_service.initialize()
+    profile_service._write_profile(
+        "Default",
+        {
+            "used_mods_custom": {"custom": ["target"]},
+            "used_mods_customized": {"customized": ["keep"]},
+            "mod_steps_customized_profile_default": {"customized": [["keep"]]},
+        },
+    )
+    app_state.local_config["used_mods_customized"] = {"customized": ["keep"]}
+
+    profile_service.cleanup_game_references("custom", "deltarune", remove_used_mods=True)
+
+    data = profile_service._read_profile("Default")
+    assert "used_mods_custom" not in data
+    assert "used_mods_customized" in data
+    assert "mod_steps_customized_profile_default" in data
+    assert "used_mods_customized" in app_state.local_config
 
 
 class TestImportExport:

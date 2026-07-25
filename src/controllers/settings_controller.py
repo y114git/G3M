@@ -141,10 +141,6 @@ class SettingsUiController:
             self.app.show_reset_buttons_checkbox.setChecked(
                 config.get("show_reset_buttons", False)
             )
-        if hasattr(self.app, "analytics_opt_in_checkbox"):
-            self.app.analytics_opt_in_checkbox.setChecked(
-                config.get("analytics_opt_in_enabled", False)
-            )
         if hasattr(self.app, "disable_discord_rich_presence_checkbox"):
             self.app.disable_discord_rich_presence_checkbox.setChecked(
                 config.get("disable_discord_rich_presence", False)

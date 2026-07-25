@@ -43,6 +43,7 @@ class ImportDialog(QDialog):
 
     def init_ui(self):
         keys = self._get_import_keys()
+        self._localization_keys = keys
         title_key = keys["title_key"]
         instructions_key = keys["instructions_key"]
         from_file_key = keys["from_file_key"]
@@ -55,27 +56,40 @@ class ImportDialog(QDialog):
         self.setMinimumWidth(500)
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
-        instructions = QLabel(tr(instructions_key))
-        instructions.setWordWrap(True)
-        layout.addWidget(instructions)
-        file_button = QPushButton(tr(from_file_key))
-        file_button.clicked.connect(self._import_from_file)
-        layout.addWidget(file_button)
-        url_label = QLabel(tr(from_url_key))
-        layout.addWidget(url_label)
+        self.instructions_label = QLabel(tr(instructions_key))
+        self.instructions_label.setWordWrap(True)
+        layout.addWidget(self.instructions_label)
+        self.file_button = QPushButton(tr(from_file_key))
+        self.file_button.clicked.connect(self._import_from_file)
+        layout.addWidget(self.file_button)
+        self.url_label = QLabel(tr(from_url_key))
+        layout.addWidget(self.url_label)
         url_layout = QHBoxLayout()
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(tr(url_placeholder_key))
         url_layout.addWidget(self.url_input)
-        url_import_button = QPushButton(tr(from_url_button_key))
-        url_import_button.clicked.connect(self._import_from_url)
-        url_layout.addWidget(url_import_button)
+        self.url_import_button = QPushButton(tr(from_url_button_key))
+        self.url_import_button.clicked.connect(self._import_from_url)
+        url_layout.addWidget(self.url_import_button)
         layout.addLayout(url_layout)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
+        self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
         self.select_archive_key = select_archive_key
         self.url_required_key = url_required_key
+        self.relocalize_ui()
+
+    def relocalize_ui(self) -> None:
+        keys = self._localization_keys
+        self.setWindowTitle(tr(keys["title_key"]))
+        self.instructions_label.setText(tr(keys["instructions_key"]))
+        self.file_button.setText(tr(keys["from_file_key"]))
+        self.url_label.setText(tr(keys["from_url_key"]))
+        self.url_input.setPlaceholderText(tr(keys["url_placeholder_key"]))
+        self.url_import_button.setText(tr(keys["from_url_button_key"]))
+        self.button_box.button(QDialogButtonBox.StandardButton.Cancel).setText(
+            tr("dialogs.cancel")
+        )
 
     def _import_from_file(self):
         file_filter_text = self._get_file_filter_text()
@@ -115,12 +129,12 @@ class ImportDialog(QDialog):
                 if self.import_type == "themes"
                 else tr(f"{self.import_type}.archive_files")
             )
-            return f"{description} ({self.file_filter});;All Files (*)"
+            return f"{description} ({self.file_filter});;{tr('file_descriptions.all_files')} (*)"
         if self.import_type == "themes":
-            return f"{tr('file_descriptions.theme_files')} (*.zip);;All Files (*)"
+            return f"{tr('file_descriptions.theme_files')} (*.zip);;{tr('file_descriptions.all_files')} (*)"
         return (
             tr("mods.archive_files")
-            + " (*.zip *.7z *.rar *.tar.gz *.lzma);;All Files (*)"
+            + f" (*.zip *.7z *.rar *.tar.gz *.lzma);;{tr('file_descriptions.all_files')} (*)"
         )
 
     def _import_from_url(self):

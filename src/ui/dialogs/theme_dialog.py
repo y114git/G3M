@@ -19,31 +19,42 @@ class ThemeManagementDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
 
-        info_label = QLabel(tr("themes.current_settings") + ":")
-        info_label.setStyleSheet("font-weight: bold;")
-        info_label.setToolTip(tr("tooltips.theme_current_settings"))
-        layout.addWidget(info_label)
+        self.info_label = QLabel()
+        self.info_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self.info_label)
 
         settings_text = self._build_settings_text()
-        settings_label = QLabel(settings_text)
-        settings_label.setToolTip(tr("tooltips.theme_current_settings"))
-        layout.addWidget(settings_label)
+        self.settings_label = QLabel(settings_text)
+        layout.addWidget(self.settings_label)
 
         button_layout = QHBoxLayout()
-        import_btn = QPushButton(tr("buttons.import"))
-        import_btn.setToolTip(tr("tooltips.import_theme"))
-        import_btn.clicked.connect(self._on_import)
-        export_btn = QPushButton(tr("buttons.export"))
-        export_btn.setToolTip(tr("tooltips.export_theme"))
-        export_btn.clicked.connect(self._on_export)
-        cancel_btn = QPushButton(tr("dialogs.cancel"))
-        cancel_btn.setToolTip(tr("tooltips.cancel"))
-        cancel_btn.clicked.connect(self.reject)
+        self.import_button = QPushButton()
+        self.import_button.clicked.connect(self._on_import)
+        self.export_button = QPushButton()
+        self.export_button.clicked.connect(self._on_export)
+        self.cancel_button = QPushButton()
+        self.cancel_button.clicked.connect(self.reject)
 
-        button_layout.addWidget(import_btn)
-        button_layout.addWidget(export_btn)
-        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(self.import_button)
+        button_layout.addWidget(self.export_button)
+        button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
+        self.relocalize_ui()
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("buttons.theme_management"))
+        self.info_label.setText(tr("themes.current_settings") + ":")
+        tooltip = tr("tooltips.theme_current_settings")
+        self.info_label.setToolTip(tooltip)
+        self.settings_label.setText(self._build_settings_text())
+        self.settings_label.setToolTip(tooltip)
+        for button, text_key, tooltip_key in (
+            (self.import_button, "buttons.import", "tooltips.import_theme"),
+            (self.export_button, "buttons.export", "tooltips.export_theme"),
+            (self.cancel_button, "dialogs.cancel", "tooltips.cancel"),
+        ):
+            button.setText(tr(text_key))
+            button.setToolTip(tr(tooltip_key))
 
     def _build_settings_text(self):
         config = self.theme_controller.app_state.local_config

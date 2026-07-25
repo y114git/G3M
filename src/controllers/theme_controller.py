@@ -10,7 +10,11 @@ from PyQt6.QtWidgets import QWIDGETSIZE_MAX, QApplication
 from app.game_ui import update_chapter_tabs_style
 from config.config import DEFAULT_COLORS, DEFAULT_THEME, QSS_TRANSPARENT_NOPAD
 from config.style_loader import build_stylesheet, invalidate_stylesheet_cache
-from services.localization_service import localization_service, tr
+from services.localization_service import (
+    add_application_font_from_file,
+    localization_service,
+    tr,
+)
 from ui.common.styling import get_border_radius, rgba_from_color
 from ui.utils.ui_utils import DebounceTimer
 from utils.path_utils import resource_path
@@ -816,8 +820,7 @@ class ThemeController:
                 )
             if (
                 font_file_key
-                and
-                getattr(self.app, "_custom_font_file_key", None) == font_file_key
+                and getattr(self.app, "_custom_font_file_key", None) == font_file_key
                 and getattr(self.app, "custom_font_family", None)
             ):
                 return
@@ -825,7 +828,7 @@ class ThemeController:
             old_id = getattr(self.app, "_custom_font_id", None)
             if old_id is not None and old_id != -1:
                 QFontDatabase.removeApplicationFont(old_id)
-            f_id = QFontDatabase.addApplicationFont(custom_f_path)
+            f_id = add_application_font_from_file(custom_f_path)
             if f_id != -1:
                 self.app._custom_font_id = f_id
                 self.app._custom_font_file_key = font_file_key
@@ -836,6 +839,9 @@ class ThemeController:
                         f"Custom font loaded: {families[0]} from {custom_f_path}"
                     )
                 else:
+                    QFontDatabase.removeApplicationFont(f_id)
+                    self.app._custom_font_id = None
+                    self.app._custom_font_file_key = None
                     logger.warning(
                         f"No font families found in {custom_f_path}, using default"
                     )
@@ -848,6 +854,9 @@ class ThemeController:
                 )
                 self.app.custom_font_family = localization_service.load_font()
         else:
+            old_id = getattr(self.app, "_custom_font_id", None)
+            if old_id is not None and old_id != -1:
+                QFontDatabase.removeApplicationFont(old_id)
             self.app._custom_font_file_key = None
             self.app._custom_font_id = None
             self.app.custom_font_family = localization_service.load_font()

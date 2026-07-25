@@ -36,7 +36,7 @@ _SAFE_RE = re.compile(r"[^\w\- ]+")
 
 
 def is_profile_key(key: str) -> bool:
-    return key in PROFILE_STATIC_KEYS or key.startswith("used_mods_")
+    return key in PROFILE_STATIC_KEYS or key.startswith(("used_mods_", "mod_steps_"))
 
 
 def _has_safe_profile_name(name: str) -> bool:
@@ -411,8 +411,12 @@ class ProfileService(QObject):
                 data["selected_game_type"] = fallback_game_id
                 changed = True
             if remove_used_mods:
-                prefix = f"used_mods_{game_id}"
-                for key in [key for key in data if key.startswith(prefix)]:
+                prefixes = (f"used_mods_{game_id}", f"mod_steps_{game_id}")
+                for key in [
+                    key
+                    for key in data
+                    if any(key == prefix or key.startswith(f"{prefix}_") for prefix in prefixes)
+                ]:
                     del data[key]
                     changed = True
             if changed:
@@ -420,9 +424,11 @@ class ProfileService(QObject):
         if self.app_state.local_config.get("selected_game_type") == game_id:
             self.app_state.local_config["selected_game_type"] = fallback_game_id
         if remove_used_mods:
-            prefix = f"used_mods_{game_id}"
+            prefixes = (f"used_mods_{game_id}", f"mod_steps_{game_id}")
             for key in [
-                key for key in self.app_state.local_config if key.startswith(prefix)
+                key
+                for key in self.app_state.local_config
+                if any(key == prefix or key.startswith(f"{prefix}_") for prefix in prefixes)
             ]:
                 del self.app_state.local_config[key]
 

@@ -58,6 +58,127 @@ class UsedModsManager(QObject):
     def get_used_mods_list(self, chapter_id: str) -> list[Any]:
         return self.used_mods.get(chapter_id, [])
 
+    def _get_mod_steps_config_key(self) -> str:
+        selection_key = self.get_used_mods_config_key()
+        if selection_key.startswith("used_mods_"):
+            return f"mod_steps_{selection_key[len('used_mods_') :]}"
+        return f"mod_steps_{selection_key}"
+
+    def get_mod_steps(self, chapter_id: str) -> list[list[Any]]:
+        mods = self.get_used_mods_list(chapter_id)
+        if not mods:
+            return []
+        mods_by_id = {
+            mod_id: mod for mod in mods if (mod_id := get_mod_id(mod))
+        }
+        raw_steps = self.app_state.local_config.get(
+            self._get_mod_steps_config_key(), {}
+        )
+        if isinstance(raw_steps, dict):
+            current_id = str(chapter_id)
+            for stored_id in list(raw_steps):
+                if stored_id != current_id and migrate_legacy_chapter_id(stored_id) == current_id:
+                    raw_steps.setdefault(current_id, raw_steps[stored_id])
+                    del raw_steps[stored_id]
+        chapter_steps = raw_steps.get(str(chapter_id), []) if isinstance(raw_steps, dict) else []
+        result: list[list[Any]] = []
+        assigned: set[str] = set()
+        if isinstance(chapter_steps, list):
+            for raw_step in chapter_steps:
+                if not isinstance(raw_step, list):
+                    continue
+                step = []
+                for mod_id in raw_step:
+                    if not isinstance(mod_id, str) or mod_id in assigned:
+                        continue
+                    if mod := mods_by_id.get(mod_id):
+                        step.append(mod)
+                        assigned.add(mod_id)
+                if step:
+                    result.append(step)
+        unassigned = [mod for mod in mods if get_mod_id(mod) not in assigned]
+        if unassigned:
+            if result:
+                result[0].extend(unassigned)
+            else:
+                result.append(unassigned)
+        return result or [mods]
+
+    def set_mod_steps(
+        self, chapter_id: str, steps: list[list[Any]], save_state: bool = True
+    ) -> None:
+        normalized: list[list[Any]] = []
+        assigned: set[str] = set()
+        for raw_step in steps:
+            step = []
+            for mod in raw_step:
+                mod_id = get_mod_id(mod)
+                if not mod_id or mod_id in assigned:
+                    continue
+                assigned.add(mod_id)
+                step.append(mod)
+            if step:
+                normalized.append(step)
+        flat_mods = [mod for step in normalized for mod in step]
+        self.used_mods[chapter_id] = flat_mods
+        config_key = self._get_mod_steps_config_key()
+        stored = self.app_state.local_config.get(config_key)
+        stored_steps = dict(stored) if isinstance(stored, dict) else {}
+        if normalized:
+            stored_steps[str(chapter_id)] = [
+                [get_mod_id(mod) for mod in step] for step in normalized
+            ]
+        else:
+            stored_steps.pop(str(chapter_id), None)
+        self.app_state.local_config[config_key] = stored_steps
+        self.used_mod_changed.emit(chapter_id)
+        if save_state:
+            try:
+                self.save_used_mods_state()
+            except Exception as e:
+                logger.error(
+                    "set_mod_steps: Failed to save used mods state: %s", e, exc_info=True
+                )
+
+    def _normalize_stored_steps(self, chapter_id: str) -> None:
+        config_key = self._get_mod_steps_config_key()
+        stored = self.app_state.local_config.get(config_key)
+        if not isinstance(stored, dict) or str(chapter_id) not in stored:
+            return
+        steps = self.get_mod_steps(chapter_id)
+        pending = set(getattr(self, "_pending_mod_ids", {}).get(chapter_id, []))
+        if steps or pending:
+            resolved_order = [
+                mod_id
+                for step in steps
+                for mod in step
+                if (mod_id := get_mod_id(mod))
+            ]
+            resolved_ids = set(resolved_order)
+            raw = stored.get(str(chapter_id), [])
+            normalized_ids = []
+            assigned: set[str] = set()
+            for raw_step in raw if isinstance(raw, list) else []:
+                kept = [
+                    mod_id
+                    for mod_id in raw_step
+                    if isinstance(mod_id, str)
+                    and mod_id not in assigned
+                    and (mod_id in resolved_ids or mod_id in pending)
+                ] if isinstance(raw_step, list) else []
+                if kept:
+                    normalized_ids.append(kept)
+                    assigned.update(kept)
+            unassigned = [mod_id for mod_id in resolved_order if mod_id not in assigned]
+            if unassigned:
+                if not normalized_ids:
+                    normalized_ids.append([])
+                normalized_ids[0].extend(unassigned)
+            stored[str(chapter_id)] = normalized_ids
+        else:
+            stored.pop(str(chapter_id), None)
+        self.app_state.local_config[config_key] = stored
+
     def set_used_mod(
         self, chapter_id: str, mod_data: Any | None, save_state: bool = True
     ) -> None:
@@ -79,6 +200,7 @@ class UsedModsManager(QObject):
             else:
                 current_mods.insert(0, mod_data)
                 self.used_mods[chapter_id] = current_mods
+        self._normalize_stored_steps(chapter_id)
         self.used_mod_changed.emit(chapter_id)
         if save_state:
             try:
@@ -96,6 +218,7 @@ class UsedModsManager(QObject):
                 del self.used_mods[chapter_id]
         else:
             self.used_mods[chapter_id] = mods_list
+        self._normalize_stored_steps(chapter_id)
         self.used_mod_changed.emit(chapter_id)
         if save_state:
             try:
@@ -135,7 +258,7 @@ class UsedModsManager(QObject):
         config_keys = [
             config_key
             for config_key in self.app_state.local_config
-            if config_key.startswith("used_mods_")
+            if config_key.startswith(("used_mods_", "mod_steps_"))
         ]
         config_updated = False
         for config_key in config_keys:
@@ -144,6 +267,22 @@ class UsedModsManager(QObject):
                 continue
             chapters_to_clear = []
             for chapter_id_str, mod_data_raw in list(used_mods_data.items()):
+                if config_key.startswith("mod_steps_") and isinstance(
+                    mod_data_raw, list
+                ):
+                    cleaned_steps = [
+                        [item for item in step if item != mod_id]
+                        for step in mod_data_raw
+                        if isinstance(step, list)
+                    ]
+                    cleaned_steps = [step for step in cleaned_steps if step]
+                    if cleaned_steps != mod_data_raw:
+                        config_updated = True
+                        if cleaned_steps:
+                            used_mods_data[chapter_id_str] = cleaned_steps
+                        else:
+                            chapters_to_clear.append(chapter_id_str)
+                    continue
                 if isinstance(mod_data_raw, str):
                     if mod_data_raw == mod_id:
                         chapters_to_clear.append(chapter_id_str)
@@ -469,6 +608,32 @@ class UsedModsManager(QObject):
                 m
                 for m in mods_list
                 if hasattr(m, "get_chapter_data") and m.get_chapter_data(tab.tab_id)
+            ]
+            for tab in gm.tabs
+        }
+
+    def get_active_mod_steps(self) -> dict[str, list[list[Any]]]:
+        gm = self.app_state.game_mode
+        default_id = get_chapter_id_for_game_mode(gm)
+        if not gm.is_multi_tab:
+            return {default_id: self.get_mod_steps(default_id)}
+        if self.app_state.current_mode == "chapter":
+            return {tab.tab_id: self.get_mod_steps(tab.tab_id) for tab in gm.tabs}
+        default_steps = self.get_mod_steps(default_id)
+        return {
+            tab.tab_id: [
+                [
+                    mod
+                    for mod in step
+                    if hasattr(mod, "get_chapter_data")
+                    and mod.get_chapter_data(tab.tab_id)
+                ]
+                for step in default_steps
+                if any(
+                    hasattr(mod, "get_chapter_data")
+                    and mod.get_chapter_data(tab.tab_id)
+                    for mod in step
+                )
             ]
             for tab in gm.tabs
         }

@@ -62,6 +62,7 @@ class GameLaunchController(QObject):
         self.app = app_window
         self._full_install_checkbox_is_checked = False
         self._window_hidden_for_launch = False
+        self._external_process_status_visible = False
         self._external_game_timer = QTimer(self)
         self._external_game_timer.setInterval(2000)
         self._external_game_timer.timeout.connect(self.refresh_external_game_process)
@@ -81,7 +82,10 @@ class GameLaunchController(QObject):
         if getattr(self.app_state, "game_is_running", False):
             return
         current = get_running_game_process_name()
-        if current != getattr(self.app_state, "external_game_process_name", ""):
+        previous = getattr(self.app_state, "external_game_process_name", "")
+        if current != previous:
+            if previous and not current:
+                self._external_process_status_visible = True
             self.set_external_game_process_name(current)
 
     def _is_full_install_enabled(self) -> bool:
@@ -139,6 +143,7 @@ class GameLaunchController(QObject):
                 ),
                 UI_COLORS["status_warning"],
             )
+            self._external_process_status_visible = True
             return
         action_text = (
             tr("buttons.install")
@@ -149,13 +154,16 @@ class GameLaunchController(QObject):
         )
         self.app_state.action_button_text = action_text
         self.app_state.action_button_enabled = True
+        if self._external_process_status_visible:
+            self._external_process_status_visible = False
+            self._safe_update_status(tr("status.ready"), UI_COLORS["status_info"])
 
     def _reset_progress_bar(self):
         try:
             self.app_state.progress_bar_value = 0
             self.app_state.progress_bar_visible = False
-        except (AttributeError, RuntimeError):
-            pass
+        except (AttributeError, RuntimeError) as error:
+            logger.debug("Best-effort operation failed: %s", error, exc_info=True)
 
     def _cancel_patching_operation(self):
         library_display = getattr(self.app, "library_display", None)
@@ -175,11 +183,12 @@ class GameLaunchController(QObject):
             try:
                 patching_thread.progress_update.disconnect()
                 patching_thread.status_update.disconnect()
+                patching_thread.result_ready.disconnect()
                 patching_thread.finished.disconnect()
                 if hasattr(patching_thread, "warning_confirmation_needed"):
                     patching_thread.warning_confirmation_needed.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            except (TypeError, RuntimeError) as error:
+                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
             patching_thread.cancel()
             if patching_thread.isRunning():
                 if hasattr(patching_thread, "_warning_event"):
@@ -189,14 +198,14 @@ class GameLaunchController(QObject):
                 if patching_thread.patcher:
                     if (
                         patching_thread.patcher.backup_service
-                        and patching_thread.chapter_mods
+                        and patching_thread.patch_plan.sections
                     ):
-                        for chapter_id in patching_thread.chapter_mods:
+                        for section_id, _steps in patching_thread.patch_plan.sections:
                             patching_thread.patcher.backup_service.restore_backups(
-                                chapter_id
+                                section_id
                             )
                             logger.info(
-                                f"[CANCEL] Restored backups for chapter {chapter_id}"
+                                "[CANCEL] Restored backups for section %s", section_id
                             )
                     patching_thread.patcher.cleanup(force=True)
                 if not patching_thread.isRunning():
@@ -224,9 +233,10 @@ class GameLaunchController(QObject):
             try:
                 plugin_thread.progress_update.disconnect()
                 plugin_thread.status_update.disconnect()
+                plugin_thread.result_ready.disconnect()
                 plugin_thread.finished.disconnect()
-            except (TypeError, RuntimeError):
-                pass
+            except (TypeError, RuntimeError) as error:
+                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
             plugin_thread.cancel()
             if plugin_thread.isRunning():
                 plugin_thread.wait(5000)
@@ -396,7 +406,7 @@ class GameLaunchController(QObject):
             lambda v: setattr(self.app_state, "progress_bar_value", v)
         )
         full_install_thread.status.connect(self.app.update_status_signal)
-        full_install_thread.finished.connect(self.on_full_install_finished)
+        full_install_thread.result_ready.connect(self.on_full_install_finished)
         self.app_state.current_task = full_install_thread
         full_install_thread.start()
 

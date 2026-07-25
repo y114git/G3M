@@ -79,6 +79,19 @@ def test_read_snapshot_returns_incremental_updates(tmp_path):
     assert third.full_text == "reset\n"
 
 
+def test_read_snapshot_does_not_truncate_large_logs(tmp_path):
+    log_path = tmp_path / "logs" / "patching.log"
+    log_path.parent.mkdir(parents=True)
+    text = "xdelta diagnostic\n" * 20_000
+    log_path.write_text(text, encoding="utf-8")
+
+    snapshot = LogViewerService(user_data_root=str(tmp_path)).read_snapshot(
+        str(log_path), previous_state=None
+    )
+
+    assert snapshot.full_text == text
+
+
 def test_resolve_history_sorts_archives_by_embedded_timestamp_not_mtime(tmp_path):
     archive_dir = tmp_path / "logs" / "patching"
     archive_dir.mkdir(parents=True)

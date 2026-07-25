@@ -248,6 +248,7 @@ jobs:
         env:
           ARCHIVE_PATH: ${{ steps.set_names.outputs.archive_path }}
           STARTUP_TARGET: ${{ matrix.startup_target }}
+          STARTUP_LAUNCH_TARGET: dist/${{ matrix.startup_target }}
         run: python tests/integration/test_startup.py
 
       - uses: actions/upload-artifact@v4

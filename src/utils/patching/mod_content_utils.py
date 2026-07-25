@@ -108,6 +108,44 @@ def classify_patch_file(path: str | None) -> tuple[str | None, str]:
     return (None, MOD_TYPE_OVERRIDES_ONLY)
 
 
+def classify_mod_directory(mod_source_dir: str) -> tuple[str | None, str]:
+    """Classify a mod directory with one filesystem traversal."""
+    if not os.path.isdir(mod_source_dir):
+        return (None, MOD_TYPE_OVERRIDES_ONLY)
+
+    first_g3mpatch = None
+    first_xdelta = None
+    first_csx = None
+    first_data_file = None
+    for root, _dirs, files in os.walk(mod_source_dir):
+        is_root = os.path.normcase(root) == os.path.normcase(mod_source_dir)
+        for filename in files:
+            path = os.path.join(root, filename)
+            lower_name = filename.lower()
+            if first_g3mpatch is None and is_g3mpatch_package(path):
+                first_g3mpatch = path
+            if (
+                first_xdelta is None
+                and is_root
+                and lower_name.endswith((".xdelta", ".vcdiff"))
+            ):
+                first_xdelta = path
+            if first_csx is None and lower_name.endswith(".csx"):
+                first_csx = path
+            if first_data_file is None and lower_name.endswith(GAME_DATA_FILE_EXTENSIONS):
+                first_data_file = path
+
+    if first_g3mpatch:
+        return (first_g3mpatch, MOD_TYPE_G3MPATCH)
+    if first_xdelta:
+        return (first_xdelta, MOD_TYPE_XDELTA)
+    if first_csx:
+        return (first_csx, MOD_TYPE_CSX)
+    if first_data_file:
+        return (first_data_file, MOD_TYPE_DATAFILE)
+    return (None, MOD_TYPE_OVERRIDES_ONLY)
+
+
 def find_csx_scripts(mod_source_dir: str) -> list[str]:
     if not os.path.isdir(mod_source_dir):
         return []

@@ -21,7 +21,7 @@ def test_full_install_worker_emits_failure_when_app_state_is_incomplete(qapp):
     statuses = []
     finished = []
     worker.status.connect(lambda message, color: statuses.append((message, color)))
-    worker.finished.connect(lambda success, target: finished.append((success, target)))
+    worker.result_ready.connect(lambda success, target: finished.append((success, target)))
 
     worker.run()
 
@@ -39,7 +39,7 @@ def test_full_install_worker_suppresses_emit_failure_after_install_error(qapp, c
             raise RuntimeError("receiver deleted")
 
     worker.status = _FailingSignal()
-    worker.finished = _FailingSignal()
+    worker.result_ready = _FailingSignal()
 
     worker.run()
 

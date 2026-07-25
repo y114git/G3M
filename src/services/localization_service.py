@@ -18,6 +18,15 @@ from utils.path_utils import get_user_lang_dir, resource_path
 logger = logging.getLogger(__name__)
 
 
+def add_application_font_from_file(font_path: str) -> int:
+    """Load a font without leaving its source file open on Windows."""
+    try:
+        with open(font_path, "rb") as handle:
+            return QFontDatabase.addApplicationFontFromData(handle.read())
+    except OSError:
+        return -1
+
+
 class LocalizationManager:
     """Manages application localization."""
 
@@ -84,7 +93,7 @@ class LocalizationManager:
                 logger.debug(f"Could not load fallback strings: {e}")
 
     def _sync_internal_languages(self):
-        if not os.path.exists(self.internal_lang_dir):
+        if not self.external_lang_dir or not os.path.exists(self.internal_lang_dir):
             return
         for filename in os.listdir(self.internal_lang_dir):
             internal_path = os.path.join(self.internal_lang_dir, filename)
@@ -231,8 +240,8 @@ class LocalizationManager:
                     system_locale = (getter() or (None,))[0]
                     if system_locale:
                         break
-                except (AttributeError, TypeError, ValueError):
-                    pass
+                except (AttributeError, TypeError, ValueError) as error:
+                    logger.debug("Best-effort operation failed: %s", error, exc_info=True)
             if not system_locale:
                 lang_env = (
                     os.environ.get("LANG")

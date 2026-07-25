@@ -9,7 +9,7 @@ import threading
 import zipfile
 from contextlib import suppress
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -34,6 +34,7 @@ from ui.common.dialog_theme import (
     get_dialog_theme_values,
 )
 from ui.common.feedback import FeedbackManager
+from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
 from utils.native_integration import (
     get_existing_directory,
@@ -119,7 +120,7 @@ def _set_g3mtool_failure_status(label, operation: str, rc: int, out: str, err: s
             "Modding tools %s failed with code %s: %s",
             operation,
             rc,
-            details[:2000],
+            details,
         )
     _safe_set_status(label, tr("modding_tools.failed_details_logged"))
 
@@ -313,10 +314,10 @@ def _get_app_font(app_state) -> str:
     return f"'{ff}'" if ff else ""
 
 
-class _WorkerThread(QThread):
+class _WorkerThread(ManagedQThread):
     """Run a G3M command off the UI thread."""
 
-    finished = pyqtSignal(int, str, str)
+    result_ready = pyqtSignal(int, str, str)
     progress = pyqtSignal(int, str)
 
     def __init__(self, func, args, parent=None) -> None:
@@ -324,21 +325,24 @@ class _WorkerThread(QThread):
         self._func, self._args = func, args
 
     def run(self):
+        if self.isInterruptionRequested():
+            return
         try:
             rc, out, err = self._func(*self._args, progress_callback=self.progress.emit)
         except TypeError as exc:
             if "progress_callback" not in str(exc):
-                self.finished.emit(-1, "", str(exc))
+                self.result_ready.emit(-1, "", str(exc))
                 return
             try:
                 rc, out, err = self._func(*self._args)
             except Exception as inner_exc:
-                self.finished.emit(-1, "", str(inner_exc))
+                self.result_ready.emit(-1, "", str(inner_exc))
                 return
         except Exception as e:
-            self.finished.emit(-1, "", str(e))
+            self.result_ready.emit(-1, "", str(e))
             return
-        self.finished.emit(rc, out, err)
+        if not self.isInterruptionRequested():
+            self.result_ready.emit(rc, out, err)
 
 
 class _PathRow(QWidget):
@@ -388,7 +392,9 @@ class _PathRow(QWidget):
             start_path = self.path()
             if callable(self._save_path_getter):
                 with suppress(Exception):
-                    start_path = self._save_path_getter() or start_path
+                    candidate = self._save_path_getter()
+                    if isinstance(candidate, str) and candidate:
+                        start_path = candidate
             path, _ = get_save_file_name(
                 self, tr("ui.save_file"), start_path, self._filter
             )
@@ -414,10 +420,10 @@ class _PathRow(QWidget):
         self._btn.setText(tr("ui.browse_button"))
 
 
-class _ConvertWorkerThread(QThread):
+class _ConvertWorkerThread(ManagedQThread):
     """Two-step conversion: apply source patch → create target format patch."""
 
-    finished = pyqtSignal(int, str, str)
+    result_ready = pyqtSignal(int, str, str)
     progress = pyqtSignal(int, str)
 
     def __init__(
@@ -451,7 +457,9 @@ class _ConvertWorkerThread(QThread):
                     ),
                 )
                 if rc != 0:
-                    self.finished.emit(rc, out, err)
+                    self.result_ready.emit(rc, out, err)
+                    return
+                if self.isInterruptionRequested():
                     return
                 if self._target_is_xdelta:
                     rc, out, err = self._g3m.xpatch_create(
@@ -475,15 +483,16 @@ class _ConvertWorkerThread(QThread):
                             label,
                         ),
                     )
-                self.finished.emit(rc, out, err)
+                if not self.isInterruptionRequested():
+                    self.result_ready.emit(rc, out, err)
         except Exception as e:
-            self.finished.emit(-1, "", str(e))
+            self.result_ready.emit(-1, "", str(e))
 
 
-class _CreatePatchWorkerThread(QThread):
+class _CreatePatchWorkerThread(ManagedQThread):
     """Create a patch from two data files and report the tool return code."""
 
-    finished = pyqtSignal(int, str, str)
+    result_ready = pyqtSignal(int, str, str)
     progress = pyqtSignal(int, str)
 
     def __init__(
@@ -505,6 +514,8 @@ class _CreatePatchWorkerThread(QThread):
         self._include_xdelta_fallback = include_xdelta_fallback
 
     def run(self):
+        if self.isInterruptionRequested():
+            return
         try:
             if self._target_is_xdelta:
                 rc, out, err = self._g3m.xpatch_create(
@@ -522,9 +533,10 @@ class _CreatePatchWorkerThread(QThread):
                     include_xdelta_fallback=self._include_xdelta_fallback,
                     progress_callback=self.progress.emit,
                 )
-            self.finished.emit(rc, out, err)
+            if not self.isInterruptionRequested():
+                self.result_ready.emit(rc, out, err)
         except Exception as e:
-            self.finished.emit(-1, "", str(e))
+            self.result_ready.emit(-1, "", str(e))
 
 
 class _PatchTab(QWidget):
@@ -843,14 +855,15 @@ class _PatchTab(QWidget):
             else:
                 self._worker = _WorkerThread(self._g3m.apply_patch, (orig, second, out))
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_batch_run(self, orig: str) -> None:
         out_dir = self._batch_output_row.path()
         inputs = [
-            self._batch_list.item(i).data(Qt.ItemDataRole.UserRole)
+            item.data(Qt.ItemDataRole.UserRole)
             for i in range(self._batch_list.count())
+            if (item := self._batch_list.item(i)) is not None
         ]
         if not orig or not inputs or not out_dir:
             _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.batch_need_files"))
@@ -880,7 +893,7 @@ class _PatchTab(QWidget):
                 ),
             )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
@@ -888,6 +901,7 @@ class _PatchTab(QWidget):
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
+        retire_qthread(self._worker)
         self._worker = None
         if rc == 0:
             _safe_set_status(self._status_label, tr("modding_tools.success"))
@@ -932,11 +946,11 @@ class _PatchTab(QWidget):
         self._run_btn.setText(tr("modding_tools.run"))
 
 
-class _DataConvertWorkerThread(QThread):
+class _DataConvertWorkerThread(ManagedQThread):
     """Batch-convert DATA files in a mod folder."""
 
     progress = pyqtSignal(str)
-    finished = pyqtSignal(bool, str)
+    result_ready = pyqtSignal(bool, str)
 
     def __init__(
         self, g3m, mod_folder, config_data, game_path, target_mode, parent=None
@@ -983,7 +997,7 @@ class _DataConvertWorkerThread(QThread):
                     continue
                 original = find_data_win(resource_dir, game_id=game)
                 if not original:
-                    self.finished.emit(
+                    self.result_ready.emit(
                         False,
                         tr(
                             "modding_tools.convert_original_not_found",
@@ -996,7 +1010,7 @@ class _DataConvertWorkerThread(QThread):
                 )
 
             if not items:
-                self.finished.emit(False, tr("modding_tools.convert_no_data_files"))
+                self.result_ready.emit(False, tr("modding_tools.convert_no_data_files"))
                 return
 
             total = len(items)
@@ -1020,6 +1034,8 @@ class _DataConvertWorkerThread(QThread):
                 )
                 converted = 0
                 for i, (ch_info, patch_rel_path, original) in enumerate(items):
+                    if self.isInterruptionRequested():
+                        return
                     patch_path = os.path.join(converted_mod_folder, patch_rel_path)
                     self.progress.emit(
                         tr(
@@ -1034,6 +1050,8 @@ class _DataConvertWorkerThread(QThread):
                         rc, _, err = _apply_source_to_data(
                             self._g3m, original, patch_path, temp_modified
                         )
+                        if self.isInterruptionRequested():
+                            return
                         if _target_is_ready_data(self._target_mode):
                             target_name = _resolve_target_data_name(
                                 original, self._target_mode
@@ -1047,13 +1065,13 @@ class _DataConvertWorkerThread(QThread):
                             )
                             if is_patch_source:
                                 if rc != 0:
-                                    self.finished.emit(False, err[:300])
+                                    self.result_ready.emit(False, err)
                                     return
                                 shutil.copy2(temp_modified, new_path)
                             elif _is_ready_data_source(patch_path):
                                 shutil.copy2(patch_path, new_path)
                             else:
-                                self.finished.emit(
+                                self.result_ready.emit(
                                     False,
                                     tr(
                                         "modding_tools.convert_unsupported_source",
@@ -1063,7 +1081,7 @@ class _DataConvertWorkerThread(QThread):
                                 return
                         else:
                             if rc != 0:
-                                self.finished.emit(False, err[:300])
+                                self.result_ready.emit(False, err)
                                 return
                             new_name = f"{os.path.splitext(os.path.basename(patch_path))[0]}{'.xdelta' if self._target_mode == 'xdelta' else '.g3mpatch'}"
                             new_path = os.path.join(os.path.dirname(patch_path), new_name)
@@ -1079,7 +1097,7 @@ class _DataConvertWorkerThread(QThread):
                                     new_path,
                                 )
                             if rc != 0:
-                                self.finished.emit(False, err[:300])
+                                self.result_ready.emit(False, err)
                                 return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
                         with suppress(OSError):
@@ -1105,7 +1123,7 @@ class _DataConvertWorkerThread(QThread):
                     version_name,
                     ignore_versions_dir=True,
                 )
-            self.finished.emit(
+            self.result_ready.emit(
                 True,
                 tr(
                     "modding_tools.convert_data_success",
@@ -1114,18 +1132,18 @@ class _DataConvertWorkerThread(QThread):
                 ),
             )
         except Exception as e:
-            self.finished.emit(
+            self.result_ready.emit(
                 False,
                 format_filesystem_error(e, path=self._mod_folder),
             )
 
 
-class _BatchDataConvertWorkerThread(QThread):
+class _BatchDataConvertWorkerThread(ManagedQThread):
     """Convert selected mods one by one while keeping the UI responsive."""
 
     progress = pyqtSignal(str)
     warning_confirmation_needed = pyqtSignal(object, str, object)
-    finished = pyqtSignal(bool, str)
+    result_ready = pyqtSignal(bool, str)
 
     def __init__(self, g3m, jobs, target_mode, parent=None) -> None:
         super().__init__(parent)
@@ -1167,7 +1185,7 @@ class _BatchDataConvertWorkerThread(QThread):
         converted = 0
         for index, job in enumerate(self._jobs, start=1):
             if self.isInterruptionRequested():
-                self.finished.emit(
+                self.result_ready.emit(
                     False,
                     tr(
                         "modding_tools.convert_batch_failed",
@@ -1199,7 +1217,7 @@ class _BatchDataConvertWorkerThread(QThread):
                     tr("modding_tools.convert_batch_item_progress", mod=mod, message=message)
                 )
             )
-            worker.finished.connect(
+            worker.result_ready.connect(
                 lambda success, message, captured=result: captured.append(
                     (success, message)
                 )
@@ -1213,7 +1231,7 @@ class _BatchDataConvertWorkerThread(QThread):
                     warning_id=self._warning_id_for_error(message),
                 )
                 if not should_continue:
-                    self.finished.emit(
+                    self.result_ready.emit(
                         False,
                         tr(
                             "modding_tools.convert_batch_failed",
@@ -1228,7 +1246,7 @@ class _BatchDataConvertWorkerThread(QThread):
                 )
                 continue
             converted += 1
-        self.finished.emit(
+        self.result_ready.emit(
             True,
             tr("modding_tools.convert_batch_success", count=converted, total=total),
         )
@@ -1396,9 +1414,10 @@ class _DataConvertTab(QWidget):
 
     def _checked_items(self) -> list[QListWidgetItem]:
         return [
-            self._mod_list.item(i)
+            item
             for i in range(self._mod_list.count())
-            if self._mod_list.item(i).checkState() == Qt.CheckState.Checked
+            if (item := self._mod_list.item(i)) is not None
+            and item.checkState() == Qt.CheckState.Checked
         ]
 
     def _update_run_state(self, *_args) -> None:
@@ -1481,7 +1500,7 @@ class _DataConvertTab(QWidget):
         self._worker.warning_confirmation_needed.connect(
             self._on_warning_confirmation_needed
         )
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_warning_confirmation_needed(self, message, details: str, report_path):
@@ -1492,6 +1511,7 @@ class _DataConvertTab(QWidget):
             self._worker.confirm_warning(should_continue)
 
     def _on_finished(self, success, message):
+        retire_qthread(self._worker)
         self._worker = None
         self._set_busy(False)
         if success:
@@ -1641,8 +1661,9 @@ class _MergeTab(QWidget):
 
     def _current_patches(self) -> list[str]:
         return [
-            self._file_list.item(i).data(Qt.ItemDataRole.UserRole)
+            item.data(Qt.ItemDataRole.UserRole)
             for i in range(self._file_list.count())
+            if (item := self._file_list.item(i)) is not None
         ]
 
     def _on_add_set(self):
@@ -1746,15 +1767,16 @@ class _MergeTab(QWidget):
             ),
         )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_batch_run(self, orig: str) -> None:
         out_dir = self._batch_output_row.path()
         patch_out_dir = self._batch_patch_output_row.path()
         patch_sets = [
-            self._set_list.item(i).data(Qt.ItemDataRole.UserRole)
+            item.data(Qt.ItemDataRole.UserRole)
             for i in range(self._set_list.count())
+            if (item := self._set_list.item(i)) is not None
         ]
         if not orig or not out_dir or not patch_sets:
             _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_batch_need_files"))
@@ -1775,7 +1797,7 @@ class _MergeTab(QWidget):
             ),
         )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
@@ -1783,6 +1805,7 @@ class _MergeTab(QWidget):
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
+        retire_qthread(self._worker)
         self._worker = None
         if rc == 0:
             _safe_set_status(self._status_label, tr("modding_tools.success"))
@@ -1874,7 +1897,7 @@ class _InfoTab(QWidget):
             self._g3m.info, (target, self._verbose_cb.isChecked())
         )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
@@ -1882,6 +1905,7 @@ class _InfoTab(QWidget):
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
+        retire_qthread(self._worker)
         self._worker = None
         if rc == 0:
             self._set_output_text(out)
@@ -1891,7 +1915,7 @@ class _InfoTab(QWidget):
                 logger.info(
                     "Modding tools info failed with code %s: %s",
                     rc,
-                    details[:2000],
+                    details,
                 )
             self._set_output_text(tr("modding_tools.failed_details_logged"))
             _safe_warning(
@@ -1970,7 +1994,7 @@ class _DiffTab(QWidget):
         self._out_dir = out_dir
         self._worker = _WorkerThread(self._g3m.diff, (f1, f2, out_dir))
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_progress(self, percent: int, label: str) -> None:
@@ -1978,12 +2002,15 @@ class _DiffTab(QWidget):
 
     def _on_finished(self, rc, out, err):
         self._run_btn.setEnabled(True)
+        retire_qthread(self._worker)
         self._worker = None
         if rc != 0:
             _show_g3mtool_failure(self, self._status_label, "diff", rc, out, err)
             self._cleanup_out_dir()
             return
         _safe_set_status(self._status_label, tr("modding_tools.success"))
+        if self._out_dir is None:
+            return
         md_file = self._find_md(self._out_dir)
         if md_file:
             from ui.dialogs.g3mtool_diff_viewer import DiffViewerDialog
@@ -2206,7 +2233,10 @@ class ModdingToolsDialog(QDialog):
         self._info_tab.relocalize()
         self._diff_tab.relocalize()
 
-    def _stop_all_workers(self):
+    def _stop_all_workers(self) -> bool:
+        if self._g3m and hasattr(self._g3m, "cancel_active_processes"):
+            self._g3m.cancel_active_processes()
+        active_workers = []
         for tab in (
             self._data_convert_tab,
             self._patch_tab,
@@ -2215,14 +2245,23 @@ class ModdingToolsDialog(QDialog):
             self._diff_tab,
         ):
             worker = getattr(tab, "_worker", None)
+            if worker:
+                with suppress(TypeError, RuntimeError):
+                    worker.finished.connect(self._resume_close_after_worker)
             if worker and worker.isRunning():
                 worker.requestInterruption()
-                worker.wait(3000)
+                worker.quit()
                 if worker.isRunning():
-                    worker.terminate()
-                    worker.wait(1000)
-        if self._g3m and hasattr(self._g3m, "cancel_active_processes"):
-            self._g3m.cancel_active_processes()
+                    active_workers.append(worker)
+                    logger.warning(
+                        "Modding tools worker %s is still stopping cooperatively",
+                        type(worker).__name__,
+                    )
+        return not active_workers
+
+    def _resume_close_after_worker(self) -> None:
+        if getattr(self, "_closing_when_workers_finish", False):
+            self.close()
 
     def _has_any_interaction(self) -> bool:
         return any(
@@ -2236,8 +2275,11 @@ class ModdingToolsDialog(QDialog):
             )
         )
 
-    def closeEvent(self, event):
-        if self._has_any_interaction():
+    def closeEvent(self, a0):
+        event = a0
+        if event is None:
+            return
+        if not getattr(self, "_closing_when_workers_finish", False) and self._has_any_interaction():
             reply = _safe_question(
                 self,
                 tr("modding_tools.title"),
@@ -2248,7 +2290,21 @@ class ModdingToolsDialog(QDialog):
             if reply != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-        self._stop_all_workers()
+        if not self._stop_all_workers():
+            event.ignore()
+            if not getattr(self, "_closing_when_workers_finish", False):
+                self._closing_when_workers_finish = True
+                for tab in (
+                    self._data_convert_tab,
+                    self._patch_tab,
+                    self._merge_tab,
+                    self._info_tab,
+                    self._diff_tab,
+                ):
+                    worker = getattr(tab, "_worker", None)
+                    if worker and worker.isRunning():
+                        worker.finished.connect(self.close)
+            return
         event.accept()
         self.deleteLater()
 

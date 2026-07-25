@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -289,16 +290,18 @@ class GameBananaAPI:
                 ):
                     continue
                 file_tool_ids = [
-                    self._safe_int(integration.get("_idToolRow"))
+                    tool_id
                     for integration in file_entry.get("_aModManagerIntegrations", [])
                     if isinstance(integration, dict)
-                    and self._safe_int(integration.get("_idToolRow"))
+                    and (tool_id := self._safe_int(integration.get("_idToolRow")))
+                    is not None
                 ]
                 file_tool_names = [
                     integration.get("_sName", str(tool_id))
                     for integration in file_entry.get("_aModManagerIntegrations", [])
                     if isinstance(integration, dict)
                     and (tool_id := self._safe_int(integration.get("_idToolRow")))
+                    is not None
                 ]
                 compatibility_label = None
                 if GAMEBANANA_TOOL_ID_G3M in file_tool_ids:
@@ -348,7 +351,7 @@ class GameBananaAPI:
 
     @staticmethod
     def _first_value(
-        entries: list[dict[str, Any] | None], key: str, default: Any = None
+        entries: Sequence[Mapping[str, Any] | None], key: str, default: Any = None
     ) -> Any:
         for entry in entries:
             if not entry:
@@ -496,17 +499,18 @@ class GameBananaAPI:
             )
             if base_url and file_name:
                 urls.append(f"{base_url}/{file_name}")
-        return GameBananaAPI.fix_screenshot_urls(urls, is_wip=is_wip)
+        return GameBananaAPI.fix_screenshot_urls(urls, is_wip=is_wip) or []
 
     @staticmethod
     def extract_tags(tags) -> list[str]:
         if not tags:
             return []
-        return [
-            t["_sRawTag"] if isinstance(t, dict) else t
-            for t in tags
-            if (isinstance(t, str) and t) or (isinstance(t, dict) and t.get("_sRawTag"))
-        ]
+        result: list[str] = []
+        for tag in tags:
+            value = tag.get("_sRawTag") if isinstance(tag, dict) else tag
+            if isinstance(value, str) and value:
+                result.append(value)
+        return result
 
     _TAG_MAP = [
         (

@@ -44,7 +44,7 @@ def verify_generated_patch(
         else:
             return False, f"Unsupported patch type for verification: {patch_type}"
         if returncode != 0:
-            details = (stderr or stdout or "").strip()[:300]
+            details = (stderr or stdout or "").strip()
             suffix = f": {details}" if details else ""
             return (
                 False,

@@ -266,12 +266,6 @@ def _release_click_guard(widget) -> None:
     widget._click_guard_active = False
 
 
-def _record_setting_change(w, setting_name: str, enabled: bool):
-    analytics = getattr(w, "analytics_service", None)
-    if analytics:
-        analytics.record_setting_changed(setting_name, bool(enabled))
-
-
 def setup_settings_tab(w):
     """Wire all settings tab widgets, signals, and initial state."""
     from ui.builders.settings_view_builder import SettingsViewBuilder
@@ -298,7 +292,10 @@ def setup_settings_tab(w):
             "language_combo",
             "beta_updates_checkbox",
             "show_reset_buttons_checkbox",
-            "analytics_opt_in_checkbox",
+            "settings_user_data_root_label",
+            "settings_user_data_root_edit",
+            "settings_user_data_root_button",
+            "settings_user_data_root_reset_button",
             "disable_discord_rich_presence_checkbox",
             "fullscreen_checkbox",
             "disable_animations_checkbox",
@@ -404,7 +401,6 @@ def setup_settings_tab(w):
             w.beta_updates_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_beta_updates(bool(state)),
-                lambda: _record_setting_change(w, "beta_updates_enabled", bool(state)),
             ),
         )
     )
@@ -420,19 +416,6 @@ def setup_settings_tab(w):
             w.show_reset_buttons_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_show_reset_buttons(bool(state)),
-                lambda: _record_setting_change(w, "show_reset_buttons", bool(state)),
-            ),
-        )
-    )
-    w.analytics_opt_in_checkbox.stateChanged.connect(
-        lambda state: _guarded_trigger(
-            w.analytics_opt_in_checkbox,
-            lambda: _run_actions(
-                lambda: w.settings_service.on_toggle_analytics_opt_in(bool(state)),
-                lambda: w.analytics_service.set_opt_in_enabled(bool(state)),
-                lambda: _record_setting_change(
-                    w, "analytics_opt_in_enabled", bool(state)
-                ),
             ),
         )
     )
@@ -443,9 +426,6 @@ def setup_settings_tab(w):
                 lambda: w.settings_ui.on_toggle_disable_discord_rich_presence(
                     bool(state)
                 ),
-                lambda: _record_setting_change(
-                    w, "disable_discord_rich_presence", bool(state)
-                ),
             ),
         )
     )
@@ -454,7 +434,6 @@ def setup_settings_tab(w):
             w.fullscreen_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_fullscreen(bool(state)),
-                lambda: _record_setting_change(w, "fullscreen_enabled", bool(state)),
             ),
         )
     )
@@ -463,7 +442,6 @@ def setup_settings_tab(w):
             w.disable_animations_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_disable_animations(bool(state)),
-                lambda: _record_setting_change(w, "disable_animations", bool(state)),
             ),
         )
     )
@@ -472,7 +450,6 @@ def setup_settings_tab(w):
             w.disable_background_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_disable_background(bool(state)),
-                lambda: _record_setting_change(w, "background_disabled", bool(state)),
             ),
         )
     )
@@ -481,7 +458,6 @@ def setup_settings_tab(w):
             w.disable_startup_sound_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_disable_startup_sound(bool(state)),
-                lambda: _record_setting_change(w, "disable_startup_sound", bool(state)),
             ),
         )
     )
@@ -491,9 +467,6 @@ def setup_settings_tab(w):
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_pause_background_music_unfocused(
                     bool(state)
-                ),
-                lambda: _record_setting_change(
-                    w, "pause_background_music_unfocused", bool(state)
                 ),
             ),
         )
@@ -574,12 +547,23 @@ def setup_settings_tab(w):
             w.hide_library_filters_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_hide_library_filters(bool(state)),
-                lambda: _record_setting_change(w, "hide_library_filters", bool(state)),
             ),
         )
     )
     w.settings_game_combo.currentIndexChanged.connect(
         lambda index: on_settings_game_combo_changed(w, index)
+    )
+    w.settings_user_data_root_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_user_data_root_button,
+            w.settings_service.select_user_data_root,
+        )
+    )
+    w.settings_user_data_root_reset_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_user_data_root_reset_button,
+            w.settings_service.reset_user_data_root,
+        )
     )
     w.games_manager_button.clicked.connect(
         lambda: _guarded_trigger(
@@ -736,7 +720,6 @@ def setup_settings_tab(w):
             w.launch_via_steam_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_steam_launch(bool(state)),
-                lambda: _record_setting_change(w, "launch_via_steam", bool(state)),
             ),
         )
     )
@@ -745,9 +728,6 @@ def setup_settings_tab(w):
             w.dont_hide_window_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_dont_hide_window_on_launch(bool(state)),
-                lambda: _record_setting_change(
-                    w, "dont_hide_window_on_launch", bool(state)
-                ),
             ),
         )
     )
@@ -758,7 +738,6 @@ def setup_settings_tab(w):
                 lambda: _run_actions(
                     lambda: w.settings_ui.on_toggle_portproton(bool(state)),
                     lambda: update_portproton_ui(w),
-                    lambda: _record_setting_change(w, "use_portproton", bool(state)),
                 ),
             )
         )
@@ -767,7 +746,6 @@ def setup_settings_tab(w):
             w.hide_mods_browser_tab_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_hide_mods_browser_tab(bool(state)),
-                lambda: _record_setting_change(w, "hide_mods_browser_tab", bool(state)),
             ),
         )
     )
@@ -777,7 +755,6 @@ def setup_settings_tab(w):
             w.hide_library_tab_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_hide_library_tab(bool(state)),
-                lambda: _record_setting_change(w, "hide_library_tab", bool(state)),
             ),
         )
     )
@@ -786,7 +763,6 @@ def setup_settings_tab(w):
             w.merge_properties_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_merge_properties(bool(state)),
-                lambda: _record_setting_change(w, "merge_properties", bool(state)),
             ),
         )
     )
@@ -795,18 +771,12 @@ def setup_settings_tab(w):
             w.merge_code_checkbox,
             lambda: _run_actions(
                 lambda: w.settings_ui.on_toggle_merge_code(bool(state)),
-                lambda: _record_setting_change(w, "merge_code", bool(state)),
             ),
         )
     )
     w.show_reset_buttons_checkbox.setChecked(
         w.app_state.local_config.get("show_reset_buttons", False)
     )
-    w.analytics_opt_in_checkbox.blockSignals(True)
-    w.analytics_opt_in_checkbox.setChecked(
-        w.app_state.local_config.get("analytics_opt_in_enabled", False)
-    )
-    w.analytics_opt_in_checkbox.blockSignals(False)
     w.disable_discord_rich_presence_checkbox.setChecked(
         w.app_state.local_config.get("disable_discord_rich_presence", False)
     )
@@ -825,7 +795,6 @@ def setup_settings_tab(w):
                 w.downloads_no_auto_use_checkbox,
                 lambda: _run_actions(
                     lambda: w.settings_service.on_toggle_downloads_no_auto_use(bool(s)),
-                    lambda: _record_setting_change(w, "downloads_no_auto_use", bool(s)),
                 ),
             )
         )
@@ -838,9 +807,6 @@ def setup_settings_tab(w):
                 w.downloads_delete_after_use_checkbox,
                 lambda: _run_actions(
                     lambda: w.settings_service.on_toggle_downloads_delete_after_use(bool(s)),
-                    lambda: _record_setting_change(
-                        w, "downloads_delete_after_use", bool(s)
-                    ),
                 ),
             )
         )
@@ -853,9 +819,6 @@ def setup_settings_tab(w):
                 w.downloads_save_local_imports_checkbox,
                 lambda: _run_actions(
                     lambda: w.settings_service.on_toggle_downloads_save_local_imports(bool(s)),
-                    lambda: _record_setting_change(
-                        w, "downloads_save_local_imports", bool(s)
-                    ),
                 ),
             )
         )

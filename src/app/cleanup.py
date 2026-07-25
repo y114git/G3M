@@ -21,6 +21,7 @@ _THREAD_ATTRS = (
     "_catalog_worker",
     "_worker",
     "_post_fetch_worker",
+    "_user_data_root_worker",
     "thread",
     "_thread",
     "worker_thread",
@@ -35,7 +36,11 @@ _THREAD_ATTRS = (
     "changelog_thread",
     "presence_thread",
 )
-_THREAD_CONTAINER_ATTRS = ("_workers", "_load_more_threads")
+_THREAD_CONTAINER_ATTRS = (
+    "_workers",
+    "_load_more_threads",
+    "_retiring_patching_threads",
+)
 _THREAD_OWNER_ATTRS = (
     "downloads_manager",
     "game_launcher",
@@ -49,7 +54,7 @@ _THREAD_OWNER_ATTRS = (
 
 def _is_managed_shutdown_thread(w, thread, owner) -> bool:
     managed_owners = []
-    for attr in ("analytics_service", "session_manager"):
+    for attr in ("session_manager",):
         candidate = getattr(w, attr, None)
         if candidate is not None:
             managed_owners.append(candidate)

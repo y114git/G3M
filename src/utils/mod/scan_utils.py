@@ -124,9 +124,8 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
             },
         )
         return False
-    if isinstance(config_data.get("tags"), list) and any(
-        tag not in MOD_ALLOWED_TAGS for tag in config_data["tags"]
-    ):
+    tags = config_data.get("tags")
+    if isinstance(tags, list) and any(tag not in MOD_ALLOWED_TAGS for tag in tags):
         logger.warning(
             'validate_mod_config: Config field "tags" contains invalid values in %s',
             config_path,
@@ -204,8 +203,8 @@ def scan_mods_directory(
                                         folder_path = sub.path
                                         found_nested = True
                                         break
-                    except (OSError, PermissionError):
-                        pass
+                    except (OSError, PermissionError) as error:
+                        logger.debug("Best-effort operation failed: %s", error, exc_info=True)
                     if not found_nested:
                         continue
                 try:

@@ -76,12 +76,16 @@ class UseWorker(QThread):
 
         extract_dir = tempfile.mkdtemp(prefix="g3m_use_")
         try:
-            self._extract(extract_dir)
+            from utils.archive_utils import extract_archive_content_root
+
+            content_path = extract_archive_content_root(
+                self._file_path,
+                extract_dir,
+                is_cancelled=lambda: self._cancelled,
+            )
             if self._cancelled:
                 self._safe_finish(False, False, "cancelled")
                 return
-
-            content_path = self._resolve_content_root(extract_dir)
             gb_metadata = self._build_gb_metadata()
 
             from utils.file_utils import has_deltamod_info_file
@@ -156,17 +160,6 @@ class UseWorker(QThread):
                     details=self._file_path,
                 ),
             )
-
-    def _extract(self, target_dir: str):
-        from utils.archive_utils import extract_archive
-
-        extract_archive(self._file_path, target_dir)
-
-    @staticmethod
-    def _resolve_content_root(extract_dir: str) -> str:
-        from utils.archive_utils import unwrap_single_directory_chain
-
-        return unwrap_single_directory_chain(extract_dir)
 
     def _build_gb_metadata(self) -> dict:
         if not self._metadata.get("gb_mod_id"):

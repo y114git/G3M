@@ -84,11 +84,7 @@ class AnnouncePanel(QWidget):
         self.sync_ok_button_state()
 
     def selected_options(self) -> list[str]:
-        return [
-            button.text()
-            for button in self._option_buttons
-            if button.isChecked()
-        ]
+        return [button.text() for button in self._option_buttons if button.isChecked()]
 
     @property
     def option_buttons(self) -> list[QPushButton]:
@@ -130,7 +126,9 @@ class AnnouncePanel(QWidget):
         if AnnounceService.is_poll_announce(self._announce):
             if not self.selected_options():
                 return
-            if callable(self._on_submit_poll) and not self._on_submit_poll(self.selected_options()):
+            if callable(self._on_submit_poll) and not self._on_submit_poll(
+                self.selected_options()
+            ):
                 return
         self.accepted_with_ok.emit()
 
@@ -160,12 +158,16 @@ class AnnouncePanel(QWidget):
             button.setMinimumWidth(0)
             button.setMaximumWidth(max(70, button.sizeHint().width() + 18))
             button.clicked.connect(
-                lambda is_checked, btn=button: self._handle_option_clicked(btn, is_checked)
+                lambda is_checked, btn=button: self._handle_option_clicked(
+                    btn, is_checked
+                )
             )
             self._poll_buttons_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
             self._option_buttons.append(button)
 
-    def _handle_option_clicked(self, clicked_button: QPushButton, checked: bool) -> None:
+    def _handle_option_clicked(
+        self, clicked_button: QPushButton, checked: bool
+    ) -> None:
         if not self._allow_multiple:
             if checked:
                 for button in self._option_buttons:
@@ -208,6 +210,9 @@ class AnnouncePanel(QWidget):
         self.details_button.setText(tr("dialogs.announce_details_button"))
         self.details_button.setToolTip(tr("tooltips.announcement_details"))
         self.ok_button.setText(tr("ui.ok"))
+        self.ok_button.setToolTip(tr("tooltips.confirm"))
+        for button in self._option_buttons:
+            button.setToolTip(tr("tooltips.announcement_option"))
         self.sync_ok_button_state()
 
 

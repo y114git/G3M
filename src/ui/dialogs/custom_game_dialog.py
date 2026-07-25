@@ -20,6 +20,7 @@ class CustomGameDialog(QDialog):
         super().__init__(parent)
         self.app_state = app_state
         self.record = record
+        self._is_editing = record is not None
         self.setWindowTitle(
             tr("games.edit_custom_title") if record else tr("games.add_custom_title")
         )
@@ -48,10 +49,10 @@ class CustomGameDialog(QDialog):
             tr("games.primary_executable_placeholder")
         )
         form.addRow(tr("games.primary_executable_label"), self.primary_executable_edit)
-        executable_help = QLabel(tr("games.primary_executable_help"))
-        executable_help.setObjectName("customGameHelpLabel")
-        executable_help.setWordWrap(True)
-        form.addRow("", executable_help)
+        self.executable_help = QLabel(tr("games.primary_executable_help"))
+        self.executable_help.setObjectName("customGameHelpLabel")
+        self.executable_help.setWordWrap(True)
+        form.addRow("", self.executable_help)
         self.data_file_name_edit = QLineEdit(
             self.record.data_file_name if self.record else ""
         )
@@ -59,10 +60,10 @@ class CustomGameDialog(QDialog):
             tr("games.data_file_name_placeholder")
         )
         form.addRow(tr("games.data_file_name_label"), self.data_file_name_edit)
-        data_file_help = QLabel(tr("games.data_file_name_help"))
-        data_file_help.setObjectName("customGameHelpLabel")
-        data_file_help.setWordWrap(True)
-        form.addRow("", data_file_help)
+        self.data_file_help = QLabel(tr("games.data_file_name_help"))
+        self.data_file_help.setObjectName("customGameHelpLabel")
+        self.data_file_help.setWordWrap(True)
+        form.addRow("", self.data_file_help)
         self.steam_app_id_edit = QLineEdit(
             (self.record.steam_app_id or "") if self.record else ""
         )
@@ -76,14 +77,60 @@ class CustomGameDialog(QDialog):
         )
         form.addRow(tr("games.gamebanana_id_label"), self.gamebanana_id_edit)
         layout.addLayout(form)
-        buttons = QDialogButtonBox(
+        self.form_layout = form
+        self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        for button in buttons.buttons():
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        for button in self.buttons.buttons():
             button.setMinimumWidth(button.sizeHint().width() + 18)
-        layout.addWidget(buttons)
+        layout.addWidget(self.buttons)
+        self.relocalize_ui()
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(
+            tr("games.edit_custom_title")
+            if self._is_editing
+            else tr("games.add_custom_title")
+        )
+        for field, label_key, placeholder_key in (
+            (
+                self.display_name_edit,
+                "games.display_name_label",
+                "games.display_name_placeholder",
+            ),
+            (
+                self.primary_executable_edit,
+                "games.primary_executable_label",
+                "games.primary_executable_placeholder",
+            ),
+            (
+                self.data_file_name_edit,
+                "games.data_file_name_label",
+                "games.data_file_name_placeholder",
+            ),
+            (
+                self.steam_app_id_edit,
+                "games.steam_app_id_label",
+                "games.steam_app_id_placeholder",
+            ),
+            (
+                self.gamebanana_id_edit,
+                "games.gamebanana_id_label",
+                "games.gamebanana_id_placeholder",
+            ),
+        ):
+            label = self.form_layout.labelForField(field)
+            if isinstance(label, QLabel):
+                label.setText(tr(label_key))
+            field.setPlaceholderText(tr(placeholder_key))
+        self.executable_help.setText(tr("games.primary_executable_help"))
+        self.data_file_help.setText(tr("games.data_file_name_help"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(tr("ui.ok"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(
+            tr("dialogs.cancel")
+        )
 
     def values(self) -> dict[str, str]:
         return {

@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import shutil
+from typing import Any
 
 from PyQt6.QtCore import QEventLoop, QObject, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
@@ -13,7 +14,7 @@ from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
 from services.mod.filter_service import filter_and_sort_mods
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
-from ui.dialogs.mod.priority_dialog import ModPriorityDialog
+from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod.utils import get_mod_id
 from utils.native_integration import (
@@ -46,6 +47,15 @@ class LibraryDisplayController:
         self._updating_display = False
         self._last_render_signature = None
         self._pending_view_signature = None
+
+    def _current_game_type(self) -> str:
+        combo = getattr(self.app, "game_type_combo", None)
+        current_data = getattr(combo, "currentData", None)
+        return (
+            str(current_data() or "deltarune")
+            if callable(current_data)
+            else "deltarune"
+        )
 
     def _safe_feedback_call(self, action: str, *args, **kwargs) -> None:
         feedback_action = getattr(self.feedback_service, action, None)
@@ -92,15 +102,7 @@ class LibraryDisplayController:
             )
 
     def _current_view_signature(self):
-        current_game = (
-            getattr(
-                self.app,
-                "game_type_combo",
-                type("", (), {"currentData": lambda: "deltarune"}),
-            ).currentData()
-            if hasattr(self.app, "game_type_combo")
-            else "deltarune"
-        ) or "deltarune"
+        current_game = self._current_game_type()
         is_chapter_mode = (
             hasattr(self.app, "chapter_mode_checkbox")
             and self.app.chapter_mode_checkbox.isChecked()
@@ -141,13 +143,7 @@ class LibraryDisplayController:
             getattr(self.app_state, "selected_chapter_id", None)
             if is_chapter_mode
             else None,
-            getattr(
-                self.app,
-                "game_type_combo",
-                type("", (), {"currentData": lambda: "deltarune"}),
-            ).currentData()
-            if hasattr(self.app, "game_type_combo")
-            else "deltarune",
+            self._current_game_type(),
             sort_type,
             bool(getattr(self.app, "library_sort_ascending", False)),
             bool(
@@ -246,14 +242,7 @@ class LibraryDisplayController:
         return chapter_mods
 
     def _build_library_filters_and_sort(self):
-        current_game_type = (
-            getattr(
-                self.app,
-                "game_type_combo",
-                type("", (), {"currentData": lambda: "deltarune"}),
-            ).currentData()
-            or "deltarune"
-        )
+        current_game_type = self._current_game_type()
         selected_tags = []
         only_gamebanana = False
         if hasattr(self.app, "library_tag_widgets"):
@@ -384,9 +373,9 @@ class LibraryDisplayController:
         class _Scan(QThread):
             result_ready = pyqtSignal(list)
 
-            def __init__(self, outer) -> None:
+            def __init__(self, outer: Any) -> None:
                 super().__init__(outer if isinstance(outer, QObject) else None)
-                self.outer = outer
+                self.outer: Any = outer
 
             def run(self):
                 try:
@@ -591,8 +580,6 @@ class LibraryDisplayController:
         if target_widget:
             self.clear_all_selections()
             target_widget.set_selected(True)
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_mod_opened("library", mod_data)
             self._show_mod_in_summary(mod_data)
 
     def _show_mod_in_summary(self, mod_data):
@@ -685,8 +672,6 @@ class LibraryDisplayController:
         try:
             controller = getattr(self.app, "mod_import_export_controller", None)
             if controller:
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_details_opened("library", mod_data)
                 controller.show_mod_details_dialog(mod_data)
         except Exception as e:
             logger.error(f"Failed to open mod details: {e}", exc_info=True)
@@ -707,8 +692,6 @@ class LibraryDisplayController:
                 "Zip (*.zip)",
             )
             if path:
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_export_requested(mod_data)
                 controller.export_mod_to_path(mod_data, path)
         except Exception as e:
             logger.error(f"Failed to export mod: {e}", exc_info=True)
@@ -718,8 +701,6 @@ class LibraryDisplayController:
             key = get_mod_id(mod_data)
             mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
             if mod_folder and os.path.isdir(mod_folder):
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_folder_opened(mod_data)
                 open_path_native(os.path.normpath(mod_folder))
         except Exception as e:
             logger.error(f"Failed to open mod folder: {e}", exc_info=True)
@@ -732,8 +713,6 @@ class LibraryDisplayController:
                 return
             from ui.dialogs.mod.versions_dialog import ModVersionsDialog
 
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_dialog_opened("mod_versions")
             dialog = ModVersionsDialog(
                 mod_folder, mod_data, self.app_state, parent=self.app
             )
@@ -752,8 +731,6 @@ class LibraryDisplayController:
             if reply == QMessageBox.StandardButton.Yes:
                 self.mod_service.uninstall_mod(mod_data)
                 self.used_mods_service.remove_mod_from_all_chapters(mod_data)
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_removed(mod_data, action="delete_from_library")
                 self._clear_summary()
                 self._safe_update_after_mod_deletion()
         except Exception as e:
@@ -765,8 +742,6 @@ class LibraryDisplayController:
                 mod_data, "description_url", None
             )
             if url:
-                if analytics := getattr(self.app, "analytics_service", None):
-                    analytics.record_mod_homepage_opened(mod_data)
                 open_url_native(url)
         except Exception as e:
             logger.error(f"Failed to open homepage: {e}", exc_info=True)
@@ -790,8 +765,6 @@ class LibraryDisplayController:
                 return
             from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
-            if analytics := getattr(self.app, "analytics_service", None):
-                analytics.record_dialog_opened("mod_readme")
             dialog = ModReadmeDialog(
                 self.app_state,
                 mod_name,
@@ -1006,13 +979,15 @@ class LibraryDisplayController:
         from PyQt6.QtWidgets import QDialog
 
         try:
-            dialog = ModPriorityDialog(
-                mods_list, chapter_id, self.app_state, parent=self.app
+            dialog = ModPriorityStepsDialog(
+                self.used_mods_service.get_mod_steps(chapter_id),
+                self.app_state,
+                parent=self.app,
             )
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                new_order = dialog.get_result()
-                if new_order:
-                    self.used_mods_service.set_mods_list(chapter_id, new_order)
+                new_steps = dialog.get_result()
+                if new_steps:
+                    self.used_mods_service.set_mod_steps(chapter_id, new_steps)
                     if self.app_state.current_mode == "chapter":
                         self.update_for_chapter_mode(chapter_id)
                     else:
@@ -1054,6 +1029,13 @@ class LibraryDisplayController:
                     chapter_mods = self._distribute_mods_across_chapters(mods_list)
         if not chapter_mods:
             return
+        step_plans = {
+            chapter: steps
+            for chapter, steps in self.used_mods_service.get_active_mod_steps().items()
+            if chapter in chapter_mods and steps
+        }
+        if step_plans:
+            chapter_mods.update(step_plans)
         try:
             dialog = CreateModpackDialog(self.app_state, parent=self.app)
             if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -1082,7 +1064,7 @@ class LibraryDisplayController:
             thread.warning_confirmation_needed.connect(
                 self._on_modpack_warning_confirmation_needed
             )
-            thread.finished.connect(
+            thread.result_ready.connect(
                 lambda success: self._on_modpack_finished(success, modpack_dir)
             )
             self.app_state.current_task = thread

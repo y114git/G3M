@@ -133,7 +133,11 @@ class _RecordWidget(QFrame):
         }
         self._status_label.setText(status_tr_map.get(status_key, status_key))
         self._progress_bar.setVisible(status_key == "downloading")
-        self._progress_bar.setValue(r.progress)
+        if status_key == "downloading" and r.bytes_total <= 0:
+            self._progress_bar.setRange(0, 0)
+        else:
+            self._progress_bar.setRange(0, 100)
+            self._progress_bar.setValue(r.progress)
         if r.error_message and status_key == "failed":
             self._error_label.setText(r.error_message)
             self._error_label.setVisible(True)

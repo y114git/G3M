@@ -7,6 +7,31 @@ from PyQt6.QtCore import QObject
 from presentation.update_presenter import reload_global_settings
 
 
+def test_download_file_uses_get_length_when_head_omits_it(tmp_path):
+    from utils.network_utils import download_file
+
+    response = Mock()
+    response.status_code = 200
+    response.headers = {"content-length": "6"}
+    response.iter_content.return_value = [b"abc", b"def"]
+    session = Mock()
+    session.head.return_value = Mock(headers={})
+    session.get.return_value = response
+    progress = []
+    received = [0]
+
+    download_file(
+        session,
+        "https://example.com/mod.zip",
+        str(tmp_path / "mod.zip"),
+        progress_callback=progress.append,
+        downloaded_ref=received,
+    )
+
+    assert progress == [50, 100]
+    assert received == [6]
+
+
 def test_reload_global_settings_skips_refresh_when_cached():
     """Checks that reloading global settings skips refresh when cached."""
     app = Mock()
@@ -90,10 +115,10 @@ def test_reload_global_settings_suppresses_callback_failure_from_worker(qapp, mo
 
     class _Worker:
         def __init__(self, *_args, **_kwargs) -> None:
-            self.finished = _Signal()
+            self.result_ready = _Signal()
 
         def start(self):
-            self.finished._callback(True, {"announce": {"version": 2}})
+            self.result_ready._callback(True, {"announce": {"version": 2}})
 
         def deleteLater(self):  # noqa: N802
             return None

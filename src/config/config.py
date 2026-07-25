@@ -14,14 +14,15 @@ from dotenv import load_dotenv
 from . import styles as shared_styles
 
 _dotenv_path = Path(__file__).resolve().parents[1] / ".env"
-if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-    _dotenv_path = Path(sys._MEIPASS) / "src" / ".env"
+_bundle_root = getattr(sys, "_MEIPASS", None)
+if getattr(sys, "frozen", False) and _bundle_root:
+    _dotenv_path = Path(_bundle_root) / "src" / ".env"
 
 if _dotenv_path.is_file():
     load_dotenv(dotenv_path=_dotenv_path)
 
 """Application identity and external service configuration."""
-APP_VERSION = "3.2.1"
+APP_VERSION = "3.3.0"
 APP_DISPLAY_NAME = "G3M"
 APP_ORGANIZATION_NAME = "g3m"
 APP_DATA_DIR_NAME = "G3M"
@@ -194,8 +195,17 @@ WIDGET_LOCALIZATIONS = [
     ("language_combo", "setToolTip", "tooltips.language"),
     ("beta_updates_checkbox", "setText", "ui.beta_updates"),
     ("show_reset_buttons_checkbox", "setText", "ui.show_reset_buttons"),
-    ("analytics_opt_in_checkbox", "setText", "ui.analytics_opt_in"),
-    ("analytics_opt_in_checkbox", "setToolTip", "tooltips.analytics_opt_in"),
+    ("settings_user_data_root_label", "setText", "data_root.path_label"),
+    (
+        "settings_user_data_root_button",
+        "setToolTip",
+        "data_root.browse_tooltip",
+    ),
+    (
+        "settings_user_data_root_reset_button",
+        "setToolTip",
+        "buttons.reset_settings",
+    ),
     (
         "disable_discord_rich_presence_checkbox",
         "setText",
@@ -302,8 +312,7 @@ WIDGET_LOCALIZATIONS = [
         "tooltips.pause_background_music_unfocused",
     ),
     ("blocklist_button", "setToolTip", "ui.blocklist_tooltip"),
-    ("priority_button", "setText", "ui.priority"),
-    ("priority_button", "setToolTip", "tooltips.mod_priority"),
+    ("priority_button", "setToolTip", "tooltips.priority_steps"),
     ("create_modpack_button", "setText", "ui.create_modpack_button"),
     ("create_modpack_button", "setToolTip", "tooltips.create_modpack"),
     ("library_tags_label", "setText", "ui.tags_label"),
@@ -352,7 +361,7 @@ NETWORK_TIMEOUT_MEDIUM = 15
 NETWORK_TIMEOUT_LONG = 45
 NETWORK_TIMEOUT_HEAD = 15
 INITIALIZATION_TIMEOUT = 5000
-ONLINE_UPDATE_INTERVAL = 1800000
+ONLINE_UPDATE_INTERVAL = 10 * 60 * 1000
 LAUNCHER_FALLBACK_TIMEOUT = 8000
 SPLASH_WATCHDOG_TIMEOUT = 15000
 SPLASH_RETRY_DELAY = 100
@@ -413,6 +422,7 @@ THEME_CONFIG_FILENAMES = (
 )
 DATA_WIN_FILENAME = "data.win"
 META_JSON_FILENAME = "meta.json"
+META_TOML_FILENAME = "meta.toml"
 ICON_PNG_FILENAME = "icon.png"
 MOD_TYPE_G3MPATCH = "g3mpatch"
 MOD_TYPE_XDELTA = "xdelta"
@@ -429,6 +439,7 @@ SKIP_FILES = (
     "_icon.png",
     "icon.png",
     "meta.json",
+    META_TOML_FILENAME,
     DELTAMOD_INFO_FILENAME,
 )
 ARCHIVE_EXTENSIONS = (".zip", ".7z", ".rar", ".tar.gz", ".lzma")

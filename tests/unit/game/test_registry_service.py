@@ -53,6 +53,17 @@ def test_create_custom_game_registers_runtime_definition(registry_service):
     assert any(entry.id == record.id for entry in registry_service.list_visible_games())
 
 
+def test_create_custom_game_accepts_gamebanana_game_url(registry_service):
+    record = registry_service.create_custom_game(
+        display_name="Linked Game",
+        primary_executable="linked.exe",
+        data_file_name="data.win",
+        gamebanana_id="https://gamebanana.com/games/9876",
+    )
+
+    assert record.gamebanana_id == 9876
+
+
 def test_cannot_hide_last_visible_game(registry_service):
     """Checks that cannoting hide last visible game."""
     visible_ids = [entry.id for entry in registry_service.list_visible_games()]

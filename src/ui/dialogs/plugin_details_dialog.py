@@ -69,6 +69,17 @@ class PluginDetailsDialog(QDialog):
         self._can_download = can_download
         self.delete_requested = False
         self.download_requested = False
+        self._meta_labels: list[tuple[QLabel, str]] = []
+        self._schema_texts: list[tuple[QLabel, str, str]] = []
+        self._schema_controls: list[tuple[QWidget, dict[str, Any]]] = []
+        self._external_button: QPushButton | None = None
+        self._title_label: QLabel | None = None
+        self._description_label: QLabel | None = None
+        self._settings_title: QLabel | None = None
+        self._delete_button: QPushButton | None = None
+        self._update_button: QPushButton | None = None
+        self._download_button: QPushButton | None = None
+        self._no_settings_label: QLabel | None = None
         self.setWindowTitle(self._display_name())
         self.setMinimumWidth(620)
         self._init_ui()
@@ -133,10 +144,9 @@ class PluginDetailsDialog(QDialog):
         icon_column_layout.setSpacing(8)
         if homepage := self._homepage():
             external_button = QPushButton(tr("plugins.details_homepage"), icon_column)
+            self._external_button = external_button
             external_button.setToolTip(tr("tooltips.open_homepage"))
-            external_button.clicked.connect(
-                lambda: open_url_native(homepage)
-            )
+            external_button.clicked.connect(lambda: open_url_native(homepage))
             icon_column_layout.addWidget(external_button)
 
         icon_label = QLabel(icon_column)
@@ -165,11 +175,17 @@ class PluginDetailsDialog(QDialog):
         summary_layout.addWidget(icon_column, 0, Qt.AlignmentFlag.AlignTop)
         meta_layout = QVBoxLayout()
         title = QLabel(self._display_name())
-        title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {get_theme_color(self.app_state.local_config, 'main_text')};")
+        self._title_label = title
+        title.setStyleSheet(
+            f"font-size: 18px; font-weight: bold; color: {get_theme_color(self.app_state.local_config, 'main_text')};"
+        )
         meta_layout.addWidget(title)
         description = QLabel(self._description())
+        self._description_label = description
         description.setWordWrap(True)
-        description.setStyleSheet(f"font-size: 12px; color: {get_theme_color(self.app_state.local_config, 'secondary_text')};")
+        description.setStyleSheet(
+            f"font-size: 12px; color: {get_theme_color(self.app_state.local_config, 'secondary_text')};"
+        )
         meta_layout.addWidget(description)
         for label_key, value in (
             ("plugins.meta_author", self._author()),
@@ -178,10 +194,15 @@ class PluginDetailsDialog(QDialog):
         ):
             row = QHBoxLayout()
             meta_label = QLabel(f"{tr(label_key)}:")
-            meta_label.setStyleSheet(f"font-size: 15px; color: {get_theme_color(self.app_state.local_config, 'main_text')};")
+            self._meta_labels.append((meta_label, label_key))
+            meta_label.setStyleSheet(
+                f"font-size: 15px; color: {get_theme_color(self.app_state.local_config, 'main_text')};"
+            )
             row.addWidget(meta_label)
             meta_value = QLabel(value)
-            meta_value.setStyleSheet(f"font-size: 15px; color: {get_theme_color(self.app_state.local_config, 'secondary_text')};")
+            meta_value.setStyleSheet(
+                f"font-size: 15px; color: {get_theme_color(self.app_state.local_config, 'secondary_text')};"
+            )
             row.addWidget(meta_value, 1)
             meta_layout.addLayout(row)
         summary_layout.addLayout(meta_layout, 1)
@@ -189,8 +210,11 @@ class PluginDetailsDialog(QDialog):
 
         if self.plugin is not None:
             settings_title = QLabel(tr("plugins.details_settings"))
+            self._settings_title = settings_title
             settings_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            settings_title.setStyleSheet(f"font-weight: bold; color: {get_theme_color(self.app_state.local_config, 'main_text')};")
+            settings_title.setStyleSheet(
+                f"font-weight: bold; color: {get_theme_color(self.app_state.local_config, 'main_text')};"
+            )
             layout.addWidget(settings_title)
             settings_container = self._build_settings_container()
             layout.addWidget(settings_container, 1)
@@ -201,6 +225,7 @@ class PluginDetailsDialog(QDialog):
             actions_layout = QHBoxLayout()
             actions_layout.addStretch(1)
             delete_button = QPushButton(tr("plugins.details_delete"))
+            self._delete_button = delete_button
             delete_button.setStyleSheet(
                 f"background-color: darkred; color: {tc}; border-radius: {dr}px;"
             )
@@ -209,6 +234,7 @@ class PluginDetailsDialog(QDialog):
             actions_layout.addWidget(delete_button)
             if manifest and self._can_update:
                 update_button = QPushButton(tr("plugins.details_update"))
+                self._update_button = update_button
                 update_button.setToolTip(tr("tooltips.plugin_update"))
                 update_button.clicked.connect(self._request_update)
                 actions_layout.addWidget(update_button)
@@ -216,20 +242,22 @@ class PluginDetailsDialog(QDialog):
             layout.addLayout(actions_layout)
         else:
             download_button = QPushButton(tr("plugins.action_download"))
+            self._download_button = download_button
             download_button.setEnabled(self._can_download)
-            download_button.setStyleSheet(
-                f"color: {tc}; border-radius: {dr}px;"
-            )
+            download_button.setStyleSheet(f"color: {tc}; border-radius: {dr}px;")
             download_button.clicked.connect(self._request_download)
             layout.addWidget(download_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
     def _build_settings_container(self):
-        custom_widget = self.runtime_service.get_settings_widget(self._plugin_id(), self)
+        custom_widget = self.runtime_service.get_settings_widget(
+            self._plugin_id(), self
+        )
         if custom_widget is not None:
             return custom_widget
         schema = self.plugin.manifest.settings_schema if self.plugin.manifest else {}
         if not schema:
             label = QLabel(tr("plugins.no_settings"))
+            self._no_settings_label = label
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             return label
         content = QWidget(self)
@@ -256,6 +284,9 @@ class PluginDetailsDialog(QDialog):
         container = QWidget(self)
         layout = QHBoxLayout(container)
         label = QLabel(_resolve_text(str(field.get("label", key))))
+        label_text = str(field.get("label", key))
+        description_text = str(field.get("description", ""))
+        self._schema_texts.append((label, label_text, description_text))
         if field.get("description"):
             label.setToolTip(_resolve_text(str(field.get("description", ""))))
         layout.addWidget(label)
@@ -270,7 +301,11 @@ class PluginDetailsDialog(QDialog):
             if field.get("description"):
                 widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.stateChanged.connect(
-                lambda state, plugin_id=plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, bool(state))
+                lambda state, plugin_id=plugin_id, setting_key=key: (
+                    self.state_service.set_plugin_setting(
+                        plugin_id, setting_key, bool(state)
+                    )
+                )
             )
         elif field_type == "int":
             widget = QSpinBox(container)
@@ -292,14 +327,22 @@ class PluginDetailsDialog(QDialog):
             if field.get("description"):
                 widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.valueChanged.connect(
-                lambda value, plugin_id=plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, int(value))
+                lambda value, plugin_id=plugin_id, setting_key=key: (
+                    self.state_service.set_plugin_setting(
+                        plugin_id, setting_key, int(value)
+                    )
+                )
             )
         elif field_type == "choice":
             widget = QComboBox(container)
             options = field.get("options", [])
             for option in options:
                 value = option.get("value", option)
-                text = _resolve_text(str(option.get("label", value))) if isinstance(option, dict) else str(option)
+                text = (
+                    _resolve_text(str(option.get("label", value)))
+                    if isinstance(option, dict)
+                    else str(option)
+                )
                 widget.addItem(text, value)
             for index in range(widget.count()):
                 if widget.itemData(index) == current_value:
@@ -308,14 +351,24 @@ class PluginDetailsDialog(QDialog):
             if field.get("description"):
                 widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.currentIndexChanged.connect(
-                lambda index, combo=widget, plugin_id=plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, combo.itemData(index))
+                lambda index, combo=widget, plugin_id=plugin_id, setting_key=key: (
+                    self.state_service.set_plugin_setting(
+                        plugin_id, setting_key, combo.itemData(index)
+                    )
+                )
             )
         elif field_type in {"action", "button"}:
-            widget = QPushButton(_resolve_text(str(field.get("button_text", field.get("label", key)))))
+            widget = QPushButton(
+                _resolve_text(str(field.get("button_text", field.get("label", key))))
+            )
             if field.get("description"):
                 widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.clicked.connect(
-                lambda _=False, plugin_id=plugin_id, setting_key=key: self.runtime_service.run_settings_action(plugin_id, setting_key, self)
+                lambda _=False, plugin_id=plugin_id, setting_key=key: (
+                    self.runtime_service.run_settings_action(
+                        plugin_id, setting_key, self
+                    )
+                )
             )
         else:
             widget = QLineEdit(container)
@@ -323,12 +376,75 @@ class PluginDetailsDialog(QDialog):
             if field.get("description"):
                 widget.setToolTip(_resolve_text(str(field.get("description", ""))))
             widget.editingFinished.connect(
-                lambda edit=widget, plugin_id=plugin_id, setting_key=key: self.state_service.set_plugin_setting(plugin_id, setting_key, edit.text())
+                lambda edit=widget, plugin_id=plugin_id, setting_key=key: (
+                    self.state_service.set_plugin_setting(
+                        plugin_id, setting_key, edit.text()
+                    )
+                )
             )
         if field.get("description"):
             widget.setToolTip(_resolve_text(str(field["description"])))
+        self._schema_controls.append((widget, field))
         layout.addWidget(widget, 1 if field_type not in {"action", "button"} else 0)
         return container
+
+    def relocalize_ui(self) -> None:
+        """Refresh G3M and plugin-provided localization keys in place."""
+        self.setWindowTitle(self._display_name())
+        if self._title_label is not None:
+            self._title_label.setText(self._display_name())
+        if self._description_label is not None:
+            self._description_label.setText(self._description())
+        if self._external_button is not None:
+            self._external_button.setText(tr("plugins.details_homepage"))
+            self._external_button.setToolTip(tr("tooltips.open_homepage"))
+        for label, key in self._meta_labels:
+            label.setText(f"{tr(key)}:")
+        if self._settings_title is not None:
+            self._settings_title.setText(tr("plugins.details_settings"))
+        if self._delete_button is not None:
+            self._delete_button.setText(tr("plugins.details_delete"))
+            self._delete_button.setToolTip(tr("tooltips.plugin_delete"))
+        if self._update_button is not None:
+            self._update_button.setText(tr("plugins.details_update"))
+            self._update_button.setToolTip(tr("tooltips.plugin_update"))
+        if self._download_button is not None:
+            self._download_button.setText(tr("plugins.action_download"))
+        if self._no_settings_label is not None:
+            self._no_settings_label.setText(tr("plugins.no_settings"))
+        for label, label_text, description in self._schema_texts:
+            label.setText(_resolve_text(label_text))
+            label.setToolTip(_resolve_text(description) if description else "")
+        for widget, field in self._schema_controls:
+            description = str(field.get("description", ""))
+            widget.setToolTip(_resolve_text(description) if description else "")
+            if isinstance(widget, QPushButton):
+                widget.setText(
+                    _resolve_text(
+                        str(
+                            field.get(
+                                "button_text",
+                                field.get("label", field.get("key", "")),
+                            )
+                        )
+                    )
+                )
+            elif isinstance(widget, QComboBox):
+                selected = widget.currentData()
+                for index, option in enumerate(field.get("options", [])):
+                    value = (
+                        option.get("value", option)
+                        if isinstance(option, dict)
+                        else option
+                    )
+                    text = (
+                        _resolve_text(str(option.get("label", value)))
+                        if isinstance(option, dict)
+                        else str(option)
+                    )
+                    widget.setItemText(index, text)
+                    if value == selected:
+                        widget.setCurrentIndex(index)
 
     def _confirm_delete_plugin(self):
         """Show confirmation dialog before deleting plugin."""

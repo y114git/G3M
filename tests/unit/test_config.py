@@ -34,6 +34,11 @@ class TestConstants:
         assert "status_warning" in UI_COLORS
         assert "status_info" in UI_COLORS
 
+    def test_onboarding_is_incomplete_by_default(self):
+        from config.settings_schema import DEFAULT_APP_SETTINGS
+
+        assert DEFAULT_APP_SETTINGS["onboarding_completed"] is False
+
     def test_gamebanana_constants(self):
         """Checks that gamebananaing constants."""
         from config.config import (
@@ -110,7 +115,7 @@ class TestConstants:
         """Checks that presenceing timing constants."""
         from config.config import ONLINE_UPDATE_INTERVAL
 
-        expected = 30 * 60 * 1000
+        expected = 10 * 60 * 1000
         assert expected == ONLINE_UPDATE_INTERVAL
 
     def test_pyinstaller_spec_packages_dotenv_into_src(self):

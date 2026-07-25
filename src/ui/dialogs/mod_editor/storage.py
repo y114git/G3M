@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from contextlib import suppress
@@ -9,6 +10,8 @@ from pathlib import PureWindowsPath
 
 from utils.file_utils import get_chapter_folder_name
 from utils.mod.config_parser import parse_extra_files_raw, resolve_mod_file_path
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_managed_mod_path(file_folder: str, stored_path) -> str | None:
@@ -115,7 +118,7 @@ def build_storage_path(
                 is_directory=os.path.isdir(resolved),
             )
     except ValueError:
-        pass
+        logger.debug("Managed path is on a different filesystem", exc_info=True)
 
     root = chapter_storage_root(file_key, game)
     target_name = os.path.basename(resolved.rstrip("\\/"))

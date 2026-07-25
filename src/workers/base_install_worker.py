@@ -5,21 +5,22 @@ import os
 import shutil
 from collections.abc import Callable
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from config.config import NETWORK_TIMEOUT_HEAD, UI_COLORS
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import format_size_mb
 
 logger = logging.getLogger(__name__)
 
 
-class BaseInstallWorker(QThread):
+class BaseInstallWorker(ManagedQThread):
     """Base class for mod installation worker threads."""
 
     progress = pyqtSignal(int)
     status = pyqtSignal(str, str)
-    finished = pyqtSignal(bool, str)
+    result_ready = pyqtSignal(bool, str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)

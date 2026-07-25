@@ -1,5 +1,6 @@
 """Unit tests for test localization files."""
 
+import ast
 import hashlib
 import json
 import re
@@ -8,6 +9,33 @@ from pathlib import Path
 
 LANG_DIR = Path(__file__).resolve().parents[2] / "src" / "assets" / "lang"
 PLUGIN_DIR = Path(__file__).resolve().parents[2] / "catalog" / "plugins"
+UI_DIR = Path(__file__).resolve().parents[2] / "src" / "ui"
+
+
+def test_localized_dialogs_expose_live_relocalization() -> None:
+    """Prevent persistent dialog text from becoming restart-only again."""
+    missing: list[str] = []
+    for path in UI_DIR.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            is_dialog = any(
+                ast.unparse(base).endswith("QDialog") for base in node.bases
+            )
+            if not is_dialog or "tr(" not in (
+                ast.get_source_segment(source, node) or ""
+            ):
+                continue
+            methods = {
+                item.name for item in node.body if isinstance(item, ast.FunctionDef)
+            }
+            if "relocalize_ui" not in methods:
+                missing.append(f"{path.relative_to(UI_DIR)}:{node.name}")
+    assert not missing, "Localized dialogs without relocalize_ui(): " + ", ".join(
+        missing
+    )
 
 
 def _flatten_keys(data: dict, prefix: str = "") -> dict[str, str]:
@@ -93,7 +121,9 @@ def test_language_files_do_not_ship_raw_localization_keys_as_text():
             and key not in {"metadata.font"}
             and (raw_key_pattern.fullmatch(value) or value == f"[{key}]")
         ]
-        assert not raw_values, f"{lang_path.name} has raw localization values: {raw_values}"
+        assert not raw_values, (
+            f"{lang_path.name} has raw localization values: {raw_values}"
+        )
 
 
 def test_plugin_language_files_match_their_english_keys():
@@ -164,7 +194,9 @@ def test_plugin_archives_match_source_folders_without_python_cache():
         ]
         source_names = set(source_files)
         archived_names = set(archived_files)
-        assert not forbidden, f"{archive_path.name} ships Python cache files: {forbidden}"
+        assert not forbidden, (
+            f"{archive_path.name} ships Python cache files: {forbidden}"
+        )
         assert archived_files == source_files, (
             f"{archive_path.name} does not match {plugin_dir.name}. "
             f"Missing: {sorted(source_names - archived_names)}. "

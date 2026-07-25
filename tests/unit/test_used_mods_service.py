@@ -116,3 +116,127 @@ def test_direct_launch_menu_warning_failure_is_suppressed(app_state):
 
     feedback_service.show_message.assert_called_once()
     settings_service.write_local_config.assert_not_called()
+
+
+def test_mod_steps_default_to_one_step_without_metadata(app_state):
+    mods = [
+        SimpleNamespace(id="main", name="Main"),
+        SimpleNamespace(id="addon", name="Addon"),
+    ]
+    service = UsedModsManager(app_state, Mock(), Mock(), Mock(), parent=None)
+    service.used_mods = {"deltarune": mods}
+
+    assert service.get_mod_steps("deltarune") == [mods]
+
+
+def test_set_mod_steps_normalizes_duplicates_and_persists_flat_compatibility(app_state):
+    main = SimpleNamespace(id="main", name="Main")
+    addon = SimpleNamespace(id="addon", name="Addon")
+    settings_service = Mock()
+    service = UsedModsManager(
+        app_state, Mock(), Mock(), settings_service, parent=None
+    )
+    service._mods_state_loaded = True
+    service.used_mods = {"deltarune": [main, addon]}
+
+    service.set_mod_steps("deltarune", [[main], [addon, main], []])
+
+    assert service.get_mod_steps("deltarune") == [[main], [addon]]
+    assert service.get_used_mods_list("deltarune") == [main, addon]
+    assert app_state.local_config["mod_steps_deltarune"] == {
+        "deltarune": [["main"], ["addon"]]
+    }
+    assert app_state.local_config["used_mods_deltarune"] == {
+        "deltarune": ["main", "addon"]
+    }
+    settings_service.write_local_config.assert_called_once()
+
+
+def test_get_active_mod_steps_returns_saved_plan_for_single_tab_game(app_state):
+    from models.game_modes import get_game
+
+    app_state.game_mode = get_game("undertale")
+    main = SimpleNamespace(id="main", name="Main")
+    addon = SimpleNamespace(id="addon", name="Addon")
+    service = UsedModsManager(app_state, Mock(), Mock(), Mock(), parent=None)
+    service.used_mods = {"undertale": [main, addon]}
+    app_state.local_config["mod_steps_undertale"] = {
+        "undertale": [["main"], ["addon"]]
+    }
+
+    assert service.get_active_mod_steps() == {
+        "undertale": [[main], [addon]]
+    }
+
+
+def test_get_mod_steps_migrates_legacy_chapter_key(app_state):
+    mod = SimpleNamespace(id="main", name="Main")
+    service = UsedModsManager(app_state, Mock(), Mock(), Mock(), parent=None)
+    service.used_mods = {"deltarune_0": [mod]}
+    app_state.local_config["mod_steps_deltarune"] = {"0": [["main"]]}
+
+    assert service.get_mod_steps("deltarune_0") == [[mod]]
+    assert app_state.local_config["mod_steps_deltarune"] == {
+        "deltarune_0": [["main"]]
+    }
+
+
+def test_normalizing_steps_preserves_pending_ids_in_original_step(app_state):
+    mod = SimpleNamespace(id="loaded", name="Loaded")
+    service = UsedModsManager(app_state, Mock(), Mock(), Mock(), parent=None)
+    service.used_mods = {"deltarune": [mod]}
+    service._pending_mod_ids = {"deltarune": ["pending"]}
+    app_state.local_config["mod_steps_deltarune"] = {
+        "deltarune": [["pending"], ["loaded"]]
+    }
+
+    service._normalize_stored_steps("deltarune")
+
+    assert app_state.local_config["mod_steps_deltarune"]["deltarune"] == [
+        ["pending"],
+        ["loaded"],
+    ]
+
+
+def test_set_mod_steps_suppresses_persistence_failure(app_state):
+    mod = SimpleNamespace(id="main", name="Main")
+    settings = Mock()
+    settings.write_local_config.side_effect = OSError("disk full")
+    service = UsedModsManager(app_state, Mock(), Mock(), settings, parent=None)
+    service._mods_state_loaded = True
+
+    service.set_mod_steps("deltarune", [[mod]])
+
+    assert service.used_mods["deltarune"] == [mod]
+    settings.write_local_config.assert_called()
+
+
+def test_normalizing_steps_appends_unassigned_mods_in_resolved_order(app_state):
+    mods = [SimpleNamespace(id=mod_id, name=mod_id) for mod_id in ("z", "a", "m")]
+    service = UsedModsManager(app_state, Mock(), Mock(), Mock(), parent=None)
+    service.used_mods = {"deltarune": mods}
+    app_state.local_config["mod_steps_deltarune"] = {"deltarune": [["a"]]}
+
+    service._normalize_stored_steps("deltarune")
+
+    assert app_state.local_config["mod_steps_deltarune"]["deltarune"] == [
+        ["a", "z", "m"]
+    ]
+
+
+def test_remove_mod_cleans_saved_step_membership(app_state):
+    main = SimpleNamespace(id="main", name="Main")
+    addon = SimpleNamespace(id="addon", name="Addon")
+    settings_service = Mock()
+    service = UsedModsManager(app_state, Mock(), Mock(), settings_service, parent=None)
+    service._mods_state_loaded = True
+    service.used_mods = {"deltarune": [main, addon]}
+    app_state.local_config["mod_steps_deltarune"] = {
+        "deltarune": [["main"], ["addon"]]
+    }
+
+    service.remove_mod_from_all_chapters(main)
+
+    assert app_state.local_config["mod_steps_deltarune"] == {
+        "deltarune": [["addon"]]
+    }

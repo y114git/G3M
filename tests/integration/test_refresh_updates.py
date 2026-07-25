@@ -41,6 +41,49 @@ class TestRefreshModList:
             refresh_controller.refresh_mods_list(is_initial=False, localization_callback=localization_callback)
             assert mock_fetch.called
 
+    def test_refresh_does_not_replace_worker_that_is_still_stopping(self, app_state):
+        from controllers.refresh_controller import RefreshController
+
+        controller = RefreshController(
+            app_state, Mock(), Mock(), Mock(), Mock(), Mock(), app_window=Mock()
+        )
+        existing = Mock()
+        existing.isRunning.return_value = True
+        controller.fetch_thread = existing
+
+        with patch("controllers.refresh_controller.FetchModsThread") as factory, patch(
+            "controllers.refresh_controller.is_game_running", return_value=False
+        ):
+            controller.refresh_mods_list()
+
+        assert controller.fetch_thread is existing
+        factory.assert_not_called()
+
+    def test_is_refreshing_reports_running_worker(self, app_state):
+        from controllers.refresh_controller import RefreshController
+
+        controller = RefreshController(
+            app_state, Mock(), Mock(), Mock(), Mock(), Mock(), app_window=Mock()
+        )
+        worker = Mock()
+        worker.isRunning.return_value = True
+        controller.fetch_thread = worker
+
+        assert controller.is_refreshing()
+
+    def test_is_refreshing_discards_deleted_worker(self, app_state):
+        from controllers.refresh_controller import RefreshController
+
+        controller = RefreshController(
+            app_state, Mock(), Mock(), Mock(), Mock(), Mock(), app_window=Mock()
+        )
+        worker = Mock()
+        worker.isRunning.side_effect = RuntimeError("wrapped C/C++ object deleted")
+        controller.fetch_thread = worker
+
+        assert not controller.is_refreshing()
+        assert controller.fetch_thread is None
+
 
 class TestRefreshLanguageCombo:
     """Tests for refresh updates."""

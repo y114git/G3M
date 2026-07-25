@@ -34,16 +34,9 @@ def _safe_filename(name: str) -> str:
 def _cleanup_worker(worker):
     if not worker:
         return
-    try:
-        if worker.isFinished():
-            worker.deleteLater()
-        else:
-            worker.finished.connect(worker.deleteLater)
-    except Exception as e:
-        logger.debug(
-            f"_cleanup_worker: failed to clean up worker {type(worker).__name__}: {e}",
-            exc_info=True,
-        )
+    from ui.utils.thread_lifetime import retire_qthread
+
+    retire_qthread(worker)
 
 
 def _safe_update_status(feedback_service, message: str, color: str) -> None:
@@ -67,6 +60,7 @@ class DownloadsManager(QObject):
         self._store = DownloadsStore(base_dir)
         self._settings = settings_getter
         self._workers = {}
+        self._download_generations: dict[str, int] = {}
         self._mods_dir: str | None = None
         self._plugin_install_service = None
         self._progress_emit_state: dict[str, tuple[int, int, int, float]] = {}
@@ -95,8 +89,8 @@ class DownloadsManager(QObject):
     def enqueue(
         self,
         display_name: str,
-        source_kind: str = SourceKind.EXTERNAL_URL,
-        target_kind: str = TargetKind.MOD,
+        source_kind: SourceKind = SourceKind.EXTERNAL_URL,
+        target_kind: TargetKind = TargetKind.MOD,
         source_url: str | None = None,
         source_file_path: str | None = None,
         canonical_key: str | None = None,
@@ -149,6 +143,8 @@ class DownloadsManager(QObject):
         self.record_removed.emit(record_id)
 
     def _start_download(self, record: DownloadRecord):
+        generation = self._download_generations.get(record.id, 0) + 1
+        self._download_generations[record.id] = generation
         record.download_status = DownloadStatus.DOWNLOADING
         self._store.update(record)
         self.record_updated.emit(record)
@@ -175,20 +171,30 @@ class DownloadsManager(QObject):
             worker = LocalFileCopyWorker(
                 record.id, record.source_file_path, target_path, parent=self
             )
-            worker.download_finished.connect(self._on_download_finished)
+            worker.download_finished.connect(
+                lambda record_id, success, error, saved_path, gen=generation: self._on_download_finished(
+                    record_id, success, error, saved_path, gen
+                )
+            )
             self._workers[record.id] = worker
             worker.start()
             return
 
         if not record.source_url:
-            self._on_download_finished(record.id, False, "No download URL", "")
+            self._on_download_finished(
+                record.id, False, "No download URL", "", generation
+            )
             return
 
         from workers.download_worker import DownloadWorker
 
         worker = DownloadWorker(record.id, record.source_url, target_path, parent=self)
         worker.progress_updated.connect(self._on_download_progress)
-        worker.download_finished.connect(self._on_download_finished)
+        worker.download_finished.connect(
+            lambda record_id, success, error, saved_path, gen=generation: self._on_download_finished(
+                record_id, success, error, saved_path, gen
+            )
+        )
         self._workers[record.id] = worker
         worker.start()
 
@@ -224,14 +230,39 @@ class DownloadsManager(QObject):
         self.record_updated.emit(record)
 
     def _on_download_finished(
-        self, record_id: str, success: bool, error: str, saved_path: str
+        self,
+        record_id: str,
+        success: bool,
+        error: str,
+        saved_path: str,
+        generation: int | None = None,
     ):
         record = self._store.find(record_id)
         if not record:
             return
+        current_generation = self._download_generations.get(record_id)
+        if generation is not None and generation != current_generation:
+            logger.debug(
+                "DownloadsManager: ignoring stale generation %s for %s (current=%s)",
+                generation,
+                record_id,
+                current_generation,
+            )
+            return
         worker = self._workers.pop(record_id, None)
+        self._download_generations.pop(record_id, None)
         self._progress_emit_state.pop(record_id, None)
         _cleanup_worker(worker)
+        if record.download_status not in (
+            DownloadStatus.QUEUED,
+            DownloadStatus.DOWNLOADING,
+        ):
+            logger.debug(
+                "DownloadsManager: ignoring late terminal result for %s (%s)",
+                record_id,
+                record.download_status,
+            )
+            return
 
         if not success:
             is_cancel = error == "cancelled"
@@ -364,6 +395,9 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
+        self._download_generations[record_id] = (
+            self._download_generations.get(record_id, 0) + 1
+        )
         if worker and hasattr(worker, "cancel"):
             worker.cancel()
             with contextlib.suppress(Exception):
@@ -404,6 +438,7 @@ class DownloadsManager(QObject):
         if not record:
             return
         worker = self._workers.pop(record_id, None)
+        self._download_generations.pop(record_id, None)
         if worker and hasattr(worker, "cancel"):
             worker.cancel()
             with contextlib.suppress(Exception):
@@ -460,6 +495,8 @@ class DownloadsManager(QObject):
             )
 
             parent = parent_widget or self.parent()
+            if not record.file_path:
+                raise FileNotFoundError("Downloaded archive path is missing")
             temp_dir = tempfile.mkdtemp(prefix="g3m_manual_")
             extract_archive(record.file_path, temp_dir)
             content_path = unwrap_single_directory_chain(temp_dir)
@@ -474,7 +511,8 @@ class DownloadsManager(QObject):
                 logger.warning(
                     "DownloadsManager: pizza_oven_conversion_presenter not found for Continue Setup"
                 )
-                shutil.rmtree(temp_dir, ignore_errors=True)
+                if temp_dir:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
                 return
 
             def _on_success():
@@ -506,10 +544,11 @@ class DownloadsManager(QObject):
             logger.error(
                 "DownloadsManager: manual install dialog failed: %s", e, exc_info=True
             )
-            with contextlib.suppress(Exception):
-                shutil.rmtree(temp_dir, ignore_errors=True)
+            if temp_dir:
+                with contextlib.suppress(Exception):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
             record.use_status = UseStatus.NEEDS_MANUAL
-            record.error_message = format_filesystem_error(e, path=record.file_path)
+            record.error_message = format_filesystem_error(e, path=record.file_path or "")
             self._store.update(record)
             self.record_updated.emit(record)
 
@@ -553,6 +592,7 @@ class DownloadsManager(QObject):
 
     def clear_downloads(self):
         for r in [r for r in self._store.records if not r.is_active]:
+            self._download_generations.pop(r.id, None)
             self._store.delete_file_for_record(r)
             self._store.remove(r.id)
             self.record_removed.emit(r.id)

@@ -10,18 +10,19 @@ import subprocess
 import time
 from typing import Any
 
-from PyQt6.QtCore import QObject, QProcess, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QProcess, QThread, QTimer, pyqtSignal
 
 from config.config import UI_COLORS
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.game_detection_service import (
     get_game_name_string,
     get_game_type_string,
-    is_game_running,
+    get_matching_process_identities,
 )
 from services.localization_service import tr
 from services.warning_service import create_warning_event, is_warning_enabled
 from ui.common.styling import get_launch_status_color
+from ui.utils.thread_lifetime import retire_qthread
 from utils.file_utils import ensure_writable
 from utils.native_integration import open_url_native
 from utils.path_utils import (
@@ -60,6 +61,7 @@ class GameLauncher(QObject):
         self.mod_patcher.status_update.connect(self._on_patching_status)
         self.mod_patcher.progress_update.connect(self._on_patching_progress)
         self._patching_thread = None
+        self._retiring_patching_threads: list[QThread] = []
         self._plugin_hook_thread = None
         self.restore_window_callback = None
         self._launch_started_at = None
@@ -67,10 +69,6 @@ class GameLauncher(QObject):
         self._launch_mod_refs: list[dict[str, str]] = []
         self._launch_mode = "unknown"
         self._launch_had_mods = False
-
-    def _analytics(self):
-        parent = self.parent()
-        return getattr(parent, "analytics_service", None) if parent else None
 
     def _stop_monitor_thread(self):
         if not self.monitor_thread:
@@ -219,6 +217,20 @@ class GameLauncher(QObject):
             return {}
         return used_mods_service.get_active_mod_selections()
 
+    def _get_used_mod_steps(self) -> dict[str, list[list[Any]]]:
+        try:
+            parent_obj = self.parent()
+        except (AttributeError, TypeError):
+            parent_obj = None
+        used_mods_service = (
+            getattr(parent_obj, "used_mods_service", None) if parent_obj else None
+        )
+        if not used_mods_service or not hasattr(
+            used_mods_service, "get_active_mod_steps"
+        ):
+            return {}
+        return used_mods_service.get_active_mod_steps()
+
     def _launch_game_with_selections(
         self,
         selections: dict[str, Any],
@@ -273,7 +285,9 @@ class GameLauncher(QObject):
             self.app_state.is_patching = True
             self.app_state.action_button_text = tr("ui.cancel_button")
             self.app_state.action_button_enabled = True
-            if not self._prepare_game_files_multi_mod_async(selections):
+            if not self._prepare_game_files_multi_mod_async(
+                selections, self._get_used_mod_steps()
+            ):
                 logger.error("Failed to start multi-mod patching")
                 self.app_state.progress_bar_visible = False
                 self.app_state.is_patching = False
@@ -283,16 +297,6 @@ class GameLauncher(QObject):
             self._continue_after_patching(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self, reason: str = "unknown"):
-        analytics = self._analytics()
-        if analytics:
-            analytics.record_launch_failed(
-                reason=reason,
-                mode=self._launch_mode,
-                with_mods=self._launch_had_mods,
-                game=self.app_state.game_mode.game_id,
-                mod_count=len(self._launch_mod_refs),
-                via_steam=bool(self.app_state.local_config.get("launch_via_steam", False)),
-            )
         if self.restore_window_callback:
             self.restore_window_callback()
         parent = self.parent()
@@ -311,9 +315,13 @@ class GameLauncher(QObject):
             return
         try:
             self._stop_monitor_thread()
+            process_names = self._expected_process_names(target_path)
+            baseline_processes = get_matching_process_identities(process_names)
             if launch_type == "url":
                 self.monitor_thread = QThread(self)
-                self.monitor_worker = GameMonitorWorker(None, vanilla_mode)
+                self.monitor_worker = GameMonitorWorker(
+                    None, vanilla_mode, process_names, baseline_processes
+                )
                 self.monitor_worker.moveToThread(self.monitor_thread)
                 self.monitor_worker.finished.connect(self._on_game_process_finished)
                 self.monitor_thread.started.connect(self.monitor_worker.run)
@@ -354,17 +362,12 @@ class GameLauncher(QObject):
                     and os.path.isfile(custom_path)
                     and (os.path.abspath(custom_path) == os.path.abspath(target_path))
                 )
+                command = ["open", "-W", target_path]
+                process = subprocess.Popen(command)
                 if use_custom_exe:
-                    command = ["open", target_path]
-                    subprocess.Popen(command)
                     self.status_changed.emit(
                         tr("status.macos_file_opened"), self._launch_status_color()
                     )
-                    if self.restore_window_callback:
-                        self.restore_window_callback()
-                    return
-                command = ["open", "-W", target_path]
-                process = subprocess.Popen(command)
             else:
                 command = [target_path]
                 launch_env = build_external_process_env(system=system)
@@ -415,7 +418,9 @@ class GameLauncher(QObject):
                 tr("status.game_launched_waiting_for_exit"), self._launch_status_color()
             )
             self.monitor_thread = QThread(self)
-            self.monitor_worker = GameMonitorWorker(process, vanilla_mode)
+            self.monitor_worker = GameMonitorWorker(
+                process, vanilla_mode, process_names, baseline_processes
+            )
             self.monitor_worker.moveToThread(self.monitor_thread)
             self.monitor_worker.finished.connect(self._on_game_process_finished)
             self.monitor_thread.started.connect(self.monitor_worker.run)
@@ -432,6 +437,18 @@ class GameLauncher(QObject):
                 "red",
             )
             self._handle_launch_failure()
+
+    def _expected_process_names(self, target_path: str) -> tuple[str, ...]:
+        names = [
+            name
+            for name in self.app_state.game_mode.get_process_names()
+            if name.casefold() != "runner"
+        ]
+        if target_path and "://" not in target_path:
+            target_name = os.path.basename(target_path.rstrip("/\\"))
+            target_stem, _ = os.path.splitext(target_name)
+            names.extend((target_name, target_stem))
+        return tuple(name for name in dict.fromkeys(names) if name)
 
     @staticmethod
     def _start_detached_command(program: str, arguments: list[str]) -> bool:
@@ -457,9 +474,6 @@ class GameLauncher(QObject):
         self._check_game_running(vanilla_mode)
 
     def _check_game_running(self, vanilla_mode):
-        if is_game_running():
-            logger.debug("[LAUNCH] Game still running, cleanup deferred to monitor")
-            return
         logger.info("[LAUNCH] Game is no longer running, starting cleanup")
         self.app_state.is_patching = True
         self.app_state.progress_bar_visible = True
@@ -473,6 +487,9 @@ class GameLauncher(QObject):
         self.status_changed.emit(
             tr("status.game_closed_restoring_files"), UI_COLORS["status_info"]
         )
+        QTimer.singleShot(50, lambda: self._finish_game_cleanup(vanilla_mode))
+
+    def _finish_game_cleanup(self, vanilla_mode: bool) -> None:
         self._cleanup_direct_launch_files()
         if self.monitor_thread:
             self._stop_monitor_thread()
@@ -500,20 +517,9 @@ class GameLauncher(QObject):
         if elapsed <= 0:
             return
         parent = self.parent()
-        analytics = self._analytics()
         mod_service = getattr(parent, "mod_service", None) if parent else None
         if self._launch_mod_ids and mod_service and hasattr(mod_service, "add_playtime_hours"):
             mod_service.add_playtime_hours(self._launch_mod_ids, elapsed / 3600.0)
-        if analytics:
-            analytics.record_launch_finished(
-                elapsed,
-                mode=self._launch_mode,
-                with_mods=self._launch_had_mods,
-                game=self.app_state.game_mode.game_id,
-                mod_count=len(self._launch_mod_refs),
-                mod_refs=self._launch_mod_refs,
-                via_steam=bool(self.app_state.local_config.get("launch_via_steam", False)),
-            )
 
     @staticmethod
     def _collect_launch_mod_ids(selections: dict[str, Any]) -> list[str]:
@@ -612,6 +618,7 @@ class GameLauncher(QObject):
         custom_path = self.app_state.local_config.get(custom_exec_key, "")
         use_custom_exe = (
             custom_path
+            and source_exe
             and os.path.isfile(custom_path)
             and (os.path.abspath(custom_path) == os.path.abspath(source_exe))
         )
@@ -694,13 +701,20 @@ class GameLauncher(QObject):
         return self.app_state.game_mode.get_game_path(self.app_state.local_config) or ""
 
     def _prepare_game_files_multi_mod_async(
-        self, selections: dict[int, list[Any]]
+        self,
+        selections: dict[str, list[Any]],
+        patch_steps: dict[str, list[list[Any]]] | None = None,
     ) -> bool:
+        from models.execution_plan import PatchPlan
         from workers.mod.patching_worker import ModPatchingThread
 
         logger.info("Starting multi-mod patching in background thread")
         chapter_mods = {
-            chapter_id: mods_list
+            chapter_id: steps
+            for chapter_id, steps in (patch_steps or {}).items()
+            if steps
+        } or {
+            chapter_id: [mods_list]
             for chapter_id, mods_list in selections.items()
             if isinstance(mods_list, list) and mods_list
         }
@@ -710,15 +724,27 @@ class GameLauncher(QObject):
         self.app_state.progress_bar_visible = True
         self.app_state.progress_bar_value = 0
         session_manifest_path = os.path.join(self.app_state.config_dir, "session.lock")
+        patch_plan = PatchPlan.from_runtime(chapter_mods)
+        plan_mods = [
+            mod
+            for steps in chapter_mods.values()
+            for step in steps
+            for mod in step
+        ]
         self._patching_thread = ModPatchingThread(
-            self.app_state, self.mod_service, chapter_mods, session_manifest_path, self
+            self.app_state,
+            self.mod_service,
+            patch_plan,
+            session_manifest_path,
+            self,
+            plan_mods=plan_mods,
         )
         self._patching_thread.progress_update.connect(self._on_patching_progress)
         self._patching_thread.status_update.connect(self._on_patching_status)
         self._patching_thread.warning_confirmation_needed.connect(
             self._on_patching_warning_confirmation_needed
         )
-        self._patching_thread.finished.connect(
+        self._patching_thread.result_ready.connect(
             lambda success: self._on_patching_finished(selections, success)
         )
         self.app_state.current_task = self._patching_thread
@@ -736,26 +762,33 @@ class GameLauncher(QObject):
         )
         patching_thread.confirm_warning(should_continue)
 
-    def _on_patching_finished(self, selections: dict[int, Any], success: bool):
+    def _on_patching_finished(self, selections: dict[str, Any], success: bool):
         patching_thread = self._patching_thread
         if patching_thread:
             try:
-                if patching_thread.isRunning():
+                if patching_thread.patcher:
+                    self.mod_patcher = patching_thread.patcher
+                self._retiring_patching_threads.append(patching_thread)
+                cleaned_up = False
+
+                def cleanup_patching_thread():
+                    nonlocal cleaned_up
+                    if cleaned_up:
+                        return
+                    cleaned_up = True
+                    if patching_thread.patcher:
+                        self.mod_patcher = patching_thread.patcher
+                    with contextlib.suppress(ValueError):
+                        self._retiring_patching_threads.remove(patching_thread)
+                    patching_thread.deleteLater()
+
+                patching_thread.finished.connect(cleanup_patching_thread)
+                if not patching_thread.isRunning():
+                    cleanup_patching_thread()
+                else:
                     logger.debug(
                         "Patching thread still running, will clean up via finished signal"
                     )
-                if patching_thread.patcher:
-                    self.mod_patcher = patching_thread.patcher
-                if not patching_thread.isRunning():
-                    patching_thread.deleteLater()
-                else:
-
-                    def cleanup_patching_thread():
-                        if patching_thread.patcher:
-                            self.mod_patcher = patching_thread.patcher
-                        patching_thread.deleteLater()
-
-                    patching_thread.finished.connect(cleanup_patching_thread)
             except Exception as e:
                 logger.error(f"Error cleaning up patching thread: {e}", exc_info=True)
             finally:
@@ -831,7 +864,9 @@ class GameLauncher(QObject):
         )
         thread.progress_update.connect(self._on_patching_progress)
         thread.status_update.connect(self._on_patching_status)
-        thread.finished.connect(lambda success: self._on_plugin_hook_finished(hook_args, success))
+        thread.result_ready.connect(
+            lambda success: self._on_plugin_hook_finished(hook_args, success)
+        )
         self._plugin_hook_thread = thread
         self.app_state.current_task = thread
         thread.start()
@@ -847,9 +882,7 @@ class GameLauncher(QObject):
         thread = self._plugin_hook_thread
         self._plugin_hook_thread = None
         if thread:
-            with contextlib.suppress(Exception):
-                if not thread.isRunning():
-                    thread.deleteLater()
+            retire_qthread(thread)
         selections = hook_args[0] if hook_args else {}
         needs_multi_mod = bool(hook_args[1]) if len(hook_args) > 1 else False
         if not success:
@@ -863,7 +896,7 @@ class GameLauncher(QObject):
 
     def _continue_after_patching(
         self,
-        selections: dict[int, Any],
+        selections: dict[str, Any],
         patching_success: bool,
         needs_multi_mod: bool = False,
     ):
@@ -884,7 +917,7 @@ class GameLauncher(QObject):
 
     def _finalize_launch_after_plugin_hooks(
         self,
-        selections: dict[int, Any],
+        selections: dict[str, Any],
         needs_multi_mod: bool = False,
     ) -> None:
         self._finish_background_launch_operation()
@@ -924,15 +957,6 @@ class GameLauncher(QObject):
             self._handle_launch_failure("config")
             return
         self._launch_mode = str(launch_config.get("type", "unknown"))
-        if analytics := self._analytics():
-            analytics.record_launch_started(
-                mode=self._launch_mode,
-                with_mods=has_selected_mods,
-                game=self.app_state.game_mode.game_id,
-                mod_count=len(self._launch_mod_refs),
-                mod_refs=self._launch_mod_refs,
-                via_steam=bool(self.app_state.local_config.get("launch_via_steam", False)),
-            )
         if needs_multi_mod and self.restore_window_callback:
             self.game_launch_started.emit()
         self._execute_game(launch_config)
@@ -1034,7 +1058,7 @@ class GameLauncher(QObject):
             logger.error(f"recover_previous_session: Failed: {e}", exc_info=True)
 
     def _find_and_validate_game_path(
-        self, selections: dict[int, Any] | None = None, is_initial: bool = False
+        self, selections: dict[str, Any] | None = None, is_initial: bool = False
     ):
         from services.game_detection_service import is_valid_game_path
         from utils.path_utils import autodetect_path
@@ -1111,7 +1135,7 @@ class GameLauncher(QObject):
             )
         return False
 
-    def _has_selected_mods(self, selections: dict[int, Any]) -> bool:
+    def _has_selected_mods(self, selections: dict[str, Any]) -> bool:
         return any(
             (
                 mod_data

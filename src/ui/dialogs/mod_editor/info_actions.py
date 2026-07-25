@@ -1,6 +1,7 @@
 """Info-file action helpers for the mod editor dialog."""
 
 import os
+from collections.abc import Callable
 
 from ui.dialogs.mod_editor.info_files import reset_info_file_entry
 
@@ -30,7 +31,7 @@ def reset_selected_info_file(
     entries: list[dict],
     index: int,
     *,
-    is_file: callable = os.path.isfile,
+    is_file: Callable[[str], bool] = os.path.isfile,
 ) -> tuple[list[dict], int]:
     updated = [dict(entry) for entry in entries]
     entry = updated[index]

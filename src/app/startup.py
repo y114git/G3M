@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import traceback
+from typing import Any, cast
 
 from PyQt6.QtCore import (
     QLibraryInfo,
@@ -45,8 +46,6 @@ from utils.path_utils import get_launcher_dir, resource_path
 
 logger = logging.getLogger(__name__)
 
-if platform.system() == "Windows":
-    import winreg
 _translator = QTranslator()
 SINGLE_INSTANCE_ACTIVATE = "__g3m_activate__"
 _fault_log_handle = None
@@ -110,13 +109,6 @@ def install_process_exit_logging(app_name: str) -> None:
                 handler.flush()
 
     atexit.register(_log_process_exit)
-
-
-def _safe_warning(title: str, message: str) -> None:
-    try:
-        QMessageBox.warning(None, title, message)
-    except Exception:
-        logger.exception("Failed to show startup warning dialog")
 
 
 def _safe_critical(title: str, message: str) -> None:
@@ -224,6 +216,8 @@ def register_url_protocol():
     system = platform.system()
     try:
         if system == "Windows":
+            import winreg
+
             for scheme in URL_PROTOCOL_SCHEMES:
                 key_path = f"Software\\Classes\\{scheme}"
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
@@ -394,8 +388,6 @@ def run_app(argv: list[str] | None = None) -> int:
             socket.flush()
             socket.waitForBytesWritten(1000)
         socket.disconnectFromServer()
-        if not url_arg:
-            _safe_warning(tr("errors.error"), tr("errors.single_instance_error"))
         return 0
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     initial_external_game_process = (
@@ -422,7 +414,7 @@ def run_app(argv: list[str] | None = None) -> int:
         window_factory=AppWindow,
         server_factory=SingleInstanceServer,
     )
-    app._bootstrap_coordinator = coordinator
+    cast(Any, app)._bootstrap_coordinator = coordinator
     coordinator.launch()
     try:
         return app.exec()

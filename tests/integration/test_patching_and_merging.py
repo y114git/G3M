@@ -20,7 +20,73 @@ from services.g3mtool_patching_service import (
     MOD_TYPE_OVERRIDES_ONLY,
     MOD_TYPE_XDELTA,
     G3MToolPatchingService,
+    _get_patching_logger,
+    _new_g3mtool_log_path,
+    _rotate_patching_files,
 )
+
+
+def test_g3mtool_log_paths_are_process_safe(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "services.g3mtool_patching_service._get_patching_logs_dir",
+        lambda: str(tmp_path),
+    )
+
+    first = _new_g3mtool_log_path()
+    second = _new_g3mtool_log_path()
+
+    assert first != second
+    assert os.path.isfile(first)
+    assert os.path.isfile(second)
+    assert os.path.basename(first).startswith(f"g3mtool_{os.getpid()}_")
+
+
+def test_g3mtool_log_failure_does_not_block_patching(monkeypatch):
+    monkeypatch.setattr(
+        "services.g3mtool_patching_service._get_patching_logs_dir",
+        Mock(side_effect=PermissionError),
+    )
+
+    assert _new_g3mtool_log_path() is None
+
+
+def test_patching_logger_reuses_the_active_file_handler(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "services.g3mtool_patching_service.get_user_data_root",
+        lambda: str(tmp_path),
+    )
+    patching_logger = logging.getLogger("patching")
+    for handler in list(patching_logger.handlers):
+        patching_logger.removeHandler(handler)
+        handler.close()
+
+    try:
+        first = _get_patching_logger()
+        handler = first.handlers[0]
+        second = _get_patching_logger()
+
+        assert second is first
+        assert second.handlers == [handler]
+    finally:
+        for handler in list(patching_logger.handlers):
+            patching_logger.removeHandler(handler)
+            handler.close()
+
+
+def test_patching_log_rotation_tolerates_a_disappearing_file(tmp_path, monkeypatch):
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "patching.log").write_text("active", encoding="utf-8")
+    monkeypatch.setattr(
+        "services.g3mtool_patching_service.get_user_data_root",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        "services.g3mtool_patching_service.os.path.getsize",
+        Mock(side_effect=FileNotFoundError),
+    )
+
+    _rotate_patching_files()
 
 
 class TestG3MToolAdapter:
@@ -624,6 +690,47 @@ class TestModClassification:
 
         assert mod_infos == [(str(data_file), MOD_TYPE_DATAFILE, str(mod_dir))]
 
+    def test_collect_mod_infos_does_not_treat_configured_extra_xdelta_as_data_patch(
+        self, tmp_path
+    ):
+        mod_dir = tmp_path / "teto_cover"
+        (mod_dir / "mus").mkdir(parents=True)
+        extra_patch = mod_dir / "NewLyrics.xdelta"
+        extra_patch.write_bytes(b"music patch")
+        (mod_dir / "mus" / "flowerman.ogg").write_bytes(b"arrangement")
+        (mod_dir / "mod_config.json").write_text(
+            json.dumps(
+                {
+                    "id": "teto_cover",
+                    "game": "deltarune",
+                    "files": {
+                        "deltarune_5": {
+                            "extra_files": [
+                                "NewLyrics.xdelta",
+                                "mus/flowerman.ogg",
+                            ]
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        app_state = Mock(local_config={}, mods_dir=str(tmp_path))
+        mod_service = Mock()
+        mod_service.get_mod_folder_path.return_value = str(mod_dir)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        mod_data = SimpleNamespace(
+            id="teto_cover",
+            name="Teto Vocal Cover",
+            game="deltarune",
+        )
+
+        mod_infos = patcher._collect_mod_infos([mod_data], "deltarune_5")
+
+        assert mod_infos == [
+            (None, MOD_TYPE_OVERRIDES_ONLY, str(mod_dir)),
+        ]
+
     def test_get_mod_source_dir_uses_configured_root_files_when_chapter_folder_missing(
         self, tmp_path
     ):
@@ -810,6 +917,18 @@ class TestServiceInitialization:
 
         assert patcher._request_warning("warning text") is True
         patcher.warning_handler.assert_not_called()
+
+    def test_strict_warning_handler_ignores_user_suppression(self):
+        app_state = Mock()
+        app_state.local_config = {"skip_patching_warnings": True}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher.strict_warning_handler = Mock(return_value=False)
+
+        assert patcher._request_warning("warning text", details="tool output") is False
+        event, details, report_path = patcher.strict_warning_handler.call_args.args
+        assert event.fallback_message == "warning text"
+        assert details == "tool output"
+        assert report_path is None
 
     def test_g3mpatch_newer_tool_version_warning_can_abort(self):
         """Checks that newer G3MTool patches can be rejected by the user."""
@@ -1005,8 +1124,8 @@ class TestXdeltaPatchApplication:
 class TestCsxPatchApplication:
     """Tests for csx patch execution."""
 
-    def test_csx_patch_uses_execute_with_data_file(self, tmp_path):
-        """Checks that csx execution writes a patched output file."""
+    def test_csx_patch_uses_universal_patch_apply(self, tmp_path):
+        """Checks that G3M delegates CSX materialization to G3MTool."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -1016,15 +1135,15 @@ class TestCsxPatchApplication:
         data_win_path.write_bytes(b"ORIGINAL")
         patch_file.write_text("// script", encoding="utf-8")
 
-        def _execute(target, args=None, data_file=None, output_path=None, input_path=None):
-            assert target == str(patch_file)
-            assert data_file == str(data_win_path)
-            assert output_path == str(output_path_arg)
-            Path(output_path).write_bytes(b"PATCHED")
+        def _apply(original, patch, output, **_kwargs):
+            assert original == str(data_win_path)
+            assert patch == str(patch_file)
+            assert output == str(output_path_arg)
+            Path(output).write_bytes(b"PATCHED")
             return (0, "", "")
 
         output_path_arg = output_path
-        patcher.g3mtool.execute = Mock(side_effect=_execute)
+        patcher.g3mtool.apply_patch = Mock(side_effect=_apply)
 
         result = patcher._apply_single_mod(
             str(data_win_path),
@@ -1038,7 +1157,7 @@ class TestCsxPatchApplication:
 
         assert result is True
         assert output_path.read_bytes() == b"PATCHED"
-        patcher.g3mtool.execute.assert_called_once()
+        patcher.g3mtool.apply_patch.assert_called_once()
 
     def test_csx_missing_output_uses_warning_fallback(self, tmp_path):
         """Checks that csx missing output uses warning fallback."""
@@ -1050,7 +1169,7 @@ class TestCsxPatchApplication:
         output_path = tmp_path / "patched_data.win"
         data_win_path.write_bytes(b"ORIGINAL")
         patch_file.write_text("// script", encoding="utf-8")
-        patcher.g3mtool.execute = Mock(return_value=(0, "", ""))
+        patcher.g3mtool.apply_patch = Mock(return_value=(0, "", ""))
         patcher.warning_handler = Mock(return_value=True)
 
         result = patcher._apply_single_mod(
@@ -1313,14 +1432,14 @@ class TestG3MPatchProgressText:
             "Chapter 1",
         )
         assert any(
-            "status.patching_chapter" in message for message in progress_messages
+            "status.patching_section" in message for message in progress_messages
         )
         assert all(
             "status.merging_patches" not in message for message in progress_messages
         )
 
-    def test_multi_patch_passes_raw_inputs_directly_to_merge(self, tmp_path):
-        """Checks that multi merge forwards xdelta/datafile inputs directly to G3MTool."""
+    def test_multi_patch_passes_raw_inputs_to_g3mtool_in_priority_order(self, tmp_path):
+        """Checks that G3MTool owns mixed-input normalization and merge."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -1360,14 +1479,151 @@ class TestG3MPatchProgressText:
 
         assert out.read_text(encoding="utf-8") == "merged"
         assert len(captured["patches"]) == 3
-        assert captured["patches"][0] == "raw_patch.xdelta"
-        assert captured["patches"][1] == str(replacement)
-        assert captured["patches"][2] == "already.g3mpatch"
-        assert not getattr(patcher.g3mtool.xpatch_apply, "called", False)
-        assert not getattr(patcher.g3mtool.patch_create, "called", False)
+        assert captured["patches"] == [
+            "raw_patch.xdelta",
+            str(replacement),
+            "already.g3mpatch",
+        ]
 
-    def test_multi_patch_direct_merge_reports_progress(self, tmp_path):
-        """Checks that direct merge progress advances chapter progress across the merge window."""
+    def test_data_steps_use_previous_step_output_as_next_base(self, tmp_path):
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher._temp_dir = str(tmp_path)
+        original = tmp_path / "data.win"
+        original.write_text("original", encoding="utf-8")
+        final = tmp_path / "final.win"
+        calls = []
+
+        def apply_single(base, mod_info, output, *_args):
+            calls.append((Path(base).name, mod_info[0]))
+            Path(output).write_text(f"{Path(base).read_text()}+{mod_info[0]}", encoding="utf-8")
+            return True
+
+        patcher._apply_single_mod = Mock(side_effect=apply_single)
+
+        assert patcher._apply_data_steps(
+            str(original),
+            [
+                [("main.g3mpatch", MOD_TYPE_G3MPATCH, "main")],
+                [("addon.xdelta", MOD_TYPE_XDELTA, "addon")],
+            ],
+            str(final),
+            str(tmp_path / "g3mtool.log"),
+            "chapter1",
+            0,
+            100,
+            "Chapter 1",
+        )
+        assert calls == [
+            ("data.win", "main.g3mpatch"),
+            ("step_chapter1_1.win", "addon.xdelta"),
+        ]
+        assert final.read_text(encoding="utf-8") == "original+main.g3mpatch+addon.xdelta"
+
+    def test_data_step_reverses_highest_first_ui_order_for_g3mtool(self, tmp_path):
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        patcher._temp_dir = str(tmp_path)
+        original = tmp_path / "data.win"
+        original.write_text("original", encoding="utf-8")
+        final = tmp_path / "final.win"
+
+        def apply_multi(_base, infos, output, *_args):
+            Path(output).write_text("merged", encoding="utf-8")
+            assert [info[0] for info in infos] == ["low.g3mpatch", "high.g3mpatch"]
+            assert _args[2:4] == (18, 76)
+            return True
+
+        patcher._apply_multi_mod = Mock(side_effect=apply_multi)
+
+        assert patcher._apply_data_steps(
+            str(original),
+            [[
+                ("high.g3mpatch", MOD_TYPE_G3MPATCH, "high"),
+                ("low.g3mpatch", MOD_TYPE_G3MPATCH, "low"),
+            ]],
+            str(final),
+            str(tmp_path / "g3mtool.log"),
+            "chapter1",
+            0,
+            100,
+            "Chapter 1",
+        )
+        patcher._apply_multi_mod.assert_called_once()
+
+    def test_empty_configured_extra_files_do_not_enable_legacy_folder_copy(
+        self, tmp_path, monkeypatch
+    ):
+        app_state = Mock()
+        app_state.local_config = {}
+        mod_service = Mock()
+        source = tmp_path / "mod"
+        source.mkdir()
+        (source / "unconfigured.png").write_bytes(b"no")
+        target = tmp_path / "game"
+        target.mkdir()
+        mod = Mock()
+        mod_service.get_mod_folder_path.return_value = str(source)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        patcher.backup_service = Mock()
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.has_mod_configured_chapter_entry",
+            lambda *_args: True,
+        )
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.get_mod_configured_extra_files",
+            lambda *_args: [],
+        )
+
+        assert patcher._apply_ordered_file_overrides(
+            [(mod, str(source))], str(target), "chapter", False, 0, 100
+        )
+        assert not (target / "unconfigured.png").exists()
+
+    def test_configured_frickbears3_addon_keeps_game_icon(
+        self, tmp_path, monkeypatch
+    ):
+        app_state = Mock()
+        app_state.local_config = {}
+        mod_service = Mock()
+        source = tmp_path / "mod"
+        guard = source / "addons" / "Wario"
+        guard.mkdir(parents=True)
+        (guard / "extras_info.txt").write_text(
+            '{"FULL_NAME":"Wario"}', encoding="utf-8"
+        )
+        (guard / "icon.png").write_bytes(b"guard icon")
+        (source / "_icon.png").write_bytes(b"manager icon")
+        target = tmp_path / "game"
+        target.mkdir()
+        localappdata = tmp_path / "localappdata"
+        monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+        mod = Mock()
+        mod_service.get_mod_folder_path.return_value = str(source)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        patcher.backup_service = Mock()
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.has_mod_configured_chapter_entry",
+            lambda *_args: True,
+        )
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.get_mod_configured_extra_files",
+            lambda *_args: ["addons/"],
+        )
+        monkeypatch.setattr(patcher, "_resolve_mod_game", lambda _mod: "frickbears3")
+
+        assert patcher._apply_ordered_file_overrides(
+            [(mod, str(source))], str(target), "frickbears3", False, 0, 100
+        )
+        installed = localappdata / "Frickbears3" / "addons" / "Wario"
+        assert (installed / "icon.png").read_bytes() == b"guard icon"
+        assert not (target / "_icon.png").exists()
+
+    def test_multi_patch_merge_reports_progress_after_normalization(self, tmp_path):
+        """Checks that merge progress follows the input-normalization window."""
         app_state = Mock()
         app_state.local_config = {}
         patcher = G3MToolPatchingService(app_state, Mock())
@@ -1378,8 +1634,6 @@ class TestG3MPatchProgressText:
 
         original = tmp_path / "data.win"
         original.write_text("original", encoding="utf-8")
-        replacement = tmp_path / "replacement.win"
-        replacement.write_text("replacement", encoding="utf-8")
         out = tmp_path / "out.win"
 
         def fake_merge_patches(_original, _patches, output, **kwargs):
@@ -1399,8 +1653,8 @@ class TestG3MPatchProgressText:
         assert patcher._apply_multi_mod(
             str(original),
             [
-                ("raw_patch.xdelta", MOD_TYPE_XDELTA, "x"),
-                (str(replacement), MOD_TYPE_DATAFILE, "y"),
+                ("first.g3mpatch", MOD_TYPE_G3MPATCH, "x"),
+                ("second.g3mpatch", MOD_TYPE_G3MPATCH, "y"),
             ],
             str(out),
             str(tmp_path / "g3mtool.log"),
@@ -1411,11 +1665,10 @@ class TestG3MPatchProgressText:
         )
 
         assert out.read_text(encoding="utf-8") == "merged"
-        assert any(0.20 < fraction < 0.35 for fraction in progress_fractions)
         assert any(0.45 < fraction < 0.60 for fraction in progress_fractions)
         assert any(0.70 <= fraction <= 0.72 for fraction in progress_fractions)
 
-    def test_patch_chapter_excludes_override_only_mods_from_merge_but_applies_them(
+    def test_patch_section_excludes_override_only_mods_from_merge_but_applies_them(
         self, monkeypatch, tmp_path
     ):
         """Checks that override-only mods are skipped for merge and still applied as file overrides."""
@@ -1484,7 +1737,7 @@ class TestG3MPatchProgressText:
             side_effect=lambda mod_data, _chapter_id: f"{mod_data}_dir"
         )
 
-        assert patcher._patch_chapter(
+        assert patcher._patch_section(
             "pizzatower",
             ["mod_a", "override_only", "mod_b"],
             is_modpack=False,
@@ -1497,11 +1750,11 @@ class TestG3MPatchProgressText:
         )
 
         assert captured["merged"] == [
-            ("mod_a.g3mpatch", MOD_TYPE_G3MPATCH, "mod_a_dir"),
             ("mod_b.xdelta", MOD_TYPE_XDELTA, "mod_b_dir"),
+            ("mod_a.g3mpatch", MOD_TYPE_G3MPATCH, "mod_a_dir"),
         ]
         assert captured["overrides"] == [
-            "mod_a_dir",
-            "override_only_dir",
             "mod_b_dir",
+            "override_only_dir",
+            "mod_a_dir",
         ]

@@ -9,6 +9,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from models.game_modes import get_game
 from models.game_version_models import GameVersionRecord
 from services.game_versions.store import GameVersionsStore
+from ui.utils.thread_lifetime import retire_qthread
 from utils.game_version_utils import (
     get_base_game_folder,
     get_protected_exe_paths_with_config,
@@ -97,7 +98,7 @@ class GameVersionsManager(QObject):
         )
         self._store.add(record)
 
-        use_patched = profile_name and chapter_mods and app_state and mod_service
+        use_patched = bool(profile_name and chapter_mods and app_state and mod_service)
         if use_patched:
             from workers.game_version_archive_worker import CreatePatchedVersionWorker
 
@@ -107,7 +108,7 @@ class GameVersionsManager(QObject):
                 protected,
                 app_state,
                 mod_service,
-                chapter_mods,
+                chapter_mods or {},
                 parent=self,
             )
         else:
@@ -121,7 +122,7 @@ class GameVersionsManager(QObject):
 
         def on_finished(*args):
             self._workers.pop(archive_path, None)
-            worker.deleteLater()
+            retire_qthread(worker)
             success, error, size_bytes, file_count = args[0], args[1], args[2], args[3]
             patching_error = args[4] if len(args) > 4 else None
             if not success:
@@ -139,7 +140,7 @@ class GameVersionsManager(QObject):
             self.record_updated.emit(record)
             self.operation_finished.emit()
 
-        worker.finished.connect(on_finished)
+        worker.result_ready.connect(on_finished)
         worker.start()
         self.record_added.emit(record)
 
@@ -169,7 +170,7 @@ class GameVersionsManager(QObject):
         def on_finished(success, error):
             self._workers.pop(archive_path, None)
             self._applying.discard(archive_path)
-            worker.deleteLater()
+            retire_qthread(worker)
             if not success:
                 if error != "cancelled":
                     self.operation_error.emit(error or "Apply version failed")
@@ -178,7 +179,7 @@ class GameVersionsManager(QObject):
             self.record_updated.emit(record)
             self.operation_finished.emit()
 
-        worker.finished.connect(on_finished)
+        worker.result_ready.connect(on_finished)
         worker.start()
 
     def delete_version(self, archive_path: str):
@@ -243,7 +244,7 @@ class GameVersionsManager(QObject):
 
         def on_finished(success, error):
             self._workers.pop(key, None)
-            worker.deleteLater()
+            retire_qthread(worker)
             if not success:
                 if error != "cancelled":
                     self.operation_error.emit(error or "Export failed")
@@ -252,7 +253,7 @@ class GameVersionsManager(QObject):
             self.record_updated.emit(record)
             self.operation_finished.emit()
 
-        worker.finished.connect(on_finished)
+        worker.result_ready.connect(on_finished)
         worker.start()
 
     def import_game_version_from_file(
@@ -276,7 +277,7 @@ class GameVersionsManager(QObject):
 
         def on_finished(success, error, manifest):
             self._workers.pop(dest_path, None)
-            worker.deleteLater()
+            retire_qthread(worker)
             try:
                 if not success:
                     self._store.remove(dest_path)
@@ -337,7 +338,7 @@ class GameVersionsManager(QObject):
                             e,
                         )
 
-        worker.finished.connect(on_finished)
+        worker.result_ready.connect(on_finished)
         worker.start()
         self.record_added.emit(record)
 
@@ -354,13 +355,13 @@ class GameVersionsManager(QObject):
 
         def on_finished(success, error):
             self._workers.pop(key, None)
-            worker.deleteLater()
+            retire_qthread(worker)
             if not success:
                 self.operation_error.emit(error or "URL download failed")
                 return
             self.import_game_version_from_file(game_id, dest, cleanup_source_path=dest)
 
-        worker.finished.connect(on_finished)
+        worker.result_ready.connect(on_finished)
         worker.start()
 
     def is_busy(self, archive_path: str) -> bool:

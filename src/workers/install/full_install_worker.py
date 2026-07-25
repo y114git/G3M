@@ -5,20 +5,21 @@ This module provides a worker thread for downloading and installing the full gam
 
 import logging
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from config.config import NETWORK_TIMEOUT_MEDIUM, UI_COLORS
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import format_size_mb
 from utils.network_utils import get_session
 
 logger = logging.getLogger(__name__)
 
 
-class FullInstallThread(QThread):
+class FullInstallThread(ManagedQThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str, str)
-    finished = pyqtSignal(bool, str)
+    result_ready = pyqtSignal(bool, str)
 
     def __init__(self, main_window, target_dir: str) -> None:
         super().__init__(main_window)
@@ -81,7 +82,7 @@ class FullInstallThread(QThread):
                 self._safe_emit(
                     self.status, tr("errors.files_not_found"), UI_COLORS["status_error"]
                 )
-                self._safe_emit(self.finished, False, self.target_dir)
+                self._safe_emit(self.result_ready, False, self.target_dir)
                 return
             self._safe_emit(
                 self.status,
@@ -126,13 +127,13 @@ class FullInstallThread(QThread):
                     self.status,
                     tr("status.operation_cancelled"), UI_COLORS["status_error"]
                 )
-                self._safe_emit(self.finished, False, self.target_dir)
+                self._safe_emit(self.result_ready, False, self.target_dir)
                 return
             self._safe_emit(
                 self.status,
                 tr("status.demo_installation_complete"), UI_COLORS["status_success"]
             )
-            self._safe_emit(self.finished, True, self.target_dir)
+            self._safe_emit(self.result_ready, True, self.target_dir)
         except Exception as e:
             logger.error(
                 f"FullInstallThread.run: installation error: {e}", exc_info=True
@@ -142,7 +143,7 @@ class FullInstallThread(QThread):
                 tr("errors.full_installation_error").format(str(e)),
                 UI_COLORS["status_error"],
             )
-            self._safe_emit(self.finished, False, self.target_dir)
+            self._safe_emit(self.result_ready, False, self.target_dir)
         finally:
             self._session = None
             self._active_response = None

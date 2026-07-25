@@ -6,9 +6,10 @@ import logging
 import os
 import shutil
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from models.plugin_models import PluginTaskRuntime
+from ui.utils.thread_lifetime import ManagedQThread
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class PluginHookThread(QThread):
+class PluginHookThread(ManagedQThread):
     """Runs a plugin hook with shared progress and cancellation support."""
 
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
-    finished = pyqtSignal(bool)
+    result_ready = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -140,4 +141,4 @@ class PluginHookThread(QThread):
             )
             success = False
         finally:
-            _safe_emit(self.__class__.__name__, self.finished, success)
+            _safe_emit(self.__class__.__name__, self.result_ready, success)

@@ -9,12 +9,14 @@ import re
 import shutil
 import subprocess
 import zipfile
+from typing import Any, cast
 
 from PyQt6 import sip
 from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontDatabase, QGuiApplication
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QMessageBox, QWidget
 
+from bootstrap.user_data_locator import write_selected_user_data_root
 from config.config import (
     APP_VERSION,
     THEME_CONFIG_FILENAME,
@@ -25,7 +27,12 @@ from config.settings_schema import (
     get_theme_color_key,
 )
 from models.game_modes import get_all_games
-from services.localization_service import LocalizationManager, localization_service, tr
+from services.localization_service import (
+    LocalizationManager,
+    add_application_font_from_file,
+    localization_service,
+    tr,
+)
 from services.migration_service import migrate_settings_payload
 from services.settings_themes import (
     apply_theme_archive,
@@ -44,7 +51,9 @@ from utils.native_integration import (
     get_save_file_name,
 )
 from utils.path_utils import (
+    get_default_user_data_root,
     get_g3mtool_cache_dir,
+    get_user_data_root,
     normalize_user_input_path,
     resolve_game_executable,
 )
@@ -117,10 +126,6 @@ class SettingsManager(QObject):
             return parent
         return None
 
-    def _analytics(self):
-        parent = self.parent_widget
-        return getattr(parent, "analytics_service", None) if parent else None
-
     def _safe_update_status(self, message: str, color: str) -> None:
         try:
             self.feedback_service.update_status(message, color)
@@ -137,10 +142,90 @@ class SettingsManager(QObject):
                 "SettingsManager: feedback message failed: %s", e, exc_info=True
             )
 
-    def _record_action(self, event: str, **dims) -> None:
-        analytics = self._analytics()
-        if analytics:
-            analytics.record_action(event, **dims)
+    def complete_user_data_root_change(self, result) -> None:
+        """Commit a prepared data-root change or report why it was not applied."""
+        if result.status == "ready":
+            try:
+                write_selected_user_data_root(
+                    get_default_user_data_root(), result.selected_path
+                )
+            except Exception as error:
+                logger.error("Failed to save data location: %s", error, exc_info=True)
+                self._safe_show_message(
+                    "error", "errors.error", tr("data_root.locator_write_failed", error=str(error))
+                )
+                return
+            self.restart_required.emit(tr("data_root.restart_required"))
+            return
+        if result.status == "cancelled":
+            return
+        error_text = (
+            tr(f"data_root.errors.{result.error_key}", **result.error_args)
+            if getattr(result, "error_key", "")
+            else result.error
+        )
+        self._safe_show_message(
+            "error",
+            "errors.error",
+            tr("data_root.change_failed", error=error_text),
+        )
+
+    def _ask_user_data_root_copy(self, destination: str) -> bool | None:
+        box = QMessageBox(self._dialog_parent())
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(tr("data_root.change_title"))
+        box.setText(tr("data_root.change_question", path=destination))
+        copy_button = box.addButton(
+            tr("data_root.copy_current"), QMessageBox.ButtonRole.AcceptRole
+        )
+        use_button = box.addButton(
+            tr("data_root.use_selected"), QMessageBox.ButtonRole.DestructiveRole
+        )
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is copy_button:
+            return True
+        if clicked is use_button:
+            return False
+        return None
+
+    def select_user_data_root(self) -> None:
+        destination = get_existing_directory(
+            self._dialog_parent(),
+            tr("data_root.select_directory"),
+            get_user_data_root(),
+        )
+        if not destination:
+            return
+        copy_data = self._ask_user_data_root_copy(destination)
+        if copy_data is not None:
+            self._start_user_data_root_change(destination, copy_data=copy_data)
+
+    def reset_user_data_root(self) -> None:
+        destination = get_default_user_data_root()
+        if os.path.normcase(os.path.abspath(destination)) == os.path.normcase(
+            os.path.abspath(get_user_data_root())
+        ):
+            return
+        copy_data = self._ask_user_data_root_copy(destination)
+        if copy_data is not None:
+            self._start_user_data_root_change(destination, copy_data=copy_data)
+
+    def _start_user_data_root_change(
+        self, destination: str, *, copy_data: bool
+    ) -> None:
+        from workers.user_data_root_worker import UserDataRootWorker
+
+        worker = getattr(self, "_user_data_root_worker", None)
+        if worker is not None and worker.isRunning():
+            return
+        worker = UserDataRootWorker(
+            get_user_data_root(), destination, copy_data=copy_data, parent=self
+        )
+        self._user_data_root_worker = worker
+        worker.completed.connect(self.complete_user_data_root_change)
+        worker.start()
 
     def read_json(self, path: str):
         from utils.file_utils import load_json
@@ -242,7 +327,7 @@ class SettingsManager(QObject):
         self.language_changed.emit(language_code)
 
     def _toggle_setting(
-        self, key: str, enabled: bool, signal: str = "settings_changed"
+        self, key: str, enabled: bool | str, signal: str | None = "settings_changed"
     ):
         self.app_state.local_config[key] = enabled
         self.write_local_config()
@@ -288,9 +373,6 @@ class SettingsManager(QObject):
     def on_toggle_show_reset_buttons(self, enabled: bool):
         self._toggle_setting("show_reset_buttons", enabled, None)
 
-    def on_toggle_analytics_opt_in(self, enabled: bool):
-        self._toggle_setting("analytics_opt_in_enabled", enabled, None)
-
     def on_toggle_disable_discord_rich_presence(self, enabled: bool):
         self._toggle_setting("disable_discord_rich_presence", enabled, None)
 
@@ -314,7 +396,6 @@ class SettingsManager(QObject):
             "dialogs.clear_g3mtool_cache_confirm_title",
             "dialogs.clear_g3mtool_cache_confirm_text",
         ):
-            self._record_action("g3mtool_cache_clear_cancelled")
             return False
         cache_dir = get_g3mtool_cache_dir()
         try:
@@ -330,11 +411,9 @@ class SettingsManager(QObject):
                 "dialogs.success",
                 tr("status.g3mtool_cache_cleared"),
             )
-            self._record_action("g3mtool_cache_cleared")
             return True
         except Exception as e:
             logger.error("Failed to clear G3MTool cache: %s", e, exc_info=True)
-            self._record_action("g3mtool_cache_clear_failed")
             self._safe_show_message(
                 "error",
                 "errors.error",
@@ -348,7 +427,6 @@ class SettingsManager(QObject):
         )
         if filepath:
             self._toggle_setting("portproton_path", filepath)
-            self._record_action("setting_path_selected", setting="portproton_path")
             return filepath
         return None
 
@@ -469,20 +547,12 @@ class SettingsManager(QObject):
                         corrected_path = candidate
                         break
             if not self.validate_selected_game_path(corrected_path, game):
-                self._record_action(
-                    "game_path_rejected",
-                    game=getattr(game, "game_id", "unknown"),
-                )
                 self.show_invalid_game_path_warning(corrected_path, game)
                 return False
             self.app_state.game_mode.set_game_path(
                 self.app_state.local_config, corrected_path
             )
             self.write_local_config()
-            self._record_action(
-                "game_path_set",
-                game=getattr(game, "game_id", "unknown"),
-            )
             self._safe_update_status(
                 tr("status.game_path_set", path=corrected_path),
                 UI_COLORS["status_success"],
@@ -495,7 +565,6 @@ class SettingsManager(QObject):
         if self.app_state.local_config.get("custom_background_path"):
             self._remove_custom_background_file()
             self.app_state.local_config["custom_background_path"] = ""
-            self._record_action("background_removed")
         else:
             filepath, _ = get_open_file_name(
                 self._dialog_parent(),
@@ -509,7 +578,6 @@ class SettingsManager(QObject):
                 os.makedirs(self.app_state.config_dir, exist_ok=True)
                 ext = os.path.splitext(filepath)[1].lower()
                 if ext not in self._IMAGE_EXTENSIONS:
-                    self._record_action("background_rejected", reason="invalid_format")
                     self._safe_show_message(
                         "warning", "errors.error", tr("errors.invalid_image_format")
                     )
@@ -518,7 +586,6 @@ class SettingsManager(QObject):
                 dest = os.path.join(self.app_state.config_dir, f"custom_background{ext}")
                 shutil.copy2(filepath, dest)
                 self.app_state.local_config["custom_background_path"] = dest
-                self._record_action("background_set", ext=ext.lstrip("."))
             except Exception as e:
                 friendly_error = self._describe_fs_error(e, filepath)
                 logger.error(
@@ -527,7 +594,6 @@ class SettingsManager(QObject):
                     e,
                     exc_info=True,
                 )
-                self._record_action("background_set_failed")
                 self._safe_show_message(
                     "warning", "errors.error", friendly_error
                 )
@@ -733,10 +799,9 @@ class SettingsManager(QObject):
         if cs and cs.get_custom_font_path():
             try:
                 self._remove_font_files()
-                if hasattr(self.parent_widget, "custom_font_family"):
-                    self.parent_widget.custom_font_family = (
-                        self.lang_service.load_font()
-                    )
+                parent = cast(Any, self.parent_widget)
+                if parent is not None and hasattr(parent, "custom_font_family"):
+                    parent.custom_font_family = self.lang_service.load_font()
                 self._update_font_button_text()
                 self.theme_changed.emit()
             except Exception as e:
@@ -784,7 +849,7 @@ class SettingsManager(QObject):
                 if old_id is not None and old_id != -1:
                     QFontDatabase.removeApplicationFont(old_id)
 
-                font_id = QFontDatabase.addApplicationFont(target_path)
+                font_id = add_application_font_from_file(target_path)
                 if font_id == -1:
                     logger.error(f"Failed to load font from {target_path}")
                     self._safe_show_message(
@@ -849,7 +914,7 @@ class SettingsManager(QObject):
             self.theme_changed.emit()
 
     def build_theme_export_settings(self) -> dict:
-        settings = {"config_version": THEME_CONFIG_VERSION}
+        settings: dict[str, Any] = {"config_version": THEME_CONFIG_VERSION}
         settings.update(
             {
                 key: self.app_state.local_config.get(key, "")
@@ -902,10 +967,8 @@ class SettingsManager(QObject):
             f"{tr('file_descriptions.theme_files')} (*.zip)",
         )
         if not theme_file_path:
-            self._record_action("theme_export_cancelled")
             return
         self.write_theme_archive(theme_file_path)
-        self._record_action("theme_exported")
         self._safe_show_message(
             "info", "dialogs.success", tr("dialogs.theme_exported_success")
         )
@@ -929,7 +992,6 @@ class SettingsManager(QObject):
             if not theme_archive_contains_config(theme_file_path):
                 raise ValueError
         except Exception:
-            self._record_action("theme_import_rejected", reason="invalid_archive")
             self._safe_show_message(
                 "error", "dialogs.error", tr("dialogs.theme_invalid_archive")
             )
@@ -949,18 +1011,17 @@ class SettingsManager(QObject):
             self.write_local_config()
             self.theme_changed.emit()
             self.settings_changed.emit()
-            self._record_action("theme_imported")
             self._safe_show_message(
                 "info", "dialogs.success", tr("dialogs.theme_imported_success")
             )
         except Exception as e:
-            self._record_action("theme_import_failed")
+            error_path = getattr(e, "filename", None) or theme_file_path
             self._safe_show_message(
                 "error",
                 "dialogs.error",
                 tr(
                     "dialogs.theme_import_failed",
-                    error=format_filesystem_error(e, path=theme_file_path),
+                    error=format_filesystem_error(e, path=error_path),
                 ),
             )
 
@@ -977,7 +1038,7 @@ class SettingsManager(QObject):
             worker.progress.connect(
                 lambda p: setattr(self.app_state, "progress_bar_value", p)
             )
-            worker.finished.connect(self._on_theme_install_finished)
+            worker.result_ready.connect(self._on_theme_install_finished)
             self.app_state.is_installing = True
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
@@ -987,7 +1048,6 @@ class SettingsManager(QObject):
             logger.error(
                 f"SettingsManager: Error installing theme from URL: {e}", exc_info=True
             )
-            self._record_action("theme_url_install_failed")
             self._safe_show_message(
                 "error",
                 "errors.error",
@@ -1002,12 +1062,10 @@ class SettingsManager(QObject):
         if success:
             self.theme_changed.emit()
             self.settings_changed.emit()
-            self._record_action("theme_url_installed")
             self._safe_update_status(message, "green")
             self._safe_show_message("info", "dialogs.success", message)
         else:
             logger.warning(f"Theme installation failed: {message}")
-            self._record_action("theme_url_install_failed")
             self._safe_update_status(message or tr("errors.error"), "red")
             self._safe_show_message("error", "errors.error", message)
 
@@ -1039,17 +1097,16 @@ class SettingsManager(QObject):
                 self._remove_logo_files()
             elif action == "font":
                 self._remove_font_files()
-                if hasattr(self.parent_widget, "_custom_font_id"):
-                    old_id = self.parent_widget._custom_font_id
+                parent = cast(Any, self.parent_widget)
+                if parent is not None and hasattr(parent, "_custom_font_id"):
+                    old_id = parent._custom_font_id
                     if old_id is not None and old_id != -1:
                         from PyQt6.QtGui import QFontDatabase
 
                         QFontDatabase.removeApplicationFont(old_id)
-                    self.parent_widget._custom_font_id = None
-                if hasattr(self.parent_widget, "custom_font_family"):
-                    self.parent_widget.custom_font_family = (
-                        self.lang_service.load_font()
-                    )
+                    parent._custom_font_id = None
+                if parent is not None and hasattr(parent, "custom_font_family"):
+                    parent.custom_font_family = self.lang_service.load_font()
                 self._update_font_button_text()
             elif action == "game_paths":
                 for game in get_all_games():
@@ -1184,7 +1241,9 @@ class SettingsManager(QObject):
         self._geometry_save_timer.start(timeout_ms)
 
     def _save_scheduled_geometry(self) -> None:
-        self.save_window_geometry(getattr(self, "_geometry_save_widget", None))
+        widget = getattr(self, "_geometry_save_widget", None)
+        if widget is not None:
+            self.save_window_geometry(widget)
         self._geometry_save_widget = None
 
     def lock_window_size(self, widget: QWidget):

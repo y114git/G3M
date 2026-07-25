@@ -8,7 +8,7 @@ import json
 import logging
 import threading
 import time
-from typing import override
+from typing import Any, cast, override
 
 from PyQt6 import sip as _sip
 from PyQt6.QtCore import Qt, QThread, QThreadPool, QTimer, pyqtSignal
@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QMenu,
     QPushButton,
     QScrollArea,
@@ -237,27 +236,31 @@ class LoadModDetailsThread(QThread):
 
 class ScreenshotViewerDialog(QDialog):
     class _ScreenshotContextMenu(QMenu):
-        def mousePressEvent(self, event):
+        def mousePressEvent(self, a0):
+            event = cast(Any, a0)
             if event.button() == Qt.MouseButton.RightButton:
                 self.close()
                 return
             super().mousePressEvent(event)
 
-        def mouseReleaseEvent(self, event):  # noqa: N802
+        def mouseReleaseEvent(self, a0):  # noqa: N802
+            event = cast(Any, a0)
             if event.button() == Qt.MouseButton.RightButton:
                 self.close()
                 return
             super().mouseReleaseEvent(event)
 
-        def contextMenuEvent(self, event):  # noqa: N802
+        def contextMenuEvent(self, a0):  # noqa: N802
+            event = cast(Any, a0)
             event.ignore()
 
     def __init__(self, urls, index=0, parent=None) -> None:
         super().__init__(parent)
         self._urls = urls
         self._index = index
-        self._loader = QThreadPool.globalInstance()
-        self._label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
+        self._loader = cast(QThreadPool, QThreadPool.globalInstance())
+        self._label = QLabel()
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._prev = QPushButton("←")
         self._next = QPushButton("→")
         self._label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -280,6 +283,10 @@ class ScreenshotViewerDialog(QDialog):
         signals = WorkerSignals()
         signals.result.connect(self._set_image)
         self._loader.start(ImageLoaderRunnable(self._urls[self._index], signals))
+
+    def relocalize_ui(self) -> None:
+        if not self._urls:
+            self._label.setText(tr("ui.no_screenshots"))
 
     def _set_image(self, qimg):
         pm = QPixmap.fromImage(qimg)
@@ -304,19 +311,19 @@ class ScreenshotViewerDialog(QDialog):
         menu.addAction(tr("ui.open_image_in_browser"), lambda: open_url_native(url))
         menu.addAction(
             tr("ui.copy_image"),
-            lambda: QGuiApplication.clipboard().setPixmap(
+            lambda: cast(Any, QGuiApplication.clipboard()).setPixmap(
                 self._label.pixmap() or QPixmap()
             ),
         )
         menu.addAction(
             tr("ui.copy_image_url"),
-            lambda: QGuiApplication.clipboard().setText(url),
+            lambda: cast(Any, QGuiApplication.clipboard()).setText(url),
         )
-        parent_colors = getattr(self.parent(), '_colors', None) or {}
-        elements_bg = parent_colors.get('elements', '#2b2b2b')
-        main_text = parent_colors.get('main_text', '#f0f0f0')
-        border = parent_colors.get('border', '#19c37d')
-        hover = parent_colors.get('hover', '#3d3d3d')
+        parent_colors = getattr(self.parent(), "_colors", None) or {}
+        elements_bg = parent_colors.get("elements", "#2b2b2b")
+        main_text = parent_colors.get("main_text", "#f0f0f0")
+        border = parent_colors.get("border", "#19c37d")
+        hover = parent_colors.get("hover", "#3d3d3d")
         menu.setStyleSheet(
             f"""
             QMenu {{
@@ -371,8 +378,8 @@ class ModDetailsOverlay(QWidget):
 
     def __init__(self, parent=None, mod_data=None, source_card=None) -> None:
         super().__init__(parent)
-        self.mod_data = mod_data
-        self.source_card = source_card
+        self.mod_data: Any = mod_data
+        self.source_card: Any = source_card
         self.dialog_closed = False
         self.load_thread = None
         self._ss_urls = []
@@ -382,16 +389,19 @@ class ModDetailsOverlay(QWidget):
         self._ss_index = 0
         self._description_html = ""
         self._last_description_width = 0
-        self._thread_pool = QThreadPool.globalInstance()
+        self._thread_pool = cast(QThreadPool, QThreadPool.globalInstance())
         self._original_resize_event = None
         self._last_geometry = None
         self._cleanup_started = False
+        self._prev_btn = QPushButton()
+        self._next_btn = QPushButton()
+        self._fade_anim: Any = None
         self.hide()
         self._setup_ui()
-        self.main_window = self._get_main_window()
+        self.main_window: Any = self._get_main_window()
         if self.main_window and hasattr(self.main_window, "resizeEvent"):
             self._original_resize_event = self.main_window.resizeEvent
-            self.main_window.resizeEvent = self._on_main_window_resize
+            cast(Any, self.main_window).resizeEvent = self._on_main_window_resize
 
     def _get_main_window(self):
         window = self.parent()
@@ -418,7 +428,7 @@ class ModDetailsOverlay(QWidget):
         self._border_radius = get_border_radius(local_cfg)
 
     @staticmethod
-    def _layout(layout_cls, parent=None, margins=None, spacing=None) -> QLayout:
+    def _layout(layout_cls, parent=None, margins=None, spacing=None) -> Any:
         layout = layout_cls(parent) if parent is not None else layout_cls()
         if margins is not None:
             layout.setContentsMargins(*margins)
@@ -701,7 +711,7 @@ class ModDetailsOverlay(QWidget):
             "other": tr("tags.other"),
         }
         return ", ".join(
-            tag_map.get(tag, tag)
+            tag_map.get(tag) or str(tag)
             for tag in (tags if isinstance(tags, list) else [tags])
             if tag
         )
@@ -714,7 +724,7 @@ class ModDetailsOverlay(QWidget):
         self._img_label.setFixedSize(self.IMG_W, self.IMG_H)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._img_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._img_label.mousePressEvent = self._on_screenshot_click
+        cast(Any, self._img_label).mousePressEvent = self._on_screenshot_click
         self._install_image_container_style(img_container)
         carousel.addWidget(img_container, 0, Qt.AlignmentFlag.AlignHCenter)
         nav = self._layout(QHBoxLayout, margins=(0, 0, 0, 0), spacing=4)
@@ -775,6 +785,7 @@ class ModDetailsOverlay(QWidget):
         ):
             if value:
                 label = QLabel(self._meta_row_html(key, value))
+                label.setProperty("metaValue", str(value))
                 label.setWordWrap(key == "ui.tags_label")
                 label.setTextInteractionFlags(
                     Qt.TextInteractionFlag.TextSelectableByMouse
@@ -790,25 +801,27 @@ class ModDetailsOverlay(QWidget):
                 | Qt.TextInteractionFlag.TextSelectableByKeyboard
             )
             self._meta_labels["ui.tags_label"] = label
+            label.setProperty("translatedTags", True)
             meta.addWidget(label)
         return meta
 
     def _build_left_column(self):
         left = self._layout(QVBoxLayout, margins=(0, 0, 0, 0), spacing=15)
         if homepage := getattr(self.mod_data, "homepage", None):
-            left.addWidget(
-                self._create_button(
-                    tr("ui.view_homepage"),
-                    obj_name="cardButtonExternal",
-                    style=self._button_style(
-                        "cardButtonExternal",
-                        text_color="#FFD700",
-                        width=self.EXTERNAL_BUTTON_WIDTH,
-                        font_size=15,
-                    ),
-                    clicked=lambda: open_url_native(homepage),
-                    fixed_width=self.EXTERNAL_BUTTON_WIDTH,
+            self.homepage_button = self._create_button(
+                tr("ui.view_homepage"),
+                obj_name="cardButtonExternal",
+                style=self._button_style(
+                    "cardButtonExternal",
+                    text_color="#FFD700",
+                    width=self.EXTERNAL_BUTTON_WIDTH,
+                    font_size=15,
                 ),
+                clicked=lambda: open_url_native(homepage),
+                fixed_width=self.EXTERNAL_BUTTON_WIDTH,
+            )
+            left.addWidget(
+                self.homepage_button,
                 0,
                 Qt.AlignmentFlag.AlignCenter,
             )
@@ -852,16 +865,14 @@ class ModDetailsOverlay(QWidget):
                 self._sync_timer.timeout.connect(self._sync_button_from_card)
                 self._sync_timer.start(250)
             except Exception as e:
-                logger.debug(
-                    f"QTimer setup failed for _sync_timer: {e}", exc_info=True
-                )
+                logger.debug(f"QTimer setup failed for _sync_timer: {e}", exc_info=True)
             return
         self.action_button.setText(tr("buttons.download"))
         self.action_button.setObjectName("cardButtonDownload")
         self._set_action_button_style(self._colors["border"])
         if (parent_app := self.parent()) and hasattr(parent_app, "install_mod"):
             self.action_button.clicked.connect(
-                lambda: parent_app.install_mod(self.mod_data)
+                lambda: cast(Any, parent_app).install_mod(self.mod_data)
             )
 
     def _build_action_buttons(self):
@@ -870,23 +881,21 @@ class ModDetailsOverlay(QWidget):
         self.action_button = QPushButton()
         self._configure_action_button()
         buttons.addWidget(self.action_button)
-        buttons.addWidget(
-            self._create_button(
-                tr("buttons.close"),
-                obj_name="cardButtonClose",
-                style=self._button_style("cardButtonClose"),
-                clicked=self.close_overlay,
-            )
+        self.close_button = self._create_button(
+            tr("buttons.close"),
+            obj_name="cardButtonClose",
+            style=self._button_style("cardButtonClose"),
+            clicked=self.close_overlay,
         )
+        buttons.addWidget(self.close_button)
         return buttons
 
     def _build_right_column(self):
         right = self._layout(QVBoxLayout, spacing=15)
-        right.addWidget(
-            self._html_label(
-                f"<b style='color:{self._colors['main_text']};'>{tr('ui.full_description_label')}</b>"
-            )
+        self.full_description_label = self._html_label(
+            f"<b style='color:{self._colors['main_text']};'>{tr('ui.full_description_label')}</b>"
         )
+        right.addWidget(self.full_description_label)
         self.desc_text = QTextBrowser()
         self.desc_text.setMinimumHeight(400)
         self.desc_text.setOpenExternalLinks(True)
@@ -915,6 +924,24 @@ class ModDetailsOverlay(QWidget):
         )
         container.setLayout(right)
         return container
+
+    def relocalize_ui(self) -> None:
+        """Refresh G3M-owned labels while preserving remote mod content."""
+        if hasattr(self, "homepage_button"):
+            self.homepage_button.setText(tr("ui.view_homepage"))
+        self.close_button.setText(tr("buttons.close"))
+        self.full_description_label.setText(
+            f"<b style='color:{self._colors['main_text']};'>{tr('ui.full_description_label')}</b>"
+        )
+        for key, label in self._meta_labels.items():
+            value = (
+                self._translated_tags()
+                if label.property("translatedTags")
+                else label.property("metaValue")
+            )
+            label.setText(self._meta_row_html(key, str(value or "")))
+        if not self.source_card:
+            self.action_button.setText(tr("buttons.download"))
 
     def _show_loading_description(self):
         self._set_description_message(tr("status.loading_description"))
@@ -1243,7 +1270,7 @@ class ModDetailsOverlay(QWidget):
             self.hide()
             self.deleteLater()
 
-        if hasattr(self, "_fade_anim") and self._fade_anim:
+        if self._fade_anim:
             with contextlib.suppress(TypeError, RuntimeError):
                 self._fade_anim.finished.disconnect()
 
@@ -1253,7 +1280,8 @@ class ModDetailsOverlay(QWidget):
         else:
             cleanup()
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, a0):
+        event = cast(Any, a0)
         with contextlib.suppress(RuntimeError, AttributeError):
             if event.key() == Qt.Key.Key_Escape:
                 self.close_overlay()
@@ -1262,7 +1290,8 @@ class ModDetailsOverlay(QWidget):
         with contextlib.suppress(RuntimeError, AttributeError):
             super().keyPressEvent(event)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, a0):
+        event = cast(Any, a0)
         with contextlib.suppress(RuntimeError, AttributeError):
             if not self.childAt(event.pos()):
                 self.close_overlay()
@@ -1279,7 +1308,8 @@ class ModDetailsOverlay(QWidget):
             with contextlib.suppress(RuntimeError, AttributeError):
                 self._original_resize_event(event)
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, a0):
+        event = cast(Any, a0)
         super().resizeEvent(event)
         self._last_geometry = (self.x(), self.y(), self.width(), self.height())
         self._update_ss_nav()
@@ -1309,7 +1339,7 @@ class ModDetailsOverlay(QWidget):
             return
         try:
             viewport_width = (
-                self.desc_text.viewport().width()
+                cast(Any, self.desc_text.viewport()).width()
                 if self.desc_text.viewport()
                 else self.desc_text.width()
             )
@@ -1428,7 +1458,7 @@ class ModDetailsOverlay(QWidget):
         """Restores the original resizeEvent of the main window."""
         if self.main_window and self._original_resize_event:
             try:
-                self.main_window.resizeEvent = self._original_resize_event
+                cast(Any, self.main_window).resizeEvent = self._original_resize_event
                 self._original_resize_event = None
             except (RuntimeError, AttributeError) as e:
                 logger.debug(f"Failed to restore main window resize event: {e}")
@@ -1442,10 +1472,8 @@ class ModDetailsOverlay(QWidget):
                 thread.quit()
                 if not thread.wait(5000):
                     logger.debug(
-                        f"{thread.__class__.__name__}: Thread did not stop within 5s, terminating"
+                        f"{thread.__class__.__name__}: Thread did not stop within 5s; deferring cleanup"
                     )
-                    thread.terminate()
-                    thread.wait(50)
             if thread.isFinished():
                 thread.deleteLater()
             else:
@@ -1490,7 +1518,8 @@ class ModDetailsOverlay(QWidget):
         self._cleanup_before_delete()
         super().deleteLater()
 
-    def closeEvent(self, event):
+    def closeEvent(self, a0):
+        event = cast(Any, a0)
         self._cleanup_before_delete()
         super().closeEvent(event)
 

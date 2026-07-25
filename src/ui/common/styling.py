@@ -1014,7 +1014,7 @@ def round_pixmap(pixmap, radius, border_width=0, border_color=None):
 def load_mod_icon_universal(
     icon_label,
     mod_data,
-    size=80,
+    size: int | tuple[int, int] = 80,
     local_fallback=None,
     border_radius=0,
     border_width=0,
@@ -1180,7 +1180,7 @@ def load_mod_icon_universal(
                 from workers import WorkerSignals
 
                 pool = QThreadPool.globalInstance()
-                signals = WorkerSignals(icon_label)
+                signals = WorkerSignals()
                 label_ref = weakref.ref(icon_label)
 
                 def _on_loaded_image(img):

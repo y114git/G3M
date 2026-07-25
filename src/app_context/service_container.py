@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from services.analytics_service import AnalyticsService
 from services.announce_service import AnnounceService
 from services.customization_service import CustomizationManager
 from services.discord_rich_presence_service import DiscordRichPresenceService
@@ -29,7 +28,6 @@ from ui.common.feedback import FeedbackManager
 class ServiceContainer:
     feedback_service: FeedbackManager
     settings_service: SettingsManager
-    analytics_service: AnalyticsService
     discord_rich_presence_service: DiscordRichPresenceService
     announce_service: AnnounceService
     game_registry_service: GameRegistryService

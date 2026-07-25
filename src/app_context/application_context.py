@@ -10,7 +10,6 @@ from typing import Any
 from adapters.gamebanana_adapter import GameBananaAPI
 from app_context.service_container import ServiceContainer
 from models.app_state import AppState
-from services.analytics_service import AnalyticsService
 from services.announce_service import AnnounceService
 from services.customization_service import CustomizationManager
 from services.discord_rich_presence_service import DiscordRichPresenceService
@@ -70,7 +69,6 @@ class ApplicationContext:
         window.presence_thread = self.session_manager.thread
         window.presence_worker = self.session_manager.worker
         window._online_timer = self.session_manager.timer
-        self.services.analytics_service.attach_window(window)
 
     def update_qt_locale(self, language_code: str) -> None:
         localization_service.update_qt_locale(
@@ -112,7 +110,6 @@ def build_application_context(parent=None) -> ApplicationContext:
     profile_service.initialize()
     settings_service.profile_service = profile_service
     session_manager = SessionManager(app_state, parent=parent)
-    analytics_service = AnalyticsService(app_state, parent)
     discord_rich_presence_service = DiscordRichPresenceService(
         app_state,
         used_mods_service=None,
@@ -178,7 +175,6 @@ def build_application_context(parent=None) -> ApplicationContext:
     services = ServiceContainer(
         feedback_service=feedback_service,
         settings_service=settings_service,
-        analytics_service=analytics_service,
         discord_rich_presence_service=discord_rich_presence_service,
         announce_service=announce_service,
         game_registry_service=game_registry_service,

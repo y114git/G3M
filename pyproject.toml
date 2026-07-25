@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "G3M"
-version = "3.2.1"
+version = "3.3.0"
 description = "G3M - GameMaker Mod Manager"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -116,6 +116,21 @@ ignore = [
     "ANN201", # missing return type annotation for public function
     "ANN202", # missing return type annotation for private function
 ]
+"tools/**/*.py" = [
+    "S112", # inspection tools intentionally skip unreadable inputs
+    "T201", # command-line tools write their reports to stdout
+]
+
+[tool.pyright]
+include = ["src", "tools"]
+exclude = [".venv", "build", "dist", "tests"]
+pythonVersion = "3.14"
+typeCheckingMode = "basic"
+# PyQt's generated stubs cannot model dynamic QObject attributes and expose
+# override parameter names such as a0/a1 that are irrelevant at runtime.
+reportAttributeAccessIssue = false
+reportIncompatibleMethodOverride = false
+reportOptionalMemberAccess = false
 
 [tool.ruff.format]
 quote-style = "double"

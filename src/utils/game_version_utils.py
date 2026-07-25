@@ -1,9 +1,12 @@
 """Helpers for Game Versions: base game folder, protected exe, safe archive naming."""
 
+import logging
 import os
 import re
 
 from config.config import CURRENT_PLATFORM
+
+logger = logging.getLogger(__name__)
 
 _SAFE_RE = re.compile(r"[^\w\-. ]+")
 
@@ -51,7 +54,7 @@ def get_protected_exe_paths_with_config(
             if not rel.startswith(".."):
                 protected.add(rel.replace("\\", "/"))
         except ValueError:
-            pass
+            logger.debug("Executable is on a different filesystem", exc_info=True)
     if game_def and local_config:
         custom_key = game_def.get_custom_exec_config_key()
         custom_path = local_config.get(custom_key, "") if custom_key else ""
@@ -61,7 +64,9 @@ def get_protected_exe_paths_with_config(
                 if not rel.startswith(".."):
                     protected.add(rel.replace("\\", "/"))
             except ValueError:
-                pass
+                logger.debug(
+                    "Custom executable is on a different filesystem", exc_info=True
+                )
     return protected
 
 

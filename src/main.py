@@ -8,8 +8,9 @@ import sys
 
 
 def _add_frozen_src_to_path() -> None:
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        frozen_src = os.path.join(sys._MEIPASS, "src")
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if getattr(sys, "frozen", False) and bundle_root:
+        frozen_src = os.path.join(bundle_root, "src")
         if frozen_src not in sys.path:
             sys.path.insert(0, frozen_src)
 
@@ -19,6 +20,15 @@ def _run_shortcut(argv: list[str]) -> int:
     if idx + 1 >= len(argv):
         sys.stderr.write("Error: --shortcut requires a config argument\n")
         return 2
+    try:
+        from bootstrap.user_data_bootstrap import (
+            resolve_user_data_root_with_migration,
+        )
+
+        resolve_user_data_root_with_migration(interactive=False)
+    except Exception as error:
+        sys.stderr.write(f"Error: {error}\n")
+        return 1
     from services.game_runner import run_shortcut
 
     run_shortcut(argv[idx + 1])

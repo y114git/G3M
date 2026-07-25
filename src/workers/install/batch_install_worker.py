@@ -8,7 +8,7 @@ import tempfile
 import time
 from urllib.parse import unquote, urlparse
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from config.config import (
     DATA_FILE_EXTENSIONS,
@@ -17,6 +17,7 @@ from config.config import (
     UI_COLORS,
 )
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import format_size_mb
 from utils.file_utils import get_unique_mod_dir, normalize_chapter_id
 from utils.mod.config_parser import build_mod_config_data
@@ -36,8 +37,8 @@ def is_valid_url(url: str) -> bool:
         return False
 
 
-class InstallModsThread(QThread):
-    progress, status, finished = (
+class InstallModsThread(ManagedQThread):
+    progress, status, result_ready = (
         pyqtSignal(int),
         pyqtSignal(str, str),
         pyqtSignal(bool),
@@ -172,6 +173,7 @@ class InstallModsThread(QThread):
             mod_folders = {}
             validated_files = {}
             reserved_relative_paths: dict[str, set[str]] = {}
+            skipped_missing_ids = False
 
             def reserve_relative_path(
                 mod_key: str, preferred_name: str, chapter_id: str
@@ -194,6 +196,10 @@ class InstallModsThread(QThread):
 
             for mod, chapter_id in self.install_tasks:
                 key = get_mod_id(mod)
+                if not key:
+                    logger.warning("InstallModsThread: skipping mod without an ID")
+                    skipped_missing_ids = True
+                    continue
                 if key not in mod_folders:
                     mod_folder_path = self.main_window.mod_service.get_mod_folder_path(
                         key
@@ -285,7 +291,7 @@ class InstallModsThread(QThread):
                             file_info["extra_files"] = extra_files_list
                         validated_files.setdefault(key, {})[chapter_id] = file_info
             if not tasks:
-                self._safe_emit(self.finished, True)
+                self._safe_emit(self.result_ready, not skipped_missing_ids)
                 return
             session = get_session()
             self._session = session
@@ -313,14 +319,14 @@ class InstallModsThread(QThread):
                     total_bytes = 0
                     break
             if self._cancelled:
-                self._safe_emit(self.finished, False)
+                self._safe_emit(self.result_ready, False)
                 return
             self._safe_emit(
                 self.status,
                 tr("status.preparing_download"), UI_COLORS["status_warning"]
             )
             if self._cancelled:
-                self._safe_emit(self.finished, False)
+                self._safe_emit(self.result_ready, False)
                 return
             downloaded_ref = [0]
             done_files = 0
@@ -330,7 +336,7 @@ class InstallModsThread(QThread):
             current_index = 0
             for task in tasks:
                 if self._cancelled:
-                    self._safe_emit(self.finished, False)
+                    self._safe_emit(self.result_ready, False)
                     return
                 mod = task.get("mod")
                 chapter_id = task.get("chapter_id")
@@ -468,7 +474,7 @@ class InstallModsThread(QThread):
                                 chapter_id, {}
                             )["data_file_path"] = extracted_data_files[0]
                         if self._cancelled:
-                            self._safe_emit(self.finished, False)
+                            self._safe_emit(self.result_ready, False)
                             return
                 else:
                     progress_callback = self._make_progress_callback(
@@ -500,7 +506,7 @@ class InstallModsThread(QThread):
                         self.status,
                         tr("status.operation_cancelled"), UI_COLORS["status_error"]
                     )
-                    self._safe_emit(self.finished, False)
+                    self._safe_emit(self.result_ready, False)
                     return
             for key, mod_data in installed_mods.items():
                 mod = mod_data["mod"]
@@ -563,7 +569,7 @@ class InstallModsThread(QThread):
                     self.status,
                     tr("status.operation_cancelled"), UI_COLORS["status_error"]
                 )
-                self._safe_emit(self.finished, False)
+                self._safe_emit(self.result_ready, False)
                 return
             for info in mod_configs.values():
                 folder_name = info["folder_name"]
@@ -584,23 +590,23 @@ class InstallModsThread(QThread):
                     self.status,
                     tr("status.operation_cancelled"), UI_COLORS["status_error"]
                 )
-                self._safe_emit(self.finished, False)
+                self._safe_emit(self.result_ready, False)
             else:
                 self._safe_emit(
                     self.status,
                     tr("status.installation_complete"), UI_COLORS["status_success"]
                 )
-                self._safe_emit(self.finished, True)
+                self._safe_emit(self.result_ready, not skipped_missing_ids)
         except PermissionError as e:
             logger.warning(f"InstallModsThread.run: permission error: {e}")
             self._safe_emit(
                 self.status, tr("errors.permission_error_install"), UI_COLORS["status_error"]
             )
-            self._safe_emit(self.finished, False)
+            self._safe_emit(self.result_ready, False)
         except RuntimeError as e:
             if str(e) == "download_cancelled":
                 logger.info("InstallModsThread.run: download cancelled by user")
-                self._safe_emit(self.finished, False)
+                self._safe_emit(self.result_ready, False)
             else:
                 logger.error(
                     f"InstallModsThread.run: installation error: {e}", exc_info=True
@@ -610,7 +616,7 @@ class InstallModsThread(QThread):
                     tr("errors.installation_error", error=str(e)),
                     UI_COLORS["status_error"],
                 )
-                self._safe_emit(self.finished, False)
+                self._safe_emit(self.result_ready, False)
         except Exception as e:
             logger.error(
                 f"InstallModsThread.run: installation error: {e}", exc_info=True
@@ -619,7 +625,7 @@ class InstallModsThread(QThread):
                 self.status,
                 tr("errors.installation_error", error=str(e)), UI_COLORS["status_error"]
             )
-            self._safe_emit(self.finished, False)
+            self._safe_emit(self.result_ready, False)
         finally:
             try:
                 if self.temp_root and os.path.isdir(self.temp_root):

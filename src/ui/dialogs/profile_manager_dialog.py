@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections.abc import Callable
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
@@ -56,7 +57,8 @@ class _ProfileListWidget(QListWidget):
 
     def dropEvent(self, event):
         if getattr(event, "source", lambda: None)() is None:
-            paths = collect_drop_file_paths(event.mimeData())
+            mime_data = event.mimeData()
+            paths = collect_drop_file_paths(mime_data) if mime_data else []
             if paths:
                 event.acceptProposedAction()
                 self._owner.import_profiles_from_paths(paths)
@@ -118,10 +120,25 @@ class ProfileManagerDialog(QDialog):
         self.list_widget.currentRowChanged.connect(self._on_selection_changed)
         layout.addWidget(self.list_widget, 1)
 
-        close_btn = QPushButton(tr("ui.close_button"))
-        close_btn.setToolTip(tr("tooltips.close_dialog"))
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignRight)
+        self.close_btn = QPushButton(tr("ui.close_button"))
+        self.close_btn.clicked.connect(self.accept)
+        layout.addWidget(self.close_btn, 0, Qt.AlignmentFlag.AlignRight)
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("profiles.manager_title"))
+        for attr, key in (
+            ("add_btn", "profiles.create"),
+            ("dup_btn", "profiles.duplicate"),
+            ("edit_btn", "profiles.rename"),
+            ("del_btn", "profiles.delete"),
+            ("export_btn", "buttons.export"),
+            ("import_btn", "buttons.import"),
+        ):
+            getattr(self, attr).setToolTip(tr(key))
+        self.list_widget.setToolTip(tr("tooltips.profile_reorder"))
+        self.close_btn.setText(tr("ui.close_button"))
+        self.close_btn.setToolTip(tr("tooltips.close_dialog"))
+        self._refresh_list()
 
     def _refresh_list(self):
         self.list_widget.clear()
@@ -253,7 +270,7 @@ class ProfileManagerDialog(QDialog):
             return QMessageBox.StandardButton.No
 
     def _prompt_and_execute(
-        self, action: callable, title_key: str, default_text: str = ""
+        self, action: Callable[[str], bool], title_key: str, default_text: str = ""
     ):
         name, ok = QInputDialog.getText(
             self, tr(title_key), tr("profiles.enter_name"), text=default_text

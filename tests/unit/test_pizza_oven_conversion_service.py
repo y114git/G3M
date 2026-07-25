@@ -499,7 +499,7 @@ def test_converted_mod_applies_expected_files_to_clean_game(
         game="pizzatower",
     )
 
-    success = patcher.process_mod_patch({"pizzatower": [mod_data]})
+    success = patcher.process_sections({"pizzatower": [mod_data]})
 
     assert success is True
     assert (apply_game_dir / "data.win").read_bytes() == b"ORIGINAL_DATA|po-patched|"

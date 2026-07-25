@@ -1,7 +1,10 @@
 """Main AppWindow implementation."""
 
+from __future__ import annotations
+
 import contextlib
 import logging
+from typing import TYPE_CHECKING, Any, cast
 
 from PyQt6 import sip
 from PyQt6.QtCore import (
@@ -108,8 +111,57 @@ from utils.path_utils import colored_icon, resource_path
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from models.app_state import AppState
+    from services.customization_service import CustomizationManager
+    from services.launch_service import GameLauncher
+    from services.mod.service import ModManager
+    from services.profile_service import ProfileService
+    from services.settings_service import SettingsManager
+    from services.used_mods_service import UsedModsManager
+    from session.session_manager import SessionManager
+    from ui.common.feedback import FeedbackManager
+
 
 class AppWindow(QWidget):
+    context: ApplicationContext
+    app_state: AppState
+    feedback_service: FeedbackManager
+    settings_service: SettingsManager
+    mod_service: ModManager
+    customization_service: CustomizationManager
+    game_launcher: GameLauncher
+    profile_service: ProfileService
+    used_mods_service: UsedModsManager
+    session_manager: SessionManager
+    library_display: Any
+    search_display: Any
+    game_launch: Any
+    settings_ui: Any
+    plugins_ui: Any
+    search_tab_builder: Any
+    settings_builder: Any
+    refresh_controller: Any
+    mods_browser_tab: QWidget
+    library_tab: QWidget
+    plugins_tab: QWidget
+    mods_browser_scroll: Any
+    mod_list_widget: Any
+    sort_combo: Any
+    library_sort_combo: Any
+    library_sort_order_btn: Any
+    library_search_button: Any
+    settings_tab_widget: Any
+    language_combo: Any
+    ui_scale_spinbox: Any
+    theme: Any
+    _resize_margin: int
+    _preserve_fade_effect: bool
+    _is_fading_out: bool
+    _ui_scale_timer: QTimer
+    background_movie: Any
+    background_pixmap: Any
+
     update_status_signal = pyqtSignal(str, str)
     set_progress_signal = pyqtSignal(int)
     show_update_prompt = pyqtSignal(dict)
@@ -283,6 +335,53 @@ class AppWindow(QWidget):
         dialog = ChangelogDialog(self, changelog_url.strip() if changelog_url else "")
         dialog.exec()
 
+    def _maybe_show_onboarding(self) -> None:
+        if not self.app_state.local_config.get("onboarding_completed", False):
+            self._schedule_onboarding(250)
+
+    def _schedule_onboarding(self, delay_ms: int) -> None:
+        timer = getattr(self, "_onboarding_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._show_automatic_onboarding)
+            self._onboarding_timer = timer
+        timer.start(delay_ms)
+
+    def _show_automatic_onboarding(self) -> None:
+        self._show_onboarding(auto=True)
+
+    def _show_onboarding(self, *, auto: bool = False) -> None:
+        if auto and self.app_state.local_config.get("onboarding_completed", False):
+            return
+        active_tour = getattr(self, "_onboarding_tour", None)
+        if active_tour is not None and not sip.isdeleted(active_tour):
+            active_tour.raise_()
+            active_tour.activateWindow()
+            return
+        if auto and QApplication.activeModalWidget() is not None:
+            self._schedule_onboarding(500)
+            return
+        from ui.onboarding_tour import OnboardingTour
+
+        tour = OnboardingTour(self)
+        self._onboarding_tour = tour
+
+        def complete(open_settings: bool) -> None:
+            self.app_state.local_config["onboarding_completed"] = True
+            self.settings_service.write_local_config()
+            if open_settings and not self.app_state.is_settings_view:
+                self.settings_ui.toggle_settings_view()
+            self._onboarding_tour = None
+
+        def forget_tour() -> None:
+            if getattr(self, "_onboarding_tour", None) is tour:
+                self._onboarding_tour = None
+
+        tour.completed.connect(complete)
+        tour.destroyed.connect(forget_tour)
+        tour.show()
+
     def _show_log_viewer_dialog(self):
         from app.dialogs import open_log_viewer_dialog
 
@@ -328,8 +427,8 @@ class AppWindow(QWidget):
         rect = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
         radius = clamp_border_radius(
             self._get_window_corner_radius(),
-            width=rect.width(),
-            height=rect.height(),
+            width=int(rect.width()),
+            height=int(rect.height()),
             border_width=outline_width,
         )
         path = QPainterPath()
@@ -429,6 +528,7 @@ class AppWindow(QWidget):
         self.title_bar = CustomTitleBar(self, app_state=self.app_state)
         self.title_bar.log_viewer_requested.connect(self._show_log_viewer_dialog)
         self.title_bar.changelog_requested.connect(self._show_changelog_dialog)
+        self.title_bar.onboarding_requested.connect(self._show_onboarding)
         self.title_bar.about_requested.connect(self._show_about_dialog)
         self.title_bar.minimize_requested.connect(self.showMinimized)
         self.title_bar.maximize_restore_requested.connect(
@@ -440,6 +540,7 @@ class AppWindow(QWidget):
             tr("ui.log_viewer"),
             tr("ui.help_menu"),
             tr("buttons.changelog"),
+            tr("onboarding.menu_action"),
             tr("ui.about_title"),
             tr("ui.minimize_window"),
             tr("ui.maximize_window"),
@@ -603,7 +704,9 @@ class AppWindow(QWidget):
         layout.addWidget(label)
         layout.addStretch()
         self.main_tab_widget.addTab(placeholder, "")
-        self.main_tab_widget.tabBar().hide()
+        tab_bar = self.main_tab_widget.tabBar()
+        if tab_bar is not None:
+            tab_bar.hide()
 
     def _restore_main_tabs_bar(self):
         tab_bar = self.main_tab_widget.tabBar()
@@ -819,11 +922,12 @@ class AppWindow(QWidget):
         finally:
             checkbox.blockSignals(False)
 
-    def eventFilter(self, obj, ev):
+    def eventFilter(self, a0, a1):
+        obj, ev = cast(Any, a0), cast(Any, a1)
         ev_type = ev.type()
         tooltip_timer = getattr(self, "_tooltip_timer", None)
         tooltip_widget = getattr(self, "_tooltip_widget", None)
-        last_tooltip_target = getattr(self, "_last_tooltip_target", None)
+        last_tooltip_target: Any = getattr(self, "_last_tooltip_target", None)
         if ev_type == QEvent.Type.MouseButtonDblClick:
             chapter_id = getattr(obj, "_chapter_id", None)
             if chapter_id is not None:
@@ -858,7 +962,8 @@ class AppWindow(QWidget):
                 return super().eventFilter(obj, ev)
             text = ""
             with contextlib.suppress(RuntimeError, AttributeError):
-                text = obj.toolTip() if hasattr(obj, "toolTip") else ""
+                target = cast(Any, obj)
+                text = target.toolTip() if hasattr(target, "toolTip") else ""
             if text:
                 if (
                     last_tooltip_target == obj
@@ -956,7 +1061,7 @@ class AppWindow(QWidget):
         if not last_tooltip_target or not last_tooltip_text:
             return
 
-        tooltip_widget = getattr(self, "_tooltip_widget", None)
+        tooltip_widget = cast(AnimatedToolTip | None, getattr(self, "_tooltip_widget", None))
         if tooltip_widget is None:
             tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
             tooltip_widget._preserve_fade_effect = True
@@ -985,7 +1090,7 @@ class AppWindow(QWidget):
             if target_screen is not None:
                 screen = target_screen.availableGeometry()
         if screen is None:
-            app = QApplication.instance()
+            app = cast(QApplication | None, QApplication.instance())
             with contextlib.suppress(RuntimeError, TypeError, AttributeError):
                 target_screen = app.screenAt(pos) if app else None
                 if target_screen is not None:
@@ -1006,7 +1111,7 @@ class AppWindow(QWidget):
         if tooltip_widget.isVisible():
             tooltip_widget.show()
             tooltip_widget.raise_()
-            effect = (
+            effect: Any = (
                 tooltip_widget.graphicsEffect()
                 if hasattr(tooltip_widget, "graphicsEffect")
                 else None
@@ -1036,7 +1141,8 @@ class AppWindow(QWidget):
         self._last_tooltip_text = ""
         self._last_tooltip_global_pos = None
 
-    def paintEvent(self, event):
+    def paintEvent(self, a0):
+        event = cast(Any, a0)
         painter = QPainter(self)
         if self.background_movie is not None:
             painter.drawPixmap(self.rect(), self.background_movie.currentPixmap())
@@ -1138,7 +1244,8 @@ class AppWindow(QWidget):
             for i, key in enumerate(item_keys):
                 combo.setItemText(i, tr(key))
 
-    def closeEvent(self, event):
+    def closeEvent(self, a0):
+        event = cast(Any, a0)
         begin_close_event(self, event, single_shot=QTimer.singleShot)
 
     def _run_deferred_close_cleanup(self) -> None:
@@ -1150,7 +1257,8 @@ class AppWindow(QWidget):
     def _force_finish_close_tasks(self) -> None:
         force_finish_close_tasks(self)
 
-    def changeEvent(self, event):
+    def changeEvent(self, a0):
+        event = cast(Any, a0)
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
             self._sync_title_bar_window_state()
@@ -1166,7 +1274,7 @@ class AppWindow(QWidget):
     def _on_application_state_changed(self, _state):
         self._sync_background_audio_focus()
 
-    def _widget_belongs_to_window(self, widget) -> bool:
+    def _widget_belongs_to_window(self, widget: Any) -> bool:
         seen = set()
         while widget is not None and id(widget) not in seen:
             seen.add(id(widget))
@@ -1210,7 +1318,7 @@ class AppWindow(QWidget):
     def _should_pause_background_audio(self) -> bool:
         if not self.app_state.local_config.get("pause_background_music_unfocused", False):
             return False
-        app = QApplication.instance()
+        app = cast(QApplication | None, QApplication.instance())
         if self.isMinimized():
             return True
         if not app:
@@ -1227,7 +1335,8 @@ class AppWindow(QWidget):
             self._should_pause_background_audio()
         )
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, a0):
+        event = cast(Any, a0)
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._start_system_resize_if_needed(event.position().toPoint())
@@ -1236,17 +1345,20 @@ class AppWindow(QWidget):
             return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, a0):
+        event = cast(Any, a0)
         self._update_resize_cursor(event.position().toPoint())
         super().mouseMoveEvent(event)
 
-    def leaveEvent(self, event):
+    def leaveEvent(self, a0):
+        event = cast(Any, a0)
         if self._last_resize_cursor_shape is not None:
             self.unsetCursor()
             self._last_resize_cursor_shape = None
         super().leaveEvent(event)
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, a0):
+        event = cast(Any, a0)
         super().resizeEvent(event)
         self._apply_window_corner_mask()
         if hasattr(self, "launcher_icon_label") and hasattr(self, "top_panel_widget"):
@@ -1260,7 +1372,8 @@ class AppWindow(QWidget):
             self.settings_service.schedule_geometry_save(self)
             self._schedule_window_layout_refresh()
 
-    def moveEvent(self, event):
+    def moveEvent(self, a0):
+        event = cast(Any, a0)
         super().moveEvent(event)
         if not getattr(self, "_restoring_window_geometry", False):
             self.settings_service.schedule_geometry_save(self)
@@ -1357,6 +1470,12 @@ class AppWindow(QWidget):
             self.search_display.update_search_cards()
 
     def _on_refresh_clicked(self, is_initial=False):
+        if (
+            not is_initial
+            and hasattr(self, "refresh_controller")
+            and self.refresh_controller.is_refreshing()
+        ):
+            return
         if (
             hasattr(self, "plugins_ui")
             and self.plugins_ui

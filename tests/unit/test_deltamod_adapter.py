@@ -1,5 +1,7 @@
 """Unit tests for test deltamod adapter."""
 
+import json
+
 from defusedxml import ElementTree
 
 from adapters.deltamod_adapter import DeltamodConverter
@@ -110,6 +112,40 @@ def test_generate_config_ignores_gamebanana_metadata_game():
     assert config["metadata"]["game"] == "undertale"
 
 
+def test_generate_config_uses_canonical_gamebanana_identity():
+    converter = _make_converter(
+        {
+            "metadata": {
+                "name": "Imported Mod",
+                "author": ["Author"],
+                "game": "toby.deltarune",
+            }
+        },
+        gamebanana_metadata={"mod_id": 123, "item_type": "mod"},
+    )
+
+    config = converter._generate_config_json()
+
+    assert config["metadata"]["id"] == "gb_mod_123"
+
+
+def test_generate_config_preserves_gamebanana_wip_identity():
+    converter = _make_converter(
+        {
+            "metadata": {
+                "name": "Imported WIP",
+                "author": ["Author"],
+                "game": "toby.deltarune",
+            }
+        },
+        gamebanana_metadata={"mod_id": 456, "item_type": "wip"},
+    )
+
+    config = converter._generate_config_json()
+
+    assert config["metadata"]["id"] == "gb_wip_456"
+
+
 def test_generate_config_uses_gamebanana_file_name_when_metadata_name_missing():
     """Checks that generateing config uses gamebanana file name when metadata name missing."""
     converter = _make_converter(
@@ -210,3 +246,68 @@ def test_convert_uses_metadata_name_for_target_folder(tmp_path):
 
     assert result is not None
     assert result.endswith("Boss Rush Deluxe")
+
+
+def test_convert_supports_revision_four_toml_manifest_and_patch_types(tmp_path):
+    source_dir = tmp_path / "revision4"
+    source_dir.mkdir()
+    (source_dir / "meta.toml").write_text(
+        """
+deltaruneTargetVersion = "1.05"
+
+[metadata]
+name = "Revision Four Mod"
+version = "2.0.0"
+description = "TOML package"
+author = ["First Author", "Second Author"]
+game = "toby.deltarune"
+packageID = "example.revision.author"
+""",
+        encoding="utf-8",
+    )
+    (source_dir / "modding.xml").write_text(
+        """
+<patches>
+    <patch to="./chapter3_windows/data.win" patch="./chapter3.g3mpatch" type="g3mpatch" />
+    <patch to="./chapter3_windows/mus/theme.ogg" patch="./theme.ogg" type="copy" />
+</patches>
+""",
+        encoding="utf-8",
+    )
+    (source_dir / "chapter3.g3mpatch").write_bytes(b"patch")
+    (source_dir / "theme.ogg").write_bytes(b"music")
+    mods_dir = tmp_path / "mods"
+    mods_dir.mkdir()
+
+    result = DeltamodConverter(str(source_dir), str(mods_dir)).convert()
+
+    assert result is not None
+    result_dir = tmp_path / "mods" / "Revision Four Mod"
+    config = json.loads(
+        (result_dir / "mod_config.json").read_text(encoding="utf-8")
+    )
+    metadata = config["metadata"]
+    assert metadata["id"] == "example_revision_author"
+    assert metadata["author"] == "First Author, Second Author"
+    assert metadata["game_version"] == "1.05"
+    assert config["files"]["deltarune_3"]["data_file_path"] == "chapter3.g3mpatch"
+    assert config["files"]["deltarune_3"]["extra_files"] == ["mus/theme.ogg"]
+    assert (result_dir / "chapter_3" / "chapter3.g3mpatch").read_bytes() == b"patch"
+    assert (result_dir / "chapter_3" / "mus" / "theme.ogg").read_bytes() == b"music"
+
+
+def test_revision_four_lts_demo_game_id_maps_to_demo():
+    converter = _make_converter(
+        {
+            "metadata": {
+                "name": "Demo Mod",
+                "author": "Author",
+                "game": "toby.deltarune.demolts",
+            }
+        }
+    )
+
+    config = converter._generate_config_json()
+
+    assert config["metadata"]["game"] == "deltarunedemo"
+    assert config["metadata"]["author"] == "Author"

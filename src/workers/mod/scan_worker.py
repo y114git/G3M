@@ -53,7 +53,13 @@ class ModScanThread(QThread):
                 for entry in entries:
                     if self._cancel_flag:
                         break
-                    if not entry.is_dir(follow_symlinks=False):
+                    try:
+                        if not entry.is_dir(follow_symlinks=True):
+                            continue
+                    except OSError:
+                        logger.debug(
+                            "ModScanThread: inaccessible directory link %s", entry.path
+                        )
                         continue
                     folder_name = entry.name
                     folder_path = entry.path

@@ -7,21 +7,18 @@ import os
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from config.config import (
     ARCHIVE_EXTENSIONS,
-    MOD_TYPE_CSX,
-    MOD_TYPE_DATAFILE,
     MOD_TYPE_G3MPATCH,
     MOD_TYPE_OVERRIDES_ONLY,
-    MOD_TYPE_XDELTA,
     SKIP_FILES,
 )
 from utils.mod.utils import get_mod_id, get_mod_name
 from utils.patching import mod_content_utils as mod_content
 from utils.patching.file_override_utils import (
-    _iter_configured_override_entries,
+    iter_configured_override_entries,
 )
 from utils.patching.mod_resolve_utils import (
     get_mod_configured_data_file,
@@ -56,7 +53,7 @@ class DiagnosticIssue:
 
 @dataclass(frozen=True)
 class FileImpact:
-    chapter_id: str
+    section_id: str
     mod_id: str
     mod_name: str
     source_path: str
@@ -71,7 +68,7 @@ class FileImpact:
 
 @dataclass(frozen=True)
 class DataImpact:
-    chapter_id: str
+    section_id: str
     mod_id: str
     mod_name: str
     patch_path: str | None
@@ -116,23 +113,25 @@ class ModDiagnosticsService:
     ) -> None:
         self.app_state = app_state
         self.mod_service = mod_service
-        self._target_dir_resolver = target_dir_resolver or get_target_dir
+        self._target_dir_resolver = cast(
+            Callable[..., str | None], target_dir_resolver or get_target_dir
+        )
         self._logger = logger or _NullLogger()
 
-    def build_report(self, chapter_mods: dict[str, list[Any]]) -> DiagnosticsReport:
+    def build_report(self, section_mods: dict[str, list[Any]]) -> DiagnosticsReport:
         file_impacts: list[FileImpact] = []
         data_impacts: list[DataImpact] = []
         issues: list[DiagnosticIssue] = []
         selected_mod_ids = set()
 
-        for chapter_id, mods in (chapter_mods or {}).items():
-            target_dir = self._resolve_target_dir(chapter_id)
+        for section_id, mods in (section_mods or {}).items():
+            target_dir = self._resolve_target_dir(section_id)
             if not target_dir:
                 issues.append(
                     DiagnosticIssue(
                         severity="error",
                         title="Target folder not found",
-                        explanation=f"Game target folder for {chapter_id} is not configured or does not exist.",
+                        explanation=f"Game target folder for {section_id} is not configured or does not exist.",
                         recommendation="Check the game path in settings.",
                     )
                 )
@@ -146,11 +145,11 @@ class ModDiagnosticsService:
                 selected_mod_ids.add(mod_id)
                 data_impacts.extend(
                     self._collect_data_impacts(
-                        chapter_id, mod_data, target_dir, target_data_path, issues
+                        section_id, mod_data, target_dir, target_data_path, issues
                     )
                 )
                 file_impacts.extend(
-                    self._collect_file_impacts(chapter_id, mod_data, target_dir, issues)
+                    self._collect_file_impacts(section_id, mod_data, target_dir, issues)
                 )
 
         file_impacts, conflict_issues = self._mark_file_conflicts(file_impacts)
@@ -181,19 +180,19 @@ class ModDiagnosticsService:
             issues=tuple(issues),
         )
 
-    def _resolve_target_dir(self, chapter_id: str) -> str | None:
+    def _resolve_target_dir(self, section_id: str) -> str | None:
         try:
             return self._target_dir_resolver(
-                chapter_id,
+                section_id,
                 self.app_state,
                 self._logger,
             )
         except TypeError:
-            return self._target_dir_resolver(chapter_id)
+            return self._target_dir_resolver(section_id)
 
     def _collect_data_impacts(
         self,
-        chapter_id: str,
+        section_id: str,
         mod_data,
         target_dir: str,
         target_data_path: str | None,
@@ -201,13 +200,13 @@ class ModDiagnosticsService:
     ) -> list[DataImpact]:
         patch_path = get_mod_configured_data_file(
             mod_data,
-            chapter_id,
+            section_id,
             self.mod_service,
             self.app_state,
             self._logger,
         )
         mod_source_dir = get_mod_source_dir(
-            mod_data, chapter_id, self.mod_service, self.app_state, self._logger
+            mod_data, section_id, self.mod_service, self.app_state, self._logger
         )
         patch_type = MOD_TYPE_OVERRIDES_ONLY
         if patch_path and os.path.exists(patch_path):
@@ -230,7 +229,7 @@ class ModDiagnosticsService:
         manifest = self._read_g3mpatch_manifest(patch_path) if patch_path else {}
         return [
             DataImpact(
-                chapter_id=chapter_id,
+                section_id=section_id,
                 mod_id=str(get_mod_id(mod_data) or ""),
                 mod_name=get_mod_name(mod_data),
                 patch_path=patch_path,
@@ -247,35 +246,23 @@ class ModDiagnosticsService:
         ]
 
     def _classify_mod_source(self, mod_source_dir: str) -> tuple[str | None, str]:
-        g3m_patches = mod_content.find_g3m_patches(mod_source_dir)
-        if g3m_patches:
-            return g3m_patches[0], MOD_TYPE_G3MPATCH
-        for filename in os.listdir(mod_source_dir):
-            if filename.lower().endswith((".xdelta", ".vcdiff")):
-                return os.path.join(mod_source_dir, filename), MOD_TYPE_XDELTA
-        csx_scripts = mod_content.find_csx_scripts(mod_source_dir)
-        if csx_scripts:
-            return csx_scripts[0], MOD_TYPE_CSX
-        ready_files = mod_content.find_ready_data_win_files(mod_source_dir)
-        if ready_files:
-            return ready_files[0], MOD_TYPE_DATAFILE
-        return mod_content.classify_patch_file(None)
+        return mod_content.classify_mod_directory(mod_source_dir)
 
     def _collect_file_impacts(
         self,
-        chapter_id: str,
+        section_id: str,
         mod_data,
         target_dir: str,
         issues: list[DiagnosticIssue],
     ) -> list[FileImpact]:
         mod_source_dir = get_mod_source_dir(
-            mod_data, chapter_id, self.mod_service, self.app_state, self._logger
+            mod_data, section_id, self.mod_service, self.app_state, self._logger
         )
         if not mod_source_dir:
             return []
         has_config_entry = has_mod_configured_chapter_entry(
             mod_data,
-            chapter_id,
+            section_id,
             self.mod_service,
             self.app_state,
             self._logger,
@@ -283,7 +270,7 @@ class ModDiagnosticsService:
         configured_paths = (
             get_mod_configured_extra_files(
                 mod_data,
-                chapter_id,
+                section_id,
                 self.mod_service,
                 self.app_state,
                 self._logger,
@@ -294,7 +281,7 @@ class ModDiagnosticsService:
         if configured_paths is not None:
             mod_root_dir = self.mod_service.get_mod_folder_path(get_mod_id(mod_data))
             return self._collect_configured_file_impacts(
-                chapter_id,
+                section_id,
                 mod_data,
                 target_dir,
                 mod_root_dir or mod_source_dir,
@@ -302,12 +289,12 @@ class ModDiagnosticsService:
                 issues,
             )
         return self._collect_directory_file_impacts(
-            chapter_id, mod_data, target_dir, mod_source_dir
+            section_id, mod_data, target_dir, mod_source_dir
         )
 
     def _collect_configured_file_impacts(
         self,
-        chapter_id: str,
+        section_id: str,
         mod_data,
         target_dir: str,
         mod_root_dir: str,
@@ -316,8 +303,8 @@ class ModDiagnosticsService:
     ) -> list[FileImpact]:
         game_id = self._resolve_mod_game_id(mod_data)
         impacts: list[FileImpact] = []
-        for entry in _iter_configured_override_entries(
-            mod_root_dir, configured_paths, chapter_id, game_id
+        for entry in iter_configured_override_entries(
+            mod_root_dir, configured_paths, section_id, game_id
         ):
             source = entry["source"]
             target_root = self._safe_target_root(entry.get("target_root"), target_dir)
@@ -334,7 +321,7 @@ class ModDiagnosticsService:
                         rel_file = file_name if rel_root == "." else os.path.join(rel_root, file_name)
                         impacts.append(
                             self._make_file_impact(
-                                chapter_id,
+                                section_id,
                                 mod_data,
                                 os.path.join(root, file_name),
                                 target_root,
@@ -347,7 +334,7 @@ class ModDiagnosticsService:
                 continue
             impacts.append(
                 self._make_file_impact(
-                    chapter_id,
+                    section_id,
                     mod_data,
                     source,
                     target_root,
@@ -372,7 +359,7 @@ class ModDiagnosticsService:
         return default_target_dir
 
     def _collect_directory_file_impacts(
-        self, chapter_id: str, mod_data, target_dir: str, mod_source_dir: str
+        self, section_id: str, mod_data, target_dir: str, mod_source_dir: str
     ) -> list[FileImpact]:
         impacts: list[FileImpact] = []
         for root, _dirs, files in os.walk(mod_source_dir):
@@ -388,14 +375,14 @@ class ModDiagnosticsService:
                 rel_path = os.path.relpath(source_path, mod_source_dir)
                 impacts.append(
                     self._make_file_impact(
-                        chapter_id, mod_data, source_path, target_dir, rel_path
+                        section_id, mod_data, source_path, target_dir, rel_path
                     )
                 )
         return impacts
 
     def _make_file_impact(
         self,
-        chapter_id: str,
+        section_id: str,
         mod_data,
         source_path: str,
         target_root: str,
@@ -411,7 +398,7 @@ class ModDiagnosticsService:
             notes = ("Archive contents are not expanded during quick diagnostics.",)
             analyzable = False
         return FileImpact(
-            chapter_id=chapter_id,
+            section_id=section_id,
             mod_id=str(get_mod_id(mod_data) or ""),
             mod_name=get_mod_name(mod_data),
             source_path=source_path,

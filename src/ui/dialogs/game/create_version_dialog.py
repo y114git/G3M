@@ -26,7 +26,9 @@ class CreateVersionDialog(QDialog):
         self.setModal(True)
         self._version_name = ""
         self._selected_profile: str | None = None
-        self._build_ui(game_name, profiles or [])
+        self._game_name = game_name
+        self._profiles = profiles or []
+        self._build_ui(game_name, self._profiles)
         self.setStyleSheet(build_dialog_theme_stylesheet(app_state))
 
     def _build_ui(self, game_name: str, profiles: list[str]):
@@ -34,17 +36,17 @@ class CreateVersionDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(20, 16, 20, 16)
 
-        info = QLabel(tr("game_versions.create_info", game=game_name))
-        info.setWordWrap(True)
-        layout.addWidget(info)
+        self._info_label = QLabel()
+        self._info_label.setWordWrap(True)
+        layout.addWidget(self._info_label)
 
         self._name_input = QLineEdit()
         self._name_input.setPlaceholderText(tr("game_versions.name_placeholder"))
         layout.addWidget(self._name_input)
 
         profile_row = QHBoxLayout()
-        profile_label = QLabel(tr("game_versions.apply_profile"))
-        profile_row.addWidget(profile_label)
+        self._profile_label = QLabel()
+        profile_row.addWidget(self._profile_label)
         self._profile_combo = QComboBox()
         self._profile_combo.addItem(tr("game_versions.without_profile"), None)
         for pname in profiles:
@@ -54,15 +56,29 @@ class CreateVersionDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        ok_btn = QPushButton(tr("game_versions.create_button"))
-        ok_btn.clicked.connect(self._on_accept)
-        cancel_btn = QPushButton(tr("common.close"))
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(ok_btn)
-        btn_row.addWidget(cancel_btn)
+        self._ok_button = QPushButton()
+        self._ok_button.clicked.connect(self._on_accept)
+        self._cancel_button = QPushButton()
+        self._cancel_button.clicked.connect(self.reject)
+        btn_row.addWidget(self._ok_button)
+        btn_row.addWidget(self._cancel_button)
         layout.addLayout(btn_row)
 
         self._name_input.returnPressed.connect(self._on_accept)
+        self.relocalize_ui()
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("game_versions.create_title"))
+        self._info_label.setText(tr("game_versions.create_info", game=self._game_name))
+        self._name_input.setPlaceholderText(tr("game_versions.name_placeholder"))
+        current_profile = self._profile_combo.currentData()
+        self._profile_combo.setItemText(0, tr("game_versions.without_profile"))
+        index = self._profile_combo.findData(current_profile)
+        if index >= 0:
+            self._profile_combo.setCurrentIndex(index)
+        self._profile_label.setText(tr("game_versions.apply_profile"))
+        self._ok_button.setText(tr("game_versions.create_button"))
+        self._cancel_button.setText(tr("common.close"))
 
     def _on_accept(self):
         name = self._name_input.text().strip()

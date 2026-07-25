@@ -146,6 +146,13 @@ def download_file(
                 this_request_expected = int(r.headers.get("content-length", 0))
             except (ValueError, TypeError):
                 this_request_expected = 0
+            effective_total = total_size or expected_size
+            if not effective_total and this_request_expected:
+                effective_total = (
+                    current_size + this_request_expected
+                    if mode == "ab"
+                    else this_request_expected
+                )
             written_this_request = 0
             with open(tmp_path, mode) as f:
                 for chunk in r.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
@@ -157,13 +164,16 @@ def download_file(
                     sz = len(chunk)
                     written_this_request += sz
                     downloaded_ref[0] += sz
-                    if total_size > 0 and progress_callback:
+                    if effective_total > 0 and progress_callback:
                         with contextlib.suppress(TypeError, ZeroDivisionError):
                             progress_callback(
                                 int(
                                     min(
                                         100,
-                                        max(0, downloaded_ref[0] / total_size * 100),
+                                        max(
+                                            0,
+                                            downloaded_ref[0] / effective_total * 100,
+                                        ),
                                     )
                                 )
                             )

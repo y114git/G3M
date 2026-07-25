@@ -362,12 +362,14 @@ class SearchModCardWidget(ModCardWidget):
             line_count = max(len(lines), 1)
         reserved = max(line_count, reserve_lines or max_lines)
         max_height = metrics.lineSpacing() * reserved + 6
+        min_height = max_height if reserve_lines else 0
         changed = False
         if label.text() != rendered_text:
             label.setText(rendered_text)
             changed = True
-        if label.minimumHeight() != 0:
-            label.setMinimumHeight(0)
+        if label.minimumHeight() != min_height:
+            label.setMinimumHeight(min_height)
+            changed = True
         if label.maximumHeight() != max_height:
             label.setMaximumHeight(max_height)
             changed = True

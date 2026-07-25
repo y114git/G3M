@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from services.backup_service import BackupManager
 from services.frickbears3_addons_service import Frickbears3AddonsService
 from utils.frickbears3_addons_utils import apply_frickbears3_addons_from_mod_source
@@ -134,3 +136,29 @@ def test_apply_frickbears3_addons_copies_into_localappdata_and_restores(
 
     assert existing_file.read_bytes() == b"old"
     assert not (addons_dir / "Blox" / "opening_dialogue.txt").exists()
+
+
+def test_apply_frickbears3_addons_skips_broken_symlink(tmp_path, monkeypatch):
+    mod_source_dir = tmp_path / "mod"
+    valid_file = mod_source_dir / "addons" / "Guard" / "icon.png"
+    _write_bytes(valid_file, b"icon")
+    broken_link = mod_source_dir / "addons" / "Guard" / "optional.png"
+    try:
+        os.symlink(broken_link.parent / "missing.png", broken_link)
+    except OSError as exc:
+        pytest.skip(f"File symlinks are unavailable: {exc}")
+
+    localappdata_dir = tmp_path / "localappdata"
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata_dir))
+
+    ok = apply_frickbears3_addons_from_mod_source(
+        str(mod_source_dir),
+        backup_or_mark=lambda _target_file: None,
+        logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
+        extract_archive=lambda archive_path, target_dir: None,
+    )
+
+    copied_guard = localappdata_dir / "Frickbears3" / "addons" / "Guard"
+    assert ok is True
+    assert (copied_guard / "icon.png").read_bytes() == b"icon"
+    assert not (copied_guard / "optional.png").exists()

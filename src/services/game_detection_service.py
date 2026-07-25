@@ -16,6 +16,102 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from models.game_modes import GameDefinition
 
+ProcessIdentity = tuple[int, float]
+GAME_PROCESS_POLL_SECONDS = 0.25
+GAME_PROCESS_RUNNING_POLL_SECONDS = 1.0
+GAME_PROCESS_START_TIMEOUT_SECONDS = 5 * 60
+GAME_PROCESS_EXIT_CONFIRMATION_CHECKS = 4
+
+
+def _process_identity(process: psutil.Process) -> ProcessIdentity | None:
+    try:
+        return process.pid, process.create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return None
+
+
+def get_matching_process_identities(
+    process_names: tuple[str, ...] | list[str] | set[str] | None = None,
+) -> set[ProcessIdentity]:
+    """Return stable identities for running processes with the requested names."""
+    names = process_names or get_all_process_names()
+    normalized_names = {name.casefold() for name in names if name}
+    identities: set[ProcessIdentity] = set()
+    if not normalized_names:
+        return identities
+    for process in psutil.process_iter(["name"]):
+        try:
+            name = process.info.get("name")
+            if name and name.casefold() in normalized_names:
+                identity = _process_identity(process)
+                if identity is not None:
+                    identities.add(identity)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return identities
+
+
+def get_process_tree_identities(pid: int | None) -> set[ProcessIdentity]:
+    """Return the live root process and descendants, tolerating process hand-off."""
+    if not pid:
+        return set()
+    try:
+        root = psutil.Process(pid)
+        processes = [root, *root.children(recursive=True)]
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return set()
+    return {
+        identity
+        for process in processes
+        if (identity := _process_identity(process)) is not None
+    }
+
+
+def is_process_identity_running(identity: ProcessIdentity) -> bool:
+    """Check a PID together with its creation time so PID reuse is harmless."""
+    pid, created_at = identity
+    try:
+        process = psutil.Process(pid)
+        return process.is_running() and process.create_time() == created_at
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return False
+
+
+class GameProcessTracker:
+    """Track one launch across wrapper, child, and platform process hand-offs."""
+
+    def __init__(
+        self,
+        root_pid: int | None,
+        process_names: tuple[str, ...],
+        baseline_processes: set[ProcessIdentity] | None = None,
+    ) -> None:
+        self.root_pid = root_pid
+        self.process_names = tuple(name for name in process_names if name) or tuple(
+            get_all_process_names()
+        )
+        self.baseline = (
+            set(baseline_processes)
+            if baseline_processes is not None
+            else get_matching_process_identities(self.process_names)
+        )
+        self.tracked = get_process_tree_identities(root_pid)
+
+    def discover(self) -> set[ProcessIdentity]:
+        named_processes = (
+            get_matching_process_identities(self.process_names) - self.baseline
+        )
+        return get_process_tree_identities(self.root_pid) | named_processes
+
+    def refresh(self) -> bool:
+        self.tracked.update(self.discover())
+        self.tracked = {
+            identity
+            for identity in self.tracked
+            if is_process_identity_running(identity)
+        }
+        return bool(self.tracked)
+
 
 def is_game_running(pid: int | None = None):
     if pid is not None:
@@ -23,17 +119,15 @@ def is_game_running(pid: int | None = None):
             return psutil.pid_exists(pid)
         except (TypeError, OverflowError):
             return False
-    return any(
-        proc.info["name"] in get_all_process_names()
-        for proc in psutil.process_iter(["name"])
-    )
+    return bool(get_matching_process_identities())
 
 
 def get_running_game_process_name() -> str | None:
+    process_names = {name.casefold() for name in get_all_process_names() if name}
     for proc in psutil.process_iter(["name"]):
         try:
             name = proc.info["name"]
-            if name in get_all_process_names():
+            if name and name.casefold() in process_names:
                 return name
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue

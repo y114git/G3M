@@ -208,7 +208,7 @@ class GameDefinition:
             all_mods, lambda m: m.game == self.game_id and m.get_chapter_data(tab.tab_id)
         )
 
-    def filter_mods_for_ui(self, all_mods: list) -> dict[str, list]:
+    def filter_mods_for_ui(self, all_mods: list) -> dict[int, list]:
         return {
             i: self.filter_mods_for_tab(tab, all_mods)
             for i, tab in enumerate(self.tabs)

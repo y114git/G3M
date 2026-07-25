@@ -9,11 +9,13 @@ import threading
 import uuid
 from typing import Any
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from adapters.g3mtool_adapter import G3MToolManager
+from models.execution_plan import PatchPlan
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 from utils.file_utils import get_chapter_folder_name, normalize_chapter_id
 from utils.mod.config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
@@ -29,15 +31,15 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class CreateModpackThread(QThread):
+class CreateModpackThread(ManagedQThread):
     progress_update = pyqtSignal(int, str)
     status_update = pyqtSignal(str, str)
     warning_confirmation_needed = pyqtSignal(object, str, object)
-    finished = pyqtSignal(bool)
+    result_ready = pyqtSignal(bool)
 
     def __init__(
         self,
-        chapter_mods: dict[int, list[Any]],
+        chapter_mods: dict[str, list[list[Any]]] | PatchPlan,
         modpack_name: str,
         modpack_dir: str,
         app_state,
@@ -46,7 +48,29 @@ class CreateModpackThread(QThread):
         xdelta_modpack: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.chapter_mods = chapter_mods
+        self.patch_plan = (
+            chapter_mods
+            if isinstance(chapter_mods, PatchPlan)
+            else PatchPlan.from_runtime(chapter_mods)
+        )
+        all_mods = getattr(app_state, "all_mods", ())
+        if not isinstance(all_mods, (list, tuple, set)):
+            all_mods = ()
+        mods_by_id = {
+            str(getattr(mod, "id", "")): mod
+            for mod in all_mods
+            if getattr(mod, "id", None)
+        }
+        if not isinstance(chapter_mods, PatchPlan):
+            for steps in chapter_mods.values():
+                raw_steps = steps if steps and isinstance(steps[0], list) else [steps]
+                for step in raw_steps:
+                    for mod in step:
+                        mod_id = getattr(mod, "id", None)
+                        if mod_id:
+                            mods_by_id[str(mod_id)] = mod
+        self._mods_by_id = mods_by_id
+        self.chapter_mods = self.patch_plan.resolve(self._mods_by_id.get)
         self.modpack_name = modpack_name
         self.modpack_dir = modpack_dir
         self.app_state = app_state
@@ -56,6 +80,12 @@ class CreateModpackThread(QThread):
         self._cancelled = False
         self._warning_event = threading.Event()
         self._warning_result = True
+
+    @staticmethod
+    def _flatten_steps(mods_or_steps) -> list[Any]:
+        if mods_or_steps and isinstance(mods_or_steps[0], list):
+            return [mod for step in mods_or_steps for mod in step]
+        return list(mods_or_steps or [])
 
     def cancel(self):
         self._cancelled = True
@@ -88,7 +118,7 @@ class CreateModpackThread(QThread):
             self.isInterruptionRequested() or self._cancelled
         )
 
-    def _get_mod_game(self, mods_list: list[Any]):
+    def _get_mod_game(self, mods_list: list[Any]) -> str:
         game = None
         if mods_list:
             first_mod = mods_list[0]
@@ -99,7 +129,7 @@ class CreateModpackThread(QThread):
                 config = first_mod.config_data
                 if isinstance(config, dict):
                     game = config.get("game")
-        return game
+        return str(game or self.app_state.game_mode.game_id)
 
     def run(self):
         success = False
@@ -129,8 +159,11 @@ class CreateModpackThread(QThread):
             self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
                 return
-            success = self.patcher.process_mod_patch(
-                self.chapter_mods, is_modpack=True, modpack_dir=self.modpack_dir
+            success = self.patcher.process_patch_plan(
+                self.patch_plan,
+                self._mods_by_id.get,
+                is_modpack=True,
+                modpack_dir=self.modpack_dir,
             )
             if self.isInterruptionRequested() or self._cancelled:
                 self.patcher.cancel()
@@ -180,7 +213,7 @@ class CreateModpackThread(QThread):
                     )
                 finally:
                     self.patcher = None
-            _safe_emit(self.__class__.__name__, self.finished, success)
+            _safe_emit(self.__class__.__name__, self.result_ready, success)
 
     def _create_xdelta_patches(self):
         try:
@@ -200,7 +233,7 @@ class CreateModpackThread(QThread):
             ):
                 if self.isInterruptionRequested() or self._cancelled:
                     return
-                game = self._get_mod_game(mods_list)
+                game = self._get_mod_game(self._flatten_steps(mods_list))
                 chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
                 chapter_modpack_dir = os.path.join(
                     self.modpack_dir, chapter_folder_name
@@ -224,7 +257,10 @@ class CreateModpackThread(QThread):
                 _safe_emit(
                     self.__class__.__name__,
                     self.status_update,
-                    tr("status.creating_xdelta_patch", chapter=chapter_id), "info"
+                    tr(
+                        "status.creating_xdelta_patch_for_section", section=chapter_id
+                    ),
+                    "info",
                 )
                 range_start = 96 + int((index - 1) / total_chapters * 3)
                 range_end = 96 + int(index / total_chapters * 3)
@@ -237,7 +273,10 @@ class CreateModpackThread(QThread):
                             self.__class__.__name__,
                             self.progress_update,
                             start + int((end - start) * progress / 100),
-                            tr("status.creating_xdelta_patch", chapter=chapter),
+                            tr(
+                                "status.creating_xdelta_patch_for_section",
+                                section=chapter,
+                            ),
                         )
                     ),
                 )
@@ -248,7 +287,10 @@ class CreateModpackThread(QThread):
                     _safe_emit(
                         self.__class__.__name__,
                         self.status_update,
-                        tr("errors.xdelta_patch_creation_failed", chapter=chapter_id),
+                        tr(
+                            "errors.xdelta_patch_creation_failed_for_section",
+                            section=chapter_id,
+                        ),
                         "error",
                     )
                     continue
@@ -282,7 +324,7 @@ class CreateModpackThread(QThread):
 
     def _find_original_data_file(
         self, chapter_id: str, game: str, data_filename: str
-    ) -> str:
+    ) -> str | None:
         try:
             from models.game_modes import get_game
             from utils.path_utils import find_chapter_resource_dir
@@ -322,7 +364,7 @@ class CreateModpackThread(QThread):
             detected_games = []
             for chapter_id, mods_list in self.chapter_mods.items():
                 chapter_key = normalize_chapter_id(chapter_id)
-                game = self._get_mod_game(mods_list)
+                game = self._get_mod_game(self._flatten_steps(mods_list))
                 if game:
                     detected_games.append(game)
                 chapter_folder_name = get_chapter_folder_name(chapter_id, game=game)
@@ -359,7 +401,7 @@ class CreateModpackThread(QThread):
                         f"{chapter_folder_name}/{os.path.basename(data_file)}"
                     )
                 extra_files = self._get_modpack_extra_files(
-                    mods_list, chapter_id, chapter_modpack_dir
+                    self._flatten_steps(mods_list), chapter_id, chapter_modpack_dir
                 )
                 if extra_files:
                     file_info["extra_files"] = extra_files
@@ -383,7 +425,7 @@ class CreateModpackThread(QThread):
                 self.__class__.__name__,
                 self.progress_update,
                 99,
-                tr("status.finalizing_chapter", display=self.modpack_name),
+                tr("status.finalizing_section", display=self.modpack_name),
             )
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(build_mod_config_data(config_data), f, indent=4, ensure_ascii=False)

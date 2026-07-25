@@ -114,7 +114,11 @@ class ManualModInstallDialog(QDialog):
         self._center_on_screen()
 
     def _center_on_screen(self):
-        screen = self.screen() or self.windowHandle().screen() if self.windowHandle() else None
+        screen = (
+            self.screen() or self.windowHandle().screen()
+            if self.windowHandle()
+            else None
+        )
         if screen is None and self.parentWidget():
             screen = self.parentWidget().screen()
         if screen is None:
@@ -157,7 +161,10 @@ class ManualModInstallDialog(QDialog):
         while current is not None and id(current) not in visited:
             visited.add(id(current))
             app_state = getattr(current, "app_state", None)
-            if app_state is not None and getattr(app_state, "local_config", None) is not None:
+            if (
+                app_state is not None
+                and getattr(app_state, "local_config", None) is not None
+            ):
                 return app_state
             parent_getter = getattr(current, "parent", None)
             if callable(parent_getter):
@@ -199,7 +206,8 @@ class ManualModInstallDialog(QDialog):
 
         game_layout = QHBoxLayout()
         game_layout.addStretch()
-        game_layout.addWidget(QLabel(tr("ui.mod_type_label")))
+        self.game_label = QLabel(tr("ui.mod_type_label"))
+        game_layout.addWidget(self.game_label)
         self.game_combo = QComboBox()
         self.game_combo.setMinimumWidth(240)
         self.game_combo.setToolTip(tr("tooltips.manual_install_game"))
@@ -225,15 +233,15 @@ class ManualModInstallDialog(QDialog):
         self._create_data_tab()
         self._create_extra_files_tab()
         main_layout.addWidget(self.tab_widget)
-        button_box = QDialogButtonBox(
+        self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText(
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setText(
             tr("dialogs.finish_creating_mod")
         )
-        button_box.accepted.connect(self._on_finish)
-        button_box.rejected.connect(self.reject)
-        main_layout.addWidget(button_box)
+        self.button_box.accepted.connect(self._on_finish)
+        self.button_box.rejected.connect(self.reject)
+        main_layout.addWidget(self.button_box)
         self._apply_theme_styles()
 
     def _build_section_title(self, text: str) -> QLabel:
@@ -281,6 +289,7 @@ class ManualModInstallDialog(QDialog):
         data_layout = QVBoxLayout(data_widget)
         data_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         info_label = QLabel(tr("dialogs.data_tab_info"))
+        self.data_tab_info_label = info_label
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_label.setProperty("hintText", True)
@@ -306,7 +315,9 @@ class ManualModInstallDialog(QDialog):
         self.extra_instructions_label.setWordWrap(True)
         self.extra_instructions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.extra_instructions_label.setProperty("hintText", True)
-        self.extra_instructions_label.setToolTip(tr("tooltips.manual_install_extra_tab"))
+        self.extra_instructions_label.setToolTip(
+            tr("tooltips.manual_install_extra_tab")
+        )
         self.extra_instructions_label.setStyleSheet("font-size: 11px; padding: 10px;")
         extra_layout.addWidget(self.extra_instructions_label)
         scroll_area = QScrollArea()
@@ -323,6 +334,28 @@ class ManualModInstallDialog(QDialog):
         extra_layout.addWidget(scroll_area, 1)
         self.tab_widget.addTab(extra_widget, tr("dialogs.extra_files_tab"))
         self._populate_extra_files_list()
+
+    def relocalize_ui(self) -> None:
+        """Refresh persistent G3M-owned text without changing user selections."""
+        self.setWindowTitle(tr("dialogs.manual_install_title"))
+        self.game_label.setText(tr("ui.mod_type_label"))
+        self.game_combo.setToolTip(tr("tooltips.manual_install_game"))
+        self.files_summary_label.setToolTip(tr("tooltips.manual_install_summary"))
+        self._refresh_summary_text()
+        self.data_tab_info_label.setText(tr("dialogs.data_tab_info"))
+        self.data_tab_info_label.setToolTip(tr("tooltips.manual_install_data_tab"))
+        self.extra_instructions_label.setToolTip(
+            tr("tooltips.manual_install_extra_tab")
+        )
+        self.tab_widget.setTabText(0, tr("dialogs.data_tab"))
+        self.tab_widget.setTabText(1, tr("dialogs.extra_files_tab"))
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setText(
+            tr("dialogs.finish_creating_mod")
+        )
+        self.button_box.button(QDialogButtonBox.StandardButton.Cancel).setText(
+            tr("dialogs.cancel")
+        )
+        self._update_file_tabs()
 
     def _update_file_tabs(self):
         self.data_tabs.clear()
@@ -368,7 +401,7 @@ class ManualModInstallDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         label = display_name or self._chapter_display_name(chapter_id)
-        info_text = tr("dialogs.select_data_file_info", chapter=label)
+        info_text = tr("dialogs.select_data_file_for_section", section=label)
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -391,9 +424,7 @@ class ManualModInstallDialog(QDialog):
             lambda checked, cid=chapter_id: self._browse_data_file(cid)
         )
         file_path_layout.addWidget(browse_btn)
-        clear_btn = self._make_tool_button(
-            "cross_icon.svg", tr("ui.clear_button"), ""
-        )
+        clear_btn = self._make_tool_button("cross_icon.svg", tr("ui.clear_button"), "")
         clear_btn.setToolTip(tr("tooltips.clear_selection"))
         clear_btn.clicked.connect(
             lambda checked, cid=chapter_id: self._clear_data_file(cid)
@@ -520,7 +551,7 @@ class ManualModInstallDialog(QDialog):
         file_path = self._show_file_picker_dialog(
             found_files,
             tr("dialogs.select_data_file", file_type="DATA"),
-            tr("dialogs.select_data_file_info", chapter=chapter_label),
+            tr("dialogs.select_data_file_for_section", section=chapter_label),
         )
         if file_path:
             self.data_file_selections[chapter_id] = file_path
@@ -639,9 +670,7 @@ class ManualModInstallDialog(QDialog):
             )
         )
         layout.addWidget(browse_btn)
-        clear_btn = self._make_tool_button(
-            "cross_icon.svg", tr("ui.clear_button"), ""
-        )
+        clear_btn = self._make_tool_button("cross_icon.svg", tr("ui.clear_button"), "")
         clear_btn.setObjectName(f"xdelta_clear_btn_{file_path}")
         clear_btn.setToolTip(tr("tooltips.clear_selection"))
         clear_btn.clicked.connect(
@@ -963,7 +992,11 @@ class ManualModInstallDialog(QDialog):
 
     def _peek_target_root_for_chapter(self, chapter_id: str) -> str | None:
         game_def = get_game(self.game_combo.currentData() or "")
-        if not game_def or not self.app_state or not getattr(self.app_state, "local_config", None):
+        if (
+            not game_def
+            or not self.app_state
+            or not getattr(self.app_state, "local_config", None)
+        ):
             return None
         game_root = read_configured_game_root(game_def, self.app_state.local_config)
         if not game_root:
@@ -1061,7 +1094,9 @@ class ManualModInstallDialog(QDialog):
             """
         )
         for widget in (self.files_summary_label,):
-            widget.setStyleSheet(f"color: {hint}; background-color: {elements}; border: 1px solid {border}; border-radius: 10px;")
+            widget.setStyleSheet(
+                f"color: {hint}; background-color: {elements}; border: 1px solid {border}; border-radius: 10px;"
+            )
 
     def _safe_warning(self, title: str, message: str) -> None:
         try:
@@ -1095,9 +1130,7 @@ class ManualModInstallDialog(QDialog):
         )
         has_extra_files = extra_files_count > 0
         if not has_data_files and (not has_extra_files):
-            self._safe_warning(
-                tr("errors.error"), tr("dialogs.no_data_file_selected")
-            )
+            self._safe_warning(tr("errors.error"), tr("dialogs.no_data_file_selected"))
             return
         for patches in self.xdelta_patches_mappings.values():
             for target_path in patches.values():
@@ -1180,9 +1213,7 @@ class ManualModInstallDialog(QDialog):
             stored_data_path = self._copy_file_to_relative_path(
                 target_mod_dir,
                 data_file_path,
-                self._join_storage_path(
-                    chapter_id, os.path.basename(data_file_path)
-                ),
+                self._join_storage_path(chapter_id, os.path.basename(data_file_path)),
             )
             files_structure[chapter_id]["data_file_path"] = stored_data_path
         selected_data, used_patches = self._get_excluded_files()
@@ -1217,8 +1248,8 @@ class ManualModInstallDialog(QDialog):
             relative_path = (
                 relative_path.strip().strip("/").strip("\\") if relative_path else ""
             )
-            path_chapter_id, stripped_relative_path = self._extract_chapter_prefixed_path(
-                relative_path
+            path_chapter_id, stripped_relative_path = (
+                self._extract_chapter_prefixed_path(relative_path)
             )
             if path_chapter_id:
                 target_chapter_id = path_chapter_id
@@ -1226,13 +1257,10 @@ class ManualModInstallDialog(QDialog):
             else:
                 relative_path = relative_path.strip().strip("/").strip("\\")
                 target_chapter_id = self.extra_files_chapters.get(extra_file_path)
-            target_chapter_id = (
-                target_chapter_id
-                or (
-                    min(self.data_file_selections.keys())
-                    if game == "deltarune" and self.data_file_selections
-                    else game
-                )
+            target_chapter_id = target_chapter_id or (
+                min(self.data_file_selections.keys())
+                if game == "deltarune" and self.data_file_selections
+                else game
             )
             files_structure.setdefault(target_chapter_id, {})
             stored_extra_path = self._join_storage_path(

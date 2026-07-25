@@ -279,7 +279,7 @@ class LibraryTabBuilder(QObject):
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
         header_row.setSpacing(10)
-        p_btn = QPushButton(tr("ui.priority"))
+        p_btn = QPushButton(tr("ui.priority_steps").replace("&", "&&"))
         m_btn = QPushButton(tr("ui.create_modpack_button"))
         for b, n in [(p_btn, "priority_button"), (m_btn, "create_modpack_button")]:
             b.setObjectName(n)
@@ -287,7 +287,7 @@ class LibraryTabBuilder(QObject):
             self._update_priority_button_style(
                 b, colors["elements"], colors["border"], colors["hover"]
             )
-        p_btn.setToolTip(tr("tooltips.mod_priority"))
+        p_btn.setToolTip(tr("tooltips.priority_steps"))
         m_btn.setToolTip(tr("tooltips.create_modpack"))
         add_btn = QPushButton(tr("ui.add_mod"))
         add_btn.setObjectName("add_mod_button")

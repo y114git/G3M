@@ -87,9 +87,17 @@ class GameManagerDialog(QDialog):
         self.list_widget.model().rowsMoved.connect(self._on_rows_moved)
         self.list_widget.currentRowChanged.connect(self._on_selection_changed)
         layout.addWidget(self.list_widget, 1)
-        close_btn = QPushButton(tr("ui.close_button"))
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignRight)
+        self.close_btn = QPushButton(tr("ui.close_button"))
+        self.close_btn.clicked.connect(self.accept)
+        layout.addWidget(self.close_btn, 0, Qt.AlignmentFlag.AlignRight)
+
+    def relocalize_ui(self) -> None:
+        self.setWindowTitle(tr("games.manager_title"))
+        self.add_btn.setToolTip(tr("games.add_custom_title"))
+        self.edit_btn.setToolTip(tr("games.edit_custom_title"))
+        self.del_btn.setToolTip(tr("games.delete_title"))
+        self.close_btn.setText(tr("ui.close_button"))
+        self._refresh_list()
 
     def _refresh_list(self) -> None:
         current_id = self._selected_game_id()
