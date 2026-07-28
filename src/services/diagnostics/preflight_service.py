@@ -329,11 +329,11 @@ class DiagnosticsPreflightService:
                 )
             ), ""
         patch_path = os.path.join(temp_dir, f"resources_{section_id}_{step_index}.g3mpatch")
-        returncode, _stdout, _stderr = self._patcher.g3mtool.patch_create(
+        returncode, stdout, stderr = self._patcher.g3mtool.patch_create(
             before_path, after_path, patch_path
         )
         if returncode != 0 or not os.path.isfile(patch_path):
-            return (), f"G3MTool resource diff failed for {section_id} step {step_index}: {_stderr or _stdout}"
+            return (), f"G3MTool resource diff failed for {section_id} step {step_index}: {stderr or stdout}"
         import zipfile
 
         try:

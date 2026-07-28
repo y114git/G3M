@@ -4,9 +4,11 @@ import json
 import os
 import zipfile
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QListWidgetItem
 
 from services.localization_service import tr
@@ -64,7 +66,7 @@ def test_modding_tools_close_question_failure_keeps_dialog_open(monkeypatch):
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dialog deleted")),
     )
 
-    dialog.closeEvent(event)
+    dialog.closeEvent(cast(QCloseEvent, event))
 
     event.ignore.assert_called_once_with()
     event.accept.assert_not_called()
@@ -142,6 +144,7 @@ class _FakeG3M:
         progress_callback=None,
     ):
         self._emit_progress(progress_callback, "Executing")
+        assert output_path is not None
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(f"{target}|{data_file}|{input_path}|{args}")
         return 0, "", ""

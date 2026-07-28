@@ -43,7 +43,7 @@ class UrlInstallThread(BaseInstallWorker):
 
         return extract_archive_content_root(archive_path, unpack_dir)
 
-    def __init__(self, main_window, url: str) -> None:
+    def __init__(self, main_window, url: object) -> None:
         super().__init__(main_window)
         self.main_window = main_window
         self.url = url
@@ -51,6 +51,8 @@ class UrlInstallThread(BaseInstallWorker):
     def run(self):
         download_url = str(self.url or "")
         try:
+            if not isinstance(self.url, str):
+                raise TypeError("URL must be a string")
             if self.url.startswith(URL_PROTOCOL_PREFIXES):
                 prefix = next(
                     candidate
@@ -481,7 +483,7 @@ class UrlInstallThread(BaseInstallWorker):
             self._safe_emit(
                 self.result_ready,
                 False,
-                format_network_error(e, url=self.url)
+                format_network_error(e, url=str(self.url or ""))
                 if self._looks_like_network_error(e)
                 else format_filesystem_error(e, path=archive_path),
             )

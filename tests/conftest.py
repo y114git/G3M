@@ -72,6 +72,7 @@ def qapp():
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
+    assert isinstance(app, QApplication)
     yield app
 
     from PyQt6.QtCore import QThread, QThreadPool
@@ -95,7 +96,7 @@ def qapp():
     _pump_events(app)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def sandbox_user_data_paths(monkeypatch, request, temp_dir):
     sandbox_root = Path(temp_dir) / "G3M"
     sandbox_root.mkdir(parents=True, exist_ok=True)
@@ -123,13 +124,13 @@ def sandbox_user_data_paths(monkeypatch, request, temp_dir):
         set_user_data_root_override(None)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def cleanup_threads(request):
     yield
     if "qapp" not in request.fixturenames:
         return
     app = QApplication.instance()
-    if app is None:
+    if not isinstance(app, QApplication):
         return
     from PyQt6.QtCore import QThreadPool
     _pump_events(app)

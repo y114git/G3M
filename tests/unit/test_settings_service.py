@@ -331,7 +331,7 @@ def test_reset_settings_success_feedback_failure_still_returns_true(app_state):
     assert manager.reset_section(
         "general",
         config_keys={"disable_animations"},
-        reset_actions=[],
+        reset_actions=set(),
         has_ui_reset=False,
     ) is True
 

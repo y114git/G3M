@@ -12,12 +12,15 @@ from services.game_registry_service import (
     GameRegistryService,
     GameRegistryValidationError,
 )
+from services.localization_service import localization_service
 from services.settings_service import SettingsManager
 
 
 @pytest.fixture
 def registry_service(app_state, feedback_service):
-    settings_service = SettingsManager(app_state, feedback_service, None, parent=None)
+    settings_service = SettingsManager(
+        app_state, feedback_service, localization_service, parent=None
+    )
     app_state.local_config = {}
     service = GameRegistryService(app_state, settings_service, parent=None)
     service.load()

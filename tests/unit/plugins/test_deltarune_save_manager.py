@@ -53,6 +53,7 @@ class _SettingsManager:
 def _module():
     name = "_deltarune_save_manager_for_test"
     spec = importlib.util.spec_from_file_location(name, SAVE_MANAGER_PATH)
+    assert spec is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     assert spec.loader is not None

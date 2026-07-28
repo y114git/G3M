@@ -1,5 +1,6 @@
 """Integration tests for test refresh updates."""
 
+from collections.abc import Callable
 from unittest.mock import Mock, patch
 
 
@@ -168,7 +169,7 @@ class TestRefreshMetadataLoading:
 
         class _Signal:
             def __init__(self) -> None:
-                self._callback = None
+                self._callback: Callable[..., object] | None = None
 
             def connect(self, callback):
                 self._callback = callback
@@ -178,7 +179,9 @@ class TestRefreshMetadataLoading:
                 self.done = _Signal()
 
             def start(self):
-                self.done._callback(True)
+                callback = self.done._callback
+                assert callback is not None
+                callback(True)
 
             def isFinished(self):  # noqa: N802
                 return True
@@ -217,7 +220,7 @@ class TestRefreshMetadataLoading:
 
         class _Signal:
             def __init__(self) -> None:
-                self._callback = None
+                self._callback: Callable[..., object] | None = None
 
             def connect(self, callback):
                 self._callback = callback
@@ -227,7 +230,9 @@ class TestRefreshMetadataLoading:
                 self.done = _Signal()
 
             def start(self):
-                self.done._callback(True)
+                callback = self.done._callback
+                assert callback is not None
+                callback(True)
 
             def isFinished(self):  # noqa: N802
                 return True

@@ -1,5 +1,6 @@
 """Unit tests for network-sensitive refresh behavior."""
 
+from collections.abc import Callable
 from unittest.mock import Mock, patch
 
 from PyQt6.QtCore import QObject
@@ -108,7 +109,7 @@ def test_reload_global_settings_suppresses_callback_failure_from_worker(qapp, mo
 
     class _Signal:
         def __init__(self) -> None:
-            self._callback = None
+            self._callback: Callable[..., object] | None = None
 
         def connect(self, callback):
             self._callback = callback
@@ -118,7 +119,9 @@ def test_reload_global_settings_suppresses_callback_failure_from_worker(qapp, mo
             self.result_ready = _Signal()
 
         def start(self):
-            self.result_ready._callback(True, {"announce": {"version": 2}})
+            callback = self.result_ready._callback
+            assert callback is not None
+            callback(True, {"announce": {"version": 2}})
 
         def deleteLater(self):  # noqa: N802
             return None

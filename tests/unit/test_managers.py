@@ -1245,7 +1245,7 @@ class TestBackupManager:
         backup_service = BackupManager(
             backup_dir, patching_logger=logging.getLogger("test")
         )
-        chapter_id = 1
+        chapter_id = "1"
         test_dir = os.path.join(temp_dir, "test_game")
         os.makedirs(test_dir, exist_ok=True)
         file1 = os.path.join(test_dir, "file1.txt")
@@ -1276,7 +1276,7 @@ class TestBackupManager:
         backup_service = BackupManager(
             backup_dir, patching_logger=logging.getLogger("test")
         )
-        chapter_id = 1
+        chapter_id = "1"
         test_dir = os.path.join(temp_dir, "test_game")
         os.makedirs(test_dir, exist_ok=True)
         test_file = os.path.join(test_dir, "test.txt")
@@ -1305,7 +1305,7 @@ class TestBackupManager:
         backup_service = BackupManager(
             backup_dir, patching_logger=logging.getLogger("test")
         )
-        chapter_id = 1
+        chapter_id = "1"
         sound_dir = os.path.join(temp_dir, "test_game", "sound", "Desktop")
         os.makedirs(sound_dir, exist_ok=True)
         bank_file = os.path.join(sound_dir, "test.bank")

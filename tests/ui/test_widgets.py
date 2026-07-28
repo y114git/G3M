@@ -1,7 +1,9 @@
 """UI tests for test widgets."""
 
 import contextlib
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from PyQt6.QtCore import QMimeData, QUrl
@@ -15,9 +17,10 @@ def _drain_events(qapp, cycles: int = 3) -> None:
     Multiple cycles with short waits ensure deferred deletions and
     signal/slot invocations are fully processed before test teardown.
     """
+    wait = cast(Callable[[int], None], QTest.qWait)
     for _ in range(cycles):
         qapp.processEvents()
-        QTest.qWait(5)
+        wait(5)
 
 
 def test_clear_layout_widgets_does_not_detach_visible_widgets_as_windows(qapp):
@@ -541,7 +544,7 @@ class TestCommonWidgets:
         """Checks that mod summary panel shows only final file and folder names."""
         from unittest.mock import patch
 
-        from models.mod_models import ModInfo
+        from models.mod_models import ModFileData, ModInfo
         from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
 
         host = QWidget()
@@ -557,13 +560,13 @@ class TestCommonWidgets:
             downloads=0,
             game='deltarune',
             files={
-                'deltarune_1': {
-                    'data_file_path': 'folder/something.thing',
-                    'extra_files': [
+                'deltarune_1': ModFileData(
+                    data_file_path='folder/something.thing',
+                    extra_files=[
                         'older/somefolder/',
                         'nested/final.bin',
                     ],
-                }
+                )
             },
         )
         with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):
@@ -614,7 +617,7 @@ class TestCommonWidgets:
         """Checks that mod summary panel can wrap long file names in popup layouts."""
         from unittest.mock import patch
 
-        from models.mod_models import ModInfo
+        from models.mod_models import ModFileData, ModInfo
         from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
 
         host = QWidget()
@@ -630,10 +633,10 @@ class TestCommonWidgets:
             downloads=0,
             game='deltarune',
             files={
-                'deltarune_4': {
-                    'data_file_path': 'chapter4/Ch4_Dojo_allStar.xdelta',
-                    'extra_files': ['audio/extra_file_mus_castle_town_ch4USDX.ogg.zip'],
-                }
+                'deltarune_4': ModFileData(
+                    data_file_path='chapter4/Ch4_Dojo_allStar.xdelta',
+                    extra_files=['audio/extra_file_mus_castle_town_ch4USDX.ogg.zip'],
+                )
             },
         )
         with patch('ui.widgets.mod.mod_summary_panel.load_mod_icon_universal'):

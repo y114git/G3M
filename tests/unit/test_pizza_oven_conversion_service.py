@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -29,9 +30,16 @@ class FakePizzaOvenG3MTool:
         if progress_callback:
             progress_callback(100, "done")
         source = Path(original_file)
-        patch_name = Path(patch_path).name.lower()
-        if patch_name.endswith((".xdelta", ".vcdiff")) and source.name.lower() == "data.win":
+        patch = Path(patch_path)
+        if (
+            patch.suffix.lower() in {".xdelta", ".vcdiff"}
+            and source.name.lower() == "data.win"
+            and patch.read_bytes() != b"EXE_PATCH"
+        ):
             Path(output_path).write_bytes(source.read_bytes() + b"|po-patched|")
+            return (0, "", "")
+        if source.suffix.lower() == ".exe" and patch.read_bytes() == b"EXE_PATCH":
+            Path(output_path).write_bytes(source.read_bytes() + b"|exe-patched|")
             return (0, "", "")
         return (1, "", "unsupported patch target")
 
@@ -50,6 +58,8 @@ class FakePizzaOvenG3MTool:
         progress_callback=None,
     ) -> tuple[int, str, str]:
         payload = Path(patch_path).read_bytes()
+        if Path(patch_path).suffix.lower() in {".xdelta", ".vcdiff"}:
+            return self.xpatch_apply(original_data_win, patch_path, output_path)
         if not payload.startswith(self._PATCH_PREFIX):
             return (1, "", "invalid fake g3mpatch payload")
         if progress_callback:
@@ -66,6 +76,17 @@ class FakePizzaOvenG3MTool:
     ) -> tuple[int, str, str]:
         Path(output_path).write_bytes(b"unused")
         return (0, "", "")
+
+    def merge_patches(
+        self,
+        original_file: str,
+        patch_files: list[str],
+        output_path: str,
+        **_kwargs,
+    ) -> tuple[int, str, str]:
+        if len(patch_files) != 1:
+            return (1, "", "unsupported fake merge")
+        return self.xpatch_apply(original_file, patch_files[0], output_path)
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -329,13 +350,15 @@ def test_presenter_worker_status_suppresses_broken_feedback(tmp_path, monkeypatc
 
     class _Signal:
         def __init__(self) -> None:
-            self.callback = None
+            self.callback: Callable[..., object] | None = None
 
         def connect(self, callback):
             self.callback = callback
 
         def emit(self, *args):
-            self.callback(*args)
+            callback = self.callback
+            assert callback is not None
+            callback(*args)
 
     class _FakeWorker:
         last = None
@@ -436,8 +459,8 @@ def test_convert_builds_canonical_g3m_mod_from_pizzaoven_result(tmp_path):
     chapter_data = config["files"]["pizzatower"]
     extra_files = _extra_files_to_map(chapter_data["extra_files"])
 
-    assert chapter_data["data_file_path"] == "data.g3mpatch"
-    assert (target_mod_dir / "data.g3mpatch").exists()
+    assert chapter_data["data_file_path"] == "data.xdelta"
+    assert (target_mod_dir / "data.xdelta").read_bytes() == b"patch"
     assert extra_files["root"] == ["helper.dll", "noisecredits.txt"]
     assert set(extra_files["lang"]) == {"lang/english.txt", "lang/custom.def"}
     assert extra_files["lang/graphics"] == [
@@ -447,6 +470,30 @@ def test_convert_builds_canonical_g3m_mod_from_pizzaoven_result(tmp_path):
     assert extra_files["lang/fonts"] == ["lang/fonts/tutorial_english.png"]
     assert extra_files["sound/Desktop/music"] == ["sound/Desktop/music/custom.bank"]
     assert (target_mod_dir / "Install Instructions.txt").exists()
+
+
+def test_convert_preserves_executable_xdelta_by_detected_target(tmp_path):
+    """An executable xdelta uses its detected target regardless of patch name."""
+    game_dir = tmp_path / "game"
+    mod_dir = tmp_path / "mod"
+    mods_dir = tmp_path / "mods"
+    _create_fake_pizzatower_game(game_dir)
+    (game_dir / "PizzaTower.exe").rename(game_dir / "CustomTower.exe")
+    _write_bytes(mod_dir / "unrelated-name.xdelta", b"EXE_PATCH")
+
+    result = PizzaOvenConversionService(FakePizzaOvenG3MTool()).convert(
+        str(mod_dir),
+        str(mods_dir),
+        str(game_dir),
+    )
+
+    target_mod_dir = Path(result.mod_dir)
+    config = json.loads((target_mod_dir / "mod_config.json").read_text("utf-8"))
+    extra_files = config["files"]["pizzatower"]["extra_files"]
+
+    assert extra_files == ["CustomTower.exe.xdelta"]
+    assert (target_mod_dir / "CustomTower.exe.xdelta").read_bytes() == b"EXE_PATCH"
+    assert not (target_mod_dir / "CustomTower.exe").exists()
 
 
 def test_converted_mod_applies_expected_files_to_clean_game(

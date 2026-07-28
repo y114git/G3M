@@ -18,7 +18,7 @@ def _safe_emit(owner: str, signal, *args) -> None:
 class BgLoader(QThread):
     loaded = pyqtSignal(object)
 
-    def __init__(self, path: str, size: QSize) -> None:
+    def __init__(self, path: object, size: QSize) -> None:
         super().__init__()
         self._path, self._size = path, size
 

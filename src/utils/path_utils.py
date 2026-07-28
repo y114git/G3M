@@ -282,7 +282,9 @@ def find_supported_game_data_file(
 
 
 def find_chapter_resource_dir(
-    base_dir, chapter_id: str, macos_app_names=("DELTARUNE.app", "DELTARUNEdemo.app")
+    base_dir,
+    chapter_id: str | None,
+    macos_app_names=("DELTARUNE.app", "DELTARUNEdemo.app"),
 ):
     try:
         if not base_dir or not chapter_id:
@@ -409,7 +411,7 @@ def _pizza_names(game_name):
     )
 
 
-def autodetect_path(game_name: str) -> str | None:
+def autodetect_path(game_name: str | None) -> str | None:
     if not game_name:
         return None
     unsupported_autodetect_names = {

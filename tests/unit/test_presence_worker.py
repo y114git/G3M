@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
 from workers.presence_worker import PresenceWorker
 
 
@@ -39,7 +41,7 @@ def test_presence_worker_reports_question_mark_until_first_success():
         worker.run()
 
     assert emitted == [-1]
-    assert worker._last_sync_at == 0.0
+    assert worker._last_sync_at == pytest.approx(0.0)
 
 
 def test_presence_worker_retries_read_without_heartbeat_after_rate_limit():
@@ -61,7 +63,7 @@ def test_presence_worker_retries_read_without_heartbeat_after_rate_limit():
         {},
     ]
     assert emitted == [23]
-    assert worker._last_heartbeat_at == 0.0
+    assert worker._last_heartbeat_at == pytest.approx(0.0)
 
 
 def test_presence_worker_syncs_often_but_heartbeats_sparsely():

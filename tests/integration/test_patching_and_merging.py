@@ -35,6 +35,8 @@ def test_g3mtool_log_paths_are_process_safe(tmp_path, monkeypatch):
     first = _new_g3mtool_log_path()
     second = _new_g3mtool_log_path()
 
+    assert first is not None
+    assert second is not None
     assert first != second
     assert os.path.isfile(first)
     assert os.path.isfile(second)
@@ -993,6 +995,7 @@ class TestBackupFlow:
         assert chapter_id in bm.original_files
         assert str(test_file) in bm.original_files[chapter_id]
         backup_path = bm.original_files[chapter_id][str(test_file)]
+        assert backup_path is not None
         assert os.path.exists(backup_path)
         test_file.write_bytes(b"MODIFIED_CONTENT")
         bm.restore_backups(chapter_id)

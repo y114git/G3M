@@ -1,6 +1,7 @@
 """Unit tests for AppWindow dialog callback safety."""
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 
@@ -154,7 +155,7 @@ def test_main_window_permission_error_ignores_broken_feedback():
     """Checks permission error reporting cannot crash when feedback UI is gone."""
     from app.window.main import AppWindow
 
-    window = SimpleNamespace(feedback_service=Mock())
+    window = cast(AppWindow, SimpleNamespace(feedback_service=Mock()))
     window._safe_show_message = lambda *args, **kwargs: AppWindow._safe_show_message(
         window, *args, **kwargs
     )
@@ -171,10 +172,13 @@ def test_main_window_rate_limit_ignores_broken_feedback():
     """Checks GB rate-limit persistence still happens when warning UI is gone."""
     from app.window.main import AppWindow
 
-    window = SimpleNamespace(
-        app_state=SimpleNamespace(local_config={}),
-        settings_service=Mock(),
-        feedback_service=Mock(),
+    window = cast(
+        AppWindow,
+        SimpleNamespace(
+            app_state=SimpleNamespace(local_config={}),
+            settings_service=Mock(),
+            feedback_service=Mock(),
+        ),
     )
     window._safe_show_message = lambda *args, **kwargs: AppWindow._safe_show_message(
         window, *args, **kwargs

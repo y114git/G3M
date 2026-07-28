@@ -1,6 +1,8 @@
 """UI tests for test main window."""
 
 import os
+from collections.abc import Callable
+from typing import cast
 from unittest.mock import Mock, patch
 
 from PyQt6.QtCore import QPoint, QRect, Qt
@@ -10,9 +12,10 @@ from services.localization_service import tr
 
 
 def _drain_events(qapp, cycles: int = 3, delay_ms: int = 10) -> None:
+    wait = cast(Callable[[int], None], QTest.qWait)
     for _ in range(cycles):
         qapp.processEvents()
-        QTest.qWait(delay_ms)
+        wait(delay_ms)
 
 
 def _close_app_window(qapp, window) -> None:

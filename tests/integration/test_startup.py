@@ -13,6 +13,7 @@ import tempfile
 import threading
 import types
 import zipfile
+from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -263,7 +264,7 @@ def test_install_crash_diagnostics_logs_unraisable_exceptions(temp_dir):
             err_msg=None,
             object=BrokenFinalizer(),
         )
-        sys.unraisablehook(args)
+        sys.unraisablehook(cast("types.UnraisableHookArgs", args))
         for handler in logging.getLogger().handlers:
             handler.flush()
 
@@ -296,6 +297,8 @@ def test_configure_logging_writes_uncaught_exceptions_when_root_handler_exists(t
             raise RuntimeError("startup logging probe")
         except RuntimeError:
             exctype, value, tb = sys.exc_info()
+            assert exctype is not None
+            assert value is not None
             sys.excepthook(exctype, value, tb)
 
         for handler in root.handlers:

@@ -39,7 +39,7 @@ class CreateModpackThread(ManagedQThread):
 
     def __init__(
         self,
-        chapter_mods: dict[str, list[list[Any]]] | PatchPlan,
+        chapter_mods: dict[str, list[Any]] | PatchPlan,
         modpack_name: str,
         modpack_dir: str,
         app_state,

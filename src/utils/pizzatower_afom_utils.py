@@ -33,7 +33,7 @@ def is_towers_subpath(rel_path: str) -> bool:
 def apply_afom_towers_from_mod_source(
     mod_source_dir: str,
     *,
-    backup_or_mark: Callable[[str], None],
+    backup_or_mark: Callable[[str], object],
     logger,
     extract_archive,
 ) -> bool:
@@ -61,7 +61,7 @@ def apply_afom_towers_from_mod_source(
 def _copy_tree_contents(
     source_root: str,
     target_root: str,
-    backup_or_mark: Callable[[str], None],
+    backup_or_mark: Callable[[str], object],
     logger=None,
 ) -> bool:
     try:
@@ -112,7 +112,7 @@ def _copy_tree_contents(
 def _extract_archive_contents(
     archive_path: str,
     target_root: str,
-    backup_or_mark: Callable[[str], None],
+    backup_or_mark: Callable[[str], object],
     extract_archive,
 ) -> bool:
     try:

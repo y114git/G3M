@@ -6,6 +6,7 @@ import zipfile
 
 import pytest
 
+from services.localization_service import localization_service
 from services.profile_service import ProfileService, is_profile_key
 
 
@@ -25,7 +26,9 @@ def profile_service(
     monkeypatch.setattr(
         "services.profile_service.get_user_profiles_dir", lambda: profiles_dir
     )
-    settings_service = SettingsManager(app_state, feedback_service, None, parent=None)
+    settings_service = SettingsManager(
+        app_state, feedback_service, localization_service, parent=None
+    )
     app_state.local_config = {
         "selected_game_type": "deltarune",
         "chapter_mode_enabled": True,

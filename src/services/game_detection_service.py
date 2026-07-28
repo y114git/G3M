@@ -113,8 +113,10 @@ class GameProcessTracker:
         return bool(self.tracked)
 
 
-def is_game_running(pid: int | None = None):
+def is_game_running(pid: object | None = None):
     if pid is not None:
+        if isinstance(pid, bool) or not isinstance(pid, int):
+            return False
         try:
             return psutil.pid_exists(pid)
         except (TypeError, OverflowError):

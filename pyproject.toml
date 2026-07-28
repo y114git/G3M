@@ -50,6 +50,7 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["-ra", "--tb=short"]
+usefixtures = ["sandbox_user_data_paths", "cleanup_threads"]
 markers = [
     "skip_user_data_override: allow tests to use native path resolution instead of sandboxed user data root",
 ]

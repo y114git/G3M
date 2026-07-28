@@ -3,15 +3,29 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Protocol
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from services.pizza_oven_conversion_service import (
     PizzaOvenConversionError,
-    PizzaOvenConversionService,
+    PizzaOvenConversionResult,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class PizzaOvenConverter(Protocol):
+    def convert(
+        self,
+        source_dir: str,
+        mods_dir: str,
+        game_path: str,
+        *,
+        source_file_path: str | None = None,
+        gamebanana_metadata: dict[str, Any] | None = None,
+        progress_callback=None,
+    ) -> PizzaOvenConversionResult: ...
 
 
 class PizzaOvenConversionWorker(QThread):
@@ -21,7 +35,7 @@ class PizzaOvenConversionWorker(QThread):
 
     def __init__(
         self,
-        conversion_service: PizzaOvenConversionService,
+        conversion_service: PizzaOvenConverter,
         source_dir: str,
         mods_dir: str,
         game_path: str,

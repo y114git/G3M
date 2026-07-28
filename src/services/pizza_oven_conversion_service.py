@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from adapters.g3mtool_adapter import G3MToolManager
 from config.config import MOD_CONFIG_FILENAME, MOD_DOCUMENTATION_EXTENSIONS
@@ -66,6 +66,24 @@ class PizzaOvenConversionError(RuntimeError):
     """Raised when PizzaOven conversion cannot proceed."""
 
 
+class PizzaOvenPatchTool(Protocol):
+    """G3MTool operations required by PizzaOven conversion."""
+
+    def is_available(self) -> bool: ...
+
+    def xpatch_apply(
+        self, original_file: str, patch_path: str, output_path: str
+    ) -> tuple[int, str, str]: ...
+
+    def patch_create(
+        self, original_file: str, modified_file: str, output_path: str
+    ) -> tuple[int, str, str]: ...
+
+    def xpatch_create(
+        self, original_file: str, modified_file: str, output_path: str
+    ) -> tuple[int, str, str]: ...
+
+
 @dataclass(slots=True)
 class PizzaOvenInspection:
     eligible: bool
@@ -90,12 +108,13 @@ class PizzaOvenConversionResult:
 class PizzaOvenSimulationResult:
     used_source_files: list[str]
     touched_files: set[str]
+    reusable_patches: dict[str, str] = field(default_factory=dict)
 
 
 class PizzaOvenConversionService:
     """Converts PizzaOven normal mods into G3M mods via temp simulation."""
 
-    def __init__(self, g3mtool: G3MToolManager | None = None) -> None:
+    def __init__(self, g3mtool: PizzaOvenPatchTool | None = None) -> None:
         self._g3mtool = g3mtool or G3MToolManager()
 
     def validate_game_path(self, game_path: str) -> None:
@@ -243,6 +262,7 @@ class PizzaOvenConversionService:
                 changed_files,
                 simulation.used_source_files,
                 merged_metadata,
+                simulation.reusable_patches,
             )
             if progress_callback:
                 progress_callback(100, tr("status.po_convert_completed_detail"))
@@ -333,12 +353,9 @@ class PizzaOvenConversionService:
                 "Pizza Tower folder is missing required original files: "
                 + ", ".join(missing)
             )
-        if not any(
-            os.path.isfile(os.path.join(game_path, exe_name))
-            for exe_name in ("PizzaTower.exe", "PizzaTower")
-        ):
+        if not PizzaOvenConversionService._get_executable_targets(game_path):
             raise PizzaOvenConversionError(
-                "Pizza Tower folder is missing PizzaTower executable"
+                "Pizza Tower folder is missing a game executable"
             )
 
     def _detect_mod_type(self, source_dir: str) -> str:
@@ -394,6 +411,8 @@ class PizzaOvenConversionService:
         files_to_patch = self._get_patch_targets(working_game_dir)
         used_source_files: list[str] = []
         touched_files: set[str] = set()
+        patch_sources: dict[str, list[str]] = {}
+        replaced_files: set[str] = set()
         for source_path, rel_path in mod_files:
             ext = os.path.splitext(source_path)[1].lower()
             if ext in (".xdelta", ".vcdiff"):
@@ -403,9 +422,11 @@ class PizzaOvenConversionService:
                         f"PizzaOven patch could not be applied: {os.path.basename(source_path)}"
                     )
                 used_source_files.append(rel_path)
-                touched_files.add(
-                    os.path.relpath(target_file, working_game_dir).replace("\\", "/")
-                )
+                target_rel_path = os.path.relpath(
+                    target_file, working_game_dir
+                ).replace("\\", "/")
+                touched_files.add(target_rel_path)
+                patch_sources.setdefault(target_rel_path, []).append(source_path)
                 continue
             if ext == ".txt":
                 text = self._read_text_safe(source_path)
@@ -417,8 +438,8 @@ class PizzaOvenConversionService:
                     self._copy_file(source_path, target_path)
                     used_source_files.append(rel_path)
                     touched_files.add(
-                        os.path.relpath(target_path, working_game_dir).replace(
-                            "\\", "/"
+                        self._record_replaced_file(
+                            target_path, working_game_dir, replaced_files
                         )
                     )
                 elif "credits" in basename.lower():
@@ -428,8 +449,8 @@ class PizzaOvenConversionService:
                     self._copy_file(source_path, target_path)
                     used_source_files.append(rel_path)
                     touched_files.add(
-                        os.path.relpath(target_path, working_game_dir).replace(
-                            "\\", "/"
+                        self._record_replaced_file(
+                            target_path, working_game_dir, replaced_files
                         )
                     )
                 continue
@@ -438,6 +459,7 @@ class PizzaOvenConversionService:
                 self._copy_file(source_path, target_path)
                 used_source_files.append(rel_path)
                 touched_files.add("data.win")
+                replaced_files.add("data.win")
                 continue
             if ext == ".bank":
                 target_path = self._copy_bank_file(
@@ -445,7 +467,9 @@ class PizzaOvenConversionService:
                 )
                 used_source_files.append(rel_path)
                 touched_files.add(
-                    os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                    self._record_replaced_file(
+                        target_path, working_game_dir, replaced_files
+                    )
                 )
                 continue
             if ext in {".dll", ".mp4"}:
@@ -458,7 +482,9 @@ class PizzaOvenConversionService:
                 )
                 used_source_files.append(rel_path)
                 touched_files.add(
-                    os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                    self._record_replaced_file(
+                        target_path, working_game_dir, replaced_files
+                    )
                 )
         lang_names, lang_files = self._collect_language_names(working_game_dir)
         for source_path, rel_path in mod_files:
@@ -474,7 +500,9 @@ class PizzaOvenConversionService:
                 )
                 used_source_files.append(rel_path)
                 touched_files.add(
-                    os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                    self._record_replaced_file(
+                        target_path, working_game_dir, replaced_files
+                    )
                 )
                 continue
             if ext == ".def":
@@ -487,7 +515,9 @@ class PizzaOvenConversionService:
                 )
                 used_source_files.append(rel_path)
                 touched_files.add(
-                    os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                    self._record_replaced_file(
+                        target_path, working_game_dir, replaced_files
+                    )
                 )
                 continue
             if ext == ".png":
@@ -507,8 +537,8 @@ class PizzaOvenConversionService:
                     )
                     used_source_files.append(rel_path)
                     touched_files.add(
-                        os.path.relpath(target_path, working_game_dir).replace(
-                            "\\", "/"
+                        self._record_replaced_file(
+                            target_path, working_game_dir, replaced_files
                         )
                     )
                 continue
@@ -522,7 +552,9 @@ class PizzaOvenConversionService:
                 )
                 used_source_files.append(rel_path)
                 touched_files.add(
-                    os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+                    self._record_replaced_file(
+                        target_path, working_game_dir, replaced_files
+                    )
                 )
         if not used_source_files:
             raise PizzaOvenConversionError(
@@ -531,7 +563,20 @@ class PizzaOvenConversionService:
         return PizzaOvenSimulationResult(
             used_source_files=used_source_files,
             touched_files=touched_files,
+            reusable_patches={
+                target: sources[0]
+                for target, sources in patch_sources.items()
+                if len(sources) == 1 and target not in replaced_files
+            },
         )
+
+    @staticmethod
+    def _record_replaced_file(
+        target_path: str, working_game_dir: str, replaced_files: set[str]
+    ) -> str:
+        rel_path = os.path.relpath(target_path, working_game_dir).replace("\\", "/")
+        replaced_files.add(rel_path)
+        return rel_path
 
     @staticmethod
     def _iter_mod_files(source_dir: str) -> list[tuple[str, str]]:
@@ -629,10 +674,12 @@ class PizzaOvenConversionService:
     @staticmethod
     def _get_patch_targets(working_game_dir: str) -> list[str]:
         targets = []
-        for preferred in ("data.win", "PizzaTower.exe"):
-            candidate = os.path.join(working_game_dir, preferred)
-            if os.path.isfile(candidate):
-                targets.append(candidate)
+        data_file = os.path.join(working_game_dir, "data.win")
+        if os.path.isfile(data_file):
+            targets.append(data_file)
+        targets.extend(
+            PizzaOvenConversionService._get_executable_targets(working_game_dir)
+        )
         sound_dir = os.path.join(working_game_dir, "sound", "Desktop")
         if os.path.isdir(sound_dir):
             sound_files = []
@@ -641,6 +688,33 @@ class PizzaOvenConversionService:
                     sound_files.append(os.path.join(root, file_name))
             sound_files.sort(key=lambda value: value.lower())
             targets.extend(sound_files)
+        return targets
+
+    @staticmethod
+    def _get_executable_targets(game_dir: str) -> list[str]:
+        if not os.path.isdir(game_dir):
+            return []
+        targets: list[str] = []
+        seen: set[str] = set()
+
+        def add_if_executable(path: str) -> None:
+            normalized = os.path.normcase(os.path.abspath(path))
+            if normalized in seen or not os.path.isfile(path):
+                return
+            file_name = os.path.basename(path)
+            if not (
+                file_name.lower().endswith(".exe")
+                or file_name.casefold() == "pizzatower"
+                or (os.name != "nt" and os.access(path, os.X_OK))
+            ):
+                return
+            seen.add(normalized)
+            targets.append(path)
+
+        for preferred in ("PizzaTower.exe", "PizzaTower"):
+            add_if_executable(os.path.join(game_dir, preferred))
+        for file_name in sorted(os.listdir(game_dir), key=str.casefold):
+            add_if_executable(os.path.join(game_dir, file_name))
         return targets
 
     def _apply_xdelta_file(
@@ -748,6 +822,7 @@ class PizzaOvenConversionService:
         changed_files: list[str],
         used_source_files: list[str],
         metadata: dict[str, Any],
+        reusable_patches: dict[str, str],
     ) -> PizzaOvenConversionResult:
         mod_name = str(metadata.get("name") or "PizzaOven Mod").strip()
         mod_id = str(metadata.get("id") or f"local_po_{uuid.uuid4().hex[:12]}")
@@ -755,12 +830,19 @@ class PizzaOvenConversionService:
         files_structure: dict[str, dict[str, Any]] = {"pizzatower": {}}
         changed_remaining = list(changed_files)
         data_file_name = self._write_data_patch(
-            target_mod_dir, original_game_dir, working_game_dir, changed_remaining
+            target_mod_dir,
+            original_game_dir,
+            working_game_dir,
+            changed_remaining,
+            reusable_patches.get("data.win"),
         )
         if data_file_name:
             files_structure["pizzatower"]["data_file_path"] = data_file_name
         extra_files = self._write_extra_files(
-            target_mod_dir, working_game_dir, changed_remaining
+            target_mod_dir,
+            working_game_dir,
+            changed_remaining,
+            reusable_patches,
         )
         if extra_files:
             files_structure["pizzatower"]["extra_files"] = extra_files
@@ -841,10 +923,20 @@ class PizzaOvenConversionService:
         target_mod_dir: str,
         working_game_dir: str,
         changed_files: list[str],
+        reusable_patches: dict[str, str],
     ) -> list[str]:
         extra_files = []
         for rel_path in changed_files:
             if not rel_path:
+                continue
+            patch_source = reusable_patches.get(rel_path)
+            if patch_source:
+                patch_rel_path = f"{rel_path}.xdelta"
+                target_path = os.path.join(
+                    target_mod_dir, patch_rel_path.replace("/", os.sep)
+                )
+                cls._copy_file(patch_source, target_path)
+                extra_files.append(patch_rel_path)
                 continue
             source_path = os.path.join(working_game_dir, rel_path.replace("/", os.sep))
             target_path = os.path.join(target_mod_dir, rel_path.replace("/", os.sep))
@@ -859,9 +951,15 @@ class PizzaOvenConversionService:
         original_game_dir: str,
         working_game_dir: str,
         changed_remaining: list[str],
+        data_patch_source: str | None,
     ) -> str | None:
         if "data.win" not in changed_remaining:
             return None
+        if data_patch_source and os.path.isfile(data_patch_source):
+            target_patch = os.path.join(target_mod_dir, "data.xdelta")
+            self._copy_file(data_patch_source, target_patch)
+            changed_remaining.remove("data.win")
+            return "data.xdelta"
         original_data = os.path.join(original_game_dir, "data.win")
         modified_data = os.path.join(working_game_dir, "data.win")
         if not os.path.isfile(original_data) or not os.path.isfile(modified_data):

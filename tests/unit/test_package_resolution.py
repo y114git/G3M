@@ -61,6 +61,7 @@ def test_local_top_level_packages_beat_later_installed_packages(tmp_path):
 
         for package_name in TOP_LEVEL_PACKAGES:
             module = importlib.import_module(package_name)
+            assert module.__file__ is not None
             package_root = Path(module.__file__).resolve().parent
             assert package_root == (REPO_SRC / package_name).resolve()
     finally:

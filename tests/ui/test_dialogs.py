@@ -1,19 +1,24 @@
 """UI tests for test dialogs."""
 
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock, patch
 
-try:
-    from typing import override
-except ImportError:
-    from typing import override
-
 from PyQt6.QtCore import QMimeData, Qt, QUrl
-from PyQt6.QtGui import QTextCursor, QTextDocument
+from PyQt6.QtGui import QDropEvent, QTextCursor, QTextDocument
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 EXPECTED_DIALOG_WIDTH = 1145
+
+
+@dataclass(frozen=True)
+class _GameEntry:
+    id: str
+    display_name: str
 
 
 def _close_dialog(qapp, dialog) -> None:
@@ -300,8 +305,9 @@ class TestModPriorityStepsDialog:
     def test_step_selection_is_visible_and_dialog_is_at_least_550_pixels_wide(
         self, qapp, app_state
     ):
-        from PyQt6.QtCore import QPoint, Qt
-        from PyQt6.QtTest import QTest
+        from PyQt6.QtCore import QEvent, QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
+        from PyQt6.QtWidgets import QApplication
 
         from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
 
@@ -310,9 +316,16 @@ class TestModPriorityStepsDialog:
         dialog.show()
         qapp.processEvents()
 
-        QTest.mouseClick(
-            dialog._step_groups[1], Qt.MouseButton.LeftButton, pos=QPoint(8, 8)
+        click_position = QPointF(8, 8)
+        mouse_press = QMouseEvent(
+            QEvent.Type.MouseButtonPress,
+            click_position,
+            QPointF(dialog._step_groups[1].mapToGlobal(click_position.toPoint())),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
         )
+        QApplication.sendEvent(dialog._step_groups[1], mouse_press)
 
         assert dialog.minimumWidth() == 550
         assert dialog.width() >= 550
@@ -521,7 +534,7 @@ class TestBlocklistDialog:
         dialog = BlocklistDialog(
             service,
             current_game="deltarune",
-            available_games=[SimpleNamespace(id="deltarune", display_name="DELTARUNE")],
+            available_games=[_GameEntry(id="deltarune", display_name="DELTARUNE")],
         )
         dialog.value_edit.setText("")
         dialog.add_entry()
@@ -726,7 +739,6 @@ class TestReadmeUi:
     ):
         """Checks that local HTML INFO files may load remote img sources."""
         from PyQt6.QtGui import QImage
-        from PyQt6.QtTest import QTest
 
         from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
@@ -740,21 +752,26 @@ class TestReadmeUi:
             response = Mock()
             image_bytes = bytearray()
             buffer = QImage(image)
-            from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+            from PyQt6.QtCore import (
+                QBuffer,
+                QByteArray,
+                QIODevice,
+            )
 
             data = QByteArray()
             qbuffer = QBuffer(data)
             qbuffer.open(QIODevice.OpenModeFlag.WriteOnly)
             assert buffer.save(qbuffer, "PNG")
-            image_bytes.extend(bytes(data))
+            image_bytes.extend(data.data())
             response.content = bytes(image_bytes)
             response.raise_for_status = Mock()
             get_session.return_value.get.return_value = response
             dialog = ModReadmeDialog(app_state, "Remote", [str(readme_path)])
             tab = dialog._tabs.widget(0)
+            wait = cast(Callable[[int], None], QTest.qWait)
             for _ in range(20):
                 qapp.processEvents()
-                QTest.qWait(25)
+                wait(25)
 
                 resource = tab.viewer.document().resource(
                     QTextDocument.ResourceType.ImageResource,
@@ -771,7 +788,6 @@ class TestReadmeUi:
     ):
         """Checks that lazy HTML loading does not lock images to fallback width."""
         from PyQt6.QtGui import QImage
-        from PyQt6.QtTest import QTest
 
         from ui.dialogs.mod.readme_dialog import ModReadmeDialog
 
@@ -787,9 +803,10 @@ class TestReadmeUi:
         dialog = ModReadmeDialog(app_state, "Test Mod", [str(readme_path)])
         dialog.resize(900, 640)
         dialog.show()
+        wait = cast(Callable[[int], None], QTest.qWait)
         for _ in range(5):
             qapp.processEvents()
-            QTest.qWait(30)
+            wait(30)
         tab = dialog._tabs.widget(0)
         html = tab.viewer.toHtml()
 
@@ -959,24 +976,12 @@ class TestReadmeUi:
         mime = QMimeData()
         mime.setUrls([QUrl.fromLocalFile(first), QUrl.fromLocalFile(second)])
 
-        class _Event:
-            def __init__(self) -> None:
-                self.accepted = False
-
-            @override
-            def mimeData(self):
-                return mime
-
-            def source(self):
-                return None
-
-            @override
-            def acceptProposedAction(self):
-                self.accepted = True
-
-        event = _Event()
+        event = SimpleNamespace(accepted=False)
+        event.mimeData = lambda: mime
+        event.source = lambda: None
+        event.acceptProposedAction = lambda: setattr(event, "accepted", True)
         with patch("ui.dialogs.profile_manager_dialog.QMessageBox.information"):
-            dialog.list_widget.dropEvent(event)
+            dialog.list_widget.dropEvent(cast(QDropEvent, event))
         assert event.accepted is True
         assert os.path.normpath(profile_service.import_profile.call_args_list[0].args[0]) == os.path.normpath(first)
         assert os.path.normpath(profile_service.import_profile.call_args_list[1].args[0]) == os.path.normpath(second)
@@ -1046,25 +1051,11 @@ class TestReadmeUi:
             ]
         )
 
-        class _Event:
-            def __init__(self) -> None:
-                self.accepted = False
-
-            @override
-            def mimeData(self):
-                return mime
-
-            def source(self):
-                return None
-
-            @override
-            def acceptProposedAction(self):
-                self.accepted = True
-
-            def ignore(self):
-                self.accepted = False
-
-        event = _Event()
+        event = SimpleNamespace(accepted=False)
+        event.mimeData = lambda: mime
+        event.source = lambda: None
+        event.acceptProposedAction = lambda: setattr(event, "accepted", True)
+        event.ignore = lambda: setattr(event, "accepted", False)
         dialog.dropEvent(event)
         game_id = dialog._current_game()
         assert event.accepted is True
@@ -1136,25 +1127,11 @@ class TestReadmeUi:
             ]
         )
 
-        class _Event:
-            def __init__(self) -> None:
-                self.accepted = False
-
-            @override
-            def mimeData(self):
-                return mime
-
-            def source(self):
-                return None
-
-            @override
-            def acceptProposedAction(self):
-                self.accepted = True
-
-            def ignore(self):
-                self.accepted = False
-
-        event = _Event()
+        event = SimpleNamespace(accepted=False)
+        event.mimeData = lambda: mime
+        event.source = lambda: None
+        event.acceptProposedAction = lambda: setattr(event, "accepted", True)
+        event.ignore = lambda: setattr(event, "accepted", False)
         dialog.dropEvent(event)
         assert event.accepted is True
         assert [(os.path.normpath(path), flag) for path, flag in imported_files] == [(os.path.normpath(str(first)), False), (os.path.normpath(str(second)), False)]

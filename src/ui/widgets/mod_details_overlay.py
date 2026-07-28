@@ -1463,7 +1463,8 @@ class ModDetailsOverlay(QWidget):
             except (RuntimeError, AttributeError) as e:
                 logger.debug(f"Failed to restore main window resize event: {e}")
 
-    def _stop_thread(self, thread):
+    @staticmethod
+    def _stop_thread(thread) -> None:
         """Stop and clean up a QThread safely."""
         try:
             thread.blockSignals(True)

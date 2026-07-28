@@ -88,7 +88,7 @@ class _StuckThread:
 def test_overlay_cleanup_never_force_terminates_running_thread():
     thread = _StuckThread()
 
-    ModDetailsOverlay._stop_thread(None, thread)
+    ModDetailsOverlay._stop_thread(thread)
 
     assert thread.terminated is False
     assert thread.finished.callback is not None

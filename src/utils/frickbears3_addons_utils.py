@@ -32,7 +32,7 @@ def is_addons_subpath(rel_path: str) -> bool:
 def apply_frickbears3_addons_from_mod_source(
     mod_source_dir: str,
     *,
-    backup_or_mark: Callable[[str], None],
+    backup_or_mark: Callable[[str], object],
     logger,
     extract_archive,
 ) -> bool:

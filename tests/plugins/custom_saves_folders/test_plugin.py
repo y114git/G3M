@@ -29,6 +29,7 @@ class _Settings:
 def _module():
     name = "_custom_saves_folders_plugin_for_test"
     spec = importlib.util.spec_from_file_location(name, PLUGIN_PATH)
+    assert spec is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     assert spec.loader is not None

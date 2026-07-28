@@ -37,9 +37,13 @@ class _ScopeTracker(ast.NodeVisitor):
         self._analyze_function(node)
         self.generic_visit(node)
 
-    visit_AsyncFunctionDef = visit_FunctionDef
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._analyze_function(node)
+        self.generic_visit(node)
 
-    def _analyze_function(self, func: ast.FunctionDef) -> None:
+    def _analyze_function(
+        self, func: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> None:
         cond_imports: dict[str, list[tuple[int, ast.AST]]] = {}
         fallback_names: set[str] = set()
         uncond_imports: dict[str, list[int]] = {}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from types import SimpleNamespace
 
 from models.execution_plan import PatchPlan
@@ -200,7 +201,7 @@ def test_preflight_rejects_patch_fallback_and_reports_exact_tool_error(tmp_path)
     mod = SimpleNamespace(id="broken_xdelta")
 
     class FailingPatcher:
-        strict_warning_handler = None
+        strict_warning_handler: Callable[..., bool] | None = None
 
         def __init__(self, *_args) -> None:
             pass
@@ -216,7 +217,9 @@ def test_preflight_rejects_patch_fallback_and_reports_exact_tool_error(tmp_path)
                 "xdelta_apply_failed",
                 fallback_message="xdelta failed",
             )
-            return self.strict_warning_handler(
+            warning_handler = self.strict_warning_handler
+            assert warning_handler is not None
+            return warning_handler(
                 event,
                 "xdelta3: target window checksum mismatch: XD3_INVALID_INPUT",
                 None,
