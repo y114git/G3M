@@ -6,7 +6,7 @@ This module provides a worker thread for searching GameBanana mods.
 import logging
 import time
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
 from config.config import (
@@ -17,6 +17,7 @@ from config.config import (
 from models.game_modes import get_gamebanana_reverse_map
 from models.mod_models import BrowserModInfo
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class SearchGameBananaModsThread(QThread):
+class SearchGameBananaModsThread(ManagedQThread):
     result = pyqtSignal(list)
     status = pyqtSignal(str, str)
 

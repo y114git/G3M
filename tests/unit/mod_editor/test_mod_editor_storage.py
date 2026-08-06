@@ -3,6 +3,7 @@
 from ui.dialogs.mod_editor.storage import (
     build_storage_path,
     collect_managed_file_paths,
+    find_unconfigured_root_entries,
     resolve_managed_mod_path,
 )
 
@@ -57,3 +58,18 @@ def test_build_storage_path_places_external_chapter_files_under_chapter_folder(
     )
 
     assert built == "chapter_3/data.g3mpatch"
+
+
+def test_unconfigured_folder_is_one_dependency_without_hiding_active_child(tmp_path):
+    mod_dir = tmp_path / "mod"
+    resources = mod_dir / "resources"
+    resources.mkdir(parents=True)
+    active_child = resources / "active.txt"
+    active_child.write_text("active", encoding="utf-8")
+    (resources / "helper.txt").write_text("dependency", encoding="utf-8")
+    standalone = mod_dir / "main.csx"
+    standalone.write_text("script", encoding="utf-8")
+
+    entries = find_unconfigured_root_entries(str(mod_dir), {str(active_child)})
+
+    assert set(entries) == {str(resources), str(standalone)}

@@ -1,10 +1,10 @@
 """Dialog for viewing changelog entries."""
 
-from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import QDialog, QPushButton, QTextBrowser, QVBoxLayout
 
 from config.config import NETWORK_TIMEOUT_MEDIUM
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 from workers.changelog_worker import FetchChangelogWorker
 
 
@@ -37,7 +37,7 @@ class ChangelogDialog(QDialog):
             self._load_failed = True
             self.text_browser.setMarkdown(tr("status.changelog_load_failed"))
             return
-        self._thread = QThread(self)
+        self._thread = ManagedQThread(self)
         self._worker = FetchChangelogWorker(self._source)
         self._worker.moveToThread(self._thread)
         self._worker.finished.connect(self._on_changelog_loaded)

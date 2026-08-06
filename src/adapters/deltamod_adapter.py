@@ -13,7 +13,13 @@ from defusedxml import ElementTree
 
 from config.config import MOD_DOCUMENTATION_EXTENSIONS
 from services.localization_service import tr
-from utils.file_utils import find_deltamod_info_file, get_unique_mod_dir
+from services.migration_service import build_extra_file_entry
+from utils.file_utils import (
+    check_filename_is_deltamod_info,
+    find_deltamod_info_file,
+    get_chapter_folder_name,
+    get_unique_mod_dir,
+)
 from utils.mod.config_parser import build_mod_config_data
 
 logger = logging.getLogger(__name__)
@@ -26,6 +32,14 @@ DELTAMOD_GAME_MAP: dict[str, str] = {
     "fans.utyellow": "undertaleyellow",
     "other.pizzatower": "pizzatower",
 }
+DELTAMOD_PATCH_EXTENSIONS = {
+    "xdelta": {".xdelta", ".vcdiff", ".csx", ".win"},
+    "override": None,
+    "copy": None,
+    "g3mpatch": {".g3mpatch"},
+    "csx": {".csx"},
+}
+DELTAMOD_OVERRIDE_BLOCKED_EXTENSIONS = {".xdelta", ".vcdiff", ".csx"}
 
 
 class DeltamodConverter:
@@ -92,7 +106,9 @@ class DeltamodConverter:
                 )
             config_path = os.path.join(target_mod_dir, "mod_config.json")
             with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(build_mod_config_data(config_data), f, indent=4, ensure_ascii=False)
+                json.dump(
+                    build_mod_config_data(config_data), f, indent=4, ensure_ascii=False
+                )
             logger.info(
                 f"Deltamod converted: {config_data.get('name')} → {target_mod_dir}"
             )
@@ -247,7 +263,9 @@ class DeltamodConverter:
     def _resolve_game_version(self, game_value: str) -> str:
         if game_value != "deltarune":
             return ""
-        return self.deltamod_info.get("deltaruneTargetVersion", tr("defaults.not_specified"))
+        return self.deltamod_info.get(
+            "deltaruneTargetVersion", tr("defaults.not_specified")
+        )
 
     def _normalize_content_key(self, chapter_key: str) -> str:
         from models.game_modes import get_game
@@ -271,7 +289,12 @@ class DeltamodConverter:
 
     @staticmethod
     def _normalize_folder_name(name: str) -> str:
-        return re.sub(r"[\s._-]*v?\d+(?:[._-]\d+)*$", "", name, flags=re.IGNORECASE).strip() or name
+        return (
+            re.sub(
+                r"[\s._-]*v?\d+(?:[._-]\d+)*$", "", name, flags=re.IGNORECASE
+            ).strip()
+            or name
+        )
 
     def _generate_config_json(self) -> dict[str, Any] | None:
         if not self.deltamod_info or self.modding_xml is None:
@@ -355,6 +378,13 @@ class DeltamodConverter:
                     f"DeltamodConverter: skipping patch with missing fields (to={to_path}, patch={patch_file}, type={patch_type})"
                 )
                 continue
+            if not self._is_supported_patch(patch_type, patch_file):
+                logger.warning(
+                    "DeltamodConverter: skipping invalid %s patch: %s",
+                    patch_type,
+                    patch_file,
+                )
+                continue
             chapter_key, relative_path, filename = self._parse_to_path(to_path)
             if not chapter_key:
                 logger.warning(
@@ -364,16 +394,87 @@ class DeltamodConverter:
             content_key = self._normalize_content_key(chapter_key)
             if content_key not in files_structure:
                 files_structure[content_key] = {}
-            if patch_type in {"xdelta", "g3mpatch"}:
-                files_structure[content_key]["data_file_path"] = os.path.basename(
-                    patch_file.lstrip("./").replace("\\", "/")
-                )
+            if patch_type in {"xdelta", "g3mpatch", "csx"}:
+                files_structure[content_key]["data_file_path"] = patch_file.lstrip(
+                    "./"
+                ).replace("\\", "/")
             elif patch_type in {"override", "copy"}:
                 stored_path = self._build_stored_path(relative_path, filename)
                 files_structure[content_key].setdefault("extra_files", []).append(
                     stored_path
                 )
+        self._add_csx_dependencies(files_structure, patches)
         return files_structure
+
+    @staticmethod
+    def _is_supported_patch(patch_type: str, patch_file: str) -> bool:
+        allowed = DELTAMOD_PATCH_EXTENSIONS.get(patch_type)
+        if patch_type not in DELTAMOD_PATCH_EXTENSIONS:
+            return False
+        extension = os.path.splitext(patch_file)[1].lower()
+        if patch_type in {"override", "copy"}:
+            return extension not in DELTAMOD_OVERRIDE_BLOCKED_EXTENSIONS
+        return extension in (allowed or set())
+
+    def _csx_dependency_names(self, patches: list) -> list[str]:
+        if not os.path.isdir(self.source_path) or not any(
+            patch.get("type", "").strip().lower() == "csx" for patch in patches
+        ):
+            return []
+        declared = {
+            patch.get("patch", "").lstrip("./").replace("\\", "/").casefold()
+            for patch in patches
+        }
+        result = []
+        for name in os.listdir(self.source_path):
+            path = os.path.join(self.source_path, name)
+            extension = os.path.splitext(name)[1].lower()
+            if (
+                name.casefold() in declared
+                or check_filename_is_deltamod_info(name)
+                or name.casefold()
+                in {"modding.xml", "icon.png", "_icon.png", "screenshots"}
+                or (os.path.isfile(path) and extension in MOD_DOCUMENTATION_EXTENSIONS)
+            ):
+                continue
+            result.append(name)
+        return sorted(result, key=str.casefold)
+
+    def _csx_dependencies_by_chapter(
+        self, patches: list
+    ) -> dict[str, list[tuple[str, bool]]]:
+        dependency_names = self._csx_dependency_names(patches)
+        if not dependency_names:
+            return {}
+        result: dict[str, list[tuple[str, bool]]] = {}
+        for patch in patches:
+            if patch.get("type", "").strip().lower() != "csx":
+                continue
+            chapter_key = self._parse_to_path(patch.get("to", ""))[0]
+            if not chapter_key:
+                continue
+            content_key = self._normalize_content_key(chapter_key)
+            if content_key in result:
+                continue
+            result[content_key] = [
+                (name, os.path.isdir(os.path.join(self.source_path, name)))
+                for name in dependency_names
+            ]
+        return result
+
+    def _add_csx_dependencies(self, files_structure: dict, patches: list) -> None:
+        for content_key, dependencies in self._csx_dependencies_by_chapter(
+            patches
+        ).items():
+            chapter_dir = get_chapter_folder_name(content_key, game=self._target_game)
+            extra_files = files_structure.setdefault(content_key, {}).setdefault(
+                "extra_files", []
+            )
+            for name, is_directory in dependencies:
+                path = f"{chapter_dir}/{name}"
+                if is_directory:
+                    path += "/"
+                extra_files.append(build_extra_file_entry(path, "dependency"))
 
     def _resolve_patch_file(self, patch_file_rel: str) -> str | None:
         for variant in (
@@ -418,6 +519,13 @@ class DeltamodConverter:
                     f"DeltamodConverter: skipping patch with missing to or type: {to_path}, {patch_type}"
                 )
                 continue
+            if not self._is_supported_patch(patch_type, patch_file_rel):
+                logger.warning(
+                    "DeltamodConverter: skipping invalid %s patch: %s",
+                    patch_type,
+                    patch_file_rel,
+                )
+                continue
             chapter_key, relative_path, filename = self._parse_to_path(to_path)
             if not chapter_key:
                 logger.warning(
@@ -425,9 +533,9 @@ class DeltamodConverter:
                 )
                 continue
             content_key = self._normalize_content_key(chapter_key)
-            from utils.file_utils import get_chapter_folder_name
-
-            chapter_dir_name = get_chapter_folder_name(content_key, game=self._target_game)
+            chapter_dir_name = get_chapter_folder_name(
+                content_key, game=self._target_game
+            )
             target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
             os.makedirs(target_chapter_dir, exist_ok=True)
             if patch_type in {"override", "copy"}:
@@ -451,7 +559,7 @@ class DeltamodConverter:
                     chapter_key,
                     chapter_dir_name,
                 )
-            elif patch_type in {"xdelta", "g3mpatch"}:
+            elif patch_type in {"xdelta", "g3mpatch", "csx"}:
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
                     logger.warning(
@@ -459,8 +567,9 @@ class DeltamodConverter:
                     )
                     continue
                 target_patch_path = os.path.join(
-                    target_chapter_dir, os.path.basename(patch_file_abs)
+                    target_chapter_dir, patch_file_rel.replace("/", os.sep)
                 )
+                os.makedirs(os.path.dirname(target_patch_path), exist_ok=True)
                 shutil.copy2(patch_file_abs, target_patch_path)
                 logger.info(
                     "Copied data patch: %s for chapter %s into %s",
@@ -470,6 +579,24 @@ class DeltamodConverter:
                 )
             else:
                 logger.warning(f"DeltamodConverter: unknown patch type: {patch_type}")
+        self._copy_csx_dependencies(target_mod_dir, patches)
+
+    def _copy_csx_dependencies(self, target_mod_dir: str, patches: list) -> None:
+        for content_key, dependencies in self._csx_dependencies_by_chapter(
+            patches
+        ).items():
+            chapter_dir = os.path.join(
+                target_mod_dir,
+                get_chapter_folder_name(content_key, game=self._target_game),
+            )
+            for name, is_directory in dependencies:
+                source = os.path.join(self.source_path, name)
+                destination = os.path.join(chapter_dir, name)
+                if is_directory:
+                    shutil.copytree(source, destination, dirs_exist_ok=True)
+                else:
+                    os.makedirs(os.path.dirname(destination), exist_ok=True)
+                    shutil.copy2(source, destination)
 
     def _copy_root_docs(self, target_mod_dir: str) -> None:
         try:
@@ -477,7 +604,10 @@ class DeltamodConverter:
                 source_path = os.path.join(self.source_path, item)
                 if not os.path.isfile(source_path):
                     continue
-                if os.path.splitext(item)[1].lower() not in MOD_DOCUMENTATION_EXTENSIONS:
+                if (
+                    os.path.splitext(item)[1].lower()
+                    not in MOD_DOCUMENTATION_EXTENSIONS
+                ):
                     continue
                 shutil.copy2(source_path, os.path.join(target_mod_dir, item))
         except Exception as e:

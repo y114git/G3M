@@ -8,6 +8,8 @@ import sys
 
 from PyQt6.QtWidgets import QFileDialog
 
+from services.background_operations import background_operations
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,10 @@ def get_open_file_names(
         directory or "",
         file_filter or "All Files (*)",
     )
-    return ([str(path) for path in selected if str(path).strip()], str(chosen_filter or ""))
+    return (
+        [str(path) for path in selected if str(path).strip()],
+        str(chosen_filter or ""),
+    )
 
 
 def get_save_file_name(
@@ -75,7 +80,9 @@ def open_url_native(url: str) -> bool:
                 > 32
             )
         command = ["open" if sys_platform_is_macos() else "xdg-open", url]
-        subprocess.Popen(command)
+        background_operations.track_process(
+            subprocess.Popen(command), cancel=lambda: None
+        )
         return True
     except Exception as error:
         logger.error("Failed to open URL %s: %s", url, error, exc_info=True)
@@ -92,7 +99,9 @@ def open_path_native(path: str) -> bool:
                 > 32
             )
         command = ["open" if sys_platform_is_macos() else "xdg-open", path]
-        subprocess.Popen(command)
+        background_operations.track_process(
+            subprocess.Popen(command), cancel=lambda: None
+        )
         return True
     except Exception as error:
         logger.error("Failed to open path %s: %s", path, error, exc_info=True)

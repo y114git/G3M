@@ -62,6 +62,7 @@ class PreflightReport:
     resources: tuple[PreflightResourceChange, ...] = ()
     files: tuple[PreflightFileChange, ...] = ()
     issues: tuple[str, ...] = ()
+    conflict_count: int = 0
 
     def to_dict(self) -> dict:
         return json.loads(json.dumps(asdict(self), ensure_ascii=False))
@@ -106,7 +107,7 @@ h1,h2{{margin:.4em 0}} .summary{{display:flex;gap:16px;flex-wrap:wrap}}
 table{{border-collapse:collapse;width:100%;margin:12px 0 24px}}th,td{{border:1px solid #bbb;padding:7px;text-align:left;vertical-align:top}}
 th{{background:#eee;position:sticky;top:0}}code{{overflow-wrap:anywhere}}
 </style></head><body><h1>G3M Diagnostics</h1>
-<div class="summary"><b>Success: {esc(report.success)}</b><b>Cancelled: {esc(report.cancelled)}</b><b>Duration: {report.duration_seconds:.2f}s</b></div>
+<div class="summary"><b>Success: {esc(report.success)}</b><b>Cancelled: {esc(report.cancelled)}</b><b>Conflicts: {report.conflict_count}</b><b>Duration: {report.duration_seconds:.2f}s</b></div>
 <h2>Steps</h2><table><thead><tr><th>Section</th><th>Step</th><th>Mods</th><th>Success</th><th>Duration</th><th>Error</th></tr></thead><tbody>{step_rows}</tbody></table>
 <h2>Resources</h2><table><thead><tr><th>Section</th><th>Step</th><th>Type</th><th>Operation</th><th>Name</th><th>Mods</th><th>Files</th><th>Details</th></tr></thead><tbody>{resource_rows}</tbody></table>
 <h2>Files</h2><table><thead><tr><th>Path</th><th>Operation</th><th>Section</th><th>Step</th><th>Mods</th><th>Before</th><th>After</th><th>Before SHA-256</th><th>After SHA-256</th></tr></thead><tbody>{file_rows}</tbody></table>
@@ -122,7 +123,9 @@ def export_preflight_report(report: PreflightReport, html_path: str) -> tuple[st
     with open(html_path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(_report_html(report))
     with open(json_path, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump(report.to_dict(), handle, ensure_ascii=False, indent=2, sort_keys=True)
+        json.dump(
+            report.to_dict(), handle, ensure_ascii=False, indent=2, sort_keys=True
+        )
         handle.write("\n")
     return html_path, json_path
 
@@ -139,7 +142,9 @@ def _snapshot_files(root: str) -> tuple[dict[str, tuple[int, str]], list[str]]:
     snapshot = {}
     errors = []
     for current, dirs, files in os.walk(root):
-        dirs[:] = [name for name in dirs if not os.path.islink(os.path.join(current, name))]
+        dirs[:] = [
+            name for name in dirs if not os.path.islink(os.path.join(current, name))
+        ]
         for name in files:
             path = os.path.join(current, name)
             if os.path.islink(path):
@@ -165,7 +170,9 @@ def _probe_write_access(directory: str, data_path: str | None) -> str:
     probe_path = ""
     failure = ""
     try:
-        descriptor, probe_path = tempfile.mkstemp(prefix=".g3m-preflight-", dir=directory)
+        descriptor, probe_path = tempfile.mkstemp(
+            prefix=".g3m-preflight-", dir=directory
+        )
         os.close(descriptor)
         if data_path:
             with open(data_path, "rb+"):
@@ -196,7 +203,13 @@ def _compare_snapshots(
         current = after.get(relative_path)
         if previous == current:
             continue
-        operation = "added" if previous is None else "removed" if current is None else "modified"
+        operation = (
+            "added"
+            if previous is None
+            else "removed"
+            if current is None
+            else "modified"
+        )
         changes.append(
             PreflightFileChange(
                 relative_path=relative_path,
@@ -245,14 +258,20 @@ def _manifest_resources(
         if not isinstance(operations, dict):
             continue
         for operation in ("new", "changed", "deleted"):
-            items = operations.get(operation) or operations.get(operation.capitalize()) or []
+            items = (
+                operations.get(operation)
+                or operations.get(operation.capitalize())
+                or []
+            )
             if not isinstance(items, list):
                 continue
             for item in items:
                 if isinstance(item, dict):
                     name = str(item.get("name") or "")
                     raw_files = item.get("files") or []
-                    file_values = raw_files.values() if isinstance(raw_files, dict) else raw_files
+                    file_values = (
+                        raw_files.values() if isinstance(raw_files, dict) else raw_files
+                    )
                     files = tuple(str(value) for value in file_values if value)
                 else:
                     name = str(item)
@@ -267,13 +286,47 @@ def _manifest_resources(
                         mod_ids=mod_ids,
                         files=files,
                         details=(
-                            json.dumps(item, ensure_ascii=False, indent=2, sort_keys=True)
+                            json.dumps(
+                                item, ensure_ascii=False, indent=2, sort_keys=True
+                            )
                             if isinstance(item, dict)
                             else ""
                         ),
                     )
                 )
     return tuple(changes)
+
+
+def _merge_report_conflicts(
+    report_path: str,
+    section_id: str,
+    step_index: int,
+    mod_ids: tuple[str, ...],
+) -> tuple[PreflightResourceChange, ...]:
+    try:
+        lines = Path(report_path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ()
+    resource_type = "Merge"
+    conflicts = []
+    for line in lines:
+        if line.startswith("## "):
+            resource_type = line[3:].strip()
+        elif line.startswith("|") and "**Conflict**" in line:
+            columns = [column.strip() for column in line.strip("|").split("|")]
+            if columns:
+                conflicts.append(
+                    PreflightResourceChange(
+                        section_id=section_id,
+                        step_index=step_index,
+                        resource_type=resource_type,
+                        operation="conflict",
+                        name=columns[0],
+                        mod_ids=mod_ids,
+                        details=" | ".join(columns[2:]),
+                    )
+                )
+    return tuple(conflicts)
 
 
 class DiagnosticsPreflightService:
@@ -328,12 +381,17 @@ class DiagnosticsPreflightService:
                     before_path, after_path, section_id, step_index, mod_ids
                 )
             ), ""
-        patch_path = os.path.join(temp_dir, f"resources_{section_id}_{step_index}.g3mpatch")
+        patch_path = os.path.join(
+            temp_dir, f"resources_{section_id}_{step_index}.g3mpatch"
+        )
         returncode, stdout, stderr = self._patcher.g3mtool.patch_create(
             before_path, after_path, patch_path
         )
         if returncode != 0 or not os.path.isfile(patch_path):
-            return (), f"G3MTool resource diff failed for {section_id} step {step_index}: {stderr or stdout}"
+            return (
+                (),
+                f"G3MTool resource diff failed for {section_id} step {step_index}: {stderr or stdout}",
+            )
         import zipfile
 
         try:
@@ -358,6 +416,7 @@ class DiagnosticsPreflightService:
         resources: list[PreflightResourceChange] = []
         files: list[PreflightFileChange] = []
         issues: list[str] = []
+        conflict_count = 0
         success = True
         if self._cancelled:
             return PreflightReport(False, True, time.monotonic() - started)
@@ -395,8 +454,15 @@ class DiagnosticsPreflightService:
             self._patcher = patcher
             try:
                 patch_messages: list[str] = []
+                merge_reports: list[tuple[str, int]] = []
 
-                def reject_warning(event, details: str, _report_path: str | None) -> bool:
+                def reject_warning(
+                    event, details: str, _report_path: str | None
+                ) -> bool:
+                    if event.warning_id == "merge_conflicts_detected" and _report_path:
+                        merge_reports.append(
+                            (_report_path, int(event.context.get("count", 0) or 0))
+                        )
                     message = details or event.fallback_message or event.warning_id
                     patch_messages.append(message)
                     return False
@@ -417,7 +483,10 @@ class DiagnosticsPreflightService:
                             success = False
                             break
                         mod_ids = tuple(
-                            str(getattr(mod, "id", "") or (mod.get("id") if isinstance(mod, dict) else ""))
+                            str(
+                                getattr(mod, "id", "")
+                                or (mod.get("id") if isinstance(mod, dict) else "")
+                            )
                             for mod in mods
                         )
                         before_files, scan_errors = _snapshot_files(staged_game)
@@ -429,7 +498,8 @@ class DiagnosticsPreflightService:
                         before_copy = ""
                         if before_data and os.path.isfile(before_data):
                             before_copy = os.path.join(
-                                workspace, f"before_{section_id}_{step_index}{Path(before_data).suffix}"
+                                workspace,
+                                f"before_{section_id}_{step_index}{Path(before_data).suffix}",
                             )
                             shutil.copy2(before_data, before_copy)
                         step_started = time.monotonic()
@@ -439,10 +509,26 @@ class DiagnosticsPreflightService:
                         )
                         step_plan = PatchPlan.from_runtime({section_id: [list(mods)]})
                         patch_messages.clear()
+                        merge_reports.clear()
                         step_success = patcher.process_patch_plan(
                             step_plan, resolver, is_modpack=False
                         )
-                        error = "" if step_success else "\n".join(patch_messages) or "Patch failed without diagnostic output"
+                        for report_path, count in merge_reports:
+                            conflict_count += count
+                            resources.extend(
+                                _merge_report_conflicts(
+                                    report_path,
+                                    section_id,
+                                    step_index,
+                                    mod_ids,
+                                )
+                            )
+                        error = (
+                            ""
+                            if step_success
+                            else "\n".join(patch_messages)
+                            or "Patch failed without diagnostic output"
+                        )
                         steps.append(
                             PreflightStepResult(
                                 section_id=section_id,
@@ -454,9 +540,7 @@ class DiagnosticsPreflightService:
                             )
                         )
                         if not step_success:
-                            issues.append(
-                                f"{section_id} step {step_index}: {error}"
-                            )
+                            issues.append(f"{section_id} step {step_index}: {error}")
                             success = False
                             break
                         after_files, scan_errors = _snapshot_files(staged_game)
@@ -476,13 +560,13 @@ class DiagnosticsPreflightService:
                         after_data = self._locate_data(staged_game, section_id)
                         if before_copy and after_data and os.path.isfile(after_data):
                             resource_changes, resource_error = self._resource_diff(
-                                    before_copy,
-                                    after_data,
-                                    section_id,
-                                    step_index,
-                                    mod_ids,
-                                    workspace,
-                                )
+                                before_copy,
+                                after_data,
+                                section_id,
+                                step_index,
+                                mod_ids,
+                                workspace,
+                            )
                             resources.extend(resource_changes)
                             if resource_error:
                                 issues.append(resource_error)
@@ -497,7 +581,10 @@ class DiagnosticsPreflightService:
                     patcher.cleanup(force=True)
                 finally:
                     self._patcher = None
-        emit(100, "completed" if success else "cancelled" if self._cancelled else "failed")
+        emit(
+            100,
+            "completed" if success else "cancelled" if self._cancelled else "failed",
+        )
         return PreflightReport(
             success=success and not self._cancelled,
             cancelled=self._cancelled,
@@ -506,4 +593,5 @@ class DiagnosticsPreflightService:
             resources=tuple(resources),
             files=tuple(files),
             issues=tuple(issues),
+            conflict_count=conflict_count,
         )

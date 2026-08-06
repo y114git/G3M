@@ -138,7 +138,9 @@ class ModDiagnosticsService:
                 continue
             target_data_path = mod_content.find_data_win(
                 target_dir,
-                game_id=getattr(getattr(self.app_state, "game_mode", None), "game_id", ""),
+                game_id=getattr(
+                    getattr(self.app_state, "game_mode", None), "game_id", ""
+                ),
             )
             for mod_data in mods or []:
                 mod_id = str(get_mod_id(mod_data) or "")
@@ -154,6 +156,8 @@ class ModDiagnosticsService:
 
         file_impacts, conflict_issues = self._mark_file_conflicts(file_impacts)
         issues.extend(conflict_issues)
+        data_overlap_issues = self._find_opaque_data_overlaps(data_impacts)
+        issues.extend(data_overlap_issues)
         summary = DiagnosticsSummary(
             selected_mods=len([mod_id for mod_id in selected_mod_ids if mod_id]),
             new_files=sum(1 for impact in file_impacts if impact.operation == "add")
@@ -163,10 +167,12 @@ class ModDiagnosticsService:
                 for counts in impact.resource_summary.values()
             ),
             modified_files=sum(
-                1 for impact in file_impacts if impact.operation in {"modify", "replace"}
+                1
+                for impact in file_impacts
+                if impact.operation in {"modify", "replace"}
             )
             + len(data_impacts),
-            conflicts=len(conflict_issues),
+            conflicts=len(conflict_issues) + len(data_overlap_issues),
             data_files=len(data_impacts),
             deep_analyzable_data_files=sum(
                 1 for impact in data_impacts if impact.deep_analysis_available
@@ -234,7 +240,8 @@ class ModDiagnosticsService:
                 mod_name=get_mod_name(mod_data),
                 patch_path=patch_path,
                 patch_type=patch_type,
-                target_data_path=target_data_path or os.path.join(target_dir, "data.win"),
+                target_data_path=target_data_path
+                or os.path.join(target_dir, "data.win"),
                 deep_analysis_available=patch_type == MOD_TYPE_G3MPATCH,
                 manifest=manifest,
                 resource_summary=self._resource_summary_from_manifest(manifest),
@@ -311,14 +318,20 @@ class ModDiagnosticsService:
             target_relative = entry["target_relative"]
             if entry["is_directory"]:
                 if not os.path.isdir(source):
-                    issues.append(self._missing_issue(mod_data, source, is_directory=True))
+                    issues.append(
+                        self._missing_issue(mod_data, source, is_directory=True)
+                    )
                     continue
                 for root, _dirs, files in os.walk(source):
                     rel_root = os.path.relpath(root, source)
                     for file_name in files:
                         if file_name.lower() in SKIP_FILES:
                             continue
-                        rel_file = file_name if rel_root == "." else os.path.join(rel_root, file_name)
+                        rel_file = (
+                            file_name
+                            if rel_root == "."
+                            else os.path.join(rel_root, file_name)
+                        )
                         impacts.append(
                             self._make_file_impact(
                                 section_id,
@@ -368,9 +381,14 @@ class ModDiagnosticsService:
                     continue
                 source_path = os.path.join(root, file_name)
                 lower = source_path.lower()
-                if lower.endswith((".xdelta", ".vcdiff")) or lower.endswith(ARCHIVE_EXTENSIONS):
+                if lower.endswith((".xdelta", ".vcdiff")) or lower.endswith(
+                    ARCHIVE_EXTENSIONS
+                ):
                     continue
-                if mod_content.classify_patch_file(source_path)[1] != MOD_TYPE_OVERRIDES_ONLY:
+                if (
+                    mod_content.classify_patch_file(source_path)[1]
+                    != MOD_TYPE_OVERRIDES_ONLY
+                ):
                     continue
                 rel_path = os.path.relpath(source_path, mod_source_dir)
                 impacts.append(
@@ -416,7 +434,9 @@ class ModDiagnosticsService:
     ) -> tuple[list[FileImpact], list[DiagnosticIssue]]:
         by_target: dict[str, list[FileImpact]] = {}
         for impact in impacts:
-            by_target.setdefault(os.path.normcase(os.path.abspath(impact.target_path)), []).append(impact)
+            by_target.setdefault(
+                os.path.normcase(os.path.abspath(impact.target_path)), []
+            ).append(impact)
         conflicts = {
             key: group
             for key, group in by_target.items()
@@ -430,7 +450,8 @@ class ModDiagnosticsService:
                 **{
                     **impact.__dict__,
                     "operation": "conflict"
-                    if os.path.normcase(os.path.abspath(impact.target_path)) in conflict_keys
+                    if os.path.normcase(os.path.abspath(impact.target_path))
+                    in conflict_keys
                     else impact.operation,
                 }
             )
@@ -448,6 +469,37 @@ class ModDiagnosticsService:
             for group in conflicts.values()
         ]
         return updated, issues
+
+    @staticmethod
+    def _find_opaque_data_overlaps(
+        impacts: list[DataImpact],
+    ) -> list[DiagnosticIssue]:
+        by_target: dict[str, list[DataImpact]] = {}
+        for impact in impacts:
+            target = impact.target_data_path or impact.section_id
+            by_target.setdefault(os.path.normcase(os.path.abspath(target)), []).append(
+                impact
+            )
+        return [
+            DiagnosticIssue(
+                severity="warning",
+                title="DATA merge requires verification",
+                explanation=(
+                    "Multiple DATA patches target the same file, and at least one cannot "
+                    "be inspected at resource level. Quick diagnostics cannot confirm "
+                    "that their code and resource references are compatible."
+                ),
+                affected_mods=tuple(impact.mod_name for impact in group),
+                target_path=group[0].target_data_path or "",
+                recommendation=(
+                    "Run Analyze Actual Launch Result and review every reported merge "
+                    "conflict before launching."
+                ),
+            )
+            for group in by_target.values()
+            if len({impact.mod_id for impact in group}) > 1
+            and any(not impact.deep_analysis_available for impact in group)
+        ]
 
     @staticmethod
     def _missing_issue(mod_data, path: str, *, is_directory: bool) -> DiagnosticIssue:
@@ -474,7 +526,9 @@ class ModDiagnosticsService:
             return {}
 
     @staticmethod
-    def _resource_summary_from_manifest(manifest: dict[str, Any]) -> dict[str, dict[str, int]]:
+    def _resource_summary_from_manifest(
+        manifest: dict[str, Any],
+    ) -> dict[str, dict[str, int]]:
         resources = manifest.get("resources") if isinstance(manifest, dict) else None
         if not isinstance(resources, dict):
             return {}
@@ -486,14 +540,20 @@ class ModDiagnosticsService:
             new = value.get("new") or value.get("New") or []
             deleted = value.get("deleted") or value.get("Deleted") or []
             summary[str(resource_type)] = {
-                "changed": len(changed) if isinstance(changed, list) else int(bool(changed)),
+                "changed": len(changed)
+                if isinstance(changed, list)
+                else int(bool(changed)),
                 "new": len(new) if isinstance(new, list) else int(bool(new)),
-                "deleted": len(deleted) if isinstance(deleted, list) else int(bool(deleted)),
+                "deleted": len(deleted)
+                if isinstance(deleted, list)
+                else int(bool(deleted)),
             }
         return summary
 
     @staticmethod
-    def _resource_entries_from_manifest(manifest: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    def _resource_entries_from_manifest(
+        manifest: dict[str, Any],
+    ) -> tuple[dict[str, Any], ...]:
         resources = manifest.get("resources") if isinstance(manifest, dict) else None
         if not isinstance(resources, dict):
             return ()
@@ -509,7 +569,11 @@ class ModDiagnosticsService:
                     if isinstance(item, dict):
                         name = str(item.get("name") or "")
                         raw_files = item.get("files") or []
-                        files = raw_files.values() if isinstance(raw_files, dict) else raw_files
+                        files = (
+                            raw_files.values()
+                            if isinstance(raw_files, dict)
+                            else raw_files
+                        )
                     else:
                         name = str(item)
                         files = []

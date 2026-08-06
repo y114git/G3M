@@ -371,7 +371,11 @@ def update_mod_widget_style(widget, frame_selector, parent_app=None):
 
 
 def show_empty_message_in_layout(layout, text, local_config=None, font_size=16):
-    empty_text_color = get_theme_color(local_config, "secondary_text") if local_config else DEFAULT_COLORS["secondary_text"]
+    empty_text_color = (
+        get_theme_color(local_config, "secondary_text")
+        if local_config
+        else DEFAULT_COLORS["secondary_text"]
+    )
     parent = layout.parentWidget() if hasattr(layout, "parentWidget") else None
     empty_label = QLabel(text, parent)
     empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -409,7 +413,9 @@ def get_launch_status_color(config):
 def get_theme_colors(config, **overrides):
     """Return dict of themed colors, using DEFAULT_COLORS as base."""
     merged = {**DEFAULT_COLORS, **overrides}
-    return {key: get_theme_color(config, key, default) for key, default in merged.items()}
+    return {
+        key: get_theme_color(config, key, default) for key, default in merged.items()
+    }
 
 
 def invalidate_theme_color_cache():
@@ -626,7 +632,9 @@ def refresh_themed_button_icon(button) -> None:
     icon_size = getattr(button, "_themed_icon_size", None)
     if not icon_name or app_state is None or icon_size is None:
         return
-    tc = get_theme_color(app_state.local_config, "main_text") if app_state else "#ffffff"
+    tc = (
+        get_theme_color(app_state.local_config, "main_text") if app_state else "#ffffff"
+    )
     button.setIcon(colored_icon(icon_name, tc))
     button.setIconSize(icon_size)
 
@@ -799,7 +807,9 @@ def build_scrollbar_qss(
             """
 
 
-def style_filter_scroll_area(scroll_area, config, cache_attr="_filter_scroll_qss_cache") -> str:
+def style_filter_scroll_area(
+    scroll_area, config, cache_attr="_filter_scroll_qss_cache"
+) -> str:
     """Apply a high-contrast scrollbar style for horizontal filter strips."""
     if not scroll_area:
         return ""
@@ -1176,6 +1186,7 @@ def load_mod_icon_universal(
             and icon_source.startswith(("http://", "https://"))
         ):
             try:
+                from services.background_operations import background_operations
                 from ui.utils.image_loader import ImageLoaderRunnable
                 from workers import WorkerSignals
 
@@ -1290,6 +1301,7 @@ def load_mod_icon_universal(
                         logger.debug(
                             f"load_mod_icon_universal: Error cleaning up icon loader attributes: {e}"
                         )
+
                 try:
                     icon_label.destroyed.connect(_cleanup_refs)
                 except Exception as e:
@@ -1297,7 +1309,10 @@ def load_mod_icon_universal(
                         f"load_mod_icon_universal: Error connecting destroyed signal: {e}"
                     )
                 if pool is not None:
-                    pool.start(runnable)
+                    background_operations.start_runnable(
+                        pool,
+                        runnable,
+                    )
             except Exception as e:
                 logger.debug(
                     f"load_mod_icon_universal: Error setting up async icon loader for {icon_source}: {e}"

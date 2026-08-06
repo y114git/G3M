@@ -4,7 +4,7 @@ import contextlib
 import logging
 import threading
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -21,6 +21,7 @@ from ui.common.styling import (
     get_theme_color,
     get_widget_dimensions,
 )
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import UIAnimator
 from utils.mod.utils import get_mod_id
 
@@ -29,7 +30,7 @@ from .base_mod_widget import BaseModWidget
 logger = logging.getLogger(__name__)
 
 
-class CompatibilityCheckThread(QThread):
+class CompatibilityCheckThread(ManagedQThread):
     _semaphore = threading.Semaphore(3)
     compatibility_checked = pyqtSignal(object, dict)
 
@@ -453,9 +454,7 @@ class ModCardWidget(BaseModWidget):
 
                     config = self._resolve_theme_config()
                     br = get_border_radius(config)
-                    bc = (
-                        get_theme_color(config, "border") if config else None
-                    )
+                    bc = get_theme_color(config, "border") if config else None
                     bw = 2 if bc else 0
                     icon_width, icon_height = get_widget_dimensions(
                         getattr(self, "icon_label", None)

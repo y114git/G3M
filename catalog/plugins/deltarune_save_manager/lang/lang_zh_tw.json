@@ -96,6 +96,8 @@
     "value_label": "值",
     "cancel_button": "取消",
     "save": "儲存",
+    "undo": "復原", "redo": "重做", "apply": "套用",
+    "manual_flag_editor": "手動旗標編輯器", "flag_id": "旗標 ID",
     "close_button": "關閉",
     "shortcut_summary_label": "存檔集合"
   },
@@ -147,6 +149,7 @@
     "changes_will_be_lost": "所有未儲存的變更將遺失。是否繼續？",
     "save_changes": "儲存變更？",
     "original_save_overwrite": "原始存檔將被覆蓋。",
+    "changes_summary": "已變更 {count} 個存檔欄位。原始存檔將被覆蓋。",
     "access_error": "存取錯誤",
     "no_write_permissions": "沒有資料夾的寫入權限：\n{path}",
     "delete_save": "刪除存檔？",

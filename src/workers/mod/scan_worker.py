@@ -3,9 +3,10 @@
 import logging
 import os
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from config.config import MOD_CONFIG_FILENAME
+from ui.utils.thread_lifetime import ManagedQThread
 from utils.file_utils import load_json
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ def _safe_emit_scan_completed(worker, result: dict) -> None:
         )
 
 
-class ModScanThread(QThread):
+class ModScanThread(ManagedQThread):
     """Background thread for scanning mod directory."""
 
     scan_completed = pyqtSignal(dict)

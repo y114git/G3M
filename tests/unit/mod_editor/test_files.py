@@ -1,6 +1,6 @@
 """Unit tests for test files."""
 
-from PyQt6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from ui.dialogs.mod_editor.files import (
     collect_files,
@@ -50,9 +50,48 @@ def _tab(name: str, *frames: QWidget):
 def test_extract_frame_data_reads_extra_paths_with_formatting(qapp):
     frame = _build_frame("extra", ("C:\\mods\\a.txt", True), ("nested/path/", True))
 
-    extracted = extract_frame_data(frame.layout(), format_config_path=lambda path: path.replace("\\", "/"))
+    extracted = extract_frame_data(
+        frame.layout(), format_config_path=lambda path: path.replace("\\", "/")
+    )
 
-    assert extracted == {"type": "extra", "paths": ["C:/mods/a.txt", "nested/path/"]}
+    assert extracted == {
+        "type": "extra",
+        "paths": ["C:/mods/a.txt", "nested/path/"],
+        "status": "install",
+    }
+
+
+def test_extract_frame_data_marks_dependency_only_extra_file(qapp):
+    frame = _build_frame("extra", ("main.csx", True))
+    checkbox = QCheckBox()
+    checkbox.setProperty("is_dependency_file", True)
+    checkbox.setChecked(True)
+    frame.layout().addWidget(checkbox)
+
+    extracted = extract_frame_data(frame.layout(), format_config_path=lambda path: path)
+
+    assert extracted == {
+        "type": "extra",
+        "paths": ["main.csx"],
+        "status": "dependency",
+    }
+
+
+def test_extract_frame_data_preserves_future_non_install_status(qapp):
+    frame = _build_frame("extra", ("main.csx", True))
+    checkbox = QCheckBox()
+    checkbox.setProperty("is_dependency_file", True)
+    checkbox.setProperty("extra_file_status", "embedded")
+    checkbox.setChecked(True)
+    frame.layout().addWidget(checkbox)
+
+    extracted = extract_frame_data(frame.layout(), format_config_path=lambda path: path)
+
+    assert extracted == {
+        "type": "extra",
+        "paths": ["main.csx"],
+        "status": "embedded",
+    }
 
 
 def test_collect_files_deduplicates_extra_paths(qapp):
@@ -79,6 +118,33 @@ def test_collect_files_deduplicates_extra_paths(qapp):
         "deltarune_1": {
             "data_file_path": "data.win",
             "extra_files": ["bonus.zip"],
+        }
+    }
+
+
+def test_collect_files_deduplicates_structured_extra_paths(qapp):
+    frames = []
+    for _index in range(2):
+        dependency_frame = _build_frame("extra", ("main.csx", True))
+        checkbox = QCheckBox()
+        checkbox.setProperty("is_dependency_file", True)
+        checkbox.setChecked(True)
+        dependency_frame.layout().addWidget(checkbox)
+        frames.append(dependency_frame)
+    tabs = _Tabs([_tab("Chapter 1", *frames)])
+
+    collected = collect_files(
+        tabs,
+        tab_keys=["deltarune_1"],
+        get_tab_file_layout=lambda tab: tab._file_layout,
+        extract_frame_data_fn=lambda layout: extract_frame_data(
+            layout, format_config_path=lambda path: path
+        ),
+    )
+
+    assert collected == {
+        "deltarune_1": {
+            "extra_files": [{"file_path": "main.csx", "status": "dependency"}]
         }
     }
 

@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Protocol
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from services.pizza_oven_conversion_service import (
     PizzaOvenConversionError,
     PizzaOvenConversionResult,
 )
+from ui.utils.thread_lifetime import ManagedQThread
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class PizzaOvenConverter(Protocol):
     ) -> PizzaOvenConversionResult: ...
 
 
-class PizzaOvenConversionWorker(QThread):
+class PizzaOvenConversionWorker(ManagedQThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str, str)
     conversion_finished = pyqtSignal(bool, str, object)

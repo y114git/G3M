@@ -202,8 +202,14 @@ class G3MToolPatchingService(QObject):
         self._override_game_path: str | None = None
         self._backup_root_override: str | None = None
         self._file_hashes: dict[tuple[str, int, int], str | None] = {}
-        self.warning_handler: Callable[[WarningEvent, str, str | None], bool] | None = None
-        self.strict_warning_handler: Callable[[WarningEvent, str, str | None], bool] | None = None
+        self.last_restore_external_changes: list[str] = []
+        self.last_restore_conflict_archive: str | None = None
+        self.warning_handler: Callable[[WarningEvent, str, str | None], bool] | None = (
+            None
+        )
+        self.strict_warning_handler: (
+            Callable[[WarningEvent, str, str | None], bool] | None
+        ) = None
 
         _rotate_patching_files()
         self.patching_logger = _get_patching_logger()
@@ -499,8 +505,12 @@ class G3MToolPatchingService(QObject):
                         self._restore_all(section_mods)
                     return False
 
-                if not is_modpack:
-                    self._write_session_manifest()
+                if not is_modpack and not self._write_session_manifest():
+                    self.patching_logger.error(
+                        "Patching aborted because the recovery manifest could not be saved"
+                    )
+                    self._restore_all(section_mods)
+                    return False
 
             self._emit_progress(
                 96 if is_modpack else 100, tr("status.patching_completed")
@@ -585,7 +595,8 @@ class G3MToolPatchingService(QObject):
             )
         if not target_dir:
             self.status_update.emit(
-                tr("errors.target_section_directory_not_found", section=chapter_id), "error"
+                tr("errors.target_section_directory_not_found", section=chapter_id),
+                "error",
             )
             return False
         self._emit_chapter_progress(
@@ -783,13 +794,31 @@ class G3MToolPatchingService(QObject):
     ) -> bool:
         patch_file, mod_type, *_ = mod_info
 
+        if mod_type == MOD_TYPE_DATAFILE:
+            self.patching_logger.info("Copying replacement DATA file: %s", patch_file)
+            self._emit_chapter_progress(
+                chapter_start,
+                chapter_end,
+                0.35,
+                tr("status.patching_section", section=display_name, current=1, total=1),
+            )
+            try:
+                shutil.copy2(patch_file, output_path)
+                return True
+            except OSError as error:
+                self.patching_logger.error(
+                    "Failed to copy replacement DATA file: %s", error, exc_info=True
+                )
+                return False
+
         if mod_type in {
             MOD_TYPE_CSX,
             MOD_TYPE_XDELTA,
-            MOD_TYPE_DATAFILE,
             MOD_TYPE_G3MPATCH,
         }:
-            self.patching_logger.info("Applying data input through G3MTool: %s", patch_file)
+            self.patching_logger.info(
+                "Applying data input through G3MTool: %s", patch_file
+            )
             self._emit_chapter_progress(
                 chapter_start,
                 chapter_end,
@@ -802,8 +831,15 @@ class G3MToolPatchingService(QObject):
                 output_path,
                 log_path=log_path,
                 progress_callback=lambda progress, _label: self._emit_chapter_progress(
-                    chapter_start, chapter_end, 0.30 + (progress / 100 * 0.40),
-                    tr("status.patching_section", section=display_name, current=1, total=1),
+                    chapter_start,
+                    chapter_end,
+                    0.30 + (progress / 100 * 0.40),
+                    tr(
+                        "status.patching_section",
+                        section=display_name,
+                        current=1,
+                        total=1,
+                    ),
                 ),
             )
             if returncode == 0 and os.path.exists(output_path):
@@ -818,10 +854,13 @@ class G3MToolPatchingService(QObject):
             return self._continue_without_data_patch(
                 tr(
                     "dialogs.patching_warning.data_patch_failed",
-                    patch_name=os.path.basename(patch_file), patch_path=patch_file,
-                    data_win_path=data_win_path, error=error_preview,
+                    patch_name=os.path.basename(patch_file),
+                    patch_path=patch_file,
+                    data_win_path=data_win_path,
+                    error=error_preview,
                 ),
-                data_win_path, output_path,
+                data_win_path,
+                output_path,
                 f"G3MTool universal apply failed: {error_text}",
                 warning_id=warning_id,
                 warning_context={
@@ -965,7 +1004,10 @@ class G3MToolPatchingService(QObject):
                 direct_files = [
                     entry["source"] for entry in entries if not entry["is_directory"]
                 ]
-                if any(path.casefold().endswith(transform_extensions) for path in direct_files):
+                if any(
+                    path.casefold().endswith(transform_extensions)
+                    for path in direct_files
+                ):
                     can_plan = False
                     break
                 if any(
@@ -974,8 +1016,8 @@ class G3MToolPatchingService(QObject):
                     for _root, _dirs, files in os.walk(scan_root)
                     for file in files
                 ):
-                        can_plan = False
-                        break
+                    can_plan = False
+                    break
         if can_plan:
             candidates = []
             excluded_extensions = tuple(DATA_FILE_EXTENSIONS)
@@ -1434,15 +1476,20 @@ class G3MToolPatchingService(QObject):
         return self._parse_conflict_counts(content)
 
     @staticmethod
-    def _parse_conflict_counts(content: str) -> tuple[int, int]:
-        """Extract actual conflict/auto-resolved counts from the report markdown."""
-        total = 0
-        auto_resolved = 0
+    def _parse_count_field(content: str, field_pattern: str) -> int:
+        matches = (
+            re.finditer(rf"(?i)(?:total\s+)?{field_pattern}\s*[:=]\s*(\d+)", content),
+            re.finditer(rf"(?i)(\d+)[ \t]+{field_pattern}\b", content),
+        )
+        return max(
+            (int(match.group(1)) for group in matches for match in group), default=0
+        )
 
-        for m in re.finditer(r"(?i)(?:total\s+)?conflicts?\s*[:=]\s*(\d+)", content):
-            total = max(total, int(m.group(1)))
-        for m in re.finditer(r"(?i)auto[- ]?resolved?\s*[:=]\s*(\d+)", content):
-            auto_resolved = max(auto_resolved, int(m.group(1)))
+    @classmethod
+    def _parse_conflict_counts(cls, content: str) -> tuple[int, int]:
+        """Extract actual conflict/auto-resolved counts from the report markdown."""
+        total = cls._parse_count_field(content, r"conflicts?")
+        auto_resolved = cls._parse_count_field(content, r"auto[- ]?resolved?")
 
         if total == 0:
             conflict_sections = re.findall(
@@ -1458,30 +1505,49 @@ class G3MToolPatchingService(QObject):
             )
         return (total, auto_resolved)
 
-    def _write_session_manifest(self) -> None:
+    def _write_session_manifest(self) -> bool:
         """Write session manifest so backups can be recovered after a crash."""
         manifest_path = self._session_manifest_path
-        if manifest_path and self.backup_service:
-            self.backup_service.save_backups_to_manifest(manifest_path)
+        if not manifest_path:
+            return True
+        if not self.backup_service:
+            return False
+        return self.backup_service.save_backups_to_manifest(manifest_path)
 
     def _restore_all(self, section_mods: dict) -> None:
         if self.backup_service:
-            for section_id in section_mods:
+            results = [
                 self.backup_service.restore_backups(section_id)
-            self.backup_service.clear_backup_dir()
+                for section_id in section_mods
+            ]
+            if all(results):
+                self.backup_service.clear_backup_dir()
 
     def restore_all_backups(self) -> bool:
         if self.backup_service:
+            self.last_restore_external_changes = []
+            self.last_restore_conflict_archive = None
             result = self.backup_service.restore_all_backups()
-            self.backup_service.clear_backup_dir()
+            if not result and self.backup_service.external_changes:
+                self.last_restore_external_changes = list(
+                    self.backup_service.external_changes
+                )
+                archive = self.backup_service.archive_conflicted_session()
+                if archive:
+                    self.last_restore_conflict_archive = archive
+                    return True
+            if result:
+                self.backup_service.clear_backup_dir()
             return result
         return False
 
-    def clear_session(self) -> None:
-        """Remove persistent backups and session manifest (call after successful game close)."""
-        if self.backup_service:
-            self.backup_service.clear_backup_dir()
-            self.patching_logger.info("Session cleared: backups and manifest removed")
+    def finalize_session_state(self) -> bool:
+        if not self.backup_service or (
+            not self.backup_service.original_files
+            and not self.backup_service.added_files
+        ):
+            return True
+        return self.backup_service.capture_deployed_state()
 
     def cleanup_processes_and_temp_files(self) -> None:
         """Called from app_cleanup.py on close."""

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class CustomTitleBar(QWidget):
     log_viewer_requested = pyqtSignal()
+    support_packager_requested = pyqtSignal()
     changelog_requested = pyqtSignal()
     onboarding_requested = pyqtSignal()
     about_requested = pyqtSignal()
@@ -54,6 +55,11 @@ class CustomTitleBar(QWidget):
         self.log_viewer_action = QAction(self.windows_menu)
         self.log_viewer_action.triggered.connect(self.log_viewer_requested.emit)
         self.windows_menu.addAction(self.log_viewer_action)
+        self.support_packager_action = QAction(self.windows_menu)
+        self.support_packager_action.triggered.connect(
+            self.support_packager_requested.emit
+        )
+        self.windows_menu.addAction(self.support_packager_action)
 
         self.help_button, self.help_menu = self.add_menu_button()
         self.changelog_action = QAction(self.help_menu)
@@ -144,6 +150,7 @@ class CustomTitleBar(QWidget):
         self,
         windows_text: str,
         log_viewer_text: str,
+        support_packager_text: str,
         help_text: str,
         changelog_text: str,
         onboarding_text: str,
@@ -156,6 +163,8 @@ class CustomTitleBar(QWidget):
         self.windows_button.setText(windows_text)
         self.log_viewer_action.setText(log_viewer_text)
         self.log_viewer_action.setToolTip(log_viewer_text)
+        self.support_packager_action.setText(support_packager_text)
+        self.support_packager_action.setToolTip(support_packager_text)
         self.help_button.setText(help_text)
         self.changelog_action.setText(changelog_text)
         self.changelog_action.setToolTip(changelog_text)

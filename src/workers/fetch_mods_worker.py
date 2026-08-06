@@ -5,12 +5,13 @@ import logging
 import os
 from typing import Any
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_game_ids
 from models.mod_models import AnyModInfo, BrowserModInfo
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 from utils.mod.utils import get_mod_id
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class FetchModsThread(QThread):
+class FetchModsThread(ManagedQThread):
     """Background thread for fetching mod lists from remote sources."""
 
     result = pyqtSignal(bool)
@@ -275,7 +276,9 @@ class FetchModsThread(QThread):
             _safe_emit(self.__class__.__name__, self.result, True)
         except Exception as e:
             logger.error(f"FetchModsThread: Error in run: {e}", exc_info=True)
-            _safe_emit(self.__class__.__name__, self.status, str(e), UI_COLORS["status_error"])
+            _safe_emit(
+                self.__class__.__name__, self.status, str(e), UI_COLORS["status_error"]
+            )
             _safe_emit(self.__class__.__name__, self.result, False)
 
     def _get_local_mods(self) -> list[AnyModInfo]:
@@ -324,7 +327,9 @@ class FetchModsThread(QThread):
                         continue
                     mod_id = config_data.get("id")
                     is_local_mod_id = (
-                        mod_id and isinstance(mod_id, str) and mod_id.startswith("local_")
+                        mod_id
+                        and isinstance(mod_id, str)
+                        and mod_id.startswith("local_")
                     )
                     if not mod_id or is_local_mod_id:
                         continue

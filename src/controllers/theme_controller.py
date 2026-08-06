@@ -108,18 +108,15 @@ class ThemeController:
             self.app_state.local_config.get("custom_main_text_color")
             or theme["colors"]["main_text"]
         )
-        disabled_bg = (
-            self.app_state.local_config.get("custom_disabled_bg")
-            or theme["colors"].get("disabled_bg", "#333333")
-        )
-        disabled_text = (
-            self.app_state.local_config.get("custom_disabled_text")
-            or theme["colors"].get("disabled_text", "#888888")
-        )
-        disabled_border = (
-            self.app_state.local_config.get("custom_disabled_border")
-            or theme["colors"].get("disabled_border", "#555555")
-        )
+        disabled_bg = self.app_state.local_config.get("custom_disabled_bg") or theme[
+            "colors"
+        ].get("disabled_bg", "#333333")
+        disabled_text = self.app_state.local_config.get(
+            "custom_disabled_text"
+        ) or theme["colors"].get("disabled_text", "#888888")
+        disabled_border = self.app_state.local_config.get(
+            "custom_disabled_border"
+        ) or theme["colors"].get("disabled_border", "#555555")
         font_family_main = (
             self.app.custom_font_family
             or localization_service.load_font()
@@ -127,7 +124,9 @@ class ThemeController:
         )
         zoom_factor = self.app_state.local_config.get("ui_scale", 1.0)
 
-        secondary_text_color = self.app_state.local_config.get("custom_secondary_text_color")
+        secondary_text_color = self.app_state.local_config.get(
+            "custom_secondary_text_color"
+        )
         border_radius_value = get_border_radius(self.app_state.local_config)
         custom_border_radius = f"{border_radius_value}px"
         params = {
@@ -337,6 +336,7 @@ class ThemeController:
                     "_mod_versions_dialog",
                     "_downloads_dialog",
                     "_log_viewer_dialog",
+                    "_support_packager_dialog",
                     "_modding_tools_dialog",
                     "_diagnostics_dialog",
                 ):
@@ -448,9 +448,7 @@ class ThemeController:
                     self.app.video_sink.videoFrameChanged.connect(on_frame_changed)
                     self.app.media_player.play()
                 except Exception as e:
-                    logger.error(
-                        f"Failed to play video background: {e}", exc_info=True
-                    )
+                    logger.error(f"Failed to play video background: {e}", exc_info=True)
             elif obj[0] == "gif":
                 self.app.background_movie = QMovie(obj[1])
                 self.app.background_movie.frameChanged.connect(self.app.update)
@@ -489,8 +487,13 @@ class ThemeController:
             archive_path = os.path.join(dir_path, filename)
             try:
                 with zipfile.ZipFile(archive_path, "r") as zipf:
-                    names = {name.replace("\\", "/").strip("/") for name in zipf.namelist()}
-                return any(name.endswith("/theme.json") or name == "theme.json" for name in names)
+                    names = {
+                        name.replace("\\", "/").strip("/") for name in zipf.namelist()
+                    }
+                return any(
+                    name.endswith("/theme.json") or name == "theme.json"
+                    for name in names
+                )
             except Exception:
                 return True
 
@@ -562,7 +565,6 @@ class ThemeController:
                 "info", "dialogs.success", tr("dialogs.theme_exported_success")
             )
         except Exception as e:
-
             logger.error(f"Failed to export theme: {e}")
 
     def on_theme_delete_clicked(self):
@@ -589,7 +591,6 @@ class ThemeController:
                 os.remove(theme_path)
                 self.init_theme_list()
             except Exception as e:
-
                 logger.error(f"Failed to delete theme: {e}")
 
     def on_theme_changed_by_service(self):
@@ -677,7 +678,6 @@ class ThemeController:
                     self.customization_service.stop_background_music()
                     self.customization_service.maybe_start_background_music(force=True)
         except Exception as e:
-
             logger.error(
                 f"ThemeController: Error handling music after theme change: {e}",
                 exc_info=True,
@@ -849,9 +849,7 @@ class ThemeController:
             else:
                 self.app._custom_font_id = -1
                 self.app._custom_font_file_key = None
-                logger.error(
-                    f"Failed to load font from {custom_f_path}, using default"
-                )
+                logger.error(f"Failed to load font from {custom_f_path}, using default")
                 self.app.custom_font_family = localization_service.load_font()
         else:
             old_id = getattr(self.app, "_custom_font_id", None)

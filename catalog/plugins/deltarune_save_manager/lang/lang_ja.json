@@ -96,6 +96,8 @@
     "value_label": "値",
     "cancel_button": "キャンセル",
     "save": "保存",
+    "undo": "元に戻す", "redo": "やり直す", "apply": "適用",
+    "manual_flag_editor": "フラグ手動編集", "flag_id": "フラグ ID",
     "close_button": "閉じる",
     "shortcut_summary_label": "セーブコレクション"
   },
@@ -147,6 +149,7 @@
     "changes_will_be_lost": "保存していない変更はすべて失われます。続行しますか?",
     "save_changes": "変更を保存しますか?",
     "original_save_overwrite": "元のセーブが上書きされます。",
+    "changes_summary": "{count} 件のセーブ項目を変更しました。元のセーブを上書きします。",
     "access_error": "アクセスエラー",
     "no_write_permissions": "このフォルダーに書き込み権限がありません:\n{path}",
     "delete_save": "セーブを削除しますか?",

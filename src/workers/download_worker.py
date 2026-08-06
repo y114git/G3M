@@ -5,8 +5,9 @@ import logging
 import os
 import shutil
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
+from ui.utils.thread_lifetime import ManagedQThread
 from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class DownloadWorker(QThread):
+class DownloadWorker(ManagedQThread):
     progress_updated = pyqtSignal(str, int, int, int)
     download_finished = pyqtSignal(str, bool, str, str)
 
@@ -70,7 +71,10 @@ class DownloadWorker(QThread):
                     _safe_emit(
                         "DownloadWorker",
                         self.progress_updated,
-                        self._record_id, pct, downloaded_ref[0], total_size
+                        self._record_id,
+                        pct,
+                        downloaded_ref[0],
+                        total_size,
                     )
 
             def on_response(r):
@@ -126,7 +130,10 @@ class DownloadWorker(QThread):
                 _safe_emit(
                     "DownloadWorker",
                     self.download_finished,
-                    self._record_id, False, format_network_error(e, url=self._url), ""
+                    self._record_id,
+                    False,
+                    format_network_error(e, url=self._url),
+                    "",
                 )
         except Exception as e:
             _cleanup_file(self._target_path)
@@ -134,11 +141,14 @@ class DownloadWorker(QThread):
             _safe_emit(
                 "DownloadWorker",
                 self.download_finished,
-                self._record_id, False, format_network_error(e, url=self._url), ""
+                self._record_id,
+                False,
+                format_network_error(e, url=self._url),
+                "",
             )
 
 
-class LocalFileCopyWorker(QThread):
+class LocalFileCopyWorker(ManagedQThread):
     download_finished = pyqtSignal(str, bool, str, str)
     _CHUNK = 256 * 1024
 

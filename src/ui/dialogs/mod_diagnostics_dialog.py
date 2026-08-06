@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from multiprocessing import Process
 from typing import Any, cast
 
-from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -76,7 +76,7 @@ def _play_audio_preview_process(sound_path: str) -> None:
         )
 
 
-class DiagnosticsWorker(QThread):
+class DiagnosticsWorker(ManagedQThread):
     result_ready = pyqtSignal(object)
 
     def __init__(
@@ -701,6 +701,13 @@ class ModDiagnosticsDialog(QDialog):
         self._preflight_report = report
         self._export_preflight_btn.setEnabled(True)
         self._populate_preflight_report(report)
+        quick_conflicts = self._report.summary.conflicts if self._report else 0
+        self._summary_labels["conflicts"].setText(
+            tr(
+                "diagnostics.summary_conflicts",
+                count=max(quick_conflicts, report.conflict_count),
+            )
+        )
         if report.cancelled:
             self._preflight_phase.setText(tr("diagnostics.actual_phase_cancelled"))
         elif report.success:

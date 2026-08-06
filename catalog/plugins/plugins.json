@@ -5,7 +5,7 @@
         "name": "DR Save Manager",
         "description": "Manage DELTARUNE save collections and switch them before launch.",
         "author": "Y114",
-        "version": "1.1.3",
+        "version": "1.2.0",
         "api_version": ">=1.1.0",
         "icon": "https://raw.githubusercontent.com/y114git/G3M/main/catalog/plugins/deltarune_save_manager/icon.png",
         "homepage": "https://github.com/y114git/G3M/tree/main/catalog/plugins/deltarune_save_manager",

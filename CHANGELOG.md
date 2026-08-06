@@ -1,3 +1,30 @@
+### Version 3.3.1 — 05.08.26
+
+- **Launch and Restoration Fixes**
+
+  - Fixed cases where a mod remained in the game after switching profiles or launching with no mods. G3M also recovers interrupted sessions before the next launch.
+  - G3M leaves game files untouched if the player or another program changes them after applying a mod.
+
+- **Diagnostics and DATA Mods**
+
+  - Launch Preflight now reports resource conflicts found during the simulated launch.
+  - G3M now copies full `data.win` replacements directly. This reduces loading times and fixes failures with translations, downpatches, and other full DATA mods.
+
+- **DELTAMOD and Mod Editor**
+
+  - G3M now supports the updated DELTAMOD format.
+  - The Mod Editor can mark Extra files and folders as dependencies. Scripts can use them inside the mod, and G3M excludes them from the game installation.
+
+- **DR Save Manager 1.2.0**
+
+  - DR Save Manager now supports save data from all five DELTARUNE chapters.
+  - Added undo and redo, change summaries, manual flag editing, and updated simple-mode fields.
+
+- **Support Packager**
+
+  - Added *Windows > Support Packager* for creating a local diagnostic archive with logs, settings, installed mods, system details, and file structures.
+  - Package contents can be selected before saving. User and computer names, along with recognized secret values, are removed automatically.
+
 ### Version 3.3.0 — 25.07.26
 
 - **Getting Started Guide**

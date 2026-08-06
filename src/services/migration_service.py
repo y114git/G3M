@@ -31,6 +31,19 @@ LEGACY_THEME_COLOR_KEYS = {
     "custom_color_text": "custom_main_text_color",
     "custom_color_version_text": "custom_secondary_text_color",
 }
+
+
+def build_extra_file_entry(
+    path: str, status: str = "install"
+) -> str | dict[str, str]:
+    normalized_status = str(status or "install").strip().lower()
+    return (
+        path
+        if normalized_status == "install"
+        else {"file_path": path, "status": normalized_status}
+    )
+
+
 LEGACY_CHAPTER_IDS = {
     "-1": "deltarune",
     "0": "deltarune_0",
@@ -101,7 +114,10 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
     homepage_value = config_data.get("homepage")
     if homepage_value in (None, ""):
         for legacy_key in LEGACY_HOMEPAGE_KEYS:
-            if legacy_key in config_data and config_data.get(legacy_key) not in (None, ""):
+            if legacy_key in config_data and config_data.get(legacy_key) not in (
+                None,
+                "",
+            ):
                 homepage_value = config_data.get(legacy_key)
                 break
 
@@ -154,14 +170,23 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
                             if isinstance(extra_file, str):
                                 file_path = extra_file
                             elif isinstance(extra_file, dict):
-                                file_path = extra_file.get("file_path") or extra_file.get(
-                                    "url"
-                                )
+                                file_path = extra_file.get(
+                                    "file_path"
+                                ) or extra_file.get("url")
                             else:
                                 continue
                             if not file_path:
                                 continue
-                            normalized_extra_files.append(file_path)
+                            status = (
+                                str(extra_file.get("status") or "install")
+                                .strip()
+                                .lower()
+                                if isinstance(extra_file, dict)
+                                else "install"
+                            )
+                            normalized_extra_files.append(
+                                build_extra_file_entry(file_path, status)
+                            )
                     elif isinstance(extra_files, dict):
                         for filenames in extra_files.values():
                             if not isinstance(filenames, list):

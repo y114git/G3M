@@ -154,9 +154,22 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         if not isinstance(extra_files, list):
             return False
         for extra_file in extra_files:
-            if not isinstance(extra_file, str) or len(extra_file) > MOD_FIELD_LIMITS[
-                "file_value"
-            ]:
+            if isinstance(extra_file, str):
+                file_path = extra_file
+                status = "install"
+            elif isinstance(extra_file, dict):
+                file_path = extra_file.get("file_path")
+                status = extra_file.get("status")
+            else:
+                return False
+            if (
+                not isinstance(file_path, str)
+                or not file_path
+                or len(file_path) > MOD_FIELD_LIMITS["file_value"]
+                or not isinstance(status, str)
+                or not status
+                or len(status) > MOD_FIELD_LIMITS["file_value"]
+            ):
                 return False
     return True
 

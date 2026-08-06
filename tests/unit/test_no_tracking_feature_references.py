@@ -43,7 +43,7 @@ def test_removed_usage_reporting_has_no_tracked_references() -> None:
             continue
         try:
             content = path.read_text(encoding="utf-8").casefold()
-        except UnicodeDecodeError, OSError:
+        except (UnicodeDecodeError, OSError):
             continue
         for token in FORBIDDEN:
             if token.casefold() in content:

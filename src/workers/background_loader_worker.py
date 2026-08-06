@@ -2,8 +2,10 @@
 
 import logging
 
-from PyQt6.QtCore import QSize, QThread, pyqtSignal
+from PyQt6.QtCore import QSize, pyqtSignal
 from PyQt6.QtGui import QImage
+
+from ui.utils.thread_lifetime import ManagedQThread
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class BgLoader(QThread):
+class BgLoader(ManagedQThread):
     loaded = pyqtSignal(object)
 
     def __init__(self, path: object, size: QSize) -> None:
@@ -45,6 +47,11 @@ class BgLoader(QThread):
             else:
                 result = ("img", QImage(path))
         except Exception as e:
-            logger.warning("BgLoader: failed to load background %r: %s", self._path, e, exc_info=True)
+            logger.warning(
+                "BgLoader: failed to load background %r: %s",
+                self._path,
+                e,
+                exc_info=True,
+            )
             result = ("img", QImage())
         _safe_emit(self.__class__.__name__, self.loaded, result)

@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import uuid
 
-from PyQt6.QtCore import QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QMetaObject, QObject, Qt, QTimer, pyqtSignal
 
 from config.config import ONLINE_UPDATE_INTERVAL
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import safe_stop_thread
 from workers.presence_worker import PresenceWorker
 
@@ -21,13 +22,11 @@ class SessionManager(QObject):
     def __init__(self, app_state, parent=None) -> None:
         super().__init__(parent)
         self.session_id = uuid.uuid4().hex
-        self._thread = QThread(parent)
+        self._thread = ManagedQThread(parent)
         self.worker = PresenceWorker(self.session_id, app_state)
         self.worker.moveToThread(self._thread)
         self.worker.update_online_count.connect(self._handle_online_count)
-        self.worker.global_settings_received.connect(
-            self.global_settings_received.emit
-        )
+        self.worker.global_settings_received.connect(self.global_settings_received.emit)
         self._thread.finished.connect(self.worker.deleteLater)
         self.timer = QTimer(parent)
         self.timer.timeout.connect(self.request_presence_refresh)

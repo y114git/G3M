@@ -39,8 +39,8 @@ def _mod_stub(mod_id: str, name: str, chapter_ids: tuple[str, ...] = ()):
     mod.get_id.return_value = mod_id
     mod.get_name.return_value = name
     mod.name = name
-    mod.get_chapter_data.side_effect = (
-        lambda chapter_id: {"files": []} if chapter_id in chapter_ids else None
+    mod.get_chapter_data.side_effect = lambda chapter_id: (
+        {"files": []} if chapter_id in chapter_ids else None
     )
     return mod
 
@@ -324,8 +324,8 @@ class TestAppWindow:
             try:
                 window.show()
                 _drain_events(qapp)
-                window.settings_service.validate_executable_path = (
-                    lambda path: path.endswith("G3MTool.exe")
+                window.settings_service.validate_executable_path = lambda path: (
+                    path.endswith("G3MTool.exe")
                 )
 
                 custom_path = os.path.join(temp_dir, "tools", "G3MTool.exe")
@@ -336,10 +336,9 @@ class TestAppWindow:
                 _drain_events(qapp)
 
                 assert window.settings_game_path_label.text().endswith(" Path:")
-                assert (
-                    window.app_state.local_config.get("custom_g3mtool_path")
-                    == normalize_user_input_path(custom_path)
-                )
+                assert window.app_state.local_config.get(
+                    "custom_g3mtool_path"
+                ) == normalize_user_input_path(custom_path)
                 assert not window.settings_reset_g3mtool_button.isHidden()
 
                 window.settings_reset_g3mtool_button.click()
@@ -494,7 +493,9 @@ class TestAppWindow:
                 window.show()
                 _drain_events(qapp)
                 window.feedback_service.show_message = Mock()
-                window.settings_service.validate_selected_game_path = lambda _path, *args, **kwargs: False
+                window.settings_service.validate_selected_game_path = (
+                    lambda _path, *args, **kwargs: False
+                )
                 previous_path = window.settings_game_path_edit.full_text()
 
                 invalid_path = os.path.join(temp_dir, "BrokenGameFolder")
@@ -504,7 +505,12 @@ class TestAppWindow:
                 window.settings_custom_executable_edit.setFocus()
                 _drain_events(qapp)
 
-                assert window.app_state.game_mode.get_game_path(window.app_state.local_config) == previous_path
+                assert (
+                    window.app_state.game_mode.get_game_path(
+                        window.app_state.local_config
+                    )
+                    == previous_path
+                )
                 assert window.settings_game_path_edit.full_text() == previous_path
                 window.feedback_service.show_message.assert_called_once()
             finally:
@@ -547,7 +553,10 @@ class TestAppWindow:
                     == "Specify path..."
                 )
                 assert window.settings_custom_wine_label.text() == "Custom Wine:"
-                assert window.settings_custom_portproton_label.text() == "Custom PortProton:"
+                assert (
+                    window.settings_custom_portproton_label.text()
+                    == "Custom PortProton:"
+                )
                 assert window.manage_warnings_button.text() == "Manage Warnings"
                 assert window.clear_g3mtool_cache_button.text() == "Clear G3MTool Cache"
                 assert window.settings_custom_g3mtool_label.text() == "Custom G3MTool:"
@@ -571,12 +580,16 @@ class TestAppWindow:
                     window.settings_custom_portproton_label.text()
                     == "Кастомный PortProton:"
                 )
-                assert window.manage_warnings_button.text() == "Управление предупреждениями"
                 assert (
-                    window.clear_g3mtool_cache_button.text()
-                    == "Очистить кеш G3MTool"
+                    window.manage_warnings_button.text()
+                    == "Управление предупреждениями"
                 )
-                assert window.settings_custom_g3mtool_label.text() == "Кастомный G3MTool:"
+                assert (
+                    window.clear_g3mtool_cache_button.text() == "Очистить кеш G3MTool"
+                )
+                assert (
+                    window.settings_custom_g3mtool_label.text() == "Кастомный G3MTool:"
+                )
                 assert (
                     window.change_font_button.text()
                     == window.customization_service.get_font_button_text()
@@ -586,9 +599,7 @@ class TestAppWindow:
                 localization_service.load_language(original_language)
                 _close_app_window(qapp, window)
 
-    def test_clear_g3mtool_cache_button_calls_settings_service(
-        self, qapp, temp_dir
-    ):
+    def test_clear_g3mtool_cache_button_calls_settings_service(self, qapp, temp_dir):
         from app.window import AppWindow
 
         _, _, _, _, _, patches = _window_test_patches(temp_dir)
@@ -894,6 +905,39 @@ class TestAppWindow:
                     window._log_viewer_dialog.close()
                 _close_app_window(qapp, window)
 
+    def test_title_bar_windows_menu_opens_support_packager(self, qapp, temp_dir):
+        from app.window import AppWindow
+
+        _, _, _, _, _, patches = _window_test_patches(temp_dir)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patches[4],
+            patches[5],
+            patches[6],
+            patches[7],
+            patches[8],
+            patches[9],
+        ):
+            window = AppWindow()
+            try:
+                assert window.title_bar.support_packager_action.text() == tr(
+                    "ui.support_packager"
+                )
+                assert window._support_packager_dialog is None
+
+                window.title_bar.support_packager_action.trigger()
+                qapp.processEvents()
+
+                assert window._support_packager_dialog is not None
+                assert window._support_packager_dialog.isVisible() is True
+            finally:
+                if window._support_packager_dialog:
+                    window._support_packager_dialog.close()
+                _close_app_window(qapp, window)
+
 
 class TestTabBuilders:
     """Tests for main window."""
@@ -1014,7 +1058,9 @@ class TestTabBuilders:
         with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
             dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
         try:
-            checks = {check.text(): check.isChecked() for check in dialog._mod_checks.values()}
+            checks = {
+                check.text(): check.isChecked() for check in dialog._mod_checks.values()
+            }
             assert checks == {"Profile Mod": True, "Disabled Mod": False}
             assert all(check.toolTip() for check in dialog._mod_checks.values())
         finally:
@@ -1048,7 +1094,9 @@ class TestTabBuilders:
         with patch.object(ModDiagnosticsDialog, "_run_analysis", lambda self: None):
             dialog = ModDiagnosticsDialog(app_state, mod_service, used_mods_service)
         try:
-            checks = {check.text(): check.isChecked() for check in dialog._mod_checks.values()}
+            checks = {
+                check.text(): check.isChecked() for check in dialog._mod_checks.values()
+            }
             assert checks == {"Enabled Mod": True, "Disabled Mod": False}
             assert all(check.toolTip() for check in dialog._mod_checks.values())
         finally:
@@ -1121,10 +1169,12 @@ class TestTabBuilders:
                 False,
                 0.1,
                 issues=("xdelta3: XD3_INVALID_INPUT", "PermissionError: access denied"),
+                conflict_count=7,
             )
-            dialog._populate_preflight_report(report)
+            dialog._on_preflight_ready(report)
             assert "XD3_INVALID_INPUT" in dialog._inspector.toPlainText()
             assert "access denied" in dialog._inspector.toPlainText()
+            assert "7" in dialog._summary_labels["conflicts"].text()
         finally:
             dialog.close()
             dialog.deleteLater()
@@ -1264,9 +1314,8 @@ class TestTabBuilders:
         try:
             widgets = builder.get_widgets()
             assert widgets["settings_game_path_label"].text() == "{GAME} Path:"
-            assert (
-                widgets["settings_custom_g3mtool_edit"].placeholderText()
-                == tr("ui.path_field_placeholder")
+            assert widgets["settings_custom_g3mtool_edit"].placeholderText() == tr(
+                "ui.path_field_placeholder"
             )
             assert widgets["settings_custom_executable_label"].text() == tr(
                 "ui.settings_custom_executable_path_label"
@@ -1279,9 +1328,8 @@ class TestTabBuilders:
             assert widgets["settings_custom_xdelta_button"].toolTip() == tr(
                 "tooltips.custom_xdelta_binary"
             )
-            assert (
-                widgets["settings_custom_wine_edit"].placeholderText()
-                == tr("ui.path_field_placeholder")
+            assert widgets["settings_custom_wine_edit"].placeholderText() == tr(
+                "ui.path_field_placeholder"
             )
             assert widgets["settings_custom_wine_button"].toolTip() == tr(
                 "tooltips.custom_wine_binary"

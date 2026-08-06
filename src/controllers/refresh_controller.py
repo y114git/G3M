@@ -4,18 +4,19 @@ import contextlib
 import logging
 import os
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from config.config import UI_COLORS
 from services.game_detection_service import is_game_running
 from services.localization_service import localization_service, tr
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import safe_stop_thread
 from workers.fetch_mods_worker import FetchModsThread
 
 logger = logging.getLogger(__name__)
 
 
-class _PostFetchWorker(QThread):
+class _PostFetchWorker(ManagedQThread):
     """Background worker for heavy post-fetch operations (scan + cache restore)."""
 
     done = pyqtSignal(bool)
@@ -287,9 +288,7 @@ class RefreshController:
                         if self.app_state.all_mods
                         else tr("ui.network_update_failed")
                     )
-                    self._safe_update_status(
-                        fallback_msg, UI_COLORS["status_error"]
-                    )
+                    self._safe_update_status(fallback_msg, UI_COLORS["status_error"])
                 if is_initial and success:
                     current_game_path = (
                         self.app_state.game_mode.get_game_path(

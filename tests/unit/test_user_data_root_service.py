@@ -11,6 +11,19 @@ from services.user_data_root_service import (
 )
 
 
+def _require_symlink_support(tmp_path: Path) -> None:
+    target = tmp_path / "symlink-probe-target"
+    link = tmp_path / "symlink-probe-link"
+    target.mkdir()
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"Creating symlinks is unavailable: {error}")
+    else:
+        link.unlink()
+        target.rmdir()
+
+
 def test_validation_returns_destination_without_appending_g3m(tmp_path):
     source = tmp_path / "current"
     destination = tmp_path / "chosen-name"
@@ -67,12 +80,16 @@ def test_copy_preserves_tree_and_excludes_bootstrap_locator(tmp_path):
     result = prepare_data_root_change(str(source), str(destination), copy_data=True)
 
     assert result.status == "ready"
-    assert (destination / "profiles" / "Default" / "mod.json").read_text(encoding="utf-8") == "{}"
+    assert (destination / "profiles" / "Default" / "mod.json").read_text(
+        encoding="utf-8"
+    ) == "{}"
     assert not (destination / "data-root.json").exists()
     assert (source / "profiles" / "Default" / "mod.json").exists()
 
 
-def test_committed_migration_succeeds_when_old_backup_cleanup_fails(tmp_path, monkeypatch):
+def test_committed_migration_succeeds_when_old_backup_cleanup_fails(
+    tmp_path, monkeypatch
+):
     source = tmp_path / "current"
     destination = tmp_path / "new-root"
     source.mkdir()
@@ -85,7 +102,9 @@ def test_committed_migration_succeeds_when_old_backup_cleanup_fails(tmp_path, mo
             raise OSError("locked")
         return original_rmtree(path, *args, **kwargs)
 
-    monkeypatch.setattr("services.user_data_root_service.shutil.rmtree", fail_old_backup)
+    monkeypatch.setattr(
+        "services.user_data_root_service.shutil.rmtree", fail_old_backup
+    )
 
     result = prepare_data_root_change(str(source), str(destination), copy_data=True)
 
@@ -149,8 +168,8 @@ def test_cancelled_partial_copy_leaves_existing_destination_unchanged(tmp_path):
     assert not (destination / "two.txt").exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks may require Windows privileges")
 def test_validation_resolves_symlink_aliases_before_overlap_check(tmp_path):
+    _require_symlink_support(tmp_path)
     source = tmp_path / "current"
     source.mkdir()
     alias = tmp_path / "alias"
@@ -190,8 +209,8 @@ def test_every_bundled_language_translates_data_root_errors():
         assert required <= content["data_root"]["errors"].keys(), path.name
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks may require Windows privileges")
 def test_copy_preserves_symlink_without_following_it(tmp_path):
+    _require_symlink_support(tmp_path)
     source = tmp_path / "current"
     destination = tmp_path / "new-root"
     source.mkdir()

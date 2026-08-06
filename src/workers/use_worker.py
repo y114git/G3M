@@ -5,15 +5,16 @@ import os
 import shutil
 import tempfile
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from models.download_models import TargetKind
+from ui.utils.thread_lifetime import ManagedQThread
 from utils.process_utils import format_filesystem_error, format_plugin_error
 
 logger = logging.getLogger(__name__)
 
 
-class UseWorker(QThread):
+class UseWorker(ManagedQThread):
     use_finished = pyqtSignal(str, bool, bool, str)
 
     def __init__(
@@ -35,9 +36,7 @@ class UseWorker(QThread):
         self._plugin_install_service = plugin_install_service
         self._cancelled = False
 
-    def _safe_finish(
-        self, success: bool, needs_manual: bool, message: str
-    ) -> None:
+    def _safe_finish(self, success: bool, needs_manual: bool, message: str) -> None:
         try:
             self.use_finished.emit(
                 self._record_id,
@@ -46,7 +45,9 @@ class UseWorker(QThread):
                 message,
             )
         except Exception as e:
-            logger.warning("UseWorker: failed to emit use_finished: %s", e, exc_info=True)
+            logger.warning(
+                "UseWorker: failed to emit use_finished: %s", e, exc_info=True
+            )
 
     def cancel(self):
         self._cancelled = True
@@ -58,10 +59,14 @@ class UseWorker(QThread):
             elif self._target_kind == TargetKind.PLUGIN:
                 self._use_plugin()
             else:
-                self._safe_finish(False, False, f"Unsupported target_kind: {self._target_kind}")
+                self._safe_finish(
+                    False, False, f"Unsupported target_kind: {self._target_kind}"
+                )
         except Exception as e:
             logger.error("UseWorker: %s", e, exc_info=True)
-            self._safe_finish(False, False, format_filesystem_error(e, path=self._file_path))
+            self._safe_finish(
+                False, False, format_filesystem_error(e, path=self._file_path)
+            )
 
     def _use_mod(self):
         if not os.path.exists(self._file_path):
@@ -101,7 +106,9 @@ class UseWorker(QThread):
             elif self._is_afom_archive(extract_dir, gb_metadata):
                 success = self._install_afom_archive(extract_dir, gb_metadata)
             elif self._is_frickbears3_addon_archive(extract_dir, gb_metadata):
-                success = self._install_frickbears3_addon_archive(extract_dir, gb_metadata)
+                success = self._install_frickbears3_addon_archive(
+                    extract_dir, gb_metadata
+                )
             elif gb_metadata:
                 success = self._install_via_gamebanana_converter(gb_metadata)
             else:
@@ -172,7 +179,8 @@ class UseWorker(QThread):
             "version": self._metadata.get("version"),
             "description": self._metadata.get("description"),
             "file_name": self._metadata.get("file_name"),
-            "homepage": self._metadata.get("homepage") or self._metadata.get("profile_url"),
+            "homepage": self._metadata.get("homepage")
+            or self._metadata.get("profile_url"),
             "icon": self._metadata.get("icon"),
             "tags": self._metadata.get("tags") or [],
             "category": self._metadata.get("category"),
@@ -275,7 +283,11 @@ class UseWorker(QThread):
             return False
 
     def _is_afom_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
-        game = str((gb_metadata or {}).get("game") or self._metadata.get("game") or "").strip().lower()
+        game = (
+            str((gb_metadata or {}).get("game") or self._metadata.get("game") or "")
+            .strip()
+            .lower()
+        )
         if game and game != "pizzatower":
             return False
         try:
@@ -287,17 +299,27 @@ class UseWorker(QThread):
             logger.debug("UseWorker: AFOM inspection failed: %s", e, exc_info=True)
             return False
 
-    def _is_frickbears3_addon_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
-        game = str((gb_metadata or {}).get("game") or self._metadata.get("game") or "").strip().lower()
+    def _is_frickbears3_addon_archive(
+        self, extract_dir: str, gb_metadata: dict
+    ) -> bool:
+        game = (
+            str((gb_metadata or {}).get("game") or self._metadata.get("game") or "")
+            .strip()
+            .lower()
+        )
         if game and game != "frickbears3":
             return False
         try:
             from services.frickbears3_addons_service import Frickbears3AddonsService
 
-            inspection = Frickbears3AddonsService().inspect_extracted_archive(extract_dir)
+            inspection = Frickbears3AddonsService().inspect_extracted_archive(
+                extract_dir
+            )
             return inspection.eligible
         except Exception as e:
-            logger.debug("UseWorker: FRICKBEARS3 addon inspection failed: %s", e, exc_info=True)
+            logger.debug(
+                "UseWorker: FRICKBEARS3 addon inspection failed: %s", e, exc_info=True
+            )
             return False
 
     def _install_afom_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
@@ -315,7 +337,9 @@ class UseWorker(QThread):
             logger.error("UseWorker: AFOM conversion failed: %s", e, exc_info=True)
             return False
 
-    def _install_frickbears3_addon_archive(self, extract_dir: str, gb_metadata: dict) -> bool:
+    def _install_frickbears3_addon_archive(
+        self, extract_dir: str, gb_metadata: dict
+    ) -> bool:
         try:
             from services.frickbears3_addons_service import Frickbears3AddonsService
 
@@ -327,7 +351,9 @@ class UseWorker(QThread):
             )
             return bool(result)
         except Exception as e:
-            logger.error("UseWorker: FRICKBEARS3 addon conversion failed: %s", e, exc_info=True)
+            logger.error(
+                "UseWorker: FRICKBEARS3 addon conversion failed: %s", e, exc_info=True
+            )
             return False
 
     @staticmethod

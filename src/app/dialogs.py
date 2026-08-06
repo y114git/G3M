@@ -55,7 +55,9 @@ def on_downloads_use_completed(w):
         if hasattr(w, "library_display"):
             w.library_display.update_display()
         w.game_launch.update_button_state()
-        _safe_update_status(w, tr("downloads.install_success"), UI_COLORS["status_success"])
+        _safe_update_status(
+            w, tr("downloads.install_success"), UI_COLORS["status_success"]
+        )
     except Exception as e:
         logger.warning(f"on_downloads_use_completed failed: {e}", exc_info=True)
 
@@ -90,6 +92,19 @@ def open_log_viewer_dialog(w):
     w._log_viewer_dialog.show()
     w._log_viewer_dialog.raise_()
     w._log_viewer_dialog.activateWindow()
+
+
+def open_support_packager_dialog(w):
+    from ui.dialogs.support_packager_dialog import SupportPackagerDialog
+
+    if w._support_packager_dialog is None:
+        w._support_packager_dialog = SupportPackagerDialog(w.app_state, w)
+        w._support_packager_dialog.destroyed.connect(
+            lambda: setattr(w, "_support_packager_dialog", None)
+        )
+    w._support_packager_dialog.show()
+    w._support_packager_dialog.raise_()
+    w._support_packager_dialog.activateWindow()
 
 
 def open_game_versions_dialog(w):

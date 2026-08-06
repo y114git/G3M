@@ -17,7 +17,7 @@
         "game_setup": {"title": "Configura el juego", "body": "Elige el juego y su carpeta. Game Manager permite añadir juegos personalizados o conservar varias versiones instaladas. Steam, otro ejecutable, Wine y PortProton están disponibles cuando hagan falta."},
         "browser_settings": {"title": "Ajustes del Navegador", "body": "Aquí puedes ocultar el Navegador y decidir qué ocurre al terminar una descarga. Mantén los valores iniciales si quieres preparar los mods con el menor número de pasos."},
         "library_settings": {"title": "Ajustes de la Biblioteca", "body": "Controla la presentación de la Biblioteca y cómo se actualizan los mods. Puedes ocultar filtros o reemplazar un mod entero al actualizarlo."},
-        "plugins": {"title": "Plugins", "body": "Los plugins pueden añadir juegos, herramientas o pantallas. Instala solo los que sean de confianza; sus filtros y opciones aparecen aquí."},
+        "plugins": {"title": "Plugins", "body": "Los plugins pueden añadir juegos, herramientas o pantallas. Instala solo los que sean de confianza. Sus filtros y opciones aparecen aquí."},
         "browser": {"title": "Elige dónde buscar", "body": "Este selector decide qué página de GameBanana consulta G3M. Los juegos personalizados también aparecen si tienen un ID de GameBanana."},
         "browser_filters": {"title": "Encuentra un mod", "body": "Usa búsqueda, orden y etiquetas cuando haya muchos resultados. Abre la tarjeta para leer la descripción, ver capturas, archivos y versión del juego antes de instalar."},
         "downloads": {"title": "Controla las descargas", "body": "Consulta progreso, fallos, reintentos y elementos pendientes de instalar o usar sin bloquear la interfaz."},
@@ -43,7 +43,7 @@
     "language_name": "Español",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_es",
-    "version": "3.3.0"
+    "version": "3.3.1"
   },
   "blocklist": {
     "title": "Gestor de Blocklist",
@@ -126,6 +126,7 @@
     "windows_menu": "Ventanas",
     "help_menu": "Ayuda",
     "log_viewer": "Visor de registros",
+    "support_packager": "Empaquetador de soporte",
     "about_title": "Acerca de",
     "about_dialog_text": "El gestor de mods definitivo para DELTARUNE, UNDERTALE, Pizza Tower y mucho más.",
     "about_version_label": "Versión: {version}",
@@ -301,6 +302,7 @@
   "files": {
     "data_file": "DATA - Archivo",
     "extra_files_title": "Archivos adicionales #{number}",
+    "dependency_only": "Solo dependencia (no instalar)",
     "icon_label": "Icono",
     "version_label": "Versión {file_type}:"
   },
@@ -428,6 +430,7 @@
     "mod_editor_game_version": "Versión objetivo del juego para la que fue creado el mod.",
     "mod_editor_add_data": "Agrega el archivo DATA principal para esta pestaña. Solo se permite un archivo DATA por pestaña.",
     "mod_editor_add_extra": "Agrega archivos o carpetas extra para esta pestaña.",
+    "mod_editor_dependency_only": "Conserva este archivo junto al mod para los scripts, pero nunca lo copia al juego.",
     "mod_editor_selected_file": "Archivo o carpeta seleccionados que se incluirán en el mod.",
     "mod_editor_data_version": "Etiqueta de versión para esta entrada de archivo DATA.",
     "mod_editor_special_extra_target_towers": "Archivos extra especiales: se colocarán en {target_path} mientras el juego esté abierto.",
@@ -457,7 +460,7 @@
     "modding_tools_batch_mode": "Ejecutar esta pestaña como operación por lotes.",
     "modding_tools_continue_on_error": "Continuar con los siguientes trabajos si un elemento falla.",
     "run_tool": "Ejecuta la acción seleccionada de la herramienta.",
-    "g3mpatch_xdelta_fallback": "Añade un parche xdelta exacto en Xdelta/ dentro del .g3mpatch. Úsalo solo si necesitas recuperación byte a byte cuando falle la aplicación semántica; aumenta el tamaño del parche y lo hace menos orientado a fusión.",
+    "g3mpatch_xdelta_fallback": "Añade un parche xdelta exacto en Xdelta/ dentro del .g3mpatch. Úsalo solo si necesitas recuperación byte a byte cuando falle la aplicación semántica. Aumenta el tamaño del parche y lo hace menos orientado a fusión.",
     "theme_current_settings": "Muestra qué personalizaciones del tema están activas ahora mismo.",
     "import_theme": "Importa un archivo de tema en G3M.",
     "export_theme": "Exporta la configuración actual del tema a un archivo.",
@@ -658,6 +661,7 @@
     "g3mtool_cache_clear_failed": "No se pudo limpiar la caché de G3MTool: {error}",
     "files_not_found": "No se pudieron encontrar archivos.",
     "files_restore_error": "Error al restaurar archivos: {error}",
+    "pending_session_restore_failed": "No se pudieron restaurar los archivos del juego de la sesión anterior. El juego no se inició y se conservó la copia de recuperación.",
     "folder_creation_failed": "No se pudo crear carpeta:\n{error}",
     "full_installation_error": "Error de instalación completa: {0}",
     "game_launch_error": "Error al iniciar juego: {error}",
@@ -781,6 +785,7 @@
     "demo_installation_complete": "Instalación completa de DEMO finalizada.",
     "downloading_version": "Descargando v{version}...",
     "files_restored": "Archivos restaurados exitosamente.",
+    "restore_skipped_external_changes": "Los archivos del juego cambiaron después de que G3M aplicara el mod, por lo que no se restauraron. La copia de recuperación fue archivada.",
     "game_closed_restoring_files": "Juego cerrado. Restaurando archivos...",
     "g3mtool_cache_cleared": "Caché de G3MTool limpiada.",
     "game_files_install_complete": "Archivos del juego instalados.",
@@ -985,7 +990,7 @@
     "loading": "Cargando el canal de GameBanana...",
     "loading_progress": "Cargando el canal de GameBanana... {current}/{total}",
     "results": "{count} elementos",
-    "partial_results": "{count} elementos cargados; {failed} canales de juegos no están disponibles.",
+    "partial_results": "{count} elementos cargados. {failed} canales de juegos no están disponibles.",
     "empty": "No hay elementos para esta selección.",
     "no_games": "Ningún juego visible tiene un ID de GameBanana configurado.",
     "load_failed": "GameBanana no está disponible temporalmente. Inténtalo de nuevo más tarde.",
@@ -1199,9 +1204,9 @@
     "overview_conflicts": "Se encontraron conflictos. Abre Problemas o Árbol de archivos para ver los solapamientos.",
     "overview_warnings": "Se encontraron advertencias. Revisa la pestaña Problemas antes de iniciar.",
     "g3mpatch_tip": "Consejo: los mods normales también se revisan, pero convertir un parche DATA a .g3mpatch habilita diagnósticos más profundos por recurso.",
-    "scope_game": "Alcance: perfil actual, juego {game}. Los mods marcados participan en este preflight; los desactivados en el perfil quedan sin marcar hasta que los actives.",
-    "scope_section": "Alcance: perfil actual, juego {game}, sección de contenido {section}. Los mods marcados participan en esta comprobación; los desactivados en el perfil quedan sin marcar hasta que los actives.",
-    "scope_chapter": "Alcance: perfil actual, juego {game}, capítulo {chapter}. Los mods marcados participan en esta comprobación; los desactivados en el perfil quedan sin marcar hasta que los actives.",
+    "scope_game": "Alcance: perfil actual, juego {game}. Los mods marcados participan en este preflight. Los desactivados en el perfil quedan sin marcar hasta que los actives.",
+    "scope_section": "Alcance: perfil actual, juego {game}, sección de contenido {section}. Los mods marcados participan en esta comprobación. Los desactivados en el perfil quedan sin marcar hasta que los actives.",
+    "scope_chapter": "Alcance: perfil actual, juego {game}, capítulo {chapter}. Los mods marcados participan en esta comprobación. Los desactivados en el perfil quedan sin marcar hasta que los actives.",
     "unknown_scope": "desconocido",
     "mod_state_enabled": "activado en el perfil",
     "mod_state_available": "solo disponible",
@@ -1421,7 +1426,7 @@
       },
       "merge_conflicts_detected": {
         "title": "Se detectaron conflictos de fusión",
-        "body": "Varios mods cambiaron los mismos recursos. Revisa el informe de conflictos; si continúas, una modificación puede sustituir a otra."
+        "body": "Varios mods cambiaron los mismos recursos. Revisa el informe de conflictos. Si continúas, una modificación puede sustituir a otra."
       },
       "steam_launch_with_mods": {
         "title": "Steam puede iniciar otra carpeta del juego",
@@ -1437,7 +1442,7 @@
       },
       "cache_rebuild_needed": {
         "title": "Se reconstruirá la caché de G3MTool",
-        "body": "G3MTool reconstruirá la caché para este archivo. La primera ejecución puede ser más lenta; las siguientes deberían ser más rápidas."
+        "body": "G3MTool reconstruirá la caché para este archivo. La primera ejecución puede ser más lenta. Las siguientes deberían ser más rápidas."
       },
       "legacy_patching_warning": {
         "title": "Otra advertencia de parcheo",
@@ -1516,6 +1521,14 @@
     "choose_another": "Elegir otra carpeta",
     "use_default": "Usar ubicación predeterminada"
   },
+  "support_packager": {
+    "title": "Empaquetador de soporte", "description": "Elige los datos de diagnóstico. El archivo permanece en este equipo. Se ocultan nombres de cuenta y secretos.", "build": "Crear", "save_title": "Guardar paquete de soporte", "completed": "Paquete guardado en:\n{path}", "failed": "No se pudo crear el paquete:\n{error}", "log_range": "Intervalo de registros", "category": {"application": "Aplicación", "system": "Sistema", "metadata": "Configuración y mods", "logs": "Registros"}, "field": {"version": "Versión de G3M", "state": "Estado actual de la aplicación", "os": "Sistema operativo y versión", "machine": "Arquitectura y procesador", "python": "Entorno de Python", "memory": "Uso de memoria", "time": "Inicio del sistema y hora de recopilación", "processes": "Procesos activos (sin líneas de comandos)", "network": "Contadores de interfaces de red", "settings": "Configuración de G3M (sin secretos)", "mods": "Mods instalados", "structure": "Estructura y tamaños de archivos de G3M"}, "range": {"all": "Todos los registros disponibles", "day": "Últimas 24 horas", "week": "Últimos 7 días", "month": "Últimos 30 días"}
+  },
+  "support_packager_fields": {"performance": "Muestra de CPU, disco y velocidad de red local", "ui_performance": "Respuesta de la interfaz de G3M y frecuencia del temporizador"},
+  "support_packager_options": {"custom_settings": "Configuración personalizada del paquete", "custom_settings_tooltip": "Actívalo para elegir el contenido. Si está desactivado, se incluye todo lo disponible.", "empty": "No se encontraron elementos disponibles."},
+  "support_packager_categories": {"configuration": "Configuración y metadatos", "g3m_files": "Archivos JSON, Markdown y texto de G3M", "patches": "Manifiestos G3MPatch", "games": "Estructuras de carpetas de juegos", "appdata": "Estructuras compatibles de AppData", "mod": "Mod"},
+  "support_packager_mod": {"config": "Configuración del mod", "structure": "Estructura recursiva completa", "files": "Todos los archivos del mod"},
+  "support_packager_app": {"selection": "Juego, capítulo y perfil seleccionados", "operations": "Estado actual de inicio, parcheo e instalación", "background": "Cantidad de operaciones en segundo plano", "launch": "Estado de la transacción de inicio"},
   "discord_rich_presence": {
     "status": {
       "configuring": "Configurando G3M",

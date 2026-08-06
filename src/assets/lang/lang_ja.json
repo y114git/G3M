@@ -43,7 +43,7 @@
     "language_name": "日本語",
     "font": "NotoSansJP-Bold.ttf",
     "qt_translation": "qtbase_ja",
-    "version": "3.3.0"
+    "version": "3.3.1"
   },
   "blocklist": {
     "title": "ブロックリストマネージャー",
@@ -126,6 +126,7 @@
     "windows_menu": "ウィンドウ",
     "help_menu": "ヘルプ",
     "log_viewer": "ログビューア",
+    "support_packager": "サポートパッケージャー",
     "about_title": "G3M について",
     "about_dialog_text": "DELTARUNE、UNDERTALE、Pizza Tower などのための究極の MOD マネージャー。",
     "about_version_label": "バージョン: {version}",
@@ -301,6 +302,7 @@
   "files": {
     "data_file": "DATA - ファイル",
     "extra_files_title": "追加ファイル #{number}",
+    "dependency_only": "依存関係のみ（インストールしない）",
     "icon_label": "アイコン",
     "version_label": "バージョン {file_type}:"
   },
@@ -428,6 +430,7 @@
     "mod_editor_game_version": "この MOD が構築されたオプションのターゲット ゲーム バージョン。",
     "mod_editor_add_data": "このタブのメイン DATA パッチ ファイルを追加します。タブごとに 1 つの DATA ファイルのみが許可されます。",
     "mod_editor_add_extra": "このタブに追加ファイルを含むアーカイブまたはフォルダーを追加します。",
+    "mod_editor_dependency_only": "スクリプト用にmod内へ保持しますが、ゲームにはコピーしません。",
     "mod_editor_selected_file": "MOD に含まれる選択したファイルまたはフォルダー。",
     "mod_editor_data_version": "この DATA ファイル エントリのバージョン ラベル。",
     "mod_editor_special_extra_target_towers": "特別な追加ファイル: ゲームの実行中は {target_path} に配置されます。",
@@ -658,6 +661,7 @@
     "g3mtool_cache_clear_failed": "G3MTool キャッシュのクリアに失敗しました: {error}",
     "files_not_found": "ファイルが見つかりませんでした。",
     "files_restore_error": "ファイルの復元エラー: {error}",
+    "pending_session_restore_failed": "前回のMODセッションからゲームファイルを復元できませんでした。ゲームは起動せず、復元用バックアップを保持しました。",
     "folder_creation_failed": "フォルダーを作成できませんでした:\n{error}",
     "full_installation_error": "完全なインストール エラー: {0}",
     "game_launch_error": "ゲーム起動エラー: {error}",
@@ -781,6 +785,7 @@
     "demo_installation_complete": "完全なデモのインストールが完了しました。",
     "downloading_version": "v{version} をダウンロード中...",
     "files_restored": "ファイルは正常に復元されました。",
+    "restore_skipped_external_changes": "G3M が Mod を適用した後にゲームファイルが変更されたため、復元しませんでした。復旧用バックアップはアーカイブされました。",
     "game_closed_restoring_files": "ゲームは終了しました。ファイルを復元中...",
     "g3mtool_cache_cleared": "G3MTool キャッシュがクリアされました。",
     "game_files_install_complete": "ゲームファイルがインストールされています。",
@@ -1508,6 +1513,12 @@
     "choose_another": "別のフォルダーを選択",
     "use_default": "既定の保存場所を使用"
   },
+  "support_packager": {"title": "サポートパッケージャー", "description": "含める診断情報を選択します。アーカイブはこのPC内に保存され、アカウント名と機密値は伏せられます。", "build": "作成", "save_title": "サポートパッケージを保存", "completed": "保存先:\n{path}", "failed": "作成できませんでした:\n{error}", "log_range": "ログ期間", "category": {"application": "アプリケーション", "system": "システム", "metadata": "設定とMOD", "logs": "ログ"}, "field": {"version": "G3Mバージョン", "state": "現在のアプリ状態", "os": "OSとバージョン", "machine": "アーキテクチャとプロセッサ", "python": "Pythonランタイム", "memory": "メモリ使用量", "time": "起動時刻と収集時刻", "processes": "実行中のプロセス（コマンドラインなし）", "network": "ネットワークインターフェイス統計", "settings": "G3M設定（機密値を除く）", "mods": "インストール済みMOD", "structure": "G3Mのファイル構造とサイズ"}, "range": {"all": "利用可能なすべてのログ", "day": "過去24時間", "week": "過去7日間", "month": "過去30日間"}},
+  "support_packager_fields": {"performance": "CPU、ディスク、ローカル通信速度の測定", "ui_performance": "G3M UIの応答性とタイマー頻度"},
+  "support_packager_options": {"custom_settings": "パッケージ内容を設定", "custom_settings_tooltip": "有効にすると内容を個別に選択できます。無効時は利用可能な項目をすべて含めます。", "empty": "利用可能な項目がありません。"},
+  "support_packager_categories": {"configuration": "設定とメタデータ", "g3m_files": "G3MのJSON、Markdown、テキスト", "patches": "G3MPatchマニフェスト", "games": "ゲームフォルダー構造", "appdata": "対応AppDataフォルダー構造", "mod": "MOD"},
+  "support_packager_mod": {"config": "MOD設定", "structure": "完全な再帰ファイル構造", "files": "MODの全ファイル"},
+  "support_packager_app": {"selection": "選択中のゲーム、チャプター、プロファイル", "operations": "起動、パッチ、インストールの現在状態", "background": "実行中のバックグラウンド処理数", "launch": "現在の起動トランザクション状態"},
   "discord_rich_presence": {
     "status": {
       "configuring": "G3M を設定中",

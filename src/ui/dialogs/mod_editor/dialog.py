@@ -62,6 +62,7 @@ from ui.dialogs.mod_editor.storage import (
     collect_managed_file_paths,
     copy_files_to_mod_dir,
     copy_path_into_mod_dir,
+    find_unconfigured_root_entries,
     remove_stale_managed_files,
     resolve_managed_mod_path,
 )
@@ -73,7 +74,7 @@ from utils.mod.config_parser import (
     MOD_FIELD_LIMITS,
     build_mod_config_data,
     normalize_mod_config_data,
-    parse_extra_files_raw,
+    parse_extra_file_entries_raw,
     resolve_mod_file_path,
 )
 from utils.mod.readme_utils import find_mod_info_candidates
@@ -122,6 +123,8 @@ class ModEditorDialog(QDialog):
         self.setMinimumSize(round(700 * scale), round(500 * scale))
         self._section_widgets = {}
         self._localized_labels: list[tuple[QLabel, str]] = []
+        self._icon_request_id = 0
+        self._icon_fetch_signals: set[object] = set()
         self._init_ui()
         if not is_creating and mod_data:
             self._populate_fields()
@@ -924,6 +927,12 @@ class ModEditorDialog(QDialog):
                 )
             )
         fl.addWidget(path_edit)
+        if file_type == "extra":
+            dependency_check = QCheckBox(tr("files.dependency_only"))
+            dependency_check.setToolTip(tr("tooltips.mod_editor_dependency_only"))
+            dependency_check.setProperty("is_dependency_file", True)
+            dependency_check.setProperty("extra_file_status", "install")
+            fl.addWidget(dependency_check)
         browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
             tr("ui.browse_button"),
@@ -1194,6 +1203,7 @@ class ModEditorDialog(QDialog):
             self.icon_edit.setText(path)
 
     def _on_icon_text_changed(self, text):
+        self._icon_request_id += 1
         text = text.strip()
         if not text:
             self._load_default_icon()
@@ -1227,13 +1237,21 @@ class ModEditorDialog(QDialog):
         from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
         from PyQt6.QtGui import QImage
 
+        from services.background_operations import background_operations
+
         self.icon_preview.setText(tr("ui.loading_placeholder"))
 
         class _Signals(QObject):
             loaded = pyqtSignal(QImage)
 
-        signals = _Signals(self)
-        signals.loaded.connect(self._apply_url_icon)
+        request_id = self._icon_request_id
+        signals = _Signals()
+        self._icon_fetch_signals.add(signals)
+        signals.loaded.connect(
+            lambda image, request_id=request_id, signals=signals: self._apply_url_icon(
+                image, request_id, signals
+            )
+        )
 
         class _IconFetch(QRunnable):
             def __init__(self, url, signals) -> None:
@@ -1254,7 +1272,10 @@ class ModEditorDialog(QDialog):
                 except Exception:
                     self._signals.loaded.emit(QImage())
 
-        QThreadPool.globalInstance().start(_IconFetch(url, signals))
+        background_operations.start_runnable(
+            QThreadPool.globalInstance(),
+            _IconFetch(url, signals),
+        )
 
     def _set_icon_pixmap(self, px):
         """Crop to square center, scale to 64x64, apply border radius."""
@@ -1274,7 +1295,11 @@ class ModEditorDialog(QDialog):
         )
         self.icon_preview.setPixmap(round_pixmap(scaled, pr) if pr > 0 else scaled)
 
-    def _apply_url_icon(self, image):
+    def _apply_url_icon(self, image, request_id=None, signals=None):
+        if signals is not None:
+            self._icon_fetch_signals.discard(signals)
+        if request_id is not None and request_id != self._icon_request_id:
+            return
         if image.isNull():
             self.icon_preview.setText(tr("status.loading_error"))
         else:
@@ -2052,9 +2077,54 @@ class ModEditorDialog(QDialog):
                 if data_path:
                     self._create_file_frame(layout, "data")
                     self._fill_data_in_tab(layout, data_path)
-                for extra_file in parse_extra_files_raw(fi.get("extra_files", [])):
+                for entry in parse_extra_file_entries_raw(fi.get("extra_files", [])):
                     self._create_file_frame(layout, "extra")
-                    self._fill_extra_in_tab(layout, extra_file)
+                    self._fill_extra_in_tab(layout, entry["file_path"], entry["status"])
+        self._populate_unconfigured_dependencies(files_data)
+
+    def _populate_unconfigured_dependencies(self, files_data):
+        mod_folder = self._find_mod_folder()
+        if (
+            not mod_folder
+            or not os.path.isdir(mod_folder)
+            or not self.file_tabs.count()
+        ):
+            return
+        configured = {os.path.abspath(os.path.join(mod_folder, "mod_config.json"))}
+        icon = self.mod_data.get("icon")
+        if (
+            isinstance(icon, str)
+            and icon
+            and not icon.startswith(("http://", "https://"))
+        ):
+            configured.add(os.path.abspath(resolve_mod_file_path(mod_folder, icon)))
+        for info_path in self.mod_data.get("info_files") or {}:
+            configured.add(
+                os.path.abspath(resolve_mod_file_path(mod_folder, info_path))
+            )
+        for file_info in (files_data or {}).values():
+            data_path = file_info.get("data_file_path") or file_info.get(
+                "data_file_url"
+            )
+            if isinstance(data_path, str) and data_path:
+                configured.add(
+                    os.path.abspath(resolve_mod_file_path(mod_folder, data_path))
+                )
+            for entry in parse_extra_file_entries_raw(file_info.get("extra_files", [])):
+                configured.add(
+                    os.path.abspath(
+                        resolve_mod_file_path(mod_folder, entry["file_path"])
+                    )
+                )
+        layout = self._get_tab_file_layout(self.file_tabs.widget(0))
+        if not layout:
+            return
+        for path in find_unconfigured_root_entries(mod_folder, configured):
+            relative_path = os.path.relpath(path, mod_folder).replace("\\", "/")
+            if os.path.isdir(path):
+                relative_path += "/"
+            self._create_file_frame(layout, "extra")
+            self._fill_extra_in_tab(layout, relative_path, "dependency")
 
     def _resolve_path(self, file_path, tab_idx, mod_folder, game=None):
         if not file_path:
@@ -2080,7 +2150,7 @@ class ModEditorDialog(QDialog):
                     sub.setText(path)
             return
 
-    def _fill_extra_in_tab(self, layout, filename):
+    def _fill_extra_in_tab(self, layout, filename, status="install"):
         for i in range(layout.count() - 1, -1, -1):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
             if not w or not hasattr(w, "layout") or not (fl := w.layout()):
@@ -2096,6 +2166,10 @@ class ModEditorDialog(QDialog):
                     and not sub.text()
                 ):
                     sub.setText(filename)
+                    for checkbox in w.findChildren(QCheckBox):
+                        if checkbox.property("is_dependency_file"):
+                            checkbox.setProperty("extra_file_status", status)
+                            checkbox.setChecked(status != "install")
                     return
 
     def relocalize_ui(self):
@@ -2140,6 +2214,10 @@ class ModEditorDialog(QDialog):
             layout = self._get_tab_file_layout(tab)
             if layout:
                 self._refresh_extra_file_titles(layout)
+                for checkbox in tab.findChildren(QCheckBox):
+                    if checkbox.property("is_dependency_file"):
+                        checkbox.setText(tr("files.dependency_only"))
+                        checkbox.setToolTip(tr("tooltips.mod_editor_dependency_only"))
             data_button = getattr(tab, "_data_button", None)
             if data_button is not None:
                 data_button.setText(tr("ui.add_data_file"))

@@ -387,6 +387,11 @@ class AppWindow(QWidget):
 
         open_log_viewer_dialog(self)
 
+    def _show_support_packager_dialog(self):
+        from app.dialogs import open_support_packager_dialog
+
+        open_support_packager_dialog(self)
+
     def _toggle_maximized_from_title_bar(self):
         if self.isMaximized():
             self.showNormal()
@@ -408,9 +413,7 @@ class AppWindow(QWidget):
         return 0 if self.isMaximized() or self.isFullScreen() else 2
 
     def _get_window_outline_color(self) -> QColor:
-        color = QColor(
-            get_theme_color(self.app_state.local_config, "border")
-        )
+        color = QColor(get_theme_color(self.app_state.local_config, "border"))
         return color if color.isValid() else QColor(DEFAULT_COLORS["border"])
 
     def _apply_window_corner_mask(self):
@@ -527,6 +530,9 @@ class AppWindow(QWidget):
         self.setMouseTracking(True)
         self.title_bar = CustomTitleBar(self, app_state=self.app_state)
         self.title_bar.log_viewer_requested.connect(self._show_log_viewer_dialog)
+        self.title_bar.support_packager_requested.connect(
+            self._show_support_packager_dialog
+        )
         self.title_bar.changelog_requested.connect(self._show_changelog_dialog)
         self.title_bar.onboarding_requested.connect(self._show_onboarding)
         self.title_bar.about_requested.connect(self._show_about_dialog)
@@ -538,6 +544,7 @@ class AppWindow(QWidget):
         self.title_bar.set_localized_texts(
             tr("ui.windows_menu"),
             tr("ui.log_viewer"),
+            tr("ui.support_packager"),
             tr("ui.help_menu"),
             tr("buttons.changelog"),
             tr("onboarding.menu_action"),
@@ -566,8 +573,7 @@ class AppWindow(QWidget):
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self.top_refresh_button.clicked.connect(self._on_refresh_clicked)
-        main_text_color = get_theme_color(
-            self.app_state.local_config, "main_text")
+        main_text_color = get_theme_color(self.app_state.local_config, "main_text")
         self.top_refresh_button.setIcon(colored_icon("refresh", main_text_color))
         self.top_refresh_button.setIconSize(QSize(20, 20))
         self.top_refresh_button.setFixedSize(30, 30)
@@ -592,9 +598,7 @@ class AppWindow(QWidget):
                 )
             )
             btn.setIcon(QIcon(resource_path(f"assets/icons/{icon_svg}")))
-            btn.setIconSize(
-                QSize(36, 36) if url_key == "boosty" else QSize(32, 32)
-            )
+            btn.setIconSize(QSize(36, 36) if url_key == "boosty" else QSize(32, 32))
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             btn.setStyleSheet(social_style)
             btn.setToolTip(tr(lang_key))
@@ -835,7 +839,9 @@ class AppWindow(QWidget):
         after_change=None,
     ):
         timer = self._get_or_create_theme_timer(timer_attr)
-        if after_change and not getattr(spinbox, "_theme_after_change_connected", False):
+        if after_change and not getattr(
+            spinbox, "_theme_after_change_connected", False
+        ):
             timer.timeout.connect(after_change)
             spinbox._theme_after_change_connected = True
 
@@ -856,14 +862,16 @@ class AppWindow(QWidget):
         self._scaled_refresh_pending = False
         try:
             if hasattr(self, "search_tab_builder") and hasattr(
-            self.search_tab_builder, "refresh_dynamic_styles"
+                self.search_tab_builder, "refresh_dynamic_styles"
             ):
                 self.search_tab_builder.refresh_dynamic_styles()
             if hasattr(self, "settings_builder") and hasattr(
                 self.settings_builder, "refresh_dynamic_styles"
             ):
                 self.settings_builder.refresh_dynamic_styles()
-            if hasattr(self, "theme") and hasattr(self.theme, "update_dynamic_elements"):
+            if hasattr(self, "theme") and hasattr(
+                self.theme, "update_dynamic_elements"
+            ):
                 self.theme.update_dynamic_elements()
             if getattr(self, "search_display", None) is not None:
                 self.search_display.update_display()
@@ -874,6 +882,7 @@ class AppWindow(QWidget):
                 "_mod_versions_dialog",
                 "_downloads_dialog",
                 "_log_viewer_dialog",
+                "_support_packager_dialog",
                 "_modding_tools_dialog",
                 "_diagnostics_dialog",
             ):
@@ -1061,7 +1070,9 @@ class AppWindow(QWidget):
         if not last_tooltip_target or not last_tooltip_text:
             return
 
-        tooltip_widget = cast(AnimatedToolTip | None, getattr(self, "_tooltip_widget", None))
+        tooltip_widget = cast(
+            AnimatedToolTip | None, getattr(self, "_tooltip_widget", None)
+        )
         if tooltip_widget is None:
             tooltip_widget = AnimatedToolTip(last_tooltip_text, None)
             tooltip_widget._preserve_fade_effect = True
@@ -1263,9 +1274,8 @@ class AppWindow(QWidget):
         if event.type() == QEvent.Type.WindowStateChange:
             self._sync_title_bar_window_state()
             self._sync_background_audio_focus()
-            if (
-                not self.isMinimized()
-                and not getattr(self, "_restoring_window_geometry", False)
+            if not self.isMinimized() and not getattr(
+                self, "_restoring_window_geometry", False
             ):
                 self.settings_service.schedule_geometry_save(self, timeout_ms=0)
             if not self.isMinimized():
@@ -1280,7 +1290,9 @@ class AppWindow(QWidget):
             seen.add(id(widget))
             if widget is self:
                 return True
-            parent_widget = widget.parentWidget() if hasattr(widget, "parentWidget") else None
+            parent_widget = (
+                widget.parentWidget() if hasattr(widget, "parentWidget") else None
+            )
             if parent_widget is None and hasattr(widget, "parent"):
                 parent_widget = widget.parent()
             if (
@@ -1295,9 +1307,7 @@ class AppWindow(QWidget):
         return False
 
     def _has_owned_active_window(self, app: QApplication) -> bool:
-        app_is_active = (
-            app.applicationState() == Qt.ApplicationState.ApplicationActive
-        )
+        app_is_active = app.applicationState() == Qt.ApplicationState.ApplicationActive
         for widget in (
             app.activeWindow(),
             app.focusWidget(),
@@ -1316,7 +1326,9 @@ class AppWindow(QWidget):
         return False
 
     def _should_pause_background_audio(self) -> bool:
-        if not self.app_state.local_config.get("pause_background_music_unfocused", False):
+        if not self.app_state.local_config.get(
+            "pause_background_music_unfocused", False
+        ):
             return False
         app = cast(QApplication | None, QApplication.instance())
         if self.isMinimized():
@@ -1390,7 +1402,9 @@ class AppWindow(QWidget):
             for key, value in self.app_state.local_config.items()
             if is_profile_key(key)
         }
-        refreshed_settings = self.settings_service.read_json(self.app_state.config_path) or {}
+        refreshed_settings = (
+            self.settings_service.read_json(self.app_state.config_path) or {}
+        )
         refreshed_settings.update(profile_values)
         self.app_state.local_config = refreshed_settings
         if active_profile:

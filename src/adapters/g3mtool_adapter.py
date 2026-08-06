@@ -9,6 +9,7 @@ import subprocess
 import threading
 from collections.abc import Callable
 
+from services.background_operations import background_operations, terminate_process
 from services.localization_service import tr
 from utils.path_utils import get_g3mtool_cache_dir, get_user_data_root, resource_path
 from utils.process_utils import bounded_output_preview, format_external_process_error
@@ -38,7 +39,9 @@ class G3MToolManager:
         if isinstance(local_config, dict):
             return local_config
         try:
-            config_path = os.path.join(get_user_data_root(), "settings", "settings.json")
+            config_path = os.path.join(
+                get_user_data_root(), "settings", "settings.json"
+            )
             if os.path.isfile(config_path):
                 with open(config_path, encoding="utf-8") as handle:
                     data = json.load(handle)
@@ -49,7 +52,9 @@ class G3MToolManager:
         return {}
 
     def _get_configured_g3mtool_path(self) -> str | None:
-        path = str(self._get_local_config().get("custom_g3mtool_path", "") or "").strip()
+        path = str(
+            self._get_local_config().get("custom_g3mtool_path", "") or ""
+        ).strip()
         return path or None
 
     def _get_configured_xdelta_path(self) -> str | None:
@@ -124,12 +129,17 @@ class G3MToolManager:
             return True
         if len(args) >= 3 and args[0] == "patch" and args[1] == "batch":
             return args[2] in {"apply", "create", "merge"}
-        return len(args) >= 2 and args[0] == "patch" and args[1] in {
-            "apply",
-            "create",
-            "merge",
-            "validate",
-        }
+        return (
+            len(args) >= 2
+            and args[0] == "patch"
+            and args[1]
+            in {
+                "apply",
+                "create",
+                "merge",
+                "validate",
+            }
+        )
 
     def _run_command(
         self,
@@ -233,12 +243,7 @@ class G3MToolManager:
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool patch batch merge <original> <set...> --apply <dir> [--out <dir>]."""
-        comma_paths = [
-            path
-            for paths in patch_sets
-            for path in paths
-            if "," in path
-        ]
+        comma_paths = [path for paths in patch_sets for path in paths if "," in path]
         if comma_paths:
             return (
                 2,
@@ -481,6 +486,13 @@ class G3MToolManager:
             )
             with self._active_processes_lock:
                 self._active_processes.append(process)
+            background_operations.register_process(
+                process,
+                cancel=lambda process=process: (
+                    terminate_process(process) if process.poll() is None else None
+                ),
+                owner=self,
+            )
             stdout_chunks: list[str] = []
             stderr_chunks: list[str] = []
             stdout_thread = threading.Thread(
@@ -506,6 +518,7 @@ class G3MToolManager:
                 with self._active_processes_lock:
                     if process in self._active_processes:
                         self._active_processes.remove(process)
+                background_operations.release_process(process)
             logger.info(f"G3MTool completed with return code {returncode}")
             stdout_text = stdout.strip()
             stderr_text = stderr.strip()

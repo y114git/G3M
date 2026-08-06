@@ -93,6 +93,7 @@ def test_patching_log_rotation_tolerates_a_disappearing_file(tmp_path, monkeypat
 
 class TestG3MToolAdapter:
     """Tests for patching and merging."""
+
     class _FakeProcess:
         def __init__(self, stdout="", stderr="") -> None:
             self.stdout = io.StringIO(stdout)
@@ -128,7 +129,9 @@ class TestG3MToolAdapter:
             "adapters.g3mtool_adapter.resource_path",
             lambda relative_path: f"C:/bundle/{relative_path}",
         )
-        monkeypatch.setattr("adapters.g3mtool_adapter.os.path.exists", lambda _path: True)
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.os.path.exists", lambda _path: True
+        )
         info = Mock()
         monkeypatch.setattr("adapters.g3mtool_adapter.logger.info", info)
         G3MToolManager._cached_executable_paths = {}
@@ -221,7 +224,9 @@ class TestG3MToolAdapter:
         assert g3mtool.get_version() == "1.0.2"
         assert calls == [["g3mtool", "--version"]]
 
-    def test_run_returns_localized_message_when_g3mtool_binary_missing(self, monkeypatch):
+    def test_run_returns_localized_message_when_g3mtool_binary_missing(
+        self, monkeypatch
+    ):
         from services.localization_service import tr
 
         g3mtool = G3MToolManager()
@@ -247,11 +252,12 @@ class TestG3MToolAdapter:
             "_get_local_config",
             lambda: {"custom_g3mtool_path": "/tools/G3MTool.exe"},
         )
-        monkeypatch.setattr("adapters.g3mtool_adapter.os.path.exists", lambda _path: False)
+        monkeypatch.setattr(
+            "adapters.g3mtool_adapter.os.path.exists", lambda _path: False
+        )
 
-        assert (
-            g3mtool.get_unavailable_reason()
-            == tr("errors.custom_g3mtool_not_found", path="/tools/G3MTool.exe")
+        assert g3mtool.get_unavailable_reason() == tr(
+            "errors.custom_g3mtool_not_found", path="/tools/G3MTool.exe"
         )
 
     @pytest.mark.parametrize(
@@ -300,16 +306,43 @@ class TestG3MToolAdapter:
                 ],
             ),
             (
-                lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
-                ["g3mtool", "xpatch", "apply", "original.win", "patch.xdelta", "out.win"],
+                lambda g3mtool: g3mtool.xpatch_apply(
+                    "original.win", "patch.xdelta", "out.win"
+                ),
+                [
+                    "g3mtool",
+                    "xpatch",
+                    "apply",
+                    "original.win",
+                    "patch.xdelta",
+                    "out.win",
+                ],
             ),
             (
-                lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
-                ["g3mtool", "xpatch", "create", "original.win", "modified.win", "out.xdelta"],
+                lambda g3mtool: g3mtool.xpatch_create(
+                    "original.win", "modified.win", "out.xdelta"
+                ),
+                [
+                    "g3mtool",
+                    "xpatch",
+                    "create",
+                    "original.win",
+                    "modified.win",
+                    "out.xdelta",
+                ],
             ),
             (
-                lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
-                ["g3mtool", "patch", "create", "original.win", "modified.win", "out.g3mpatch"],
+                lambda g3mtool: g3mtool.patch_create(
+                    "original.win", "modified.win", "out.g3mpatch"
+                ),
+                [
+                    "g3mtool",
+                    "patch",
+                    "create",
+                    "original.win",
+                    "modified.win",
+                    "out.g3mpatch",
+                ],
             ),
             (
                 lambda g3mtool: g3mtool.batch_apply_patches(
@@ -436,16 +469,22 @@ class TestG3MToolAdapter:
         assert caller(g3mtool) == (7, "stdout", "stderr")
         actual_cmd = run.call_args.args[0]
         expected_cmd = expected_args[:]
-        if expected_args[1:3] in (
-            ["patch", "merge"],
-            ["patch", "apply"],
-            ["patch", "create"],
-            ["patch", "validate"],
-        ) or expected_args[1:4] in (
-            ["patch", "batch", "apply"],
-            ["patch", "batch", "create"],
-            ["patch", "batch", "merge"],
-        ) or expected_args[1] in ("info", "diff"):
+        if (
+            expected_args[1:3]
+            in (
+                ["patch", "merge"],
+                ["patch", "apply"],
+                ["patch", "create"],
+                ["patch", "validate"],
+            )
+            or expected_args[1:4]
+            in (
+                ["patch", "batch", "apply"],
+                ["patch", "batch", "create"],
+                ["patch", "batch", "merge"],
+            )
+            or expected_args[1] in ("info", "diff")
+        ):
             expected_cmd.extend(["--cache", str(tmp_path / "cache" / "G3MTool")])
         assert actual_cmd == expected_cmd
 
@@ -465,15 +504,12 @@ class TestG3MToolAdapter:
             lambda cmd, **kwargs: calls.append(cmd) or self._FakeProcess(),
         )
 
-        assert (
-            g3mtool.patch_create(
-                "original.win",
-                "modified.win",
-                "out.g3mpatch",
-                include_xdelta_fallback=True,
-            )
-            == (0, "", "")
-        )
+        assert g3mtool.patch_create(
+            "original.win",
+            "modified.win",
+            "out.g3mpatch",
+            include_xdelta_fallback=True,
+        ) == (0, "", "")
         assert calls == [
             [
                 "g3mtool",
@@ -554,11 +590,21 @@ class TestG3MToolAdapter:
     @pytest.mark.parametrize(
         "caller",
         [
-            lambda g3mtool: g3mtool.merge_patches("original.win", ["a.g3mpatch"], "out.win"),
-            lambda g3mtool: g3mtool.apply_patch("original.win", "patch.g3mpatch", "out.win"),
-            lambda g3mtool: g3mtool.xpatch_apply("original.win", "patch.xdelta", "out.win"),
-            lambda g3mtool: g3mtool.xpatch_create("original.win", "modified.win", "out.xdelta"),
-            lambda g3mtool: g3mtool.patch_create("original.win", "modified.win", "out.g3mpatch"),
+            lambda g3mtool: g3mtool.merge_patches(
+                "original.win", ["a.g3mpatch"], "out.win"
+            ),
+            lambda g3mtool: g3mtool.apply_patch(
+                "original.win", "patch.g3mpatch", "out.win"
+            ),
+            lambda g3mtool: g3mtool.xpatch_apply(
+                "original.win", "patch.xdelta", "out.win"
+            ),
+            lambda g3mtool: g3mtool.xpatch_create(
+                "original.win", "modified.win", "out.xdelta"
+            ),
+            lambda g3mtool: g3mtool.patch_create(
+                "original.win", "modified.win", "out.g3mpatch"
+            ),
             lambda g3mtool: g3mtool.batch_apply_patches(
                 "original.win", ["patch.g3mpatch"], "out-dir"
             ),
@@ -608,6 +654,7 @@ class TestG3MToolAdapter:
 
 class TestModClassification:
     """Tests for patching and merging."""
+
     def test_classify_g3mpatch(self, tmp_path):
         """Checks that classifying g3mpatch."""
         mod_dir = tmp_path / "mod"
@@ -876,6 +923,7 @@ class TestModClassification:
 
 class TestServiceInitialization:
     """Tests for patching and merging."""
+
     def test_service_has_g3mtool(self):
         """Checks that serviceing has g3mtool."""
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -983,6 +1031,7 @@ class TestServiceInitialization:
 
 class TestBackupFlow:
     """Tests for patching and merging."""
+
     def test_backup_and_restore(self, tmp_path):
         """Checks that backup and restore."""
         backup_dir = tmp_path / "backups"
@@ -1038,6 +1087,7 @@ class TestBackupFlow:
 
 class TestReportParsing:
     """Tests for patching and merging."""
+
     def test_no_report(self):
         """Checks that noing report."""
         patcher = G3MToolPatchingService(Mock(), Mock())
@@ -1055,6 +1105,18 @@ class TestReportParsing:
         total, auto = patcher.get_report_stats()
         assert total == 3
         assert auto == 1
+
+    def test_report_parses_g3mtool_summary_format(self, tmp_path):
+        report = tmp_path / "report.md"
+        report.write_text(
+            "# G3MTool Merge Report\n\n**Summary:** 1239 conflicts, 1 auto-resolved\n",
+            encoding="utf-8",
+        )
+        patcher = G3MToolPatchingService(Mock(), Mock())
+        patcher._last_report_path = str(report)
+
+        assert patcher.report_has_conflicts() is True
+        assert patcher.get_report_stats() == (1239, 1)
 
     def test_report_without_conflicts(self, tmp_path):
         """Checks that reporting without conflicts."""
@@ -1076,12 +1138,12 @@ class TestReportParsing:
             "services.g3mtool_patching_service.get_user_data_root",
             return_value=str(tmp_path),
         ):
-            saved_path = patcher._persist_conflict_artifacts(
-                str(report), "deltarune_1"
-            )
+            saved_path = patcher._persist_conflict_artifacts(str(report), "deltarune_1")
 
         conflicts_log = tmp_path / "logs" / "conflicts.log"
-        archived_conflicts = list((tmp_path / "logs" / "patching").glob("conflicts_*.log"))
+        archived_conflicts = list(
+            (tmp_path / "logs" / "patching").glob("conflicts_*.log")
+        )
         archived_reports = list((tmp_path / "logs" / "patching").glob("*.md"))
 
         assert saved_path is not None
@@ -1096,6 +1158,32 @@ class TestReportParsing:
 
 class TestXdeltaPatchApplication:
     """Tests for patching and merging."""
+
+    def test_single_data_file_is_copied_without_conversion(self, tmp_path):
+        app_state = Mock()
+        app_state.local_config = {}
+        patcher = G3MToolPatchingService(app_state, Mock())
+        original = tmp_path / "original.win"
+        replacement = tmp_path / "replacement.win"
+        output = tmp_path / "output.win"
+        original.write_bytes(b"ORIGINAL")
+        replacement.write_bytes(b"REPLACEMENT")
+        patcher.g3mtool.apply_patch = Mock()
+
+        result = patcher._apply_single_mod(
+            str(original),
+            (str(replacement), MOD_TYPE_DATAFILE, str(tmp_path)),
+            str(output),
+            str(tmp_path / "g3mtool.log"),
+            0,
+            100,
+            "Chapter 4",
+        )
+
+        assert result is True
+        assert output.read_bytes() == b"REPLACEMENT"
+        patcher.g3mtool.apply_patch.assert_not_called()
+
     def test_xdelta_missing_output_uses_warning_fallback(self, tmp_path):
         """Checks that xdelta missing output uses warning fallback."""
         app_state = Mock()
@@ -1192,6 +1280,7 @@ class TestCsxPatchApplication:
 
 class TestFileOverrideProgress:
     """Tests for patching and merging."""
+
     def test_apply_file_overrides_uses_only_configured_root_entries(self, tmp_path):
         """Checks that config-driven root overrides do not copy unrelated chapter folders."""
         from utils.patching.file_override_utils import apply_file_overrides
@@ -1261,7 +1350,9 @@ class TestFileOverrideProgress:
         )
 
         assert result is True
-        assert (target_dir / "lang" / "lang_en.json").read_text(encoding="utf-8") == "hello"
+        assert (target_dir / "lang" / "lang_en.json").read_text(
+            encoding="utf-8"
+        ) == "hello"
         assert not (target_dir / "chapter3").exists()
 
     def test_apply_file_overrides_copies_configured_extra_data_files(self, tmp_path):
@@ -1296,7 +1387,9 @@ class TestFileOverrideProgress:
         )
 
         assert result is True
-        assert (target_dir / "data_30tbps.win").read_text(encoding="utf-8") == "patched data"
+        assert (target_dir / "data_30tbps.win").read_text(
+            encoding="utf-8"
+        ) == "patched data"
 
     def test_apply_file_overrides_skips_legacy_walk_when_config_has_no_extra_files(
         self, tmp_path
@@ -1392,6 +1485,7 @@ class TestFileOverrideProgress:
 
 class TestG3MPatchProgressText:
     """Tests for patching and merging."""
+
     def test_multi_patch_progress_uses_generic_patching_text(
         self, monkeypatch, tmp_path
     ):
@@ -1500,7 +1594,9 @@ class TestG3MPatchProgressText:
 
         def apply_single(base, mod_info, output, *_args):
             calls.append((Path(base).name, mod_info[0]))
-            Path(output).write_text(f"{Path(base).read_text()}+{mod_info[0]}", encoding="utf-8")
+            Path(output).write_text(
+                f"{Path(base).read_text()}+{mod_info[0]}", encoding="utf-8"
+            )
             return True
 
         patcher._apply_single_mod = Mock(side_effect=apply_single)
@@ -1522,7 +1618,9 @@ class TestG3MPatchProgressText:
             ("data.win", "main.g3mpatch"),
             ("step_chapter1_1.win", "addon.xdelta"),
         ]
-        assert final.read_text(encoding="utf-8") == "original+main.g3mpatch+addon.xdelta"
+        assert (
+            final.read_text(encoding="utf-8") == "original+main.g3mpatch+addon.xdelta"
+        )
 
     def test_data_step_reverses_highest_first_ui_order_for_g3mtool(self, tmp_path):
         app_state = Mock()
@@ -1543,10 +1641,12 @@ class TestG3MPatchProgressText:
 
         assert patcher._apply_data_steps(
             str(original),
-            [[
-                ("high.g3mpatch", MOD_TYPE_G3MPATCH, "high"),
-                ("low.g3mpatch", MOD_TYPE_G3MPATCH, "low"),
-            ]],
+            [
+                [
+                    ("high.g3mpatch", MOD_TYPE_G3MPATCH, "high"),
+                    ("low.g3mpatch", MOD_TYPE_G3MPATCH, "low"),
+                ]
+            ],
             str(final),
             str(tmp_path / "g3mtool.log"),
             "chapter1",
@@ -1585,9 +1685,7 @@ class TestG3MPatchProgressText:
         )
         assert not (target / "unconfigured.png").exists()
 
-    def test_configured_frickbears3_addon_keeps_game_icon(
-        self, tmp_path, monkeypatch
-    ):
+    def test_configured_frickbears3_addon_keeps_game_icon(self, tmp_path, monkeypatch):
         app_state = Mock()
         app_state.local_config = {}
         mod_service = Mock()
@@ -1648,8 +1746,8 @@ class TestG3MPatchProgressText:
 
         patcher.g3mtool.merge_patches = Mock(side_effect=fake_merge_patches)
         patcher._emit_chapter_progress = Mock(
-            side_effect=lambda _start, _end, fraction, _message: progress_fractions.append(
-                round(fraction, 4)
+            side_effect=lambda _start, _end, fraction, _message: (
+                progress_fractions.append(round(fraction, 4))
             )
         )
 

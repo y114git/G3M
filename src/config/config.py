@@ -22,7 +22,7 @@ if _dotenv_path.is_file():
     load_dotenv(dotenv_path=_dotenv_path)
 
 """Application identity and external service configuration."""
-APP_VERSION = "3.3.0"
+APP_VERSION = "3.3.1"
 APP_DISPLAY_NAME = "G3M"
 APP_ORGANIZATION_NAME = "g3m"
 APP_DATA_DIR_NAME = "G3M"
@@ -343,8 +343,16 @@ WIDGET_LOCALIZATIONS = [
     ("merge_properties_checkbox", "setToolTip", "tooltips.merge_properties"),
     ("merge_code_checkbox", "setToolTip", "tooltips.merge_code"),
     ("downloads_no_auto_use_checkbox", "setText", "downloads.settings_no_auto_use"),
-    ("downloads_delete_after_use_checkbox", "setText", "downloads.settings_delete_after_use",),
-    ("downloads_save_local_imports_checkbox", "setText", "downloads.settings_save_local_imports",),
+    (
+        "downloads_delete_after_use_checkbox",
+        "setText",
+        "downloads.settings_delete_after_use",
+    ),
+    (
+        "downloads_save_local_imports_checkbox",
+        "setText",
+        "downloads.settings_save_local_imports",
+    ),
 ]
 COMBO_LOCALIZATIONS = {
     "sort_combo": [

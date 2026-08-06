@@ -43,7 +43,7 @@
     "language_name": "繁體中文",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_zh_tw",
-    "version": "3.3.0"
+    "version": "3.3.1"
   },
   "blocklist": {
     "title": "封鎖清單管理器",
@@ -126,6 +126,7 @@
     "windows_menu": "視窗",
     "help_menu": "說明",
     "log_viewer": "日誌檢視器",
+    "support_packager": "支援包產生器",
     "about_title": "關於",
     "about_dialog_text": "適用於 DELTARUNE、UNDERTALE、Pizza Tower 等遊戲的終極模組管理器。",
     "about_version_label": "版本：{version}",
@@ -301,6 +302,7 @@
   "files": {
     "data_file": "DATA - 檔案",
     "extra_files_title": "額外檔案 #{number}",
+    "dependency_only": "僅作為相依檔案（不安裝）",
     "icon_label": "圖標",
     "version_label": "版本 {file_type}："
   },
@@ -428,6 +430,7 @@
     "mod_editor_game_version": "此模組對應的遊戲版本，可選填。",
     "mod_editor_add_data": "為這個分頁新增主要 DATA 檔案。每個分頁只允許一個 DATA 檔案。",
     "mod_editor_add_extra": "為這個分頁新增額外檔案壓縮包或資料夾。",
+    "mod_editor_dependency_only": "將此檔案保留在模組中供指令碼使用，但絕不複製到遊戲中。",
     "mod_editor_selected_file": "將被包含進模組中的已選檔案或資料夾。",
     "mod_editor_data_version": "此 DATA 檔案項目的版本標籤。",
     "mod_editor_special_extra_target_towers": "特殊 extra 檔案：遊戲執行期間會放入 {target_path}。",
@@ -658,6 +661,7 @@
     "g3mtool_cache_clear_failed": "無法清除 G3MTool 快取：{error}",
     "files_not_found": "找不到檔案。",
     "files_restore_error": "恢復檔案時出錯：{error}",
+    "pending_session_restore_failed": "無法還原上一次模組工作階段的遊戲檔案。遊戲未啟動，復原備份已保留。",
     "folder_creation_failed": "無法創建資料夾：\\n{error}",
     "full_installation_error": "完整安裝錯誤：{0}",
     "game_launch_error": "啟動遊戲錯誤：{error}",
@@ -781,6 +785,7 @@
     "demo_installation_complete": "Demo版完整安裝完成。",
     "downloading_version": "正在下載v{version}...",
     "files_restored": "檔案已成功恢復。",
+    "restore_skipped_external_changes": "G3M 套用模組後遊戲檔案發生變更，因此未進行還原。復原備份已封存。",
     "game_closed_restoring_files": "遊戲已關閉。正在恢復檔案...",
     "g3mtool_cache_cleared": "G3MTool 快取已清除。",
     "game_files_install_complete": "遊戲檔案已安裝。",
@@ -1502,6 +1507,12 @@
     "choose_another": "選擇其他資料夾",
     "use_default": "使用預設位置"
   },
+  "support_packager": {"title": "支援包產生器", "description": "選擇要包含的診斷資訊。壓縮檔只保存在本機，帳戶名稱和敏感值會被隱藏。", "build": "產生", "save_title": "儲存支援包", "completed": "支援包已儲存到：\n{path}", "failed": "無法產生支援包：\n{error}", "log_range": "日誌範圍", "category": {"application": "應用程式", "system": "系統", "metadata": "設定和模組", "logs": "日誌"}, "field": {"version": "G3M版本", "state": "目前應用程式狀態", "os": "作業系統和版本", "machine": "電腦架構和處理器", "python": "Python執行環境", "memory": "記憶體使用情況", "time": "系統啟動和收集時間", "processes": "執行中的處理程序（不含命令列）", "network": "網路介面計數器", "settings": "G3M設定（已移除敏感值）", "mods": "已安裝模組", "structure": "G3M檔案結構和大小"}, "range": {"all": "所有可用日誌", "day": "最近24小時", "week": "最近7天", "month": "最近30天"}},
+  "support_packager_fields": {"performance": "CPU、磁碟和本機網路吞吐量取樣", "ui_performance": "G3M介面回應和計時器頻率取樣"},
+  "support_packager_options": {"custom_settings": "自訂支援包內容", "custom_settings_tooltip": "啟用後可逐項選擇內容。停用時會包含所有可用項目。", "empty": "未找到可用項目。"},
+  "support_packager_categories": {"configuration": "設定和中繼資料", "g3m_files": "G3M JSON、Markdown和文字檔", "patches": "G3MPatch資訊清單", "games": "遊戲資料夾結構", "appdata": "支援的AppData資料夾結構", "mod": "模組"},
+  "support_packager_mod": {"config": "模組設定", "structure": "完整遞迴檔案結構", "files": "模組全部檔案"},
+  "support_packager_app": {"selection": "所選遊戲、章節和設定檔", "operations": "目前啟動、修補和安裝狀態", "background": "作用中背景作業數量", "launch": "目前啟動交易狀態"},
   "discord_rich_presence": {
     "status": {
       "configuring": "正在設定 G3M",

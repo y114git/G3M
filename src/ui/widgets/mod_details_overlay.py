@@ -11,7 +11,7 @@ import time
 from typing import Any, cast, override
 
 from PyQt6 import sip as _sip
-from PyQt6.QtCore import Qt, QThread, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 
 from adapters.gamebanana_adapter import GameBananaAPI
+from services.background_operations import background_operations
 from services.localization_service import tr
 from ui.common.styling import (
     apply_scroll_area_chrome,
@@ -42,6 +43,7 @@ from ui.common.styling import (
     round_pixmap,
 )
 from ui.utils.image_loader import ImageLoaderRunnable
+from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import UIAnimator
 from utils.mod.utils import get_mod_id
 from utils.native_integration import open_url_native
@@ -86,7 +88,7 @@ def _store_cached_mod_details(cache_key: tuple[int, str], value: dict) -> None:
             _MOD_DETAILS_CACHE.popitem(last=False)
 
 
-class LoadDescriptionFromUrlThread(QThread):
+class LoadDescriptionFromUrlThread(ManagedQThread):
     description_loaded = pyqtSignal(str)
     error_occurred = pyqtSignal(str, int)
 
@@ -109,7 +111,7 @@ class LoadDescriptionFromUrlThread(QThread):
             self.error_occurred.emit(str(e), 0)
 
 
-class LoadModDetailsThread(QThread):
+class LoadModDetailsThread(ManagedQThread):
     details_loaded = pyqtSignal(dict)
 
     def __init__(self, mod_data, parent=None) -> None:
@@ -282,7 +284,10 @@ class ScreenshotViewerDialog(QDialog):
             return
         signals = WorkerSignals()
         signals.result.connect(self._set_image)
-        self._loader.start(ImageLoaderRunnable(self._urls[self._index], signals))
+        background_operations.start_runnable(
+            self._loader,
+            ImageLoaderRunnable(self._urls[self._index], signals),
+        )
 
     def relocalize_ui(self) -> None:
         if not self._urls:
@@ -1139,7 +1144,10 @@ class ModDetailsOverlay(QWidget):
         signals.error.connect(
             lambda url, msg, i=idx, s=signals: self._ss_on_load_error(s, i, msg)
         )
-        self._thread_pool.start(ImageLoaderRunnable(self._ss_urls[idx], signals))
+        background_operations.start_runnable(
+            self._thread_pool,
+            ImageLoaderRunnable(self._ss_urls[idx], signals),
+        )
 
     def _forget_screenshot_load_signal(self, signals):
         with contextlib.suppress(ValueError):

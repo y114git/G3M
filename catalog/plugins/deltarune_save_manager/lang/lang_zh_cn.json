@@ -96,6 +96,8 @@
     "value_label": "值",
     "cancel_button": "取消",
     "save": "保存",
+    "undo": "撤销", "redo": "重做", "apply": "应用",
+    "manual_flag_editor": "手动旗标编辑器", "flag_id": "旗标 ID",
     "close_button": "关闭",
     "shortcut_summary_label": "存档集合"
   },
@@ -147,6 +149,7 @@
     "changes_will_be_lost": "所有未保存的更改将丢失。是否继续？",
     "save_changes": "保存更改？",
     "original_save_overwrite": "原始存档将被覆盖。",
+    "changes_summary": "已更改 {count} 个存档字段。原始存档将被覆盖。",
     "access_error": "访问错误",
     "no_write_permissions": "没有文件夹的写入权限：\n{path}",
     "delete_save": "删除存档？",

@@ -2,7 +2,9 @@
 
 import os
 
-from PyQt6.QtWidgets import QLabel, QLineEdit
+from PyQt6.QtWidgets import QCheckBox, QLabel, QLineEdit
+
+from services.migration_service import build_extra_file_entry
 
 
 def extract_frame_data(layout, *, format_config_path):
@@ -25,12 +27,22 @@ def extract_frame_data(layout, *, format_config_path):
             }
     elif ftype == "extra":
         paths = []
+        status = "install"
         for i in range(layout.count()):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
-            if isinstance(w, QLineEdit) and w.property("is_local_extra_path") and w.text():
+            if (
+                isinstance(w, QLineEdit)
+                and w.property("is_local_extra_path")
+                and w.text()
+            ):
                 paths.append(format_config_path(w.text()))
+            elif isinstance(w, QCheckBox) and w.property("is_dependency_file"):
+                preserved_status = (
+                    str(w.property("extra_file_status") or "dependency").strip().lower()
+                )
+                status = preserved_status if w.isChecked() else "install"
         if paths:
-            return {"type": "extra", "paths": paths}
+            return {"type": "extra", "paths": paths, "status": status}
     return None
 
 
@@ -111,11 +123,17 @@ def collect_files(
             elif data["type"] == "extra" and data.get("paths"):
                 extra_files = tab_files.setdefault("extra_files", [])
                 existing_paths = {
-                    extra_file for extra_file in extra_files if isinstance(extra_file, str)
+                    extra_file.get("file_path")
+                    if isinstance(extra_file, dict)
+                    else extra_file
+                    for extra_file in extra_files
+                    if isinstance(extra_file, (str, dict))
                 }
                 for path in data["paths"]:
                     if path not in existing_paths:
-                        extra_files.append(path)
+                        extra_files.append(
+                            build_extra_file_entry(path, data.get("status", "install"))
+                        )
                         existing_paths.add(path)
         if tab_files:
             files[tab_keys[idx]] = tab_files

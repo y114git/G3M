@@ -147,7 +147,6 @@ class TestGameLaunchSimulation:
         statuses = []
         launcher.status_changed.connect(lambda message, color: statuses.append((message, color)))
         launcher.mod_patcher.restore_all_backups = MagicMock(return_value=True)
-        launcher.mod_patcher.clear_session = MagicMock()
         launcher._direct_launch_cleanup_info = None
 
         launcher._cleanup_direct_launch_files()

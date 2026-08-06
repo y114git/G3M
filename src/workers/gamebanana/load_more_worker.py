@@ -2,12 +2,13 @@
 
 import logging
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
 from config.config import GAMEBANANA_PER_PAGE, UI_COLORS
 from models.game_modes import get_gamebanana_reverse_map
 from services.localization_service import tr
+from ui.utils.thread_lifetime import ManagedQThread
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def _safe_emit(owner: str, signal, *args) -> None:
         logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
-class LoadMoreGameBananaModsThread(QThread):
+class LoadMoreGameBananaModsThread(ManagedQThread):
     result, status = pyqtSignal(list), pyqtSignal(str, str)
 
     def __init__(

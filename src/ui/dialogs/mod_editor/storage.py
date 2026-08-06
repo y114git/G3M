@@ -8,8 +8,12 @@ import shutil
 from contextlib import suppress
 from pathlib import PureWindowsPath
 
+from services.migration_service import build_extra_file_entry
 from utils.file_utils import get_chapter_folder_name
-from utils.mod.config_parser import parse_extra_files_raw, resolve_mod_file_path
+from utils.mod.config_parser import (
+    parse_extra_file_entries_raw,
+    resolve_mod_file_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +47,26 @@ def collect_managed_file_paths(mod_dir: str, files_data, game: str) -> set[str]:
             managed_path = resolve_managed_mod_path(mod_dir, data_file)
             if managed_path:
                 managed_paths.add(managed_path)
-        for extra_file in parse_extra_files_raw(file_info.get("extra_files", [])):
+        for entry in parse_extra_file_entries_raw(file_info.get("extra_files", [])):
+            extra_file = entry["file_path"]
             managed_path = resolve_managed_mod_path(mod_dir, extra_file)
             if managed_path:
                 managed_paths.add(managed_path)
     return managed_paths
 
 
-def remove_stale_managed_files(
-    mod_dir: str, old_files, new_files, game: str
-) -> None:
+def find_unconfigured_root_entries(
+    mod_dir: str, configured_paths: set[str]
+) -> list[str]:
+    configured = {os.path.normcase(os.path.abspath(path)) for path in configured_paths}
+    return [
+        entry.path
+        for entry in os.scandir(mod_dir)
+        if os.path.normcase(os.path.abspath(entry.path)) not in configured
+    ]
+
+
+def remove_stale_managed_files(mod_dir: str, old_files, new_files, game: str) -> None:
     previous_paths = collect_managed_file_paths(mod_dir, old_files, game)
     current_paths = collect_managed_file_paths(mod_dir, new_files, game)
     stale_paths = sorted(previous_paths - current_paths, key=len, reverse=True)
@@ -156,7 +170,8 @@ def copy_files_to_mod_dir(
                 destination = resolve_mod_file_path(mod_dir, stored_path)
                 copy_path_into_mod_dir(resolved, destination)
                 new_file_data["data_file_path"] = stored_path
-        for path in parse_extra_files_raw(file_data.get("extra_files", [])):
+        for entry in parse_extra_file_entries_raw(file_data.get("extra_files", [])):
+            path = entry["file_path"]
             if not path:
                 continue
             resolved = resolve_file_path(path)
@@ -172,7 +187,9 @@ def copy_files_to_mod_dir(
             )
             destination = resolve_mod_file_path(mod_dir, stored_path)
             copy_path_into_mod_dir(resolved, destination)
-            new_file_data.setdefault("extra_files", []).append(stored_path)
+            new_file_data.setdefault("extra_files", []).append(
+                build_extra_file_entry(stored_path, entry["status"])
+            )
         if new_file_data:
             processed[file_key] = new_file_data
     return processed

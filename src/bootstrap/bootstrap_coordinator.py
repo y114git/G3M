@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 
-from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from app.game_ui import (
@@ -26,6 +26,7 @@ from services.game_detection_service import is_game_running
 from services.localization_service import tr
 from ui.splash import create_png_splash
 from ui.utils.audio_utils import _audio_service
+from ui.utils.thread_lifetime import ManagedQThread
 from utils.network_utils import (
     check_internet_connection,
     cloud_function_request,
@@ -35,7 +36,7 @@ from utils.network_utils import (
 logger = logging.getLogger(__name__)
 
 
-class _NetworkInitThread(QThread):
+class _NetworkInitThread(ManagedQThread):
     done = pyqtSignal(bool, dict)
 
     def __init__(self, app_state, parent=None) -> None:

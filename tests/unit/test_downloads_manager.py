@@ -66,3 +66,24 @@ def test_clear_downloads_removes_generation_for_deleted_record(tmp_path) -> None
     manager.clear_downloads()
 
     assert record.id not in manager._download_generations
+
+
+def test_manual_setup_result_is_not_reported_as_installed(tmp_path) -> None:
+    manager = DownloadsManager(str(tmp_path), lambda: {})
+    record = DownloadRecord(
+        id="wip-84933",
+        display_name="DELTARUNE Multiplayer Mod!",
+        download_status=DownloadStatus.DOWNLOADED,
+        use_status=UseStatus.USING,
+        file_path=str(tmp_path / "multiplayer.zip"),
+        file_exists=True,
+    )
+    manager.store.add(record)
+    completions = []
+    manager.use_completed.connect(lambda: completions.append(True))
+
+    manager._on_use_finished(record.id, False, True, "")
+
+    assert record.use_status == UseStatus.NEEDS_MANUAL
+    assert record.ever_installed is False
+    assert completions == []

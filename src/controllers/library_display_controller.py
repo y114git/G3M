@@ -6,7 +6,7 @@ import os
 import shutil
 from typing import Any
 
-from PyQt6.QtCore import QEventLoop, QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QEventLoop, QObject, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from app.game_ui import show_chapter_mode_instruction
@@ -15,6 +15,7 @@ from services.localization_service import tr
 from services.mod.filter_service import filter_and_sort_mods
 from ui.common.styling import clear_layout_widgets, show_empty_message_in_layout
 from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from ui.widgets.mod.installed_mod_widget import InstalledModWidget
 from utils.mod.utils import get_mod_id
 from utils.native_integration import (
@@ -120,9 +121,7 @@ class LibraryDisplayController:
                     if _bound_checkbox_is_checked(self.app, "library_tag_textedit")
                     else None,
                     "customization"
-                    if _bound_checkbox_is_checked(
-                        self.app, "library_tag_customization"
-                    )
+                    if _bound_checkbox_is_checked(self.app, "library_tag_customization")
                     else None,
                     "gameplay"
                     if _bound_checkbox_is_checked(self.app, "library_tag_gameplay")
@@ -146,9 +145,7 @@ class LibraryDisplayController:
             self._current_game_type(),
             sort_type,
             bool(getattr(self.app, "library_sort_ascending", False)),
-            bool(
-                _bound_checkbox_is_checked(self.app, "library_tag_gamebanana")
-            ),
+            bool(_bound_checkbox_is_checked(self.app, "library_tag_gamebanana")),
             selected_tags,
             getattr(self.app, "library_search_text", "") or "",
         )
@@ -370,7 +367,7 @@ class LibraryDisplayController:
                 self.update_for_chapter_mode(selected_id)
             return
 
-        class _Scan(QThread):
+        class _Scan(ManagedQThread):
             result_ready = pyqtSignal(list)
 
             def __init__(self, outer: Any) -> None:
@@ -392,8 +389,7 @@ class LibraryDisplayController:
             ):
                 if self.app._installed_scan_thread.isRunning():
                     self.app._installed_scan_thread.requestInterruption()
-                    self.app._installed_scan_thread.wait(100)
-                self.app._installed_scan_thread.deleteLater()
+                retire_qthread(self.app._installed_scan_thread)
             self.app._installed_scan_thread = _Scan(self)
             self.app._installed_scan_thread.result_ready.connect(
                 self.update_display_from_list
@@ -588,11 +584,15 @@ class LibraryDisplayController:
             return
         key = get_mod_id(mod_data)
         mod_folder = self.mod_service.get_mod_folder_path(key) if key else None
-        if (not mod_folder or not os.path.isdir(mod_folder)) and hasattr(mod_data, "folder_path"):
+        if (not mod_folder or not os.path.isdir(mod_folder)) and hasattr(
+            mod_data, "folder_path"
+        ):
             candidate = getattr(mod_data, "folder_path", None)
             if candidate and os.path.isdir(candidate):
                 mod_folder = candidate
-        if (not mod_folder or not os.path.isdir(mod_folder)) and hasattr(mod_data, "folder_name"):
+        if (not mod_folder or not os.path.isdir(mod_folder)) and hasattr(
+            mod_data, "folder_name"
+        ):
             folder_name = getattr(mod_data, "folder_name", None)
             if folder_name:
                 candidate = os.path.join(self.app_state.mods_dir, folder_name)
@@ -808,9 +808,7 @@ class LibraryDisplayController:
                 if mod_data:
                     expected_mods.append(mod_data)
 
-            current_keys = {
-                get_mod_id(mod) for mod in current_mods if get_mod_id(mod)
-            }
+            current_keys = {get_mod_id(mod) for mod in current_mods if get_mod_id(mod)}
             expected_keys = {
                 get_mod_id(mod) for mod in expected_mods if get_mod_id(mod)
             }
@@ -1079,8 +1077,7 @@ class LibraryDisplayController:
         except Exception as e:
             logger.error(f"Error creating modpack: {e}", exc_info=True)
             self._safe_feedback_call(
-                "show_message",
-                "error", "errors.error", format_filesystem_error(e)
+                "show_message", "error", "errors.error", format_filesystem_error(e)
             )
 
     def _on_modpack_progress(self, progress: int, message: str):
@@ -1088,9 +1085,7 @@ class LibraryDisplayController:
         if message:
             from config.config import UI_COLORS
 
-            self._safe_feedback_call(
-                "update_status", message, UI_COLORS["status_info"]
-            )
+            self._safe_feedback_call("update_status", message, UI_COLORS["status_info"])
 
     def _on_modpack_status(self, message: str, status_type: str):
         from config.config import UI_COLORS
@@ -1158,5 +1153,7 @@ class LibraryDisplayController:
                     )
             self._safe_feedback_call(
                 "show_message",
-                "error", "errors.error", tr("errors.modpack_creation_failed")
+                "error",
+                "errors.error",
+                tr("errors.modpack_creation_failed"),
             )

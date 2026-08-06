@@ -17,6 +17,7 @@ import time
 
 from models.execution_plan import LaunchPlan
 from models.game_modes import get_game
+from services.background_operations import background_operations
 from services.game_detection_service import (
     GAME_PROCESS_EXIT_CONFIRMATION_CHECKS,
     GAME_PROCESS_POLL_SECONDS,
@@ -166,9 +167,7 @@ def _execute_patch_plan(plan, game_path: str, game_mode, local_config: dict):
         local_config=local_config,
         config_dir=os.path.join(get_user_data_root(), "settings"),
     )
-    patcher = G3MToolPatchingService(
-        app_state, _HeadlessModService(local_config), None
-    )
+    patcher = G3MToolPatchingService(app_state, _HeadlessModService(local_config), None)
     patcher.set_override_game_path(game_path)
     patcher._session_manifest_path = os.path.join(app_state.config_dir, "session.lock")
     cache = {}
@@ -216,9 +215,7 @@ def _wait_for_game_exit(
     """Wait for one launched game, including wrapper and Steam process hand-offs."""
     root_pid = getattr(process, "pid", None)
     tracker = GameProcessTracker(root_pid, process_names, baseline_processes)
-    startup_checks = int(
-        GAME_PROCESS_START_TIMEOUT_SECONDS / GAME_PROCESS_POLL_SECONDS
-    )
+    startup_checks = int(GAME_PROCESS_START_TIMEOUT_SECONDS / GAME_PROCESS_POLL_SECONDS)
     for _ in range(startup_checks):
         if tracker.refresh():
             logger.info("Game process detected")
@@ -245,9 +242,7 @@ def _launch_game(
     direct_launch_chapter = shortcut_config.get("direct_launch_chapter", "")
     is_chapter_mode = shortcut_config.get("chapter_mode", False)
     process_names = [
-        name
-        for name in game_mode.get_process_names()
-        if name.casefold() != "runner"
+        name for name in game_mode.get_process_names() if name.casefold() != "runner"
     ]
     custom_path = local_config.get(game_mode.get_custom_exec_config_key(), "")
     if custom_path:
@@ -262,7 +257,8 @@ def _launch_game(
         system = platform.system()
         if system == "Linux":
             try:
-                subprocess.Popen(["steam", steam_url])
+                process = subprocess.Popen(["steam", steam_url])
+                background_operations.track_process(process, cancel=lambda: None)
             except FileNotFoundError:
                 open_url_native(steam_url)
         else:
@@ -355,7 +351,11 @@ def _launch_game(
         for name in dict.fromkeys((*process_names, target_name, target_stem))
         if name
     )
-    _wait_for_game_exit(process, process_names, baseline_processes)
+    background_operations.register_process(process, cancel=lambda: None)
+    try:
+        _wait_for_game_exit(process, process_names, baseline_processes)
+    finally:
+        background_operations.release_process(process)
     if cleanup_info:
         target_exe = cleanup_info["target_exe"]
         if os.path.exists(target_exe):

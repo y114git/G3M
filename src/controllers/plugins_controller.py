@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
@@ -32,6 +32,7 @@ from ui.common.styling import (
     update_mod_widget_style,
 )
 from ui.dialogs.plugin_details_dialog import PluginDetailsDialog
+from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ def _resolve_text(value: str) -> str:
     return value if translated == f"[{value}]" else translated
 
 
-class _PluginCatalogWorker(QThread):
+class _PluginCatalogWorker(ManagedQThread):
     loaded = pyqtSignal()
 
     def __init__(self, plugin_catalog_service) -> None:
@@ -62,7 +63,9 @@ class _PluginCatalogWorker(QThread):
         try:
             self.plugin_catalog_service.refresh_catalog()
         except Exception:
-            logger.exception("PluginsController: catalog refresh failed in _PluginCatalogWorker")
+            logger.exception(
+                "PluginsController: catalog refresh failed in _PluginCatalogWorker"
+            )
         finally:
             self.loaded.emit()
 
@@ -104,7 +107,9 @@ class PluginsController:
         filters = self.plugin_state_service.get_filters()
         self._filtering = True
         try:
-            self.app.plugins_installed_only_checkbox.setChecked(filters["installed_only"])
+            self.app.plugins_installed_only_checkbox.setChecked(
+                filters["installed_only"]
+            )
             for tag, attr in _TAG_TO_ATTR.items():
                 checkbox = getattr(self.app, attr, None)
                 if checkbox:
@@ -128,7 +133,11 @@ class PluginsController:
             self.ensure_loaded()
 
     def ensure_loaded(self, force_refresh: bool = False) -> None:
-        if self._loaded and not force_refresh and self.plugin_catalog_service.is_loaded():
+        if (
+            self._loaded
+            and not force_refresh
+            and self.plugin_catalog_service.is_loaded()
+        ):
             return
         self.plugin_runtime_service.scan_installed_plugins(resolve_catalog=False)
         self._loaded = True
@@ -188,7 +197,9 @@ class PluginsController:
             )
             return
         for widget in items:
-            self.app.plugins_layout.insertWidget(self.app.plugins_layout.count() - 1, widget)
+            self.app.plugins_layout.insertWidget(
+                self.app.plugins_layout.count() - 1, widget
+            )
 
     def relocalize_ui(self) -> None:
         self.restore_filter_state()
@@ -335,9 +346,13 @@ QPushButton#cardButtonUninstall:disabled {{
 
     @staticmethod
     def _entry_api_compatible(entry) -> bool:
-        return bool(entry and is_version_compatible(PLUGIN_API_VERSION, entry.api_version))
+        return bool(
+            entry and is_version_compatible(PLUGIN_API_VERSION, entry.api_version)
+        )
 
-    def _action_button(self, text: str, role: str, callback, enabled: bool = True) -> QPushButton:
+    def _action_button(
+        self, text: str, role: str, callback, enabled: bool = True
+    ) -> QPushButton:
         button = QPushButton(text)
         button.setObjectName(role)
         button.clicked.connect(callback)
@@ -370,7 +385,9 @@ QPushButton#cardButtonUninstall:disabled {{
         if badge:
             badge_label = QLabel(badge)
             badge_label.setObjectName("secondaryText")
-            badge_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            badge_label.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             badge_label.setStyleSheet(f"font-size: 13px; color: {meta_color};")
             if badge_tooltip:
                 badge_label.setToolTip(badge_tooltip)
@@ -402,11 +419,11 @@ QPushButton#cardButtonUninstall:disabled {{
         description = QLabel(entry.description)
         description.setObjectName("secondaryText")
         secondary_color = get_theme_color(self.app_state.local_config, "secondary_text")
-        description.setStyleSheet(
-            f"color: {secondary_color}; font-size: 12px;"
-        )
+        description.setStyleSheet(f"color: {secondary_color}; font-size: 12px;")
         description.setWordWrap(True)
-        description.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        description.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
+        )
         body.addWidget(description)
 
         is_compatible = self._entry_api_compatible(entry)
@@ -425,7 +442,9 @@ QPushButton#cardButtonUninstall:disabled {{
                 f"color: {warning_color}; font-size: 11px; font-style: italic;"
             )
             warning.setWordWrap(True)
-            warning.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            warning.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
+            )
             body.addWidget(warning)
 
         download_button = self._action_button(
@@ -474,30 +493,34 @@ QPushButton#cardButtonUninstall:disabled {{
                     exc_info=True,
                 )
         description = QLabel(
-            _resolve_text(plugin.manifest.description if plugin.manifest else plugin.error)
+            _resolve_text(
+                plugin.manifest.description if plugin.manifest else plugin.error
+            )
         )
         description.setObjectName("secondaryText")
         secondary_color = get_theme_color(self.app_state.local_config, "secondary_text")
-        description.setStyleSheet(
-            f"color: {secondary_color}; font-size: 12px;"
-        )
+        description.setStyleSheet(f"color: {secondary_color}; font-size: 12px;")
         description.setWordWrap(True)
-        description.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        description.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
+        )
         body.addWidget(description)
 
         if plugin.is_local:
             badge_text = tr("plugins.badge_local")
             badge_label = QLabel(badge_text)
             badge_label.setObjectName("secondaryText")
-            badge_label.setStyleSheet(
-                f"color: {secondary_color}; font-size: 12px;"
-            )
+            badge_label.setStyleSheet(f"color: {secondary_color}; font-size: 12px;")
             badge_label.setToolTip(tr("plugins.badge_local_tooltip"))
             body.addWidget(badge_label)
 
         actions.addWidget(
             self._action_button(
-                tr("plugins.action_disable" if plugin.enabled else "plugins.action_enable"),
+                tr(
+                    "plugins.action_disable"
+                    if plugin.enabled
+                    else "plugins.action_enable"
+                ),
                 "cardButtonUninstall" if plugin.enabled else "cardButtonDownload",
                 lambda: self.toggle_plugin(plugin.plugin_id),
             )
@@ -514,7 +537,9 @@ QPushButton#cardButtonUninstall:disabled {{
     def download_plugin(self, entry) -> None:
         if not entry.download_link:
             return
-        if not self._entry_api_compatible(entry) and not self._confirm_incompatible_api_download(entry):
+        if not self._entry_api_compatible(
+            entry
+        ) and not self._confirm_incompatible_api_download(entry):
             return
         self.downloads_manager.enqueue_with_feedback(
             self.feedback_service,
@@ -563,7 +588,12 @@ QPushButton#cardButtonUninstall:disabled {{
                 self.plugin_install_service.install_path(path, source="manual")
                 imported = True
             except Exception as e:
-                logger.error("PluginsController: import failed for %s: %s", path, e, exc_info=True)
+                logger.error(
+                    "PluginsController: import failed for %s: %s",
+                    path,
+                    e,
+                    exc_info=True,
+                )
                 self._safe_show_message(
                     "error", "errors.error", format_filesystem_error(e, path=path)
                 )
@@ -593,7 +623,11 @@ QPushButton#cardButtonUninstall:disabled {{
 
     def show_plugin_details(self, plugin_id: str) -> None:
         plugin = self.plugin_runtime_service.get_plugin(plugin_id)
-        entry = None if plugin else self.plugin_catalog_service.get_entry(plugin_id, load_if_needed=False)
+        entry = (
+            None
+            if plugin
+            else self.plugin_catalog_service.get_entry(plugin_id, load_if_needed=False)
+        )
         if not plugin and not entry:
             return
         if entry is not None:
@@ -617,16 +651,16 @@ QPushButton#cardButtonUninstall:disabled {{
             self.plugin_state_service,
             self.app_state,
             can_update=bool(
-                plugin.update_available
-                and plugin.catalog_entry
-                and not plugin.is_local
+                plugin.update_available and plugin.catalog_entry and not plugin.is_local
             ),
             on_update=self.update_plugin,
             parent=self.app,
         )
         dialog.exec()
         if dialog.delete_requested:
-            QTimer.singleShot(0, lambda plugin_id=plugin_id: self.delete_plugin(plugin_id))
+            QTimer.singleShot(
+                0, lambda plugin_id=plugin_id: self.delete_plugin(plugin_id)
+            )
             return
         self.render()
 
@@ -646,7 +680,12 @@ QPushButton#cardButtonUninstall:disabled {{
                 resolve_catalog=self.plugin_catalog_service.is_loaded()
             )
         except Exception as e:
-            logger.error("PluginsController: delete failed for %s: %s", plugin_id, e, exc_info=True)
+            logger.error(
+                "PluginsController: delete failed for %s: %s",
+                plugin_id,
+                e,
+                exc_info=True,
+            )
             plugin_path = str(getattr(plugin, "path", "") or "")
             self._safe_show_message(
                 "error", "errors.error", format_filesystem_error(e, path=plugin_path)
@@ -705,10 +744,7 @@ QPushButton#cardButtonUninstall:disabled {{
         record = self._get_plugin_download_record(entry.id)
         button.setText(self._download_button_text(record))
         button.setEnabled(
-            bool(
-                entry.download_link
-                and not self._is_plugin_download_busy(record)
-            )
+            bool(entry.download_link and not self._is_plugin_download_busy(record))
         )
 
     def _refresh_download_button_state(self, plugin_id: str) -> None:
@@ -748,10 +784,9 @@ QPushButton#cardButtonUninstall:disabled {{
             self._catalog_worker = None
 
             if worker.isRunning():
+                worker.requestInterruption()
                 worker.quit()
-                worker.wait(1000)
-
-            worker.deleteLater()
+            retire_qthread(worker)
 
     def shutdown(self) -> None:
         """Explicit cleanup method for deterministic shutdown."""
@@ -771,8 +806,7 @@ QPushButton#cardButtonUninstall:disabled {{
             )
         ]
         desired_signature = tuple(
-            (plugin.plugin_id, plugin.manifest.name)
-            for plugin in main_view_plugins
+            (plugin.plugin_id, plugin.manifest.name) for plugin in main_view_plugins
         )
         if (
             not force_rebuild

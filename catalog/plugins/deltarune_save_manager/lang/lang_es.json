@@ -96,6 +96,8 @@
     "value_label": "Valor",
     "cancel_button": "Cancelar",
     "save": "Guardar",
+    "undo": "Deshacer", "redo": "Rehacer", "apply": "Aplicar",
+    "manual_flag_editor": "Editor manual de indicadores", "flag_id": "ID del indicador",
     "close_button": "Cerrar",
     "shortcut_summary_label": "Colección guardados"
   },
@@ -147,6 +149,7 @@
     "changes_will_be_lost": "Se perderán todos los cambios no guardados. ¿Continuar?",
     "save_changes": "¿Guardar cambios?",
     "original_save_overwrite": "El guardado original será sobrescrito.",
+    "changes_summary": "Se modificaron {count} campo(s). Se sobrescribirá el guardado original.",
     "access_error": "Error de acceso",
     "no_write_permissions": "Sin permisos de escritura para la carpeta:\n{path}",
     "delete_save": "¿Eliminar guardado?",

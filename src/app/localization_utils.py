@@ -163,6 +163,7 @@ def relocalize_texts(w):
         w.title_bar.set_localized_texts(
             tr("ui.windows_menu"),
             tr("ui.log_viewer"),
+            tr("ui.support_packager"),
             tr("ui.help_menu"),
             tr("buttons.changelog"),
             tr("onboarding.menu_action"),
@@ -172,6 +173,9 @@ def relocalize_texts(w):
             tr("ui.restore_window"),
             tr("ui.close_window"),
         )
+    support_dialog = getattr(w, "_support_packager_dialog", None)
+    if support_dialog and hasattr(support_dialog, "relocalize_ui"):
+        support_dialog.relocalize_ui()
     for key in w.color_widgets:
         if key in w.color_labels:
             w.color_labels[key].setText(w.color_config[key])

@@ -82,7 +82,10 @@ def test_diagnostics_detects_new_modified_and_conflicting_extra_files(tmp_path):
 
     report = service.build_report({"deltarune_1": [mod_a, mod_b]})
 
-    by_name = {impact.target_relative_path.replace("\\", "/"): impact for impact in report.file_impacts}
+    by_name = {
+        impact.target_relative_path.replace("\\", "/"): impact
+        for impact in report.file_impacts
+    }
     assert by_name["new_asset.txt"].operation == "add"
     assert by_name["lang_en.json"].operation == "conflict"
     assert by_name["lang_en.json"].existing is True
@@ -140,6 +143,46 @@ def test_diagnostics_marks_g3mpatch_data_entries_as_deep_analyzable(tmp_path):
     assert report.summary.new_files == 1
     assert report.summary.modified_files == 1
     assert report.summary.deep_analyzable_data_files == 1
+
+
+def test_diagnostics_warns_when_opaque_data_patches_share_a_target(tmp_path):
+    game_dir = tmp_path / "game" / "chapter4_windows"
+    game_dir.mkdir(parents=True)
+    (game_dir / "data.win").write_bytes(b"data")
+    folders = {}
+    mods = []
+    for mod_id in ("boss-rush", "60-fps"):
+        mod_root = tmp_path / "mods" / mod_id
+        chapter = mod_root / "chapter_4"
+        chapter.mkdir(parents=True)
+        (chapter / f"{mod_id}.xdelta").write_bytes(b"patch")
+        mods.append(
+            _make_mod(
+                mod_root,
+                mod_id,
+                mod_id,
+                {"deltarune_4": {"data_file_path": f"chapter_4/{mod_id}.xdelta"}},
+            )
+        )
+        folders[mod_id] = str(mod_root)
+    service = ModDiagnosticsService(
+        SimpleNamespace(
+            game_mode=SimpleNamespace(game_id="deltarune"), local_config={}
+        ),
+        _ModService(folders),
+        target_dir_resolver=lambda *_args, **_kwargs: str(game_dir),
+    )
+
+    report = service.build_report({"deltarune_4": mods})
+
+    issue = next(
+        issue
+        for issue in report.issues
+        if issue.title == "DATA merge requires verification"
+    )
+    assert issue.severity == "warning"
+    assert issue.affected_mods == ("boss-rush", "60-fps")
+    assert report.summary.conflicts == 1
 
 
 def test_diagnostics_uses_g3mpatch_manifest_archive_paths(tmp_path):
@@ -228,7 +271,6 @@ def test_diagnostics_falls_back_when_extra_target_root_is_unrelated(tmp_path):
     game_dir.mkdir()
     other_dir.mkdir()
 
-    assert (
-        ModDiagnosticsService._safe_target_root(str(other_dir), str(game_dir))
-        == str(game_dir)
-    )
+    assert ModDiagnosticsService._safe_target_root(
+        str(other_dir), str(game_dir)
+    ) == str(game_dir)

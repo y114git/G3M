@@ -17,6 +17,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from config.config import APP_VERSION, ARCH, UI_COLORS
 from models.app_state import AppState
 from models.exceptions import AppError
+from services.background_operations import background_operations
 from services.localization_service import tr
 from ui.common.feedback import FeedbackManager
 from utils.network_utils import get_session
@@ -98,7 +99,9 @@ class UpdateChecker(QObject):
     ) -> dict | None:
         system = system or platform.system()
         if beta_enabled is None:
-            beta_enabled = self.app_state.local_config.get("beta_updates_enabled", False)
+            beta_enabled = self.app_state.local_config.get(
+                "beta_updates_enabled", False
+            )
         launcher_files_key = "launcher_beta_files" if beta_enabled else "launcher_files"
         launcher_files = self.app_state.global_settings.get(launcher_files_key)
         if not isinstance(launcher_files, dict):
@@ -204,7 +207,10 @@ class UpdateChecker(QObject):
         )
         if system == "Darwin" and archive_path.lower().endswith(".zip"):
             try:
-                run(["/usr/bin/ditto", "-x", "-k", archive_path, extraction_dir], check=True)
+                run(
+                    ["/usr/bin/ditto", "-x", "-k", archive_path, extraction_dir],
+                    check=True,
+                )
             except FileNotFoundError as exc:
                 raise AppError("errors.archive_not_found") from exc
             except PermissionError as exc:
@@ -213,7 +219,9 @@ class UpdateChecker(QObject):
         from utils.archive_utils import extract_archive
 
         try:
-            extract_archive(archive_path, extraction_dir, os.path.basename(archive_path))
+            extract_archive(
+                archive_path, extraction_dir, os.path.basename(archive_path)
+            )
         except FileNotFoundError as exc:
             raise AppError("errors.archive_not_found") from exc
         except PermissionError as exc:
@@ -295,7 +303,8 @@ class UpdateChecker(QObject):
             for file_name in files:
                 file_path = os.path.join(root, file_name)
                 if os.path.isfile(file_path) and (
-                    not os.path.splitext(file_name)[1] or file_name.endswith(".AppImage")
+                    not os.path.splitext(file_name)[1]
+                    or file_name.endswith(".AppImage")
                 ):
                     size = os.path.getsize(file_path)
                     if size > largest_size:
@@ -377,13 +386,14 @@ fi
         os.chmod(updater_script_path, 0o700)
         logger.info("[UPDATE] Launching updater script %s", updater_script_path)
         try:
-            Popen(
+            process = Popen(
                 ["/bin/bash", updater_script_path],
                 start_new_session=True,
                 stdin=DEVNULL,
                 stdout=DEVNULL,
                 stderr=DEVNULL,
             )
+            background_operations.track_process(process, cancel=lambda: None)
         except Exception:
             with contextlib.suppress(OSError):
                 os.remove(updater_script_path)
@@ -418,7 +428,9 @@ fi
                 )
                 self._perform_unix_update(replace_target, staged_content_path)
         except PermissionError as e:
-            logger.error("[UPDATE] Permission error during update: %s", e, exc_info=True)
+            logger.error(
+                "[UPDATE] Permission error during update: %s", e, exc_info=True
+            )
             self.status_changed.emit(
                 tr("errors.update_permission_error"), UI_COLORS["status_error"]
             )
@@ -431,7 +443,8 @@ fi
             logger.error("[UPDATE] Update failed with error: %s", e, exc_info=True)
             formatted_error = self._format_update_worker_error(e)
             self.status_changed.emit(
-                tr("errors.update_failed", error=formatted_error), UI_COLORS["status_error"]
+                tr("errors.update_failed", error=formatted_error),
+                UI_COLORS["status_error"],
             )
             self.update_error.emit(
                 tr("errors.update_could_not_complete", error=formatted_error)

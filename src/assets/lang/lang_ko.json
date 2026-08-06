@@ -43,7 +43,7 @@
     "language_name": "한국어",
     "font": "NotoSansKR-Bold.ttf",
     "qt_translation": "qtbase_ko",
-    "version": "3.3.0"
+    "version": "3.3.1"
   },
   "blocklist": {
     "title": "차단 매니저",
@@ -126,6 +126,7 @@
     "windows_menu": "창",
     "help_menu": "도움말",
     "log_viewer": "로그 뷰어",
+    "support_packager": "지원 패키지 생성기",
     "about_title": "정보",
     "about_dialog_text": "DELTARUNE, UNDERTALE, Pizza Tower 등 다양한 게임을 위한 궁극의 모드 매니저",
     "about_version_label": "버전: {version}",
@@ -301,6 +302,7 @@
   "files": {
     "data_file": "DATA 파일",
     "extra_files_title": "추가 파일 #{number}",
+    "dependency_only": "종속성 전용(설치 안 함)",
     "icon_label": "아이콘",
     "version_label": "버전 {file_type}:"
   },
@@ -428,6 +430,7 @@
     "mod_editor_game_version": "이 모드가 제작된 대상 게임 버전입니다. 선택 사항입니다.",
     "mod_editor_add_data": "이 탭의 메인 DATA 패치 파일을 추가합니다. 탭당 하나의 DATA 파일만 허용됩니다.",
     "mod_editor_add_extra": "추가 파일이 포함된 압축 파일이나 폴더를 추가합니다.",
+    "mod_editor_dependency_only": "스크립트가 사용하도록 모드에 보관하지만 게임에는 복사하지 않습니다.",
     "mod_editor_selected_file": "모드에 포함될 선택된 파일 또는 폴더입니다.",
     "mod_editor_data_version": "이 DATA 파일 항목의 버전 라벨입니다.",
     "mod_editor_special_extra_target_towers": "특수 extra 파일: 게임 실행 중에는 {target_path} 로 들어갑니다.",
@@ -658,6 +661,7 @@
     "g3mtool_cache_clear_failed": "G3MTool 캐시를 지우지 못했습니다: {error}",
     "files_not_found": "파일을 찾을 수 없습니다.",
     "files_restore_error": "파일 복원 오류: {error}",
+    "pending_session_restore_failed": "이전 모드 세션의 게임 파일을 복원하지 못했습니다. 게임을 실행하지 않았으며 복구 백업은 유지했습니다.",
     "folder_creation_failed": "폴더를 생성할 수 없습니다:\n{error}",
     "full_installation_error": "전체 설치 오류: {0}",
     "game_launch_error": "게임 실행 오류: {error}",
@@ -781,6 +785,7 @@
     "demo_installation_complete": "DEMO 전체 설치 완료.",
     "downloading_version": "v{version} 다운로드 중...",
     "files_restored": "파일이 성공적으로 복원되었습니다.",
+    "restore_skipped_external_changes": "G3M이 모드를 적용한 후 게임 파일이 변경되어 복원하지 않았습니다. 복구 백업은 보관되었습니다.",
     "game_closed_restoring_files": "게임 종료됨. 파일 복원 중...",
     "g3mtool_cache_cleared": "G3MTool 캐시를 지웠습니다.",
     "game_files_install_complete": "게임 파일을 설치했습니다.",
@@ -1507,6 +1512,12 @@
     "choose_another": "다른 폴더 선택",
     "use_default": "기본 위치 사용"
   },
+  "support_packager": {"title": "지원 패키지 생성기", "description": "포함할 진단 정보를 선택하세요. 파일은 이 컴퓨터에만 저장되며 계정 이름과 비밀 값은 가려집니다.", "build": "생성", "save_title": "지원 패키지 저장", "completed": "저장 위치:\n{path}", "failed": "패키지를 만들 수 없습니다:\n{error}", "log_range": "로그 기간", "category": {"application": "애플리케이션", "system": "시스템", "metadata": "설정 및 모드", "logs": "로그"}, "field": {"version": "G3M 버전", "state": "현재 애플리케이션 상태", "os": "운영 체제 및 버전", "machine": "아키텍처 및 프로세서", "python": "Python 런타임", "memory": "메모리 사용량", "time": "시스템 부팅 및 수집 시간", "processes": "실행 중인 프로세스(명령줄 제외)", "network": "네트워크 인터페이스 카운터", "settings": "G3M 설정(비밀 제외)", "mods": "설치된 모드", "structure": "G3M 파일 구조 및 크기"}, "range": {"all": "사용 가능한 모든 로그", "day": "최근 24시간", "week": "최근 7일", "month": "최근 30일"}},
+  "support_packager_fields": {"performance": "CPU, 디스크 및 로컬 네트워크 속도 측정", "ui_performance": "G3M UI 응답성과 타이머 빈도"},
+  "support_packager_options": {"custom_settings": "패키지 내용 사용자 지정", "custom_settings_tooltip": "활성화하면 내용을 개별 선택할 수 있습니다. 비활성화하면 사용 가능한 모든 항목이 포함됩니다.", "empty": "사용 가능한 항목이 없습니다."},
+  "support_packager_categories": {"configuration": "설정 및 메타데이터", "g3m_files": "G3M JSON, Markdown 및 텍스트 파일", "patches": "G3MPatch 매니페스트", "games": "게임 폴더 구조", "appdata": "지원되는 AppData 폴더 구조", "mod": "모드"},
+  "support_packager_mod": {"config": "모드 설정", "structure": "전체 재귀 파일 구조", "files": "모드의 모든 파일"},
+  "support_packager_app": {"selection": "선택한 게임, 챕터 및 프로필", "operations": "현재 실행, 패치 및 설치 상태", "background": "활성 백그라운드 작업 수", "launch": "현재 실행 트랜잭션 상태"},
   "discord_rich_presence": {
     "status": {
       "configuring": "G3M 설정 중",

@@ -21,14 +21,14 @@
         "browser": {"title": "Choose what you want to browse", "body": "The game selector changes which GameBanana page G3M reads. Pick a game here before looking for mods. Custom games also work when they have a GameBanana ID."},
         "browser_filters": {"title": "Find a mod", "body": "Search by name or use sorting and tags when the list is busy. Open a mod card to read its description, screenshots, files, game version, and other details before installing it."},
         "downloads": {"title": "Downloads", "body": "This button opens the download queue. You can watch progress, retry a failed download, install something that is waiting, or clear old entries."},
-        "library": {"title": "Your Library", "body": "Installed mods live here. Select a mod to read its details and use the action buttons to edit, update, export, open its folder, or remove it. <b>Use</b> adds it to the current play setup; <b>Unuse</b> removes it from that setup without uninstalling it."},
+        "library": {"title": "Your Library", "body": "Installed mods live here. Select a mod to read its details and use the action buttons to edit, update, export, open its folder, or remove it. <b>Use</b> adds it to the current play setup. <b>Unuse</b> removes it from that setup without uninstalling it."},
         "add_mod": {"title": "Add a mod from your computer", "body": "Use <b>Add Mod</b> for a downloaded archive, an unpacked folder, or a supported patch. G3M recognizes its own packages and common packages made for other mod managers. The mod is added to the Library first, so you still choose when to use it."},
         "profiles": {"title": "Profiles", "body": "A profile remembers which mods you use and how they are arranged. Make separate profiles for different players, playthroughs, or mod combinations. Switching profile doesn't reinstall anything."},
         "game_versions": {"title": "Game Versions", "body": "Save a copy of the current game files before an update or a major mod change. You can return to that copy later, keep a version together with a profile, or import and export version archives. This is useful when a mod only works with a particular game release."},
         "priority": {"title": "Priority and steps", "body": "Use this when two mods replace the same file, or when one mod needs another. Higher mods win inside a step. A later step starts from the result of the earlier one, which is what addons and version-changing mods need."},
         "modpack": {"title": "Create Modpack", "body": "Once a combination works the way you want, this turns it into one local mod. It's handy for sharing the setup or launching it later without rebuilding the same combination each time."},
         "diagnostics": {"title": "Diagnostics", "body": "Open this before launching when you're unsure about a mod combination. <b>Analyze Launch</b> prepares the same result in a safe temporary copy, then shows what would change and where mods disagree. The game itself isn't started."},
-        "common_problems": {"title": "When something goes wrong", "body": "A wrong-version or xdelta message usually means the mod was made for a different copy of the game. An access message often means the game is still open or its folder can't be written to. Check the report first; if you ask for help, export it and include the G3M log."},
+        "common_problems": {"title": "When something goes wrong", "body": "A wrong-version or xdelta message usually means the mod was made for a different copy of the game. An access message often means the game is still open or its folder can't be written to. Check the report first. If you ask for help, export it and include the G3M log."},
         "modding_tools": {"title": "Modding Tools", "body": "This area is mainly for mod makers. It can create and apply patches, compare game files, convert patch types, merge several mods, and run the same job on a batch of files. You don't need it to install and play a mod."},
         "shortcut": {"title": "Shortcut", "body": "Create a desktop shortcut for a game and profile you use often. A shortcut can contain several steps, with one mod in each step, so dependent mods still start in the right order."},
         "community": {"title": "Community", "body": "Browse new or featured GameBanana posts without leaving G3M. You can look at one game or combine the feeds from every game you've set up."},
@@ -43,7 +43,7 @@
     "language_name": "English",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_en",
-    "version": "3.3.0"
+    "version": "3.3.1"
   },
   "blocklist": {
     "title": "Blocklist Manager",
@@ -126,6 +126,7 @@
     "windows_menu": "Windows",
     "help_menu": "Help",
     "log_viewer": "Log Viewer",
+    "support_packager": "Support Packager",
     "about_title": "About",
     "about_dialog_text": "The ultimate mod manager for DELTARUNE, UNDERTALE, Pizza Tower, and more.",
     "about_version_label": "Version: {version}",
@@ -301,6 +302,7 @@
   "files": {
     "data_file": "DATA - File",
     "extra_files_title": "Extra files #{number}",
+    "dependency_only": "Dependency only (do not install)",
     "icon_label": "Icon",
     "version_label": "Version {file_type}:"
   },
@@ -428,6 +430,7 @@
     "mod_editor_game_version": "Optional target game version this mod was built for.",
     "mod_editor_add_data": "Add the main DATA patch file for this tab. Only one DATA file is allowed per tab.",
     "mod_editor_add_extra": "Add archives or folders with extra files for this tab.",
+    "mod_editor_dependency_only": "Keep this file beside the mod for scripts to use, but never copy it into the game.",
     "mod_editor_selected_file": "The selected file or folder that will be included in the mod.",
     "mod_editor_data_version": "Version label for this DATA file entry.",
     "mod_editor_special_extra_target_towers": "Special extra files: these will be restored into {target_path} while the game is running.",
@@ -457,7 +460,7 @@
     "modding_tools_batch_mode": "Run this tab as a batch operation.",
     "modding_tools_continue_on_error": "Keep running later batch jobs if one item fails.",
     "run_tool": "Run the selected tool action.",
-    "g3mpatch_xdelta_fallback": "Adds an exact xdelta patch to Xdelta/ inside the .g3mpatch. Use only when you need byte-perfect recovery if semantic apply fails; it makes the patch larger and less merge-oriented.",
+    "g3mpatch_xdelta_fallback": "Adds an exact xdelta patch to Xdelta/ inside the .g3mpatch. Use only when you need byte-perfect recovery if semantic apply fails. It makes the patch larger and less merge-oriented.",
     "theme_current_settings": "Shows which theme customizations are currently active.",
     "import_theme": "Import a theme file into G3M.",
     "export_theme": "Export your current theme settings to a file.",
@@ -658,6 +661,7 @@
     "g3mtool_cache_clear_failed": "Failed to clear G3MTool cache: {error}",
     "files_not_found": "Could not find files.",
     "files_restore_error": "Error restoring files: {error}",
+    "pending_session_restore_failed": "Could not restore game files from the previous mod session. The game was not launched and the recovery backup was kept.",
     "folder_creation_failed": "Could not create folder:\n{error}",
     "full_installation_error": "Full installation error: {0}",
     "game_launch_error": "Error launching game: {error}",
@@ -781,6 +785,7 @@
     "demo_installation_complete": "Full DEMO installation complete.",
     "downloading_version": "Downloading v{version}...",
     "files_restored": "Files restored successfully.",
+    "restore_skipped_external_changes": "Game files changed after G3M applied the mod, so they were not restored. The recovery backup was archived.",
     "game_closed_restoring_files": "Game closed. Restoring files...",
     "g3mtool_cache_cleared": "G3MTool cache cleared.",
     "game_files_install_complete": "Game files installed.",
@@ -985,7 +990,7 @@
     "loading": "Loading GameBanana feed...",
     "loading_progress": "Loading GameBanana feed... {current}/{total}",
     "results": "{count} items",
-    "partial_results": "{count} items loaded; {failed} game feeds were unavailable.",
+    "partial_results": "{count} items loaded. {failed} game feeds were unavailable.",
     "empty": "No items are currently available for this selection.",
     "no_games": "No visible games have a GameBanana ID configured.",
     "load_failed": "GameBanana is temporarily unavailable. Please try again later.",
@@ -1212,9 +1217,9 @@
     "overview_conflicts": "Conflicts were found. Open Problems or File Tree to see what overlaps.",
     "overview_warnings": "Warnings were found. Review the Problems tab before launch.",
     "g3mpatch_tip": "Tip: regular mods are included too, but converting a DATA patch to .g3mpatch unlocks deeper resource-level diagnostics.",
-    "scope_game": "Scope: current profile, game {game}. Checked mods are included in this preflight; profile-disabled mods stay unchecked until you opt in.",
-    "scope_section": "Scope: current profile, game {game}, content section {section}. Checked mods are included in this preflight; profile-disabled mods stay unchecked until you opt in.",
-    "scope_chapter": "Scope: current profile, game {game}, chapter {chapter}. Checked mods are included in this preflight; profile-disabled mods stay unchecked until you opt in.",
+    "scope_game": "Scope: current profile, game {game}. Checked mods are included in this preflight. Profile-disabled mods stay unchecked until you opt in.",
+    "scope_section": "Scope: current profile, game {game}, content section {section}. Checked mods are included in this preflight. Profile-disabled mods stay unchecked until you opt in.",
+    "scope_chapter": "Scope: current profile, game {game}, chapter {chapter}. Checked mods are included in this preflight. Profile-disabled mods stay unchecked until you opt in.",
     "unknown_scope": "unknown",
     "mod_state_enabled": "enabled in profile",
     "mod_state_available": "available only",
@@ -1434,7 +1439,7 @@
       },
       "merge_conflicts_detected": {
         "title": "Merge conflicts were detected",
-        "body": "Multiple mods changed the same resources. Review the conflict report; continuing may pick one change over another."
+        "body": "Multiple mods changed the same resources. Review the conflict report. Continuing may pick one change over another."
       },
       "steam_launch_with_mods": {
         "title": "Steam may launch a different game folder",
@@ -1450,7 +1455,7 @@
       },
       "cache_rebuild_needed": {
         "title": "G3MTool cache will be rebuilt",
-        "body": "G3MTool will rebuild cache data for this file. The first run can be slower; later runs should be faster."
+        "body": "G3MTool will rebuild cache data for this file. The first run can be slower. Later runs should be faster."
       },
       "legacy_patching_warning": {
         "title": "Other patching warning",
@@ -1529,6 +1534,14 @@
     "choose_another": "Choose another folder",
     "use_default": "Use default location"
   },
+  "support_packager": {
+    "title": "Support Packager", "description": "Choose the diagnostic data to include. The archive stays on this computer. Account names and secret values are redacted.", "build": "Build", "save_title": "Save support package", "completed": "Support package saved to:\n{path}", "failed": "Could not build the support package:\n{error}", "log_range": "Log range", "category": {"application": "Application", "system": "System", "metadata": "Configuration and mods", "logs": "Logs"}, "field": {"version": "G3M version", "state": "Current application state", "os": "Operating system and version", "machine": "Computer architecture and processor", "python": "Python runtime", "memory": "Memory usage", "time": "System boot and collection time", "processes": "Running processes (without command lines)", "network": "Network interface counters", "settings": "G3M settings (secrets removed)", "mods": "Installed mods", "structure": "G3M file structure and file sizes"}, "range": {"all": "All available logs", "day": "Last 24 hours", "week": "Last 7 days", "month": "Last 30 days"}
+  },
+  "support_packager_fields": {"performance": "CPU, disk, and local network throughput sample", "ui_performance": "G3M UI responsiveness and timer-rate sample"},
+  "support_packager_options": {"custom_settings": "Custom package settings", "custom_settings_tooltip": "Enable to choose individual package contents. With this disabled, every available item is included.", "empty": "No available items were found."},
+  "support_packager_categories": {"configuration": "Configuration and metadata", "g3m_files": "G3M JSON, Markdown, and text files", "patches": "G3MPatch manifests", "games": "Game folder structures", "appdata": "Supported AppData folder structures", "mod": "Mod"},
+  "support_packager_mod": {"config": "Mod configuration", "structure": "Complete recursive file structure", "files": "All mod files"},
+  "support_packager_app": {"selection": "Selected game, chapter, and profile", "operations": "Current launch, patching, and installation state", "background": "Active background-operation counts", "launch": "Current launch-transaction state"},
   "discord_rich_presence": {
     "status": {
       "configuring": "Configuring G3M",

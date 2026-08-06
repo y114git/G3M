@@ -7,8 +7,12 @@ from defusedxml import ElementTree
 from adapters.deltamod_adapter import DeltamodConverter
 
 
-def _make_converter(metadata: dict, gamebanana_metadata: dict | None = None) -> DeltamodConverter:
-    converter = DeltamodConverter("source", "mods", gamebanana_metadata=gamebanana_metadata)
+def _make_converter(
+    metadata: dict, gamebanana_metadata: dict | None = None
+) -> DeltamodConverter:
+    converter = DeltamodConverter(
+        "source", "mods", gamebanana_metadata=gamebanana_metadata
+    )
     converter.deltamod_info = metadata
     converter.modding_xml = object()
     return converter
@@ -160,7 +164,9 @@ def test_generate_config_uses_gamebanana_file_name_when_metadata_name_missing():
 
 def test_fallback_mod_name_ignores_gamebanana_file_name_suffixes():
     """Checks that fallback mod name ignores gamebanana file name suffixes."""
-    converter = DeltamodConverter("Vase", "mods", gamebanana_metadata={"file_name": "Vase1.1.0.zip"})
+    converter = DeltamodConverter(
+        "Vase", "mods", gamebanana_metadata={"file_name": "Vase1.1.0.zip"}
+    )
 
     assert converter._fallback_mod_name() == "Vase"
 
@@ -283,9 +289,7 @@ packageID = "example.revision.author"
 
     assert result is not None
     result_dir = tmp_path / "mods" / "Revision Four Mod"
-    config = json.loads(
-        (result_dir / "mod_config.json").read_text(encoding="utf-8")
-    )
+    config = json.loads((result_dir / "mod_config.json").read_text(encoding="utf-8"))
     metadata = config["metadata"]
     assert metadata["id"] == "example_revision_author"
     assert metadata["author"] == "First Author, Second Author"
@@ -294,6 +298,68 @@ packageID = "example.revision.author"
     assert config["files"]["deltarune_3"]["extra_files"] == ["mus/theme.ogg"]
     assert (result_dir / "chapter_3" / "chapter3.g3mpatch").read_bytes() == b"patch"
     assert (result_dir / "chapter_3" / "mus" / "theme.ogg").read_bytes() == b"music"
+
+
+def test_convert_supports_revision_five_csx_and_dependencies(tmp_path):
+    source_dir = tmp_path / "revision5"
+    source_dir.mkdir()
+    (source_dir / "meta.toml").write_text(
+        """
+deltaruneTargetVersion = "1.05"
+
+[metadata]
+name = "Revision Five Mod"
+version = "1.0.0"
+author = ["Author"]
+game = "toby.deltarune"
+packageID = "example.revision.five"
+""",
+        encoding="utf-8",
+    )
+    (source_dir / "modding.xml").write_text(
+        '<patch type="csx" patch="./scripts/build.csx" '
+        'to="./chapter4_windows/data.win" />',
+        encoding="utf-8",
+    )
+    scripts = source_dir / "scripts"
+    scripts.mkdir()
+    (scripts / "build.csx").write_text('#load "main.csx"', encoding="utf-8")
+    (scripts / "main.csx").write_text("// dependency", encoding="utf-8")
+    resources = source_dir / "resources"
+    resources.mkdir()
+    (resources / "map.json").write_text("{}", encoding="utf-8")
+    mods_dir = tmp_path / "mods"
+    mods_dir.mkdir()
+
+    result = DeltamodConverter(str(source_dir), str(mods_dir)).convert()
+
+    assert result is not None
+    result_dir = mods_dir / "Revision Five Mod"
+    config = json.loads((result_dir / "mod_config.json").read_text(encoding="utf-8"))
+    chapter = config["files"]["deltarune_4"]
+    assert chapter["data_file_path"] == "scripts/build.csx"
+    assert chapter["extra_files"] == [
+        {
+            "file_path": "chapter_4/resources/",
+            "status": "dependency",
+        },
+        {
+            "file_path": "chapter_4/scripts/",
+            "status": "dependency",
+        },
+    ]
+    assert (result_dir / "chapter_4" / "scripts" / "build.csx").is_file()
+    assert (result_dir / "chapter_4" / "scripts" / "main.csx").is_file()
+    assert (result_dir / "chapter_4" / "resources" / "map.json").is_file()
+
+
+def test_revision_five_rejects_patch_type_extension_mismatches():
+    converter = _make_converter({"metadata": {"name": "Invalid"}})
+
+    assert converter._is_supported_patch("csx", "build.csx") is True
+    assert converter._is_supported_patch("csx", "build.xdelta") is False
+    assert converter._is_supported_patch("g3mpatch", "patch.zip") is False
+    assert converter._is_supported_patch("override", "helper.csx") is False
 
 
 def test_revision_four_lts_demo_game_id_maps_to_demo():

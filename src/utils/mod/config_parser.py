@@ -7,7 +7,10 @@ from urllib.parse import urlparse
 
 from config.config import CYOP_AFOM_TAG
 from models.game_modes import get_all_games
-from services.migration_service import migrate_mod_config_legacy_fields
+from services.migration_service import (
+    build_extra_file_entry,
+    migrate_mod_config_legacy_fields,
+)
 from utils.file_utils import normalize_chapter_id
 from utils.mod.utils import resolve_mod_icon
 
@@ -90,16 +93,18 @@ def _sanitize_tags(tags_raw) -> list[str]:
     return result
 
 
-def _sanitize_extra_files(extra_files_raw) -> list[str]:
-    result: list[str] = []
-    for extra_file in parse_extra_files_raw(extra_files_raw):
+def _sanitize_extra_files(extra_files_raw) -> list[str | dict[str, str]]:
+    result: list[str | dict[str, str]] = []
+    for entry in parse_extra_file_entries_raw(extra_files_raw):
+        extra_file = entry["file_path"]
         file_path = _normalize_extra_file_path(
             _trim_string(extra_file, MOD_FIELD_LIMITS["file_value"])
         )
         if not file_path:
             continue
-        if file_path not in result:
-            result.append(file_path)
+        value = build_extra_file_entry(file_path, entry["status"])
+        if value not in result:
+            result.append(value)
     return result
 
 
@@ -115,7 +120,9 @@ def _sanitize_info_files(info_files_raw) -> dict[str, str]:
         if not file_path:
             continue
         visibility = str(raw_visibility or "").strip().lower()
-        result[file_path] = visibility if visibility in MOD_INFO_FILE_VISIBILITY else "show"
+        result[file_path] = (
+            visibility if visibility in MOD_INFO_FILE_VISIBILITY else "show"
+        )
     return result
 
 
@@ -202,11 +209,21 @@ def _sanitize_files(
             )
         extra_files = _sanitize_extra_files(ch_info.get("extra_files", []))
         if extra_files:
-            entry["extra_files"] = [
-                _migrate_legacy_layout_path(extra_file, mod_root_path)
-                for extra_file in extra_files
-                if extra_file
-            ]
+            entry["extra_files"] = []
+            for extra_file in extra_files:
+                if isinstance(extra_file, dict):
+                    entry["extra_files"].append(
+                        {
+                            **extra_file,
+                            "file_path": _migrate_legacy_layout_path(
+                                extra_file["file_path"], mod_root_path
+                            ),
+                        }
+                    )
+                else:
+                    entry["extra_files"].append(
+                        _migrate_legacy_layout_path(extra_file, mod_root_path)
+                    )
             if not entry["extra_files"]:
                 entry.pop("extra_files", None)
         normalized[file_key] = entry
@@ -223,8 +240,12 @@ def normalize_mod_config_data(
     changed = migrate_mod_config_legacy_fields(config_data)
     canonical = {
         "config_version": MOD_CONFIG_VERSION,
-        "id": _trim_string(_get_metadata_value(config_data, "id"), MOD_FIELD_LIMITS["id"]),
-        "name": _trim_string(_get_metadata_value(config_data, "name"), MOD_FIELD_LIMITS["name"]),
+        "id": _trim_string(
+            _get_metadata_value(config_data, "id"), MOD_FIELD_LIMITS["id"]
+        ),
+        "name": _trim_string(
+            _get_metadata_value(config_data, "name"), MOD_FIELD_LIMITS["name"]
+        ),
         "version": _trim_string(
             _get_metadata_value(config_data, "version"), MOD_FIELD_LIMITS["version"]
         )
@@ -237,8 +258,12 @@ def normalize_mod_config_data(
             MOD_FIELD_LIMITS["description"],
         ),
         "homepage": _normalize_homepage(_get_metadata_value(config_data, "homepage")),
-        "icon": _trim_string(_get_metadata_value(config_data, "icon"), MOD_FIELD_LIMITS["icon"]),
-        "game": _trim_string(_get_metadata_value(config_data, "game"), MOD_FIELD_LIMITS["game"])
+        "icon": _trim_string(
+            _get_metadata_value(config_data, "icon"), MOD_FIELD_LIMITS["icon"]
+        ),
+        "game": _trim_string(
+            _get_metadata_value(config_data, "game"), MOD_FIELD_LIMITS["game"]
+        )
         or "deltarune",
         "game_version": _trim_string(
             _get_metadata_value(config_data, "game_version"),
@@ -291,9 +316,18 @@ def build_mod_config_data(config_data: dict) -> dict:
 def parse_extra_files_raw(
     extra_files_raw,
     mod_root_path: str | None = None,
-    ) -> list[str]:
+) -> list[str]:
     """Parse extra_files data from a chapter config into a list."""
-    result: list[str] = []
+    entries = parse_extra_file_entries_raw(extra_files_raw, mod_root_path)
+    return [entry["file_path"] for entry in entries if entry["status"] == "install"]
+
+
+def parse_extra_file_entries_raw(
+    extra_files_raw,
+    mod_root_path: str | None = None,
+) -> list[dict[str, str]]:
+    """Parse extra files while preserving their extensible deployment status."""
+    result: list[dict[str, str]] = []
     if not extra_files_raw:
         return result
 
@@ -306,17 +340,18 @@ def parse_extra_files_raw(
         resolved = os.path.normpath(os.path.join(mod_root_path, join_path))
         return resolved + os.sep if preserve_trailing_slash else resolved
 
-    def _append_entry(file_path: str):
+    def _append_entry(file_path: str, status: object = "install") -> None:
         resolved_path = _resolve_runtime_path(file_path)
         if resolved_path:
-            result.append(resolved_path)
+            normalized_status = str(status or "install").strip().lower()
+            result.append({"file_path": resolved_path, "status": normalized_status})
 
     if isinstance(extra_files_raw, list):
         for ef_data in extra_files_raw:
             if isinstance(ef_data, dict):
                 file_path = ef_data.get("file_path") or ef_data.get("url", "")
-                if file_path:
-                    _append_entry(file_path)
+                if isinstance(file_path, str) and file_path:
+                    _append_entry(file_path, ef_data.get("status"))
             elif isinstance(ef_data, str):
                 _append_entry(ef_data)
     elif isinstance(extra_files_raw, dict):
@@ -384,8 +419,6 @@ def normalize_files_data(files_data: dict, game: str | None = None) -> dict:
         normalized[raw_file_key] = {
             "description": ch_info.get("description"),
             "data_file_path": ch_info.get("data_file_path"),
-            "extra_files": parse_extra_files_raw(
-                ch_info.get("extra_files", [])
-            ),
+            "extra_files": parse_extra_files_raw(ch_info.get("extra_files", [])),
         }
     return normalized

@@ -1,6 +1,5 @@
 """Game launch and mod patching management."""
 
-import contextlib
 import errno
 import logging
 import os
@@ -10,19 +9,21 @@ import subprocess
 import time
 from typing import Any
 
-from PyQt6.QtCore import QObject, QProcess, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QProcess, QTimer, pyqtSignal
 
 from config.config import UI_COLORS
+from services.background_operations import background_operations
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.game_detection_service import (
     get_game_name_string,
     get_game_type_string,
     get_matching_process_identities,
 )
+from services.launch_transaction import LaunchState, LaunchTransaction
 from services.localization_service import tr
 from services.warning_service import create_warning_event, is_warning_enabled
 from ui.common.styling import get_launch_status_color
-from ui.utils.thread_lifetime import retire_qthread
+from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from utils.file_utils import ensure_writable
 from utils.native_integration import open_url_native
 from utils.path_utils import (
@@ -56,12 +57,12 @@ class GameLauncher(QObject):
         self.feedback_service = feedback_service
         self.mod_service = mod_service
         self.monitor_thread = None
+        self.monitor_worker = None
         self._direct_launch_cleanup_info = None
         self.mod_patcher = G3MToolPatchingService(app_state, mod_service, parent)
         self.mod_patcher.status_update.connect(self._on_patching_status)
         self.mod_patcher.progress_update.connect(self._on_patching_progress)
         self._patching_thread = None
-        self._retiring_patching_threads: list[QThread] = []
         self._plugin_hook_thread = None
         self.restore_window_callback = None
         self._launch_started_at = None
@@ -69,22 +70,52 @@ class GameLauncher(QObject):
         self._launch_mod_refs: list[dict[str, str]] = []
         self._launch_mode = "unknown"
         self._launch_had_mods = False
+        self._game_process = None
+        self.launch_transaction = LaunchTransaction()
 
     def _stop_monitor_thread(self):
-        if not self.monitor_thread:
+        thread = self.monitor_thread
+        worker = self.monitor_worker
+        if not thread:
             return
+        self.monitor_thread = None
+        self.monitor_worker = None
         try:
-            if self.monitor_thread.isRunning():
-                self.monitor_thread.requestInterruption()
-                self.monitor_thread.quit()
-            self.monitor_thread.deleteLater()
-            if hasattr(self, "monitor_worker") and self.monitor_worker is not None:
-                self.monitor_worker.deleteLater()
+            if thread.isRunning():
+                thread.requestInterruption()
+                thread.quit()
+            self._retire_monitor(thread, worker)
         except Exception as e:
             logger.error(f"monitor thread cleanup failed: {e}", exc_info=True)
 
+    def _retire_monitor(self, thread, worker) -> None:
+        if thread is None:
+            return
+        thread._g3m_worker = worker
+        retire_qthread(thread)
+
     def _launch_status_color(self) -> str:
         return get_launch_status_color(getattr(self.app_state, "local_config", None))
+
+    def _start_game_monitor(
+        self,
+        process,
+        vanilla_mode: bool,
+        process_names: tuple[str, ...],
+        baseline_processes,
+    ) -> None:
+        thread = ManagedQThread(self)
+        worker = GameMonitorWorker(
+            process, vanilla_mode, process_names, baseline_processes
+        )
+        worker.moveToThread(thread)
+        thread.finished.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(self._on_game_process_finished)
+        thread.started.connect(worker.run)
+        self.monitor_thread = thread
+        self.monitor_worker = worker
+        thread.start()
 
     def _safe_feedback_status(self, message: str, color: str) -> None:
         try:
@@ -95,9 +126,7 @@ class GameLauncher(QObject):
     @staticmethod
     def _is_path_like_command(command_name: str) -> bool:
         return bool(command_name) and (
-            os.path.isabs(command_name)
-            or "/" in command_name
-            or "\\" in command_name
+            os.path.isabs(command_name) or "/" in command_name or "\\" in command_name
         )
 
     def _translate_missing_launch_command(self, command_name: str) -> str:
@@ -134,7 +163,11 @@ class GameLauncher(QObject):
             )
 
         if isinstance(launch_error, FileNotFoundError) or error_errno == errno.ENOENT:
-            if error_path and target_path and os.path.abspath(error_path) == os.path.abspath(target_path):
+            if (
+                error_path
+                and target_path
+                and os.path.abspath(error_path) == os.path.abspath(target_path)
+            ):
                 return tr("errors.launch_target_missing", path=target_path)
             if error_path and command_name and error_path == command_name:
                 return self._translate_missing_launch_command(command_name)
@@ -175,7 +208,9 @@ class GameLauncher(QObject):
 
     def _discord_rich_presence_service(self):
         parent = self.parent()
-        return getattr(parent, "discord_rich_presence_service", None) if parent else None
+        return (
+            getattr(parent, "discord_rich_presence_service", None) if parent else None
+        )
 
     def _safe_discord_rich_presence_call(self, method_name: str, *args) -> None:
         service = self._discord_rich_presence_service()
@@ -236,6 +271,7 @@ class GameLauncher(QObject):
         selections: dict[str, Any],
         restore_window_callback=None,
     ):
+        self.launch_transaction.begin()
         self._launch_started_at = time.monotonic()
         self._launch_mod_ids = self._collect_launch_mod_ids(selections)
         self._launch_mod_refs = self._collect_launch_mod_refs(selections)
@@ -245,6 +281,23 @@ class GameLauncher(QObject):
         self.status_changed.emit(
             tr("status.launching_game"), self._launch_status_color()
         )
+        backup_service = getattr(self.mod_patcher, "backup_service", None)
+        has_pending_backups = bool(
+            backup_service
+            and (backup_service.original_files or backup_service.added_files)
+        )
+        if has_pending_backups:
+            self.launch_transaction.transition(LaunchState.RECOVERING)
+            if not self._try_restore_backups("[PRE-LAUNCH]"):
+                self.launch_transaction.fail("pending-restore")
+                self.status_changed.emit(
+                    tr("errors.pending_session_restore_failed"),
+                    UI_COLORS["status_error"],
+                )
+                self._handle_launch_failure("restore")
+                return
+            self.launch_transaction.transition(LaunchState.COMPLETED)
+            self.launch_transaction.begin()
         has_selected_mods = self._launch_had_mods
         current_path = self._get_current_game_path()
         if not current_path or not os.path.exists(current_path):
@@ -279,6 +332,7 @@ class GameLauncher(QObject):
             f"Multi-mod check: needs_multi_mod={needs_multi_mod} (has_list_format={has_list_format})"
         )
         if needs_multi_mod:
+            self.launch_transaction.begin_apply()
             logger.info("Using multi-mod patcher for game launch")
             self.app_state.progress_bar_visible = True
             self.app_state.progress_bar_value = 0
@@ -297,6 +351,11 @@ class GameLauncher(QObject):
             self._continue_after_patching(selections, True, needs_multi_mod)
 
     def _handle_launch_failure(self, reason: str = "unknown"):
+        if self.launch_transaction.state not in {
+            LaunchState.COMPLETED,
+            LaunchState.FAILED,
+        }:
+            self.launch_transaction.fail(reason)
         if self.restore_window_callback:
             self.restore_window_callback()
         parent = self.parent()
@@ -314,18 +373,20 @@ class GameLauncher(QObject):
             self._handle_launch_failure()
             return
         try:
+            if self.launch_transaction.state in {
+                LaunchState.IDLE,
+                LaunchState.COMPLETED,
+                LaunchState.FAILED,
+            }:
+                self.launch_transaction.begin()
+            self.launch_transaction.mark_launching()
             self._stop_monitor_thread()
             process_names = self._expected_process_names(target_path)
             baseline_processes = get_matching_process_identities(process_names)
             if launch_type == "url":
-                self.monitor_thread = QThread(self)
-                self.monitor_worker = GameMonitorWorker(
+                self._start_game_monitor(
                     None, vanilla_mode, process_names, baseline_processes
                 )
-                self.monitor_worker.moveToThread(self.monitor_thread)
-                self.monitor_worker.finished.connect(self._on_game_process_finished)
-                self.monitor_thread.started.connect(self.monitor_worker.run)
-                self.monitor_thread.start()
                 system = platform.system()
                 if system == "Linux":
                     if not self._start_detached_command("steam", [target_path]):
@@ -346,6 +407,7 @@ class GameLauncher(QObject):
                 self._safe_discord_rich_presence_call(
                     "on_after_game_started", vanilla_mode
                 )
+                self.launch_transaction.mark_running()
                 return
             if not working_directory or not os.path.isdir(working_directory):
                 msg = tr("errors.working_directory_not_found", path=working_directory)
@@ -381,9 +443,7 @@ class GameLauncher(QObject):
                     if not is_steam_launch:
                         if use_portproton:
                             command = [
-                                resolve_portproton_command(
-                                    self.app_state.local_config
-                                ),
+                                resolve_portproton_command(self.app_state.local_config),
                                 "run",
                                 target_path,
                             ]
@@ -417,26 +477,23 @@ class GameLauncher(QObject):
             self.status_changed.emit(
                 tr("status.game_launched_waiting_for_exit"), self._launch_status_color()
             )
-            self.monitor_thread = QThread(self)
-            self.monitor_worker = GameMonitorWorker(
+            self._start_game_monitor(
                 process, vanilla_mode, process_names, baseline_processes
             )
-            self.monitor_worker.moveToThread(self.monitor_thread)
-            self.monitor_worker.finished.connect(self._on_game_process_finished)
-            self.monitor_thread.started.connect(self.monitor_worker.run)
-            self.monitor_thread.start()
+            if process is not None:
+                self._game_process = process
+                background_operations.register_process(
+                    process, cancel=lambda: None, owner=self
+                )
+            self.launch_transaction.mark_running()
             self._execute_plugin_hook("after_game_started", vanilla_mode)
-            self._safe_discord_rich_presence_call(
-                "on_after_game_started", vanilla_mode
-            )
+            self._safe_discord_rich_presence_call("on_after_game_started", vanilla_mode)
         except Exception as e:
             self.status_changed.emit(
-                self._format_launch_error(
-                    e, command=command, target_path=target_path
-                ),
+                self._format_launch_error(e, command=command, target_path=target_path),
                 "red",
             )
-            self._handle_launch_failure()
+            self._handle_launch_failure("execute")
 
     def _expected_process_names(self, target_path: str) -> tuple[str, ...]:
         names = [
@@ -459,18 +516,21 @@ class GameLauncher(QObject):
             return bool(started)
         except Exception:
             try:
-                subprocess.Popen(
+                process = subprocess.Popen(
                     [program, *arguments],
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
                 )
+                background_operations.track_process(process, cancel=lambda: None)
                 return True
             except Exception:
                 return False
 
     def _on_game_process_finished(self, vanilla_mode: bool):
+        background_operations.release_process(self._game_process)
+        self._game_process = None
         self._check_game_running(vanilla_mode)
 
     def _check_game_running(self, vanilla_mode):
@@ -493,9 +553,6 @@ class GameLauncher(QObject):
         self._cleanup_direct_launch_files()
         if self.monitor_thread:
             self._stop_monitor_thread()
-            self.monitor_thread = None
-            if hasattr(self, "monitor_worker"):
-                self.monitor_worker = None
         self.game_launch_finished.emit()
         self._execute_plugin_hook("after_restore_after_exit", vanilla_mode)
         self._safe_discord_rich_presence_call(
@@ -518,7 +575,11 @@ class GameLauncher(QObject):
             return
         parent = self.parent()
         mod_service = getattr(parent, "mod_service", None) if parent else None
-        if self._launch_mod_ids and mod_service and hasattr(mod_service, "add_playtime_hours"):
+        if (
+            self._launch_mod_ids
+            and mod_service
+            and hasattr(mod_service, "add_playtime_hours")
+        ):
             mod_service.add_playtime_hours(self._launch_mod_ids, elapsed / 3600.0)
 
     @staticmethod
@@ -726,10 +787,7 @@ class GameLauncher(QObject):
         session_manifest_path = os.path.join(self.app_state.config_dir, "session.lock")
         patch_plan = PatchPlan.from_runtime(chapter_mods)
         plan_mods = [
-            mod
-            for steps in chapter_mods.values()
-            for step in steps
-            for mod in step
+            mod for steps in chapter_mods.values() for step in steps for mod in step
         ]
         self._patching_thread = ModPatchingThread(
             self.app_state,
@@ -768,24 +826,8 @@ class GameLauncher(QObject):
             try:
                 if patching_thread.patcher:
                     self.mod_patcher = patching_thread.patcher
-                self._retiring_patching_threads.append(patching_thread)
-                cleaned_up = False
-
-                def cleanup_patching_thread():
-                    nonlocal cleaned_up
-                    if cleaned_up:
-                        return
-                    cleaned_up = True
-                    if patching_thread.patcher:
-                        self.mod_patcher = patching_thread.patcher
-                    with contextlib.suppress(ValueError):
-                        self._retiring_patching_threads.remove(patching_thread)
-                    patching_thread.deleteLater()
-
-                patching_thread.finished.connect(cleanup_patching_thread)
-                if not patching_thread.isRunning():
-                    cleanup_patching_thread()
-                else:
+                retire_qthread(patching_thread)
+                if patching_thread.isRunning():
                     logger.debug(
                         "Patching thread still running, will clean up via finished signal"
                     )
@@ -811,7 +853,21 @@ class GameLauncher(QObject):
             return False
         try:
             restored = self.mod_patcher.restore_all_backups()
-            if restored and emit_status:
+            external_changes = getattr(
+                self.mod_patcher, "last_restore_external_changes", []
+            )
+            if restored and external_changes:
+                logger.warning(
+                    "%s: skipped restoration for externally changed files: %s",
+                    context,
+                    external_changes[:3],
+                )
+                if emit_status:
+                    self.status_changed.emit(
+                        tr("status.restore_skipped_external_changes"),
+                        UI_COLORS["status_warning"],
+                    )
+            elif restored and emit_status:
                 logger.info(f"{context}: backups restored successfully")
                 self.status_changed.emit(
                     tr("status.files_restored"), UI_COLORS["status_success"]
@@ -858,7 +914,9 @@ class GameLauncher(QObject):
             hook_args,
             base_progress=base_progress,
             progress_span=progress_span,
-            backup_manager_provider=lambda: getattr(self.mod_patcher, "backup_service", None),
+            backup_manager_provider=lambda: getattr(
+                self.mod_patcher, "backup_service", None
+            ),
             restore_backups_callback=self._restore_host_backups_for_plugin_task,
             parent=self,
         )
@@ -878,7 +936,9 @@ class GameLauncher(QObject):
         self.app_state.clear_current_task()
         self.app_state.action_button_text = None
 
-    def _on_plugin_hook_finished(self, hook_args: tuple[Any, ...], success: bool) -> None:
+    def _on_plugin_hook_finished(
+        self, hook_args: tuple[Any, ...], success: bool
+    ) -> None:
         thread = self._plugin_hook_thread
         self._plugin_hook_thread = None
         if thread:
@@ -887,7 +947,9 @@ class GameLauncher(QObject):
         needs_multi_mod = bool(hook_args[1]) if len(hook_args) > 1 else False
         if not success:
             self._finish_background_launch_operation()
-            if thread and (thread.isInterruptionRequested() or getattr(thread, "_cancelled", False)):
+            if thread and (
+                thread.isInterruptionRequested() or getattr(thread, "_cancelled", False)
+            ):
                 logger.info("Plugin hook execution was cancelled by user")
             self._cleanup_direct_launch_files()
             self._handle_launch_failure("plugin")
@@ -957,6 +1019,20 @@ class GameLauncher(QObject):
             self._handle_launch_failure("config")
             return
         self._launch_mode = str(launch_config.get("type", "unknown"))
+        if needs_multi_mod:
+            deployed = self.launch_transaction.mark_deployed(
+                self.mod_patcher.finalize_session_state
+            )
+        else:
+            deployed = self.mod_patcher.finalize_session_state()
+        if not deployed:
+            self.status_changed.emit(
+                tr("errors.pending_session_restore_failed"),
+                UI_COLORS["status_error"],
+            )
+            self._cleanup_direct_launch_files()
+            self._handle_launch_failure("recovery-state")
+            return
         if needs_multi_mod and self.restore_window_callback:
             self.game_launch_started.emit()
         self._execute_game(launch_config)
@@ -973,12 +1049,38 @@ class GameLauncher(QObject):
 
     def _cleanup_direct_launch_files(self):
         restore_errors = []
+        restore_skipped_external_changes = False
         try:
             try:
-                self._try_restore_backups("[CLEANUP]", emit_status=False)
+                backup_service = getattr(self.mod_patcher, "backup_service", None)
+                has_pending_backups = bool(
+                    backup_service
+                    and (backup_service.original_files or backup_service.added_files)
+                )
 
-                if hasattr(self, "mod_patcher") and self.mod_patcher:
-                    self.mod_patcher.clear_session()
+                def restore_pending() -> bool:
+                    return not has_pending_backups or self._try_restore_backups(
+                        "[CLEANUP]", emit_status=False
+                    )
+
+                if self.launch_transaction.state in {
+                    LaunchState.PREPARING,
+                    LaunchState.BACKING_UP,
+                    LaunchState.APPLYING,
+                    LaunchState.DEPLOYED,
+                    LaunchState.LAUNCHING,
+                    LaunchState.RUNNING,
+                    LaunchState.CANCELLED,
+                    LaunchState.FAILED,
+                }:
+                    restored = self.launch_transaction.restore(restore_pending)
+                else:
+                    restored = restore_pending()
+                if not restored:
+                    restore_errors.append("pending session restore failed")
+                restore_skipped_external_changes = bool(
+                    getattr(self.mod_patcher, "last_restore_external_changes", [])
+                )
             except Exception as e:
                 restore_errors.append(str(e))
             cleanup_info = self._direct_launch_cleanup_info
@@ -1006,6 +1108,11 @@ class GameLauncher(QObject):
                     tr("errors.files_restore_error", error=str(restore_errors[0])),
                     UI_COLORS["status_error"],
                 )
+            elif restore_skipped_external_changes:
+                self.status_changed.emit(
+                    tr("status.restore_skipped_external_changes"),
+                    UI_COLORS["status_warning"],
+                )
             else:
                 self.status_changed.emit(
                     tr("status.files_restored"), UI_COLORS["status_success"]
@@ -1023,6 +1130,8 @@ class GameLauncher(QObject):
             manifest_path = os.path.join(self.app_state.config_dir, "session.lock")
             if not os.path.isfile(manifest_path):
                 return
+            self.launch_transaction = LaunchTransaction()
+            self.launch_transaction.transition(LaunchState.RECOVERING)
             logger.warning(
                 f"Found stale session manifest: {manifest_path} - previous session may have crashed"
             )
@@ -1036,9 +1145,29 @@ class GameLauncher(QObject):
                 if not backup_mgr.original_files and not backup_mgr.added_files:
                     logger.info("Session manifest has no tracked files, cleaning up")
                     backup_mgr.clear_backup_dir()
+                    self.launch_transaction.transition(LaunchState.COMPLETED)
                     return
-                backup_mgr.restore_all_backups()
+                if not backup_mgr.restore_all_backups():
+                    if backup_mgr.external_changes:
+                        archive = backup_mgr.archive_conflicted_session()
+                        if not archive:
+                            raise OSError(
+                                "externally changed game files could not be archived"
+                            )
+                        logger.warning(
+                            "Recovery skipped because tracked files changed externally; "
+                            "backup archived at %s",
+                            archive,
+                        )
+                        self._safe_feedback_status(
+                            tr("status.restore_skipped_external_changes"),
+                            UI_COLORS["status_warning"],
+                        )
+                        self.launch_transaction.transition(LaunchState.COMPLETED)
+                        return
+                    raise OSError("one or more game files could not be restored")
                 backup_mgr.clear_backup_dir()
+                self.launch_transaction.transition(LaunchState.COMPLETED)
                 logger.info(
                     "recover_previous_session: game files restored successfully"
                 )
@@ -1046,6 +1175,7 @@ class GameLauncher(QObject):
                     tr("status.files_restored"), UI_COLORS["status_success"]
                 )
             except Exception as e:
+                self.launch_transaction.fail("recovery")
                 logger.error(
                     f"recover_previous_session: Failed to restore from manifest: {e}",
                     exc_info=True,
@@ -1055,6 +1185,8 @@ class GameLauncher(QObject):
                     UI_COLORS["status_error"],
                 )
         except Exception as e:
+            if self.launch_transaction.state == LaunchState.RECOVERING:
+                self.launch_transaction.fail("recovery")
             logger.error(f"recover_previous_session: Failed: {e}", exc_info=True)
 
     def _find_and_validate_game_path(

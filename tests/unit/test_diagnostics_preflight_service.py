@@ -11,6 +11,7 @@ from services.diagnostics.preflight_service import (
     PreflightReport,
     PreflightResourceChange,
     PreflightStepResult,
+    _merge_report_conflicts,
     export_preflight_report,
 )
 from services.warning_service import create_warning_event
@@ -60,6 +61,27 @@ def test_preflight_report_serialization_is_deterministic():
 
     assert report.to_dict() == report.to_dict()
     assert report.to_dict()["resources"][0]["name"] == "<script>"
+
+
+def test_preflight_extracts_resources_from_g3mtool_merge_report(tmp_path):
+    report_path = tmp_path / "merge.md"
+    report_path.write_text(
+        "# G3MTool Merge Report\n\n"
+        "## CodeEntries\n\n"
+        "| File | Status | Strategy | Winner | Details |\n"
+        "|---|---|---|---|---|\n"
+        "| gml_Object_test_Create_0 | **Conflict** | Overwrite | mod-b | |\n",
+        encoding="utf-8",
+    )
+
+    conflicts = _merge_report_conflicts(
+        str(report_path), "deltarune_4", 1, ("mod-a", "mod-b")
+    )
+
+    assert len(conflicts) == 1
+    assert conflicts[0].resource_type == "CodeEntries"
+    assert conflicts[0].name == "gml_Object_test_Create_0"
+    assert conflicts[0].operation == "conflict"
 
 
 def test_preflight_export_writes_equivalent_json_and_safe_html(tmp_path):
@@ -114,12 +136,16 @@ def test_preflight_executes_steps_in_order_without_changing_source_game(tmp_path
         SimpleNamespace(game_mode=SimpleNamespace(game_id="test"), local_config={}),
         SimpleNamespace(),
         patcher_factory=FakePatcher,
-        data_file_locator=lambda root, _section: str(tmp_path.__class__(root) / "data.win"),
+        data_file_locator=lambda root, _section: str(
+            tmp_path.__class__(root) / "data.win"
+        ),
         resource_diff_builder=lambda *_args, **_kwargs: (),
     )
     plan = PatchPlan.from_runtime({"section": [[mods[0]], [mods[1]]]})
 
-    report = service.run(plan, lambda mod_id: next((m for m in mods if m.id == mod_id), None), str(game))
+    report = service.run(
+        plan, lambda mod_id: next((m for m in mods if m.id == mod_id), None), str(game)
+    )
 
     assert report.success is True
     assert [step.mod_ids for step in report.steps] == [("base_mod",), ("addon_mod",)]
@@ -164,12 +190,16 @@ def test_preflight_cancellation_stops_before_next_step_and_cleans_up(tmp_path):
         SimpleNamespace(game_mode=SimpleNamespace(game_id="test"), local_config={}),
         SimpleNamespace(),
         patcher_factory=FakePatcher,
-        data_file_locator=lambda root, _section: str(tmp_path.__class__(root) / "data.win"),
+        data_file_locator=lambda root, _section: str(
+            tmp_path.__class__(root) / "data.win"
+        ),
         resource_diff_builder=lambda *_args, **_kwargs: (),
     )
     plan = PatchPlan.from_runtime({"section": [[mods[0]], [mods[1]]]})
 
-    report = service.run(plan, lambda mod_id: next((m for m in mods if m.id == mod_id), None), str(game))
+    report = service.run(
+        plan, lambda mod_id: next((m for m in mods if m.id == mod_id), None), str(game)
+    )
 
     assert report.cancelled is True
     assert "second" not in calls
@@ -199,6 +229,14 @@ def test_preflight_rejects_patch_fallback_and_reports_exact_tool_error(tmp_path)
     game.mkdir()
     (game / "data.win").write_text("base", encoding="utf-8")
     mod = SimpleNamespace(id="broken_xdelta")
+    merge_report = tmp_path / "merge.md"
+    merge_report.write_text(
+        "## CodeEntries\n\n"
+        "| File | Status | Strategy | Winner | Details |\n"
+        "|---|---|---|---|---|\n"
+        "| gml_Object_test_Create_0 | **Conflict** | Overwrite | mod-b | |\n",
+        encoding="utf-8",
+    )
 
     class FailingPatcher:
         strict_warning_handler: Callable[..., bool] | None = None
@@ -219,6 +257,14 @@ def test_preflight_rejects_patch_fallback_and_reports_exact_tool_error(tmp_path)
             )
             warning_handler = self.strict_warning_handler
             assert warning_handler is not None
+            warning_handler(
+                create_warning_event(
+                    "merge_conflicts_detected",
+                    context={"count": 1},
+                ),
+                "1 merge conflict",
+                str(merge_report),
+            )
             return warning_handler(
                 event,
                 "xdelta3: target window checksum mismatch: XD3_INVALID_INPUT",
@@ -235,7 +281,9 @@ def test_preflight_rejects_patch_fallback_and_reports_exact_tool_error(tmp_path)
         SimpleNamespace(game_mode=SimpleNamespace(game_id="test"), local_config={}),
         SimpleNamespace(),
         patcher_factory=FailingPatcher,
-        data_file_locator=lambda root, _section: str(tmp_path.__class__(root) / "data.win"),
+        data_file_locator=lambda root, _section: str(
+            tmp_path.__class__(root) / "data.win"
+        ),
     )
 
     report = service.run(
@@ -248,6 +296,8 @@ def test_preflight_rejects_patch_fallback_and_reports_exact_tool_error(tmp_path)
     assert report.steps[0].success is False
     assert "XD3_INVALID_INPUT" in report.steps[0].error
     assert "XD3_INVALID_INPUT" in report.issues[0]
+    assert report.conflict_count == 1
+    assert report.resources[0].name == "gml_Object_test_Create_0"
 
 
 def test_preflight_reports_real_target_permission_failure(tmp_path, monkeypatch):

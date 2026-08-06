@@ -10,6 +10,7 @@ import requests
 
 class TestModManager:
     """Tests for managers."""
+
     def test_mod_service_initialization(self, app_state, feedback_service):
         """Checks that mod service initialization."""
         from services.mod.service import ModManager
@@ -94,6 +95,7 @@ class TestModManager:
 
 class TestSettingsManager:
     """Tests for managers."""
+
     def test_settings_service_initialization(self, app_state, feedback_service, qapp):
         """Checks that settings service initialization."""
         from services.localization_service import localization_service
@@ -266,7 +268,9 @@ class TestSettingsManager:
 
         archive_path = tmp_path / "theme.zip"
         with zipfile.ZipFile(archive_path, "w") as zipf:
-            zipf.writestr("theme_config.json", json.dumps({"custom_border_color": "#ABCDEF"}))
+            zipf.writestr(
+                "theme_config.json", json.dumps({"custom_border_color": "#ABCDEF"})
+            )
 
         manager._install_theme_from_file(str(archive_path))
 
@@ -288,7 +292,9 @@ class TestSettingsManager:
         )
         manager.feedback_service.show_message = Mock()
         manager.parent_widget = Mock()
-        manager.parent_widget.do_not_save_theme_checkbox = Mock(isChecked=Mock(return_value=True))
+        manager.parent_widget.do_not_save_theme_checkbox = Mock(
+            isChecked=Mock(return_value=True)
+        )
 
         archive_path = tmp_path / "broken_theme.zip"
         with patch("zipfile.ZipFile") as zip_cls:
@@ -343,9 +349,7 @@ class TestSettingsManager:
             ),
             patch(
                 "services.settings_service.apply_theme_archive",
-                side_effect=PermissionError(
-                    13, "Permission denied", str(locked_path)
-                ),
+                side_effect=PermissionError(13, "Permission denied", str(locked_path)),
             ),
         ):
             manager._install_theme_from_file(str(archive_path))
@@ -374,7 +378,9 @@ class TestSettingsManager:
         script_path = tmp_path / "tool"
         script_path.write_bytes(b"#!/bin/sh\necho ok\n")
         script_path.chmod(0o755)
-        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "services.settings_service.platform.system", lambda: "Linux"
+        )
 
         assert manager.validate_executable_path(str(script_path)) is True
 
@@ -401,7 +407,9 @@ class TestSettingsManager:
             def wait(self, timeout=None):
                 return 0
 
-        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "services.settings_service.platform.system", lambda: "Windows"
+        )
         monkeypatch.setattr(
             "services.settings_service.subprocess.CREATE_NO_WINDOW",
             0x08000000,
@@ -435,7 +443,9 @@ class TestSettingsManager:
         )
         exe_path = tmp_path / "bad.exe"
         exe_path.write_bytes(b"MZ")
-        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "services.settings_service.platform.system", lambda: "Windows"
+        )
 
         monkeypatch.setattr(
             "services.settings_service.subprocess.Popen",
@@ -466,7 +476,9 @@ class TestSettingsManager:
         monkeypatch.setattr(
             manager,
             "get_executable_path_error",
-            lambda *_args, **_kwargs: "Configured launch executable was not found: C:/bad.bin",
+            lambda *_args, **_kwargs: (
+                "Configured launch executable was not found: C:/bad.bin"
+            ),
         )
 
         assert manager.select_executable_path("Select binary") is None
@@ -489,9 +501,8 @@ class TestSettingsManager:
             parent=qapp,
         )
 
-        assert (
-            manager.get_executable_path_error("C:/missing/tool.exe")
-            == tr("errors.launch_command_missing_path", path="C:/missing/tool.exe")
+        assert manager.get_executable_path_error("C:/missing/tool.exe") == tr(
+            "errors.launch_command_missing_path", path="C:/missing/tool.exe"
         )
 
     def test_get_executable_path_error_reports_windows_permission_denied(
@@ -508,7 +519,9 @@ class TestSettingsManager:
         )
         exe_path = tmp_path / "tool.exe"
         exe_path.write_bytes(b"MZ")
-        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "services.settings_service.platform.system", lambda: "Windows"
+        )
         monkeypatch.setattr(
             "services.settings_service.subprocess.Popen",
             lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -516,12 +529,13 @@ class TestSettingsManager:
             ),
         )
 
-        assert (
-            manager.get_executable_path_error(str(exe_path))
-            == tr("errors.launch_permission_denied", path=str(exe_path))
+        assert manager.get_executable_path_error(str(exe_path)) == tr(
+            "errors.launch_permission_denied", path=str(exe_path)
         )
 
-    def test_describe_fs_error_reports_missing_file(self, app_state, feedback_service, qapp):
+    def test_describe_fs_error_reports_missing_file(
+        self, app_state, feedback_service, qapp
+    ):
         from services.localization_service import localization_service, tr
         from services.settings_service import SettingsManager
 
@@ -532,12 +546,9 @@ class TestSettingsManager:
             parent=qapp,
         )
 
-        assert (
-            manager._describe_fs_error(
-                FileNotFoundError(2, "No such file", "C:/missing/file.png")
-            )
-            == tr("errors.file_not_found", path="C:/missing/file.png")
-        )
+        assert manager._describe_fs_error(
+            FileNotFoundError(2, "No such file", "C:/missing/file.png")
+        ) == tr("errors.file_not_found", path="C:/missing/file.png")
 
     def test_validate_selected_game_path_requires_supported_executable_without_custom_exe(
         self, app_state, feedback_service, qapp, tmp_path, monkeypatch
@@ -553,7 +564,10 @@ class TestSettingsManager:
         )
         game_dir = tmp_path / "game"
         game_dir.mkdir()
-        monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(
+            "services.settings_service.resolve_game_executable",
+            lambda *_args, **_kwargs: None,
+        )
 
         assert manager.validate_selected_game_path(str(game_dir)) is False
 
@@ -571,8 +585,13 @@ class TestSettingsManager:
         )
         game_dir = tmp_path / "game"
         game_dir.mkdir()
-        app_state.local_config[app_state.game_mode.get_custom_exec_config_key()] = "C:/custom.exe"
-        monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
+        app_state.local_config[app_state.game_mode.get_custom_exec_config_key()] = (
+            "C:/custom.exe"
+        )
+        monkeypatch.setattr(
+            "services.settings_service.resolve_game_executable",
+            lambda *_args, **_kwargs: None,
+        )
 
         assert manager.validate_selected_game_path(str(game_dir)) is True
 
@@ -600,7 +619,10 @@ class TestSettingsManager:
             "services.settings_service.get_existing_directory",
             lambda *args, **kwargs: str(invalid_dir),
         )
-        monkeypatch.setattr("services.settings_service.resolve_game_executable", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(
+            "services.settings_service.resolve_game_executable",
+            lambda *_args, **_kwargs: None,
+        )
 
         assert manager.prompt_for_game_path(is_initial=False) is False
         assert app_state.game_mode.get_game_path(app_state.local_config) == ""
@@ -629,7 +651,9 @@ class TestSettingsManager:
             captured["directory_parent"] = parent
             return ""
 
-        monkeypatch.setattr("services.settings_service.platform.system", lambda: "Darwin")
+        monkeypatch.setattr(
+            "services.settings_service.platform.system", lambda: "Darwin"
+        )
         monkeypatch.setattr(
             "services.settings_service.get_open_file_name",
             fake_get_open_file_name,
@@ -646,6 +670,7 @@ class TestSettingsManager:
 
 class TestLocalizationManager:
     """Tests for managers."""
+
     def test_custom_font_is_loaded_from_memory(self, tmp_path):
         from services.localization_service import add_application_font_from_file
 
@@ -683,6 +708,7 @@ class TestLocalizationManager:
 
 class TestLaunchManager:
     """Tests for managers."""
+
     def test_launch_service_initialization(self, app_state, feedback_service):
         """Checks that launch service initialization."""
         from services.launch_service import GameLauncher
@@ -763,6 +789,89 @@ class TestLaunchManager:
         launcher.restore_window_callback.assert_called_once()
         parent.game_launch.update_button_state.assert_called_once()
 
+    def test_empty_profile_restores_pending_mod_before_launch(
+        self, app_state, feedback_service, tmp_path
+    ):
+        from services.backup_service import BackupManager
+        from services.launch_service import GameLauncher
+
+        target = tmp_path / "data.win"
+        target.write_bytes(b"ORIGINAL")
+        launcher = GameLauncher(app_state, feedback_service, Mock())
+        launcher.mod_patcher.backup_service = BackupManager(str(tmp_path / "backups"))
+        assert launcher.mod_patcher.backup_service.backup_file(
+            "deltarune_1", str(target)
+        )
+        target.write_bytes(b"MODDED")
+        launcher._has_selected_mods = Mock(return_value=False)
+        launcher._get_current_game_path = Mock(return_value=str(tmp_path))
+        launcher._continue_after_patching = Mock()
+
+        launcher._launch_game_with_selections({})
+
+        assert target.read_bytes() == b"ORIGINAL"
+        launcher._continue_after_patching.assert_called_once_with({}, True, False)
+
+    def test_pending_restore_failure_blocks_launch_and_keeps_recovery(
+        self, app_state, feedback_service, tmp_path
+    ):
+        from services.backup_service import BackupManager
+        from services.launch_service import GameLauncher
+
+        target = tmp_path / "data.win"
+        target.write_bytes(b"ORIGINAL")
+        launcher = GameLauncher(app_state, feedback_service, Mock())
+        manager = BackupManager(str(tmp_path / "backups"))
+        launcher.mod_patcher.backup_service = manager
+        assert manager.backup_file("undertale", str(target))
+        target.write_bytes(b"MODDED")
+        os.remove(manager.original_files["undertale"][str(target)])
+        launcher._continue_after_patching = Mock()
+        launcher._handle_launch_failure = Mock()
+
+        launcher._launch_game_with_selections({})
+
+        assert target.read_bytes() == b"MODDED"
+        assert manager.original_files
+        launcher._continue_after_patching.assert_not_called()
+        launcher._handle_launch_failure.assert_called_once_with("restore")
+
+    def test_running_monitor_is_retained_until_native_thread_finishes(
+        self, app_state, feedback_service, monkeypatch
+    ):
+        import services.launch_service as launch_service
+        import ui.utils.thread_lifetime as thread_lifetime
+        from services.background_operations import BackgroundOperationManager
+        from services.launch_service import GameLauncher
+
+        operations = BackgroundOperationManager()
+        monkeypatch.setattr(launch_service, "background_operations", operations)
+        monkeypatch.setattr(thread_lifetime, "background_operations", operations)
+        launcher = GameLauncher(app_state, feedback_service, Mock())
+        thread = Mock()
+        thread._g3m_lifetime_connected = False
+        thread.isRunning.return_value = True
+        worker = Mock()
+        launcher.monitor_thread = thread
+        launcher.monitor_worker = worker
+
+        launcher._stop_monitor_thread()
+
+        thread.requestInterruption.assert_called_once_with()
+        thread.quit.assert_called_once_with()
+        thread.deleteLater.assert_not_called()
+        worker.deleteLater.assert_not_called()
+        assert launcher.monitor_thread is None
+        assert launcher.monitor_worker is None
+        assert operations.snapshot()["threads"] == 1
+
+        release = thread.finished.connect.call_args.args[0]
+        thread.isRunning.return_value = False
+        release()
+
+        thread.deleteLater.assert_called_once_with()
+        assert operations.snapshot()["threads"] == 0
+
     def test_recover_previous_session_restores_even_if_status_update_fails(
         self, app_state, feedback_service, tmp_path, monkeypatch
     ):
@@ -807,7 +916,7 @@ class TestLaunchManager:
 
         with (
             patch("services.launch_service.platform.system", return_value="Linux"),
-            patch("services.launch_service.QThread", return_value=Mock()),
+            patch("services.launch_service.ManagedQThread", return_value=Mock()),
             patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
             patch.object(
                 launcher, "_start_detached_command", return_value=True
@@ -818,9 +927,7 @@ class TestLaunchManager:
                 {"target": "steam://rungameid/1690940", "cwd": None, "type": "url"}
             )
 
-        start_detached.assert_called_once_with(
-            "steam", ["steam://rungameid/1690940"]
-        )
+        start_detached.assert_called_once_with("steam", ["steam://rungameid/1690940"])
 
     def test_check_game_running_restores_window_before_cleanup_finishes(
         self, app_state, feedback_service
@@ -873,7 +980,7 @@ class TestLaunchManager:
 
         with (
             patch("services.launch_service.platform.system", return_value="Linux"),
-            patch("services.launch_service.QThread", return_value=Mock()),
+            patch("services.launch_service.ManagedQThread", return_value=Mock()),
             patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
             patch.object(
                 launcher, "_start_detached_command", side_effect=[False, True]
@@ -902,8 +1009,10 @@ class TestLaunchManager:
         with (
             patch("services.launch_service.platform.system", return_value="Linux"),
             patch("services.launch_service.os.path.isdir", return_value=True),
-            patch("services.launch_service.subprocess.Popen", return_value=fake_process) as popen,
-            patch("services.launch_service.QThread", return_value=Mock()),
+            patch(
+                "services.launch_service.subprocess.Popen", return_value=fake_process
+            ) as popen,
+            patch("services.launch_service.ManagedQThread", return_value=Mock()),
             patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
             patch.dict(
                 "services.launch_service.os.environ",
@@ -926,7 +1035,10 @@ class TestLaunchManager:
         popen.assert_called_once()
         assert popen.call_args.kwargs["cwd"] == "/games"
         assert popen.call_args.kwargs["creationflags"] == 0
-        assert popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/usr/lib:/usr/local/lib"
+        assert (
+            popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"]
+            == "/usr/lib:/usr/local/lib"
+        )
         assert popen.call_args.args[0] == ["wine", "/games/DELTARUNE.exe"]
 
     def test_execute_game_uses_wine64_when_wine_missing(
@@ -943,9 +1055,14 @@ class TestLaunchManager:
         with (
             patch("services.launch_service.platform.system", return_value="Linux"),
             patch("services.launch_service.os.path.isdir", return_value=True),
-            patch("utils.process_utils.shutil.which", side_effect=lambda name: None if name == "wine" else "/usr/bin/wine64"),
-            patch("services.launch_service.subprocess.Popen", return_value=fake_process) as popen,
-            patch("services.launch_service.QThread", return_value=Mock()),
+            patch(
+                "utils.process_utils.shutil.which",
+                side_effect=lambda name: None if name == "wine" else "/usr/bin/wine64",
+            ),
+            patch(
+                "services.launch_service.subprocess.Popen", return_value=fake_process
+            ) as popen,
+            patch("services.launch_service.ManagedQThread", return_value=Mock()),
             patch("services.launch_service.GameMonitorWorker", return_value=Mock()),
         ):
             launcher._execute_game(
@@ -968,7 +1085,9 @@ class TestLaunchManager:
             app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
         )
         emitted = []
-        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+        launcher.status_changed.connect(
+            lambda message, color: emitted.append((message, color))
+        )
 
         with (
             patch("services.launch_service.platform.system", return_value="Linux"),
@@ -979,7 +1098,11 @@ class TestLaunchManager:
             ),
         ):
             launcher._execute_game(
-                {"target": "/games/DELTARUNE.exe", "cwd": "/games", "type": "subprocess"}
+                {
+                    "target": "/games/DELTARUNE.exe",
+                    "cwd": "/games",
+                    "type": "subprocess",
+                }
             )
 
         assert emitted[-1][0] == tr("errors.wine_not_found")
@@ -994,7 +1117,9 @@ class TestLaunchManager:
             app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
         )
         emitted = []
-        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+        launcher.status_changed.connect(
+            lambda message, color: emitted.append((message, color))
+        )
 
         missing_target = "/games/missing.exe"
         with (
@@ -1002,7 +1127,9 @@ class TestLaunchManager:
             patch("services.launch_service.os.path.isdir", return_value=True),
             patch(
                 "services.launch_service.subprocess.Popen",
-                side_effect=FileNotFoundError(2, "No such file or directory", missing_target),
+                side_effect=FileNotFoundError(
+                    2, "No such file or directory", missing_target
+                ),
             ),
         ):
             launcher._execute_game(
@@ -1021,7 +1148,9 @@ class TestLaunchManager:
             app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
         )
         emitted = []
-        launcher.status_changed.connect(lambda message, color: emitted.append((message, color)))
+        launcher.status_changed.connect(
+            lambda message, color: emitted.append((message, color))
+        )
 
         denied_path = "/games/DELTARUNE.exe"
         with (
@@ -1041,6 +1170,7 @@ class TestLaunchManager:
 
 class TestUpdateCheckManager:
     """Tests for managers."""
+
     @patch("requests.get")
     def test_update_checker_initialization(self, mock_get, app_state, feedback_service):
         """Checks that update checker initialization."""
@@ -1054,7 +1184,7 @@ class TestUpdateCheckManager:
         assert checker is not None
 
     def test_update_extract_archive_reports_missing_archive_as_app_error(
-        self, app_state, feedback_service
+        self, app_state, feedback_service, tmp_path
     ):
         from models.exceptions import AppError
         from services.localization_service import tr
@@ -1067,7 +1197,7 @@ class TestUpdateCheckManager:
             side_effect=FileNotFoundError(2, "No such file", "missing.zip"),
         ):
             with pytest.raises(AppError) as exc_info:
-                checker._extract_archive("Linux", "missing.zip", "out")
+                checker._extract_archive("Linux", "missing.zip", str(tmp_path / "out"))
             assert str(exc_info.value) == tr("errors.archive_not_found")
 
     def test_update_worker_error_formats_request_failures_precisely(
@@ -1099,6 +1229,7 @@ class TestUpdateCheckManager:
 
 class TestCustomizationManager:
     """Tests for managers."""
+
     def test_customization_service_initialization(self, app_state):
         """Checks that customization service initialization."""
         from services.customization_service import CustomizationManager
@@ -1128,7 +1259,9 @@ class TestCustomizationManager:
         assert manager._focus_pause_active is False
         assert manager._current_music_path is None
 
-    def test_customization_service_focus_pause_preserves_state_and_resumes(self, app_state):
+    def test_customization_service_focus_pause_preserves_state_and_resumes(
+        self, app_state
+    ):
         """Checks that focus pause keeps pause state until resume restarts music."""
         from unittest.mock import Mock, patch
 
@@ -1150,7 +1283,9 @@ class TestCustomizationManager:
 
         maybe_start.assert_called_once_with(force=True)
 
-    def test_customization_service_does_not_start_music_while_game_running(self, app_state):
+    def test_customization_service_does_not_start_music_while_game_running(
+        self, app_state
+    ):
         """Checks that background music stays off while the game is running."""
         from unittest.mock import Mock, patch
 
@@ -1166,9 +1301,12 @@ class TestCustomizationManager:
             manager = CustomizationManager(app_state, parent)
             manager.get_background_music_path = Mock(return_value="music.mp3")
 
-            with patch(
-                "services.customization_service.os.path.exists", return_value=True
-            ), patch.object(manager, "start_background_music") as start_music:
+            with (
+                patch(
+                    "services.customization_service.os.path.exists", return_value=True
+                ),
+                patch.object(manager, "start_background_music") as start_music,
+            ):
                 manager.maybe_start_background_music(force=True)
 
             start_music.assert_not_called()
@@ -1195,9 +1333,12 @@ class TestCustomizationManager:
             manager._bg_music_instance = player
             manager._current_music_path = "music.mp3"
 
-            with patch(
-                "services.customization_service.os.path.exists", return_value=True
-            ), patch.object(manager, "start_background_music") as start_music:
+            with (
+                patch(
+                    "services.customization_service.os.path.exists", return_value=True
+                ),
+                patch.object(manager, "start_background_music") as start_music,
+            ):
                 manager._ensure_background_music_state()
 
             start_music.assert_called_once_with(force=False)
@@ -1235,6 +1376,7 @@ class TestCustomizationManager:
 
 class TestBackupManager:
     """Tests for managers."""
+
     def test_backup_restoration_order(self, temp_dir):
         """Checks that backup restoration order."""
         import logging
@@ -1325,6 +1467,7 @@ class TestBackupManager:
 
 class TestExpandedFormats:
     """Tests for managers."""
+
     def test_customization_service_audio_formats(self, app_state, temp_dir):
         """Checks that customization service audio formats."""
         from services.customization_service import CustomizationManager

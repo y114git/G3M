@@ -2,13 +2,13 @@
 
 import contextlib
 import logging
-import os
 from collections.abc import Iterable, Mapping
 
 from PyQt6.QtCore import QObject, QThread, QThreadPool
 from PyQt6.QtWidgets import QApplication
 
 from config.config import THREAD_WAIT_TIMEOUT
+from services.background_operations import background_operations
 from ui.utils.ui_utils import safe_stop_thread
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,6 @@ _THREAD_ATTRS = (
 _THREAD_CONTAINER_ATTRS = (
     "_workers",
     "_load_more_threads",
-    "_retiring_patching_threads",
 )
 _THREAD_OWNER_ATTRS = (
     "downloads_manager",
@@ -158,28 +157,11 @@ def perform_close_cleanup(w):
             pool.clear()
             with contextlib.suppress(Exception):
                 pool.waitForDone(THREAD_WAIT_TIMEOUT)
+        background_operations.cancel_threads(THREAD_WAIT_TIMEOUT)
         w.game_launcher._cleanup_direct_launch_files()
         if hasattr(w.game_launcher, "mod_patcher"):
             w.game_launcher.mod_patcher.cleanup_processes_and_temp_files()
-        try:
-            import psutil
-
-            current_process = psutil.Process(os.getpid())
-            children = current_process.children(recursive=True)
-            for child in children:
-                with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-                    child.terminate()
-            terminated_children, alive_children = psutil.wait_procs(children, timeout=1)
-            if terminated_children:
-                logger.debug(
-                    "Cleanup terminated %s child process(es) gracefully",
-                    len(terminated_children),
-                )
-            for proc in alive_children:
-                with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
-                    proc.kill()
-        except Exception as e:
-            logger.debug(f"Error cleaning up child processes: {e}")
+        background_operations.cancel_processes()
         if getattr(w, "main_tab_widget", None):
             w.app_state.local_config["last_active_tab"] = (
                 w.main_tab_widget.currentIndex()

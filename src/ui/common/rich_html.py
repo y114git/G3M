@@ -27,6 +27,7 @@ from config.config import (
     RICH_HTML_IMAGE_CACHE_MAX_SIZE,
     RICH_HTML_IMG_RE,
 )
+from services.background_operations import background_operations
 from services.localization_service import tr
 from utils.network_utils import get_session
 
@@ -178,7 +179,9 @@ def _css_style_maps_from_style_blocks(
                         selector_inline = _strip_block_paint_styles(selector_inline)
                         if not selector_inline:
                             continue
-                    class_map[class_name] = class_map.get(class_name, "") + selector_inline
+                    class_map[class_name] = (
+                        class_map.get(class_name, "") + selector_inline
+                    )
                     continue
                 class_match = re.fullmatch(r"[a-z][\w-]*\.([\w-]+)", selector, re.I)
                 if class_match:
@@ -187,11 +190,15 @@ def _css_style_maps_from_style_blocks(
                         selector_inline = _strip_block_paint_styles(selector_inline)
                         if not selector_inline:
                             continue
-                    class_map[class_name] = class_map.get(class_name, "") + selector_inline
+                    class_map[class_name] = (
+                        class_map.get(class_name, "") + selector_inline
+                    )
                     continue
                 if re.fullmatch(r"[a-z][\w-]*", selector, re.I):
                     element = selector.lower()
-                    element_map[element] = element_map.get(element, "") + selector_inline
+                    element_map[element] = (
+                        element_map.get(element, "") + selector_inline
+                    )
     return class_map, element_map
 
 
@@ -327,12 +334,12 @@ def _resolve_image_src(src: str, base_path: str | None = None) -> str:
     if base_path:
         if _WINDOWS_DRIVE_PATTERN.match(base_path):
             resolved = str(
-                PureWindowsPath(base_path).joinpath(
-                    *src.replace("\\", "/").split("/")
-                )
+                PureWindowsPath(base_path).joinpath(*src.replace("\\", "/").split("/"))
             ).replace("\\", "/")
             return f"file:///{quote(resolved, safe='/:')}"
-        return QUrl.fromLocalFile(os.path.abspath(os.path.join(base_path, src))).toString()
+        return QUrl.fromLocalFile(
+            os.path.abspath(os.path.join(base_path, src))
+        ).toString()
     return src
 
 
@@ -414,7 +421,9 @@ def _refresh_browser_document(browser: QTextBrowser | QTextEdit, doc: QTextDocum
 
 def _normalize_media_blocks(html: str) -> str:
     html = _FIGCAPTION_RE.sub(
-        lambda m: f'<div{m.group(1)} style="font-size:90%; color:#bbbbbb; text-align:center;">{m.group(2)}</div>',
+        lambda m: (
+            f'<div{m.group(1)} style="font-size:90%; color:#bbbbbb; text-align:center;">{m.group(2)}</div>'
+        ),
         html,
     )
     html = _FIGURE_RE.sub(
@@ -434,7 +443,7 @@ def _normalize_media_blocks(html: str) -> str:
         )
         return (
             f'<table align="{align}" cellspacing="0" cellpadding="6"'
-            f'{_attrs_to_string(attrs)}><tr><td>{inner}</td></tr></table>'
+            f"{_attrs_to_string(attrs)}><tr><td>{inner}</td></tr></table>"
         )
 
     return _FLOAT_BLOCK_RE.sub(_float_repl, html)
@@ -494,11 +503,36 @@ def _normalize_heading_rules(html: str) -> str:
 
 
 def _normalize_html_structure(html: str) -> str:
-    html = re.sub(r"<\s*/?\s*section\b([^>]*)>", lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>", html, flags=re.IGNORECASE)
-    html = re.sub(r"<\s*/?\s*article\b([^>]*)>", lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>", html, flags=re.IGNORECASE)
-    html = re.sub(r"<\s*/?\s*main\b([^>]*)>", lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>", html, flags=re.IGNORECASE)
-    html = re.sub(r"<\s*/?\s*header\b([^>]*)>", lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>", html, flags=re.IGNORECASE)
-    html = re.sub(r"<\s*/?\s*footer\b([^>]*)>", lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>", html, flags=re.IGNORECASE)
+    html = re.sub(
+        r"<\s*/?\s*section\b([^>]*)>",
+        lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>",
+        html,
+        flags=re.IGNORECASE,
+    )
+    html = re.sub(
+        r"<\s*/?\s*article\b([^>]*)>",
+        lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>",
+        html,
+        flags=re.IGNORECASE,
+    )
+    html = re.sub(
+        r"<\s*/?\s*main\b([^>]*)>",
+        lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>",
+        html,
+        flags=re.IGNORECASE,
+    )
+    html = re.sub(
+        r"<\s*/?\s*header\b([^>]*)>",
+        lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>",
+        html,
+        flags=re.IGNORECASE,
+    )
+    html = re.sub(
+        r"<\s*/?\s*footer\b([^>]*)>",
+        lambda m: "<div" + m.group(1) + ">" if "/" not in m.group(0) else "</div>",
+        html,
+        flags=re.IGNORECASE,
+    )
     return html
 
 
@@ -548,9 +582,7 @@ def _resolve_font_tags(html: str) -> str:
     return RICH_HTML_FONT_COLOR_RE.sub(_repl, html)
 
 
-def _build_img_tag(
-    attrs: dict, widget_width: int, base_path: str | None = None
-) -> str:
+def _build_img_tag(attrs: dict, widget_width: int, base_path: str | None = None) -> str:
     """Build a Qt-compatible <img> tag from parsed attributes."""
     src = _resolve_image_src(attrs.get("src", ""), base_path)
     if not src:
@@ -761,7 +793,7 @@ def load_remote_images(
                 _apply_image_resource(url, img)
             continue
         runnable = _ImageFetchRunnable(url, signals)
-        pool.start(runnable)
+        background_operations.start_runnable(pool, runnable)
 
 
 def set_rich_html(
@@ -786,7 +818,9 @@ def set_rich_html(
     refined_width = _widget_available_width(browser)
     if abs(refined_width - widget_width) >= 4:
         widget_width = refined_width
-        processed = preprocess_html(html, widget_width=widget_width, base_path=base_path)
+        processed = preprocess_html(
+            html, widget_width=widget_width, base_path=base_path
+        )
         wrapped = f'<div style="color:{default_color};">{processed}</div>'
         browser.setHtml(wrapped)
     load_remote_images(browser, processed, widget_width=widget_width)
