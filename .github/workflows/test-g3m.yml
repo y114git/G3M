@@ -126,7 +126,7 @@ jobs:
         run: |
           set -o pipefail
           pytest tests/ --collect-only -q 2>&1 | tee test-collection.log || true
-          pytest tests/ -v --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | tee test-output.log
+          pytest tests/ -v --maxfail=5 2>&1 | tee test-output.log
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
@@ -135,7 +135,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
           pytest tests/ --collect-only -q 2>&1 | Tee-Object -FilePath test-collection.log
-          pytest tests/ -v --maxfail=5 --html=test-report.html --self-contained-html 2>&1 | Tee-Object -FilePath test-output.log
+          pytest tests/ -v --maxfail=5 2>&1 | Tee-Object -FilePath test-output.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish test results summary
@@ -167,7 +167,6 @@ jobs:
           path: |
             .pytest_cache/
             htmlcov/
-            test-report.html
             test-output.log
             test-collection.log
           if-no-files-found: ignore
