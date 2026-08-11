@@ -8,6 +8,7 @@ import shutil
 from PyQt6.QtCore import pyqtSignal
 
 from ui.utils.thread_lifetime import ManagedQThread
+from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
@@ -19,13 +20,6 @@ def _cleanup_file(path: str):
             os.remove(path)
     except OSError as error:
         logger.debug("Best-effort operation failed: %s", error, exc_info=True)
-
-
-def _safe_emit(owner: str, signal, *args) -> None:
-    try:
-        signal.emit(*args)
-    except Exception as e:
-        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class DownloadWorker(ManagedQThread):

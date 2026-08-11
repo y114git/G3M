@@ -1,7 +1,9 @@
 """Unit tests for test deltamod adapter."""
 
 import json
+import os
 
+import pytest
 from defusedxml import ElementTree
 
 from adapters.deltamod_adapter import DeltamodConverter
@@ -218,6 +220,111 @@ def test_process_files_uses_legacy_chapter_layout_for_deltamod_assets(tmp_path):
     assert (chapter_dir / "sprites" / "hero.png").read_text(encoding="utf-8") == "hero"
 
 
+def test_deltamod_patch_paths_stay_inside_the_converted_mod(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    scripts_dir = source_dir / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "valid.xdelta").write_text("patch", encoding="utf-8")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    converter = DeltamodConverter(str(source_dir), str(tmp_path / "mods"))
+    converter._target_game = "deltarune"
+    converter.modding_xml = ElementTree.fromstring(
+        """
+        <patches>
+            <patch to="./chapter1_windows/data.win" patch="./scripts\\valid.xdelta" type="xdelta" />
+            <patch to="./chapter1_windows/data.win" patch="../escape.xdelta" type="xdelta" />
+            <patch to="./chapter1_windows/data.win" patch="C:\\escape.xdelta" type="xdelta" />
+            <patch to="./chapter1_windows/data.win" patch="/escape.xdelta" type="xdelta" />
+        </patches>
+        """
+    )
+
+    patches = converter._collect_patches()
+    files = converter._generate_files_structure(patches)
+    converter._process_files(str(target_dir))
+
+    assert [patch.get("patch") for patch in patches] == ["scripts/valid.xdelta"]
+    assert files == {"deltarune_1": {"data_file_path": "scripts/valid.xdelta"}}
+    assert files["deltarune_1"]["data_file_path"] == "scripts/valid.xdelta"
+    assert (target_dir / "chapter_1" / "scripts" / "valid.xdelta").is_file()
+    assert not (tmp_path / "escape.xdelta").exists()
+
+
+def test_deltamod_rejects_symlinked_patch_outside_source_root(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    external_patch = tmp_path / "escape.xdelta"
+    external_patch.write_text("patch", encoding="utf-8")
+    link = source_dir / "linked.xdelta"
+    try:
+        os.symlink(external_patch, link)
+    except OSError:
+        pytest.skip("symlinks are unavailable")
+
+    converter = DeltamodConverter(str(source_dir), str(tmp_path / "mods"))
+    converter.modding_xml = ElementTree.fromstring(
+        '<patch to="./chapter1_windows/data.win" patch="linked.xdelta" type="xdelta" />'
+    )
+
+    assert converter._collect_patches() == []
+    assert converter._resolve_patch_file("linked.xdelta") is None
+
+
+def test_deltamod_rejects_patch_directories(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "patch.xdelta").mkdir()
+
+    converter = DeltamodConverter(str(source_dir), str(tmp_path / "mods"))
+
+    assert converter._resolve_patch_file("patch.xdelta") is None
+
+
+def test_deltamod_rejects_override_destination_traversal(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "hero.png").write_text("hero", encoding="utf-8")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    converter = DeltamodConverter(str(source_dir), str(tmp_path / "mods"))
+    converter._target_game = "deltarune"
+    converter.modding_xml = ElementTree.fromstring(
+        '<patch to="./chapter1_windows/../../escape.txt" patch="hero.png" type="override" />'
+    )
+
+    converter._process_files(str(target_dir))
+
+    assert not (tmp_path / "escape.txt").exists()
+
+
+def test_deltamod_rejects_override_destination_symlink_escape(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "hero.png").write_text("hero", encoding="utf-8")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+    escaped_dir = tmp_path / "escaped"
+    escaped_dir.mkdir()
+    try:
+        os.symlink(escaped_dir, target_dir / "chapter_1", target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are unavailable")
+
+    converter = DeltamodConverter(str(source_dir), str(tmp_path / "mods"))
+    converter._target_game = "deltarune"
+    converter.modding_xml = ElementTree.fromstring(
+        '<patch to="./chapter1_windows/hero.png" patch="hero.png" type="override" />'
+    )
+
+    converter._process_files(str(target_dir))
+
+    assert not (escaped_dir / "hero.png").exists()
+
+
 def test_convert_uses_metadata_name_for_target_folder(tmp_path):
     """Checks that converted deltamod mods use metadata name instead of temp dir."""
     source_dir = tmp_path / "gb_convert_deadbeef"
@@ -340,17 +447,18 @@ packageID = "example.revision.five"
     assert chapter["data_file_path"] == "scripts/build.csx"
     assert chapter["extra_files"] == [
         {
-            "file_path": "chapter_4/resources/",
+            "file_path": "resources/",
             "status": "dependency",
         },
         {
-            "file_path": "chapter_4/scripts/",
+            "file_path": "scripts/",
             "status": "dependency",
         },
     ]
-    assert (result_dir / "chapter_4" / "scripts" / "build.csx").is_file()
-    assert (result_dir / "chapter_4" / "scripts" / "main.csx").is_file()
-    assert (result_dir / "chapter_4" / "resources" / "map.json").is_file()
+    assert (result_dir / "scripts" / "build.csx").is_file()
+    assert (result_dir / "scripts" / "main.csx").is_file()
+    assert (result_dir / "resources" / "map.json").is_file()
+    assert not (result_dir / "chapter_4").exists()
 
 
 def test_revision_five_rejects_patch_type_extension_mismatches():

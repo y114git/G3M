@@ -525,12 +525,6 @@ def get_file_extension_from_url(url: str, content_type: str | None = None) -> st
     return ".zip"
 
 
-def get_file_extension_from_content(file_path: str) -> str:
-    detected_format = _detect_archive_format_by_signature(file_path)
-    format_extensions = {"zip": ".zip", "rar": ".rar", "7z": ".7z", "unknown": ".zip"}
-    return format_extensions.get(detected_format, ".zip")
-
-
 def extract_any_archive(archive_path: str, target_dir: str) -> None:
     ArchiveExtractor.extract(archive_path, target_dir)
 

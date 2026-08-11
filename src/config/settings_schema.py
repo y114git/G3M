@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any
-
 THEME_COLOR_SETTING_KEYS = {
     "background": "custom_background_color",
     "elements": "custom_elements_color",
@@ -72,9 +69,3 @@ def get_theme_color_key(color_name: str) -> str:
         normalized_name,
         f"custom_{normalized_name}_color",
     )
-
-
-def apply_settings_defaults(local_config: dict[str, Any], app_version: str) -> None:
-    local_config["cache_format_version"] = app_version
-    for key, value in DEFAULT_APP_SETTINGS.items():
-        local_config.setdefault(key, deepcopy(value))

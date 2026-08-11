@@ -11,13 +11,6 @@ from ui.dialogs.community_dialog import CommunityDialog
 logger = logging.getLogger(__name__)
 
 
-def _safe_show_message(w, level: str, title: str, message: str) -> None:
-    try:
-        w.feedback_service.show_message(level, title, message)
-    except Exception as e:
-        logger.warning(f"Dialog feedback message failed: {e}", exc_info=True)
-
-
 def _safe_update_status(w, message: str, color: str) -> None:
     try:
         w.feedback_service.update_status(message, color)

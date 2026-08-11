@@ -62,27 +62,6 @@ class BaseInstallWorker(ManagedQThread):
                 self.status, tr("status.operation_cancelled"), UI_COLORS["status_error"]
             )
 
-    def _cleanup_temp_files(
-        self, archive_path: str | None = None, archive_dir: str | None = None
-    ):
-        try:
-            if archive_path and os.path.exists(archive_path):
-                try:
-                    os.remove(archive_path)
-                except Exception as e:
-                    logger.debug(
-                        f"{self.__class__.__name__}: Error removing archive file {archive_path}: {e}"
-                    )
-            if archive_dir and os.path.exists(archive_dir):
-                try:
-                    shutil.rmtree(archive_dir, ignore_errors=True)
-                except Exception as e:
-                    logger.debug(
-                        f"{self.__class__.__name__}: Error removing archive directory {archive_dir}: {e}"
-                    )
-        except Exception as e:
-            logger.debug(f"{self.__class__.__name__}: Error during cleanup: {e}")
-
     def _get_content_length(self, session, url: str) -> int:
         try:
             head_response = session.head(
@@ -189,12 +168,3 @@ class BaseInstallWorker(ManagedQThread):
                 shutil.copytree(src_path, dst_path)
             else:
                 shutil.copy2(src_path, dst_path)
-
-    def _merge_tags(self, config_data: dict, tags: list):
-        existing_tags = config_data.get("tags", [])
-        if not isinstance(existing_tags, list):
-            existing_tags = [existing_tags] if existing_tags else []
-        for tag in tags:
-            if tag and tag not in existing_tags:
-                existing_tags.append(tag)
-        config_data["tags"] = existing_tags

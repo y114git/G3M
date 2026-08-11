@@ -362,18 +362,6 @@ def parse_extra_file_entries_raw(
     return result
 
 
-def resolve_chapter_folder(
-    file_key: str, mod_folder_path: str, game: str | None = None
-) -> str | None:
-    """Resolve the chapter subfolder path for a given file_key."""
-    if not mod_folder_path:
-        return None
-    from utils.file_utils import get_chapter_folder_name
-
-    folder_name = get_chapter_folder_name(file_key, game)
-    return os.path.join(mod_folder_path, folder_name) if folder_name else None
-
-
 def resolve_mod_file_path(mod_folder_path: str | None, stored_path: str | None) -> str:
     """Resolve a stored mod-relative path against the mod root."""
     if not stored_path:

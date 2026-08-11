@@ -40,7 +40,6 @@ from ui.dialogs.mod_editor.files import (
     collect_files,
     extract_frame_data,
     has_any_mod_files,
-    iter_tab_frames,
     validate_local_files,
 )
 from ui.dialogs.mod_editor.info_actions import (
@@ -57,14 +56,9 @@ from ui.dialogs.mod_editor.info_files import (
 )
 from ui.dialogs.mod_editor.prepare import prepare_mod_save_payload
 from ui.dialogs.mod_editor.storage import (
-    build_storage_path,
-    chapter_storage_root,
-    collect_managed_file_paths,
     copy_files_to_mod_dir,
-    copy_path_into_mod_dir,
     find_unconfigured_root_entries,
     remove_stale_managed_files,
-    resolve_managed_mod_path,
 )
 from ui.utils.ui_utils import UIAnimator
 from utils.file_utils import get_file_filter, get_unique_mod_dir
@@ -1490,14 +1484,6 @@ class ModEditorDialog(QDialog):
                     return resolved
         return normalized
 
-    def _iter_tab_frames(self):
-        """Yield (tab_index, tab_name, frame_data) for each file frame across all tabs."""
-        yield from iter_tab_frames(
-            self.file_tabs,
-            get_tab_file_layout=self._get_tab_file_layout,
-            extract_frame_data_fn=self._extract_frame_data,
-        )
-
     def _has_any_mod_files(self):
         return has_any_mod_files(
             self.file_tabs,
@@ -1644,13 +1630,6 @@ class ModEditorDialog(QDialog):
             return os.path.basename(resolved)
         return None
 
-    def _collect_managed_file_paths(self, mod_dir, files_data, game):
-        return collect_managed_file_paths(mod_dir, files_data, game)
-
-    @staticmethod
-    def _resolve_managed_mod_path(file_folder, stored_path) -> str | None:
-        return resolve_managed_mod_path(file_folder, stored_path)
-
     def _remove_stale_managed_files(self, mod_dir, old_files, new_files, game):
         remove_stale_managed_files(mod_dir, old_files, new_files, game)
 
@@ -1675,31 +1654,6 @@ class ModEditorDialog(QDialog):
             dest = os.path.join(mod_dir, file_name)
             if os.path.abspath(resolved) != os.path.abspath(dest):
                 shutil.copy2(resolved, dest)
-
-    @classmethod
-    def _copy_path_into_mod_dir(cls, resolved: str, dest: str) -> None:
-        copy_path_into_mod_dir(resolved, dest)
-
-    def _build_storage_path(
-        self,
-        mod_dir: str,
-        file_key: str,
-        original_path: str,
-        resolved: str,
-        game: str,
-    ) -> str:
-        return build_storage_path(
-            mod_dir=mod_dir,
-            file_key=file_key,
-            original_path=original_path,
-            resolved=resolved,
-            game=game,
-            format_config_path=self._format_config_path,
-        )
-
-    @staticmethod
-    def _chapter_storage_root(file_key: str, game: str) -> str:
-        return chapter_storage_root(file_key, game)
 
     def _refresh_after_save(self):
         self.parent_app.mod_service.invalidate_mods_cache()

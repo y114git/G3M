@@ -8,16 +8,10 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 from config.config import NETWORK_TIMEOUT_MEDIUM
 from services.localization_service import tr
+from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.network_utils import get_session
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_emit(owner: str, signal, *args) -> None:
-    try:
-        signal.emit(*args)
-    except Exception as e:
-        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class FetchChangelogWorker(QObject):

@@ -967,6 +967,72 @@ class TestLaunchManager:
         assert app_state.progress_bar_visible is False
         parent.game_launch.update_button_state.assert_called_once()
 
+    def test_plugin_restore_refreshes_host_deployed_state(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        launcher._execute_plugin_hook = Mock(
+            return_value=[{"refresh_host_deployed_state": True}]
+        )
+        launcher.mod_patcher.finalize_session_state = Mock(return_value=True)
+
+        with patch("services.launch_service.QTimer.singleShot"):
+            launcher._check_game_running(False)
+
+        launcher.mod_patcher.finalize_session_state.assert_called_once_with()
+
+    def test_plugin_restore_ignores_unmarked_results(
+        self, app_state, feedback_service
+    ):
+        from services.launch_service import GameLauncher
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        launcher._execute_plugin_hook = Mock(return_value=["ignored", {"other": True}])
+        launcher.mod_patcher.finalize_session_state = Mock(return_value=True)
+
+        with patch("services.launch_service.QTimer.singleShot"):
+            launcher._check_game_running(False)
+
+        launcher.mod_patcher.finalize_session_state.assert_not_called()
+
+    @pytest.mark.parametrize("result", [False, RuntimeError("refresh failed")])
+    def test_plugin_restore_refresh_failure_stays_a_warning(
+        self, app_state, feedback_service, result
+    ):
+        from services.launch_service import GameLauncher
+        from services.localization_service import tr
+
+        launcher = GameLauncher(
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+        )
+        statuses = []
+        launcher.status_changed.connect(
+            lambda message, color: statuses.append((message, color))
+        )
+        launcher._execute_plugin_hook = Mock(
+            return_value=[{"refresh_host_deployed_state": True}]
+        )
+        if isinstance(result, Exception):
+            launcher.mod_patcher.finalize_session_state = Mock(side_effect=result)
+        else:
+            launcher.mod_patcher.finalize_session_state = Mock(return_value=result)
+
+        with patch("services.launch_service.QTimer.singleShot"):
+            launcher._check_game_running(False)
+        launcher._cleanup_direct_launch_files()
+
+        assert any(
+            message == tr("status.restore_skipped_external_changes")
+            for message, _color in statuses
+        )
+        assert all(message != tr("status.files_restored") for message, _color in statuses)
+
     def test_execute_game_falls_back_to_xdg_open_when_steam_detach_fails_on_linux(
         self, app_state, feedback_service
     ):

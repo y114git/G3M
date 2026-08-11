@@ -62,6 +62,7 @@
     "script_missing": "사용자 지정 세이브 폴더 스크립트가 없습니다.",
     "g3mtool_missing": "G3MTool을 사용할 수 없습니다.",
     "apply_failed": "사용자 지정 세이브 폴더를 적용하지 못했습니다: {error}",
-    "restore_failed": "원본 DATA 파일을 복원하지 못했습니다: {error}"
+    "restore_failed": "원본 DATA 파일을 복원하지 못했습니다: {error}",
+    "restore_incomplete": "일부 원본 DATA 파일을 복원하지 못했습니다."
   }
 }

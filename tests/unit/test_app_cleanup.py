@@ -51,6 +51,7 @@ def test_perform_close_cleanup_stops_discovered_threads(qapp):
     with (
         patch("app.cleanup.safe_stop_thread") as safe_stop_thread,
         patch("app.cleanup.QThreadPool.globalInstance") as pool_instance,
+        patch("app.cleanup.shutdown_compatibility_job_pool") as shutdown_pool,
         patch("app.cleanup.QApplication.processEvents"),
     ):
         pool = Mock()
@@ -62,6 +63,7 @@ def test_perform_close_cleanup_stops_discovered_threads(qapp):
     assert child._workers["download"] in stopped
     pool.clear.assert_called_once_with()
     pool.waitForDone.assert_called_once()
+    shutdown_pool.assert_called_once()
 
 
 def test_perform_close_cleanup_stops_threads_on_non_qobject_controllers(qapp):

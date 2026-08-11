@@ -58,6 +58,7 @@ from utils.path_utils import (
 
 logger = logging.getLogger(__name__)
 
+
 def _show_translated_feedback_message(context, level: str, title_key: str, message: str) -> None:
     title = context.localization_service.get_text(title_key)
     feedback = getattr(context, "feedback_service", None)
@@ -77,6 +78,7 @@ def _show_translated_feedback_message(context, level: str, title_key: str, messa
         return
     if feedback is not None:
         feedback.show_message(level, title, message)
+
 
 _SETTINGS_FOLDERS_KEY = "folders_by_game"
 _SETTINGS_SELECTED_KEY = "selected_by_game"
@@ -109,16 +111,19 @@ _WINDOWS_RESERVED_NAMES = {
     "LPT9",
 }
 
+
 def _canonical_mod_id(mod_id: object) -> str:
     value = str(mod_id or "").strip()
     match = re.match(r"^(gb_(?:mod|wip)_\d+)", value)
     return match.group(1) if match else value
+
 
 @dataclass
 class _ActiveSession:
     game_id: str
     work_dir: str
     backup_manager: BackupManager
+
 
 class _InteractiveRow(QFrame):
     clicked = pyqtSignal()
@@ -186,6 +191,7 @@ class _InteractiveRow(QFrame):
             """,
             cache_attr="_row_stylesheet_cache",
         )
+
 
 class _FolderRow(_InteractiveRow):
     enabled_changed = pyqtSignal(bool)
@@ -264,6 +270,7 @@ class _FolderRow(_InteractiveRow):
     def update_subtitle(self, subtitle: str) -> None:
         self._subtitle_text = subtitle
         self._subtitle.setText(subtitle)
+
 
 class _RuleRow(_InteractiveRow):
     enabled_changed = pyqtSignal(bool)
@@ -347,6 +354,7 @@ class _RuleRow(_InteractiveRow):
             """,
             cache_attr="_delete_btn_ss_cache",
         )
+
 
 class _StateStore:
     def __init__(
@@ -791,6 +799,7 @@ class _StateStore:
                 return folder
         return None
 
+
 class _FolderDialog(QDialog):
     def __init__(self, app_state, state: _StateStore, tr_func, parent=None) -> None:
         super().__init__(parent)
@@ -848,6 +857,7 @@ class _FolderDialog(QDialog):
             str(self.profile_combo.currentData() or ""),
             self.name_edit.text().strip(),
         )
+
 
 class _RuleDialog(QDialog):
     def __init__(self, app_state, state: _StateStore, tr_func, parent=None) -> None:
@@ -936,6 +946,7 @@ class _RuleDialog(QDialog):
             str(self.folder_combo.currentData() or ""),
         )
 
+
 class _HelpDialog(QDialog):
     def __init__(self, app_state, tr_func, parent=None) -> None:
         super().__init__(parent)
@@ -957,6 +968,7 @@ class _HelpDialog(QDialog):
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
         apply_dialog_theme(self, self._app_state)
+
 
 class _CustomSavesFoldersWidget(QWidget):
     selection_changed = pyqtSignal()
@@ -1362,6 +1374,7 @@ class _CustomSavesFoldersWidget(QWidget):
     def refresh_theme(self) -> None:
         self._apply_theme()
 
+
 class CustomSavesFoldersPlugin:
     def __init__(self) -> None:
         self._context = None
@@ -1586,13 +1599,15 @@ class CustomSavesFoldersPlugin:
         if session is None:
             return True, ""
         try:
-            session.backup_manager.restore_backups(session.game_id)
+            if not session.backup_manager.restore_backups(session.game_id):
+                return False, self._tr()("errors.restore_incomplete")
             session.backup_manager.clear_backup_dir()
             shutil.rmtree(session.work_dir, ignore_errors=True)
             self._context.feedback_service.update_status(
                 self._tr()("ui.restored_status"),
                 get_theme_color(self._context.app_state.local_config, "border"),
             )
+            self._active_session = None
             return True, ""
         except Exception as error:
             logger.error(
@@ -1600,8 +1615,6 @@ class CustomSavesFoldersPlugin:
                 exc_info=True,
             )
             return False, str(error)
-        finally:
-            self._active_session = None
 
     def on_before_restore_after_exit(self, context, *_args):
         ok, error = self._restore_session()
@@ -1612,10 +1625,12 @@ class CustomSavesFoldersPlugin:
                 "errors.error",
                 self._tr()("errors.restore_failed", error=error),
             )
-        return ok
+            return False
+        return {"refresh_host_deployed_state": True}
 
     def on_before_restore_after_exit_shortcut(self, context, shortcut_context, *_args):
         return self.on_before_restore_after_exit(context)
+
 
 def create_plugin():
     return CustomSavesFoldersPlugin()

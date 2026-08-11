@@ -41,19 +41,6 @@ def find_files_by_extension(
     return found_files
 
 
-def find_g3m_patches(mod_source_dir: str) -> list[str]:
-    """Find G3M patch packages in a mod directory."""
-    results = []
-    if not os.path.isdir(mod_source_dir):
-        return results
-    for root, _dirs, files in os.walk(mod_source_dir):
-        for f in files:
-            candidate = os.path.join(root, f)
-            if is_g3mpatch_package(candidate):
-                results.append(candidate)
-    return results
-
-
 def is_g3mpatch_package(path: str) -> bool:
     lower_path = str(path or "").lower()
     if lower_path.endswith(".g3mpatch"):
@@ -146,12 +133,6 @@ def classify_mod_directory(mod_source_dir: str) -> tuple[str | None, str]:
     return (None, MOD_TYPE_OVERRIDES_ONLY)
 
 
-def find_csx_scripts(mod_source_dir: str) -> list[str]:
-    if not os.path.isdir(mod_source_dir):
-        return []
-    return find_files_by_extension(mod_source_dir, [".csx"])
-
-
 def find_data_win(
     target_dir: str, preferred_name: str = "", game_id: str = ""
 ) -> str | None:
@@ -204,11 +185,6 @@ def resolve_macos_path(base_path: str, app_name: str) -> str:
     return base_path
 
 
-def has_content(objects_dir: str, subdir: str) -> bool:
-    p = os.path.join(objects_dir, subdir)
-    return bool(os.path.exists(p) and os.listdir(p))
-
-
 def get_file_resources(obj_dir: str, subdir: str, exts, exclude=None) -> list:
     p = os.path.join(obj_dir, subdir)
     if not os.path.exists(p):
@@ -218,14 +194,3 @@ def get_file_resources(obj_dir: str, subdir: str, exts, exclude=None) -> list:
         for f in os.listdir(p)
         if f.endswith(exts) and (not exclude or not f.endswith(exclude))
     ]
-
-
-def no_res(obj_dir: str) -> list:
-    return []
-
-
-def json_res(subdir: str):
-    def _get_json_resources(obj_dir: str) -> list:
-        return get_file_resources(obj_dir, subdir, ".json")
-
-    return _get_json_resources

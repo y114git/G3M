@@ -155,6 +155,14 @@ class TestConstants:
         assert uses_difflib
         assert "'difflib'" not in spec_text
 
+    def test_pyinstaller_spec_keeps_decimal_for_support_package_statistics(self):
+        """Checks that the support package's statistics dependency is not excluded."""
+        spec_path = Path(__file__).resolve().parents[2] / "builds" / "G3MExecutable.spec"
+        if not spec_path.exists():
+            pytest.skip("PyInstaller spec file is not available in this checkout")
+
+        assert "'decimal'" not in spec_path.read_text(encoding="utf-8")
+
     def test_native_dialogs_do_not_require_tkinter(self):
         """Checks that file dialogs stay on Qt so frozen builds can keep tkinter excluded."""
         native_integration_path = (

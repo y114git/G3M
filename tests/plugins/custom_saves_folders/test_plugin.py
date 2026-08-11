@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 PLUGIN_PATH = (
     Path(__file__).resolve().parents[3]
@@ -55,6 +57,50 @@ def test_disabled_folder_is_not_used_as_launch_fallback():
 
     assert folder is not None
     assert folder["id"] == "folder_b"
+
+
+def test_restore_hook_requests_host_state_refresh_after_successful_restore():
+    module = _module()
+    plugin = module.CustomSavesFoldersPlugin()
+    backup_manager = Mock()
+    backup_manager.restore_backups.return_value = True
+    plugin._active_session = SimpleNamespace(
+        game_id="deltarune", work_dir="", backup_manager=backup_manager
+    )
+    plugin._context = SimpleNamespace(
+        feedback_service=Mock(),
+        app_state=SimpleNamespace(local_config={}),
+    )
+    plugin._tr = lambda: lambda key, **_kwargs: key
+
+    assert plugin.on_before_restore_after_exit(plugin._context) == {
+        "refresh_host_deployed_state": True
+    }
+    backup_manager.restore_backups.assert_called_once_with("deltarune")
+    backup_manager.clear_backup_dir.assert_called_once_with()
+
+
+def test_restore_hook_keeps_session_when_restore_is_incomplete():
+    module = _module()
+    plugin = module.CustomSavesFoldersPlugin()
+    backup_manager = Mock()
+    backup_manager.restore_backups.return_value = False
+    session = SimpleNamespace(
+        game_id="deltarune", work_dir="", backup_manager=backup_manager
+    )
+    plugin._active_session = session
+    plugin._context = SimpleNamespace(
+        feedback_service=Mock(),
+        app_state=SimpleNamespace(local_config={}),
+    )
+    plugin._tr = lambda: lambda key, **kwargs: f"{key}: {kwargs.get('error', '')}"
+
+    with patch.object(module, "_show_translated_feedback_message") as show_message:
+        assert plugin.on_before_restore_after_exit(plugin._context) is False
+
+    assert plugin._active_session is session
+    backup_manager.clear_backup_dir.assert_not_called()
+    assert "errors.restore_incomplete" in show_message.call_args.args[-1]
 
 
 def test_disabled_folder_can_still_be_used_by_enabled_rule_for_selected_mod():

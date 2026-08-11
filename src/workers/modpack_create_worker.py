@@ -16,19 +16,13 @@ from models.execution_plan import PatchPlan
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
 from ui.utils.thread_lifetime import ManagedQThread
+from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.file_utils import get_chapter_folder_name, normalize_chapter_id
 from utils.mod.config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
 from utils.patching.mod_resolve_utils import get_mod_configured_extra_files
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_emit(owner: str, signal, *args) -> None:
-    try:
-        signal.emit(*args)
-    except Exception as e:
-        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class CreateModpackThread(ManagedQThread):

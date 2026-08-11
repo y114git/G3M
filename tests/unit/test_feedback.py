@@ -11,6 +11,7 @@ def _make_message_box_stub():
     box.StandardButton = SimpleNamespace(Yes=1, No=2)
     box.setIcon = Mock()
     box.setWindowTitle = Mock()
+    box.setTextFormat = Mock()
     box.setText = Mock(side_effect=lambda value: setattr(box, "text", value))
     box.setStandardButtons = Mock()
     box.setDefaultButton = Mock()
@@ -40,6 +41,7 @@ def test_ask_question_keeps_html_details(monkeypatch, qapp):
 
     assert result is True
     assert box.text.endswith("<b>New launcher version</b><br>Line 2")
+    box.setTextFormat.assert_called_once_with(feedback_module.Qt.TextFormat.RichText)
 
 
 def test_ask_question_escapes_plain_details(monkeypatch, qapp):

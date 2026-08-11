@@ -27,20 +27,6 @@ class ModError(G3MError):
         self.mod_id, self.mod_name = mod_id, mod_name
 
 
-class ModInstallationError(ModError):
-    """Exception raised when mod installation fails."""
-
-    def __init__(
-        self,
-        message: str,
-        mod_id: str | None = None,
-        mod_name: str | None = None,
-        reason: str | None = None,
-    ) -> None:
-        super().__init__(message, mod_id, mod_name)
-        self.reason = reason
-
-
 class ModUninstallationError(ModError):
     """Exception raised when mod uninstallation fails."""
 

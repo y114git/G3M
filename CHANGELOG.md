@@ -1,3 +1,18 @@
+### Version 3.3.2 — 11.08.26
+
+- **Patching and Merging**
+
+  - New `.g3mpatch` files omit unchanged code and unnecessary ordering data when it is safe, making many patches much smaller without losing index-aware changes.
+  - Large merges now use lower-memory recovery when needed, preserve required audiogroup files, and keep ordinary merges on the faster pipeline.
+  - Non-integrity compatibility checks now warn instead of stopping patch creation or application. Real patch and file errors still show their reason and let you choose how to continue.
+
+- **Other Improvements and Bug Fixes**
+
+  - Fixed CSX dependency handling, so normal relative `#load` imports and resource paths stay available inside the mod folder without being copied into the game installation.
+  - DELTAMOD import and conversion now preserve valid relative patch paths more reliably and reject unsafe package paths.
+  - Custom Saves Folders 1.1.4 fixes false “game files changed” warnings after a normal launch and keeps its backup when a restore must be retried.
+  - Fixed *Windows > Support Packager* in packaged Windows builds, formatted update and error dialogs, and unnecessary Mod Browser background threads.
+
 ### Version 3.3.1 — 05.08.26
 
 - **Launch and Restoration Fixes**

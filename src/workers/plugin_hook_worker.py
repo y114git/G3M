@@ -10,15 +10,9 @@ from PyQt6.QtCore import pyqtSignal
 
 from models.plugin_models import PluginTaskRuntime
 from ui.utils.thread_lifetime import ManagedQThread
+from ui.utils.thread_lifetime import safe_emit as _safe_emit
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_emit(owner: str, signal, *args) -> None:
-    try:
-        signal.emit(*args)
-    except Exception as e:
-        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class PluginHookThread(ManagedQThread):

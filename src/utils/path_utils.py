@@ -80,10 +80,6 @@ def set_user_data_root_override(path: str | None) -> None:
     _user_data_root_override = path
 
 
-def get_user_data_root_override() -> str | None:
-    return _user_data_root_override
-
-
 def safe_profile_name(name: str) -> str:
     safe = re.sub(r"[^\w\- ]+", "_", name or "").strip()[:80] or "Default"
     if CURRENT_PLATFORM == "Windows" and safe.upper() in _WINDOWS_RESERVED_NAMES:
@@ -122,20 +118,12 @@ def get_profile_mods_root(name: str = "Default"):
     return os.path.join(get_user_profiles_dir(), safe_profile_name(name))
 
 
-def get_user_profile_dir(name: str = "Default"):
-    return get_profile_mods_root(name)
-
-
 def get_user_mods_dir():
     return os.path.join(get_user_data_root(), "mods")
 
 
 def get_user_lang_dir():
     return os.path.join(get_user_data_root(), "lang")
-
-
-def get_user_plugins_dir():
-    return os.path.join(get_user_data_root(), "plugins")
 
 
 def get_user_themes_dir():

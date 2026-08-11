@@ -1,10 +1,8 @@
 """Widget for mod cards in browser-style views."""
 
-import contextlib
 import logging
-import threading
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -21,7 +19,6 @@ from ui.common.styling import (
     get_theme_color,
     get_widget_dimensions,
 )
-from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import UIAnimator
 from utils.mod.utils import get_mod_id
 
@@ -30,20 +27,28 @@ from .base_mod_widget import BaseModWidget
 logger = logging.getLogger(__name__)
 
 
-class CompatibilityCheckThread(ManagedQThread):
-    _semaphore = threading.Semaphore(3)
-    compatibility_checked = pyqtSignal(object, dict)
+_compatibility_job_pool = QThreadPool()
+_compatibility_job_pool.setMaxThreadCount(3)
 
-    def __init__(self, mod_data, parent=None) -> None:
-        super().__init__(parent)
+
+def shutdown_compatibility_job_pool(timeout_ms: int) -> None:
+    _compatibility_job_pool.clear()
+    _compatibility_job_pool.waitForDone(timeout_ms)
+
+
+class CompatibilityCheckJobSignals(QObject):
+    compatibility_checked = pyqtSignal(object, dict)
+    finished = pyqtSignal(object)
+
+
+class CompatibilityCheckJob(QRunnable):
+    def __init__(self, mod_data) -> None:
+        super().__init__()
         self.mod_data = mod_data
+        self.signals = CompatibilityCheckJobSignals()
 
     def run(self):
-        if not self._semaphore.acquire(timeout=15):
-            return
         try:
-            if self.isInterruptionRequested():
-                return
             from utils.mod.utils import parse_gamebanana_mod_id
 
             key = get_mod_id(self.mod_data)
@@ -52,23 +57,17 @@ class CompatibilityCheckThread(ManagedQThread):
                 return
             from adapters.gamebanana_adapter import GameBananaAPI
 
-            cached = GameBananaAPI._compatibility_cache.get(int(gb_id))
-            if cached:
-                self.compatibility_checked.emit(self.mod_data, cached)
-                return
             api = GameBananaAPI()
-            if self.isInterruptionRequested():
-                return
             itemtype = "Wip" if gb_type == "wip" else "Mod"
             compat = api.get_supported_files_for_mod(int(gb_id), itemtype=itemtype)
-            self.compatibility_checked.emit(self.mod_data, compat)
+            self.signals.compatibility_checked.emit(self.mod_data, compat)
         except Exception as e:
             logger.warning(
-                f"CompatibilityCheckThread: Error checking compatibility: {e}",
+                f"CompatibilityCheckJob: Error checking compatibility: {e}",
                 exc_info=True,
             )
         finally:
-            self._semaphore.release()
+            self.signals.finished.emit(self.mod_data)
 
 
 class ModCardWidget(BaseModWidget):
@@ -98,15 +97,15 @@ class ModCardWidget(BaseModWidget):
         self.setObjectName("modCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(self._card_height())
-        self._compatibility_thread = None
+        self._compatibility_job_queued = False
         self._init_ui()
         self._check_installation_status()
         self.update_action_button_state()
         self._update_style()
         if self.is_installed and hasattr(self, "action_button"):
             self._apply_unaction_button_style()
-        with contextlib.suppress(Exception):
-            self.destroyed.connect(self._cleanup_compatibility_thread)
+        if get_mod_id(self.mod_data).startswith("gb_"):
+            QTimer.singleShot(350, self._do_start_compatibility_check)
         UIAnimator.fade_in(
             self,
             200,
@@ -114,29 +113,6 @@ class ModCardWidget(BaseModWidget):
             if getattr(self, "parent_app", None)
             else None,
         )
-
-    def _cleanup_compatibility_thread(self):
-        try:
-            thread = getattr(self, "_compatibility_thread", None)
-            if not thread:
-                return
-            with contextlib.suppress(TypeError, RuntimeError):
-                thread.compatibility_checked.disconnect()
-            with contextlib.suppress(TypeError, RuntimeError):
-                thread.finished.disconnect()
-            if thread.isRunning():
-                thread.requestInterruption()
-                thread.quit()
-                if not thread.wait(100):
-                    logger.debug("Thread did not stop in 100ms, continuing")
-            if thread.isFinished():
-                thread.deleteLater()
-        except Exception as e:
-            logger.debug(
-                f"ModCardWidget: failed to clean up compatibility thread: {e}",
-                exc_info=True,
-            )
-        self._compatibility_thread = None
 
     def _update_style(self):
         super()._update_style()
@@ -274,63 +250,37 @@ class ModCardWidget(BaseModWidget):
             self.is_installed = False
         self._update_action_button()
 
-    def _start_compatibility_check(self):
-        if getattr(self.mod_data, "gamebanana_compatibility_checked", False):
-            return
-        key = get_mod_id(self.mod_data)
-        if key and key.startswith("gb_"):
-            try:
-                from utils.mod.utils import parse_gamebanana_mod_id
-
-                _, gb_id = parse_gamebanana_mod_id(key)
-                if gb_id:
-                    from adapters.gamebanana_adapter import GameBananaAPI
-
-                    cached = GameBananaAPI._compatibility_cache.get(int(gb_id))
-                    if cached:
-                        self._on_compatibility_checked(self.mod_data, cached)
-                        return
-            except (ValueError, TypeError):
-                logger.debug("Failed to parse mod key for compatibility check")
-        if self._compatibility_thread:
-            if self._compatibility_thread.isFinished():
-                with contextlib.suppress(TypeError, RuntimeError):
-                    self._compatibility_thread.compatibility_checked.disconnect()
-                with contextlib.suppress(TypeError, RuntimeError):
-                    self._compatibility_thread.finished.disconnect()
-                self._compatibility_thread = None
-            elif self._compatibility_thread.isRunning():
-                return
-        from PyQt6.QtCore import QTimer
-
-        if not hasattr(self, "_compatibility_check_timer"):
-            self._compatibility_check_timer = QTimer()
-            self._compatibility_check_timer.setSingleShot(True)
-            self._compatibility_check_timer.timeout.connect(
-                self._do_start_compatibility_check
-            )
-        delay = 350
-        self._compatibility_check_timer.start(delay)
-
     def _do_start_compatibility_check(self):
         try:
             if getattr(self.mod_data, "gamebanana_compatibility_checked", False):
                 return
-            if self._compatibility_thread and self._compatibility_thread.isRunning():
+            if self._compatibility_job_queued:
                 return
-            self._compatibility_thread = CompatibilityCheckThread(self.mod_data, self)
-            self._compatibility_thread.compatibility_checked.connect(
-                self._on_compatibility_checked
-            )
-            self._compatibility_thread.finished.connect(
-                lambda: setattr(self, "_compatibility_thread", None)
-            )
-            self._compatibility_thread.start()
+            from adapters.gamebanana_adapter import GameBananaAPI
+            from utils.mod.utils import parse_gamebanana_mod_id
+
+            _gb_type, gb_id = parse_gamebanana_mod_id(get_mod_id(self.mod_data))
+            if not gb_id:
+                return
+            cached = GameBananaAPI._compatibility_cache.get(int(gb_id))
+            if cached is not None:
+                self._on_compatibility_checked(self.mod_data, cached)
+                return
+            job = CompatibilityCheckJob(self.mod_data)
+            job.signals.compatibility_checked.connect(self._on_compatibility_checked)
+            job.signals.finished.connect(self._on_compatibility_job_finished)
+            self._compatibility_job_queued = True
+            _compatibility_job_pool.start(job)
         except Exception as e:
+            self._compatibility_job_queued = False
             logger.warning(
                 f"ModCardWidget: Failed to start compatibility check: {e}",
                 exc_info=True,
             )
+
+    def _on_compatibility_job_finished(self, mod_data) -> None:
+        if mod_data == self.mod_data:
+            self._compatibility_job_queued = False
 
     _COMPAT_ATTR_MAP = {
         "gamebanana_supported_files": ("supported_files", []),

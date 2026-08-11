@@ -160,7 +160,6 @@ a = Analysis(
         'colorsys',
         'compileall',
         'csv',
-        'decimal',
         'getopt',
         'idlelib',
         'mailbox',

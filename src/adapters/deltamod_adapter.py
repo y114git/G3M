@@ -2,6 +2,7 @@
 
 import json
 import logging
+import ntpath
 import os
 import re
 import shutil
@@ -188,6 +189,36 @@ class DeltamodConverter:
         return (chapter_key, relative_path, filename)
 
     @staticmethod
+    def _sanitize_relative_path(path: str) -> str | None:
+        normalized = str(path or "").replace("\\", "/")
+        if (
+            not normalized
+            or normalized.startswith("/")
+            or os.path.isabs(normalized)
+            or ntpath.isabs(normalized)
+            or ntpath.splitdrive(normalized)[0]
+        ):
+            return None
+        parts = normalized.split("/")
+        if any(part == ".." for part in parts):
+            return None
+        sanitized = "/".join(part for part in parts if part not in {"", "."})
+        return sanitized or None
+
+    @staticmethod
+    def _resolve_contained_path(root: str, candidate: str) -> str | None:
+        root_path = os.path.realpath(root)
+        candidate_path = os.path.realpath(candidate)
+        try:
+            if os.path.commonpath(
+                [os.path.normcase(root_path), os.path.normcase(candidate_path)]
+            ) != os.path.normcase(root_path):
+                return None
+        except ValueError:
+            return None
+        return candidate_path
+
+    @staticmethod
     def _build_stored_path(relative_path: str | None, filename: str) -> str:
         return f"{relative_path}{filename}" if relative_path else filename
 
@@ -243,9 +274,25 @@ class DeltamodConverter:
     def _collect_patches(self) -> list:
         if self.modding_xml is None or not hasattr(self.modding_xml, "tag"):
             return []
-        if self.modding_xml.tag == "patch":
-            return [self.modding_xml]
-        return list(self.modding_xml.findall("patch"))
+        candidates = (
+            [self.modding_xml]
+            if self.modding_xml.tag == "patch"
+            else list(self.modding_xml.findall("patch"))
+        )
+        patches = []
+        for patch in candidates:
+            patch_file = self._sanitize_relative_path(patch.get("patch", ""))
+            to_path = self._sanitize_relative_path(patch.get("to", ""))
+            if not patch_file or not to_path or not self._resolve_patch_file(patch_file):
+                logger.warning(
+                    "DeltamodConverter: skipping patch with unsafe path: %s",
+                    patch.get("patch", ""),
+                )
+                continue
+            patch.set("patch", patch_file)
+            patch.set("to", to_path)
+            patches.append(patch)
+        return patches
 
     def _map_deltamod_game(self, game_id: Any) -> str | None:
         if not isinstance(game_id, str):
@@ -371,7 +418,7 @@ class DeltamodConverter:
             return {}
         for patch in patches:
             to_path = patch.get("to", "")
-            patch_file = patch.get("patch", "")
+            patch_file = self._sanitize_relative_path(patch.get("patch", ""))
             patch_type = patch.get("type", "").strip().lower()
             if not to_path or not patch_file or (not patch_type):
                 logger.warning(
@@ -395,9 +442,7 @@ class DeltamodConverter:
             if content_key not in files_structure:
                 files_structure[content_key] = {}
             if patch_type in {"xdelta", "g3mpatch", "csx"}:
-                files_structure[content_key]["data_file_path"] = patch_file.lstrip(
-                    "./"
-                ).replace("\\", "/")
+                files_structure[content_key]["data_file_path"] = patch_file
             elif patch_type in {"override", "copy"}:
                 stored_path = self._build_stored_path(relative_path, filename)
                 files_structure[content_key].setdefault("extra_files", []).append(
@@ -466,12 +511,11 @@ class DeltamodConverter:
         for content_key, dependencies in self._csx_dependencies_by_chapter(
             patches
         ).items():
-            chapter_dir = get_chapter_folder_name(content_key, game=self._target_game)
             extra_files = files_structure.setdefault(content_key, {}).setdefault(
                 "extra_files", []
             )
             for name, is_directory in dependencies:
-                path = f"{chapter_dir}/{name}"
+                path = name
                 if is_directory:
                     path += "/"
                 extra_files.append(build_extra_file_entry(path, "dependency"))
@@ -483,16 +527,23 @@ class DeltamodConverter:
             patch_file_rel.replace("/", "\\"),
         ):
             candidate = os.path.join(self.source_path, variant)
-            if os.path.exists(candidate):
-                return candidate
+            if os.path.isfile(candidate):
+                contained = self._resolve_contained_path(self.source_path, candidate)
+                if contained and os.path.isfile(contained):
+                    return contained
         if os.name == "nt":
             found = self._find_file_case_insensitive(self.source_path, patch_file_rel)
             if found:
-                return found
+                contained = self._resolve_contained_path(self.source_path, found)
+                if contained and os.path.isfile(contained):
+                    return contained
         found = self._find_file_recursive(
             self.source_path, os.path.basename(patch_file_rel)
         )
-        return found
+        if not found:
+            return None
+        contained = self._resolve_contained_path(self.source_path, found)
+        return contained if contained and os.path.isfile(contained) else None
 
     def _process_files(self, target_mod_dir: str) -> None:
         if self.modding_xml is None:
@@ -512,9 +563,9 @@ class DeltamodConverter:
             shutil.copy2(icon_path, target_icon_path)
         for patch in patches:
             to_path = patch.get("to", "")
-            patch_file_rel = patch.get("patch", "").lstrip("./")
+            patch_file_rel = self._sanitize_relative_path(patch.get("patch", ""))
             patch_type = patch.get("type", "").strip().lower()
-            if not to_path or not patch_type:
+            if not to_path or not patch_file_rel or not patch_type:
                 logger.warning(
                     f"DeltamodConverter: skipping patch with missing to or type: {to_path}, {patch_type}"
                 )
@@ -537,7 +588,8 @@ class DeltamodConverter:
                 content_key, game=self._target_game
             )
             target_chapter_dir = os.path.join(target_mod_dir, chapter_dir_name)
-            os.makedirs(target_chapter_dir, exist_ok=True)
+            if patch_type != "csx":
+                os.makedirs(target_chapter_dir, exist_ok=True)
             if patch_type in {"override", "copy"}:
                 patch_file_abs = self._resolve_patch_file(patch_file_rel)
                 if not patch_file_abs:
@@ -546,9 +598,16 @@ class DeltamodConverter:
                     )
                     continue
                 stored_path = self._build_stored_path(relative_path, filename)
-                target_override_path = os.path.join(
-                    target_chapter_dir, stored_path.replace("/", os.sep)
+                target_override_path = self._resolve_contained_path(
+                    target_mod_dir,
+                    os.path.join(target_chapter_dir, stored_path.replace("/", os.sep)),
                 )
+                if not target_override_path:
+                    logger.warning(
+                        "DeltamodConverter: skipping override with unsafe destination: %s",
+                        to_path,
+                    )
+                    continue
                 parent_dir = os.path.dirname(target_override_path)
                 if parent_dir:
                     os.makedirs(parent_dir, exist_ok=True)
@@ -566,8 +625,11 @@ class DeltamodConverter:
                         f"DeltamodConverter: data patch file not found: {patch_file_rel}"
                     )
                     continue
+                target_patch_dir = (
+                    target_mod_dir if patch_type == "csx" else target_chapter_dir
+                )
                 target_patch_path = os.path.join(
-                    target_chapter_dir, patch_file_rel.replace("/", os.sep)
+                    target_patch_dir, patch_file_rel.replace("/", os.sep)
                 )
                 os.makedirs(os.path.dirname(target_patch_path), exist_ok=True)
                 shutil.copy2(patch_file_abs, target_patch_path)
@@ -582,21 +644,14 @@ class DeltamodConverter:
         self._copy_csx_dependencies(target_mod_dir, patches)
 
     def _copy_csx_dependencies(self, target_mod_dir: str, patches: list) -> None:
-        for content_key, dependencies in self._csx_dependencies_by_chapter(
-            patches
-        ).items():
-            chapter_dir = os.path.join(
-                target_mod_dir,
-                get_chapter_folder_name(content_key, game=self._target_game),
-            )
-            for name, is_directory in dependencies:
-                source = os.path.join(self.source_path, name)
-                destination = os.path.join(chapter_dir, name)
-                if is_directory:
-                    shutil.copytree(source, destination, dirs_exist_ok=True)
-                else:
-                    os.makedirs(os.path.dirname(destination), exist_ok=True)
-                    shutil.copy2(source, destination)
+        for name in self._csx_dependency_names(patches):
+            source = os.path.join(self.source_path, name)
+            destination = os.path.join(target_mod_dir, name)
+            if os.path.isdir(source):
+                shutil.copytree(source, destination, dirs_exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                shutil.copy2(source, destination)
 
     def _copy_root_docs(self, target_mod_dir: str) -> None:
         try:

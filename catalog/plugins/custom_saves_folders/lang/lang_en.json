@@ -62,6 +62,7 @@
     "script_missing": "The custom save folder script is missing.",
     "g3mtool_missing": "G3MTool is not available.",
     "apply_failed": "Failed to apply the custom save folder: {error}",
-    "restore_failed": "Failed to restore original DATA files: {error}"
+    "restore_failed": "Failed to restore original DATA files: {error}",
+    "restore_incomplete": "Some original DATA files could not be restored."
   }
 }

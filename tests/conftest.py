@@ -15,7 +15,6 @@ from ui.common.feedback import FeedbackManager
 from utils.path_utils import set_user_data_root_override
 
 _THREAD_ATTRS = (
-    "_compatibility_thread",
     "_icon_loader_runnable",
     "thread",
     "_thread",
@@ -84,6 +83,9 @@ def qapp():
         thread_pool.clear()
         if thread_pool.activeThreadCount() > 0:
             thread_pool.waitForDone(200)
+    from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
+
+    shutdown_compatibility_job_pool(200)
     for widget in app.allWidgets():
         for attr_name in _THREAD_ATTRS:
             try:
@@ -140,15 +142,18 @@ def cleanup_threads(request):
         logging.debug(f'cleanup_threads: failed during thread cleanup sweep: {e}', exc_info=True)
     _close_widgets(app)
     _pump_events(app)
+    try:
+        timeout_ms = int(os.getenv("WAIT_FOR_DONE_TIMEOUT_MS", "5000"))
+    except ValueError:
+        timeout_ms = 5000
     pool = QThreadPool.globalInstance()
     if pool is not None:
         pool.clear()
         if pool.activeThreadCount() > 0:
-            try:
-                timeout_ms = int(os.getenv("WAIT_FOR_DONE_TIMEOUT_MS", "5000"))
-            except ValueError:
-                timeout_ms = 5000
             pool.waitForDone(timeout_ms)
+    from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
+
+    shutdown_compatibility_job_pool(timeout_ms)
     _pump_events(app)
 
 

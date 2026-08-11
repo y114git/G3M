@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def safe_show_message(feedback_service, level: str, title: str, message: str) -> None:
+    try:
+        feedback_service.show_message(level, title, message)
+    except Exception:
+        logger.warning("Feedback message failed", exc_info=True)
+
+
 class FeedbackManager(QObject):
     """Manages user feedback through dialogs and status messages."""
 
@@ -78,6 +85,7 @@ class FeedbackManager(QObject):
             full_message = f"{message_html}<br><br>{details_html}"
         else:
             full_message = message_html
+        msg_box.setTextFormat(Qt.TextFormat.RichText)
         msg_box.setText(full_message)
         msg_box.exec()
 
@@ -104,6 +112,7 @@ class FeedbackManager(QObject):
             full_message = f"{message_html}<br><br>{details_html}"
         else:
             full_message = self._format_html(message)
+        msg_box.setTextFormat(Qt.TextFormat.RichText)
         msg_box.setText(full_message)
         msg_box.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No

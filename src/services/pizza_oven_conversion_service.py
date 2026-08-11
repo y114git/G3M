@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -762,14 +761,6 @@ class PizzaOvenConversionService:
             )
         PizzaOvenConversionService._copy_file(source_path, target_path)
         return target_path
-
-    @staticmethod
-    def _hash_file(path: str) -> str:
-        digest = hashlib.sha256()
-        with open(path, "rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
 
     def _collect_changed_files(
         self,

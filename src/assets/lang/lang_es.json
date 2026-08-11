@@ -43,7 +43,7 @@
     "language_name": "Español",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_es",
-    "version": "3.3.1"
+    "version": "3.3.2"
   },
   "blocklist": {
     "title": "Gestor de Blocklist",

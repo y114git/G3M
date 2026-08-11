@@ -366,21 +366,6 @@ class SearchDisplayController(QObject):
             )
         return set()
 
-    def _has_active_tag_filters(self) -> bool:
-        selected_game = self._get_selected_game()
-        for attr_name in (
-            "tag_textedit",
-            "tag_customization",
-            "tag_gameplay",
-            "tag_other",
-            "tag_cyop_afom",
-        ):
-            if attr_name == "tag_cyop_afom" and selected_game != "pizzatower":
-                continue
-            if _bound_checkbox_is_checked(self.app, attr_name):
-                return True
-        return False
-
     def _set_search_btn_icon(self, is_searching: bool):
         icon_name = "reset" if is_searching else "search"
         if hasattr(self.app, "search_button"):

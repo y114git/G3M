@@ -43,7 +43,7 @@
     "language_name": "한국어",
     "font": "NotoSansKR-Bold.ttf",
     "qt_translation": "qtbase_ko",
-    "version": "3.3.1"
+    "version": "3.3.2"
   },
   "blocklist": {
     "title": "차단 매니저",

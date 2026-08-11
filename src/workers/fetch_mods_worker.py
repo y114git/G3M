@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from types import SimpleNamespace
 from typing import Any
 
 from PyQt6.QtCore import pyqtSignal
@@ -12,16 +13,10 @@ from models.game_modes import get_gamebanana_game_ids
 from models.mod_models import AnyModInfo, BrowserModInfo
 from services.localization_service import tr
 from ui.utils.thread_lifetime import ManagedQThread
+from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.mod.utils import get_mod_id
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_emit(owner: str, signal, *args) -> None:
-    try:
-        signal.emit(*args)
-    except Exception as e:
-        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class FetchModsThread(ManagedQThread):
@@ -35,14 +30,10 @@ class FetchModsThread(ManagedQThread):
         if hasattr(main_window_or_context, "app_state"):
             self.main_window = main_window_or_context
         else:
-            self.main_window = type(
-                "MainWindowProxy",
-                (),
-                {
-                    "app_state": main_window_or_context.app_state,
-                    "settings_service": main_window_or_context.settings_service,
-                },
-            )()
+            self.main_window = SimpleNamespace(
+                app_state=main_window_or_context.app_state,
+                settings_service=main_window_or_context.settings_service,
+            )
         self.force_update = force_update
 
     def run(self):

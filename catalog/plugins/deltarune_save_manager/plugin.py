@@ -22,6 +22,7 @@ def _load_local_module(filename: str, module_name: str):
     spec.loader.exec_module(module)
     return module
 
+
 class _PluginApiAdapter:
     def __init__(self, settings_accessor) -> None:
         self._settings = settings_accessor
@@ -31,6 +32,7 @@ class _PluginApiAdapter:
 
     def set_config(self, key: str, value) -> None:
         self._settings.set(key, value)
+
 
 class _SaveManagerWidgetController:
     def __init__(self, app_state, save_manager, widgets, tr_func) -> None:
@@ -267,6 +269,7 @@ QFrame#slot_row_{chapter}_{slot} {{
         self.save_manager.selected_slot = None
         self.refresh_slots()
 
+
 class DRSaveManagerPlugin:
     def __init__(self) -> None:
         self._backup_info = {}
@@ -352,14 +355,6 @@ class DRSaveManagerPlugin:
             }
         ]
 
-    def _collection_label(self, manager, collection_idx: int) -> str:
-        if collection_idx == -1:
-            return self._tr()("dialogs.main_slots")
-        collections = manager.list_collections()
-        if 0 <= collection_idx < len(collections):
-            return collections[collection_idx].rsplit("_", 1)[0]
-        return self._tr()("dialogs.main_slots")
-
     def on_before_mod_apply(self, context, *_args):
         manager = self._save_manager_instance()
         collection_idx = manager.prompt_for_save_collection_on_launch()
@@ -398,6 +393,7 @@ class DRSaveManagerPlugin:
     def on_after_restore_after_exit_shortcut(self, context, shortcut_context, *_args):
         self.on_after_restore_after_exit(context)
         return True
+
 
 def create_plugin():
     return DRSaveManagerPlugin()

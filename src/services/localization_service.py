@@ -379,7 +379,7 @@ class LocalizationManager:
         language = self.get_current_language()
         font_path = self.get_font_path(language)
         if font_path and os.path.exists(font_path):
-            font_id = QFontDatabase.addApplicationFont(font_path)
+            font_id = add_application_font_from_file(font_path)
             if font_id != -1:
                 families = QFontDatabase.applicationFontFamilies(font_id)
                 if families:

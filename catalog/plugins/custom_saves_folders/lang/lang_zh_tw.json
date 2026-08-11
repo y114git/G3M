@@ -62,6 +62,7 @@
     "script_missing": "缺少自訂存檔資料夾腳本。",
     "g3mtool_missing": "G3MTool 無法使用。",
     "apply_failed": "無法套用自訂存檔資料夾：{error}",
-    "restore_failed": "無法還原原始 DATA 檔案：{error}"
+    "restore_failed": "無法還原原始 DATA 檔案：{error}",
+    "restore_incomplete": "無法還原部分原始 DATA 檔案。"
   }
 }

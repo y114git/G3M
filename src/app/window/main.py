@@ -44,11 +44,9 @@ from app.window.close import (
 )
 from app.window.runtime import (
     connect_initialization_signals,
-    connect_window_signals,
     finalize_window_setup,
 )
 from app.window.startup import (
-    finish_initialization,
     force_finish_initialization,
     handle_pending_install,
     on_mod_scan_finished,
@@ -58,14 +56,10 @@ from app.window.startup import (
     update_installed_mods_display,
 )
 from app.window.status import (
-    get_update_widgets,
-    match_status_translation,
     on_progress_update,
     on_update_cleanup,
     perform_update_ui_prep,
     refresh_localized_status,
-    set_status_text,
-    set_update_ui_enabled,
     update_localized_status,
     update_status,
 )
@@ -226,9 +220,6 @@ class AppWindow(QWidget):
         self.initialization_timer = QTimer()
         finalize_window_setup(self)
 
-    def _connect_own_signals(self):
-        connect_window_signals(self)
-
     def _safe_show_message(self, *args, **kwargs) -> None:
         show_message = getattr(self.feedback_service, "show_message", None)
         if not callable(show_message):
@@ -288,19 +279,6 @@ class AppWindow(QWidget):
     def refresh(self, is_initial: bool = False) -> None:
         """Public method to refresh the mods list and UI."""
         self._on_refresh_clicked(is_initial=is_initial)
-
-    def _refresh_after_install(self) -> None:
-        if self.mod_service:
-            self.mod_service.invalidate_mods_cache()
-            self.mod_service.load_local_mods()
-            self.mod_service.mod_list_updated.emit()
-        if hasattr(self, "library_display"):
-            self.library_display.update_display()
-        if hasattr(self, "search_display"):
-            self.search_display.update_search_cards()
-            self.search_display.update_filtered_mods(preserve_page=True)
-        if hasattr(self, "settings_service"):
-            self.settings_service.theme_changed.emit()
 
     def handle_one_click_install(self, url: str):
         from app.protocol_handler import handle_one_click_install
@@ -730,9 +708,6 @@ class AppWindow(QWidget):
         saved_index = max(0, min(saved_index, self.main_tab_widget.count() - 1))
         self.main_tab_widget.setCurrentIndex(saved_index)
         self.previous_tab_index = saved_index
-
-    def _finish_initialization(self):
-        finish_initialization(self)
 
     def _on_mods_loaded(self):
         on_mods_loaded(self)
@@ -1187,12 +1162,6 @@ class AppWindow(QWidget):
     def _trigger_initial_mods_refresh(self, saved_chapter_mode=False):
         trigger_initial_mods_refresh(self, saved_chapter_mode=saved_chapter_mode)
 
-    def _get_update_widgets(self):
-        return get_update_widgets(self)
-
-    def _set_update_ui_enabled(self, enabled: bool):
-        set_update_ui_enabled(self, enabled)
-
     def _perform_update_ui_prep(self):
         perform_update_ui_prep(self)
 
@@ -1222,15 +1191,8 @@ class AppWindow(QWidget):
     def _update_localized_status(self, tr_key: str, color: str = "white", **kwargs):
         update_localized_status(self, tr_key, color, **kwargs)
 
-    @staticmethod
-    def _match_status_translation(message: str) -> tuple[str, dict] | None:
-        return match_status_translation(message)
-
     def _refresh_localized_status(self):
         refresh_localized_status(self)
-
-    def _set_status_text(self, message: str, color: str = "white"):
-        set_status_text(self, message, color)
 
     def _update_online_label(self, count: int):
         if hasattr(self, "online_label") and (self.online_label is not None):

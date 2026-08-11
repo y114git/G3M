@@ -20,8 +20,10 @@ from utils.native_integration import get_open_file_name, open_path_native
 
 logger = logging.getLogger(__name__)
 
+
 def tr(k, **kw):
     return k
+
 
 def _load_save_utils():
     """Helper function to load save_utils module dynamically."""
@@ -33,6 +35,7 @@ def _load_save_utils():
     save_utils = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(save_utils)
     return save_utils
+
 
 class SaveManager(QObject):
     slots_updated = pyqtSignal()

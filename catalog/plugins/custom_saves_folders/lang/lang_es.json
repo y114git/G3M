@@ -62,6 +62,7 @@
     "script_missing": "Falta el script de carpetas de guardado personalizadas.",
     "g3mtool_missing": "G3MTool no está disponible.",
     "apply_failed": "No se pudo aplicar la carpeta de guardado personalizada: {error}",
-    "restore_failed": "No se pudieron restaurar los archivos DATA originales: {error}"
+    "restore_failed": "No se pudieron restaurar los archivos DATA originales: {error}",
+    "restore_incomplete": "No se pudieron restaurar algunos archivos DATA originales."
   }
 }

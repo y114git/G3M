@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "G3M"
-version = "3.3.1"
+version = "3.3.2"
 description = "G3M - GameMaker Mod Manager"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -26,8 +26,6 @@ dependencies = [
 build = ["pyinstaller==6.21.0"]
 test = [
     "pytest==9.1.1",
-    "pytest-cov==7.1.0",
-    "pytest-html==4.2.0",
     "pytest-mock==3.15.1",
     "pytest-qt==4.5.0",
     "responses==0.26.2",
@@ -94,6 +92,7 @@ ignore = [
     "ANN201", # missing return type annotation for public function
     "ANN202", # missing return type annotation for private function
     "ANN401", # dynamically typed expressions (Any, Type) are disallowed
+    "S404",   # suspicious-subprocess-import
     "S603",   # subprocess call: check for execution of untrusted input
     "S607",   # starting a process with a shell: possible security issue
     "PT001",  # use @pytest.fixture without parentheses
@@ -124,7 +123,7 @@ ignore = [
 
 [tool.pyright]
 include = ["src", "tools"]
-exclude = [".venv", "build", "dist", "tests"]
+exclude = [".venv", "build", "dist", "tests", "**/node_modules", "**/__pycache__", "**/.*"]
 pythonVersion = "3.14"
 typeCheckingMode = "basic"
 # PyQt's generated stubs cannot model dynamic QObject attributes and expose

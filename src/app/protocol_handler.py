@@ -1,20 +1,11 @@
 """One-click install handler extracted from AppWindow."""
 
-import logging
 import os
 
 from config.config import PRIMARY_URL_SCHEME, URL_PROTOCOL_PREFIXES
 from services.game_detection_service import is_game_running
 from services.localization_service import tr
-
-logger = logging.getLogger(__name__)
-
-
-def _safe_show_message(w, level: str, title: str, message: str) -> None:
-    try:
-        w.feedback_service.show_message(level, title, message)
-    except Exception:
-        logger.warning("Protocol handler feedback message failed", exc_info=True)
+from ui.common.feedback import safe_show_message
 
 
 def _parse_g3m_url(url: str) -> str:
@@ -32,7 +23,7 @@ def _parse_g3m_url(url: str) -> str:
 def handle_one_click_install(w, url: str):
     """Handle one-click install from a supported protocol URL. `w` is the AppWindow instance."""
     if is_game_running():
-        _safe_show_message(w, "warning", "ui.warning", tr("errors.game_running"))
+        safe_show_message(w.feedback_service, "warning", "ui.warning", tr("errors.game_running"))
         return
     w.activateWindow()
     w.raise_()
@@ -52,7 +43,7 @@ def _enqueue_g3m_url(w, url: str):
 
     download_url = _parse_g3m_url(url)
     if not download_url or not download_url.startswith(("http://", "https://")):
-        _safe_show_message(w, "error", "errors.error", tr("errors.mod_not_found"))
+        safe_show_message(w.feedback_service, "error", "errors.error", tr("errors.mod_not_found"))
         return
     dialog = ConfirmExternalDownloadDialog(
         download_url, getattr(w, "app_state", None), w

@@ -62,6 +62,7 @@
     "script_missing": "缺少自定义存档文件夹脚本。",
     "g3mtool_missing": "G3MTool 不可用。",
     "apply_failed": "无法应用自定义存档文件夹：{error}",
-    "restore_failed": "无法恢复原始 DATA 文件：{error}"
+    "restore_failed": "无法恢复原始 DATA 文件：{error}",
+    "restore_incomplete": "无法还原部分原始 DATA 文件。"
   }
 }

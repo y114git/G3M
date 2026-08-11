@@ -43,7 +43,7 @@
     "language_name": "繁體中文",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_zh_tw",
-    "version": "3.3.1"
+    "version": "3.3.2"
   },
   "blocklist": {
     "title": "封鎖清單管理器",

@@ -62,6 +62,7 @@
     "script_missing": "カスタムセーブフォルダー用スクリプトが見つかりません。",
     "g3mtool_missing": "G3MToolを使用できません。",
     "apply_failed": "カスタムセーブフォルダーを適用できませんでした: {error}",
-    "restore_failed": "元のDATAファイルを復元できませんでした: {error}"
+    "restore_failed": "元のDATAファイルを復元できませんでした: {error}",
+    "restore_incomplete": "一部の元のDATAファイルを復元できませんでした。"
   }
 }

@@ -535,18 +535,43 @@ class GameLauncher(QObject):
 
     def _check_game_running(self, vanilla_mode):
         logger.info("[LAUNCH] Game is no longer running, starting cleanup")
+        self._deployed_state_refresh_failed = False
         self.app_state.is_patching = True
         self.app_state.progress_bar_visible = True
         if self.restore_window_callback:
             self.restore_window_callback()
         self._record_launch_playtime()
-        self._execute_plugin_hook("before_restore_after_exit", vanilla_mode)
+        plugin_results = self._execute_plugin_hook(
+            "before_restore_after_exit", vanilla_mode
+        )
+        if isinstance(plugin_results, (list, tuple)) and any(
+            isinstance(result, dict)
+            and result.get("refresh_host_deployed_state") is True
+            for result in plugin_results
+        ):
+            try:
+                if not self.mod_patcher.finalize_session_state():
+                    self._deployed_state_refresh_failed = True
+                    logger.warning(
+                        "Plugin restored tracked files, but the deployed state could not be refreshed"
+                    )
+            except Exception:
+                self._deployed_state_refresh_failed = True
+                logger.warning(
+                    "Plugin restored tracked files, but refreshing the deployed state failed",
+                    exc_info=True,
+                )
         self._safe_discord_rich_presence_call(
             "on_before_restore_after_exit", vanilla_mode
         )
-        self.status_changed.emit(
-            tr("status.game_closed_restoring_files"), UI_COLORS["status_info"]
-        )
+        if self._deployed_state_refresh_failed:
+            self.status_changed.emit(
+                tr("status.restore_skipped_external_changes"), UI_COLORS["status_warning"]
+            )
+        else:
+            self.status_changed.emit(
+                tr("status.game_closed_restoring_files"), UI_COLORS["status_info"]
+            )
         QTimer.singleShot(50, lambda: self._finish_game_cleanup(vanilla_mode))
 
     def _finish_game_cleanup(self, vanilla_mode: bool) -> None:
@@ -1108,7 +1133,9 @@ class GameLauncher(QObject):
                     tr("errors.files_restore_error", error=str(restore_errors[0])),
                     UI_COLORS["status_error"],
                 )
-            elif restore_skipped_external_changes:
+            elif restore_skipped_external_changes or getattr(
+                self, "_deployed_state_refresh_failed", False
+            ):
                 self.status_changed.emit(
                     tr("status.restore_skipped_external_changes"),
                     UI_COLORS["status_warning"],

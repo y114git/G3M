@@ -1,8 +1,19 @@
 """Native-safe lifetime handling for QThread wrappers."""
 
+import logging
+
 from PyQt6.QtCore import QThread
 
 from services.background_operations import background_operations
+
+logger = logging.getLogger(__name__)
+
+
+def safe_emit(owner: str, signal, *args, emitter=None) -> None:
+    try:
+        (emitter or signal.emit)(*args)
+    except Exception as e:
+        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class ManagedQThread(QThread):

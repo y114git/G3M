@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any, Protocol, cast, runtime_checkable
 
 from config.config import (
@@ -28,11 +27,6 @@ class PluginStateServiceProtocol(Protocol):
     def get_plugin_setting(self, plugin_id: str, key: str, default: Any = None) -> Any: ...
     def set_plugin_setting(self, plugin_id: str, key: str, value: Any) -> None: ...
     def get_plugin_settings(self, plugin_id: str) -> dict[str, Any]: ...
-
-
-class PluginRelation(StrEnum):
-    REQUIRE = "require"
-    CONFLICT = "conflict"
 
 
 @dataclass(slots=True)

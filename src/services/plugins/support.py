@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from models.plugin_models import (
-    PLUGIN_API_VERSION,
     PLUGIN_HOOKS,
     PLUGIN_TAGS,
     PluginManifest,
@@ -248,9 +247,3 @@ def load_plugin_langs(plugin_dir: str) -> dict[str, dict]:
             logger.warning("Failed to load plugin language file %s: %s", path, e)
             continue
     return langs
-
-
-def is_plugin_manifest_compatible(manifest: PluginManifest) -> bool:
-    if manifest.api_version:
-        return is_version_compatible(PLUGIN_API_VERSION, manifest.api_version)
-    return False

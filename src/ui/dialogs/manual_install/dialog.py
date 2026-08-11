@@ -36,7 +36,6 @@ from ui.dialogs.manual_install.paths import (
     extract_chapter_prefixed_path,
     normalize_path,
     normalize_relative_target_path,
-    strip_chapter_prefix,
 )
 from ui.dialogs.manual_install.storage import (
     build_manual_mod_identity,
@@ -44,7 +43,6 @@ from ui.dialogs.manual_install.storage import (
     copy_root_docs_to_mod,
     create_manual_mod_dir,
     join_storage_path,
-    storage_prefix_for_chapter,
 )
 from ui.dialogs.manual_install.targets import (
     get_or_prompt_game_folder,
@@ -243,11 +241,6 @@ class ManualModInstallDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
         main_layout.addWidget(self.button_box)
         self._apply_theme_styles()
-
-    def _build_section_title(self, text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet("font-size: 15px; font-weight: 700;")
-        return label
 
     def _build_summary_card(self) -> QWidget:
         frame = QWidget()
@@ -701,16 +694,6 @@ class ManualModInstallDialog(QDialog):
         elif file_path in self.xdelta_patches_mappings[chapter_id]:
             del self.xdelta_patches_mappings[chapter_id][file_path]
 
-    @staticmethod
-    def _normalize_path(path: str, trailing_slash: bool = False) -> str:
-        if not path:
-            return ""
-        path = path.strip().strip("/").strip("\\").replace("\\", "/")
-        result = "/".join(
-            p for p in path.split("/") if p and p != ".." and not os.path.isabs(p)
-        )
-        return (result + "/") if result and trailing_slash else result
-
     def _browse_xdelta_target_file(self, file_path: str, chapter_id: str):
         target_root = self._get_target_root_for_chapter(chapter_id)
         if not target_root:
@@ -822,9 +805,6 @@ class ManualModInstallDialog(QDialog):
             self.extra_file_widgets[file_path] = file_widget
         self.extra_files_list_layout.addStretch()
 
-    def _guess_chapter_for_file(self, rel_path: str) -> str | None:
-        return self._extract_chapter_prefixed_path(rel_path)[0]
-
     def _chapter_alias_map(self) -> dict[str, str]:
         folder_to_chapter = {}
         for chapter_entry in self._chapter_entries():
@@ -871,13 +851,6 @@ class ManualModInstallDialog(QDialog):
             if target_name:
                 aliases.add(target_name.replace("\\", "/").strip("/").lower())
         return {alias for alias in aliases if alias}
-
-    def _strip_chapter_prefix(self, normalized_path: str, chapter_id: str) -> str:
-        return strip_chapter_prefix(
-            normalized_path,
-            chapter_id,
-            chapter_aliases=self._chapter_path_aliases(chapter_id),
-        )
 
     def _normalize_relative_target_path(
         self,
@@ -1157,15 +1130,6 @@ class ManualModInstallDialog(QDialog):
         relative_path: str,
     ) -> str:
         return copy_file_to_relative_path(target_mod_dir, source_path, relative_path)
-
-    def _storage_prefix_for_chapter(self, chapter_id: str) -> str:
-        game = self.game_combo.currentData()
-        game_def = get_game(game)
-        return storage_prefix_for_chapter(
-            chapter_id,
-            game=game,
-            is_multi_tab=bool(game_def and game_def.is_multi_tab),
-        )
 
     def _join_storage_path(self, chapter_id: str, *parts: str) -> str:
         game = self.game_combo.currentData()

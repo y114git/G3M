@@ -150,11 +150,6 @@ class UpdateChecker(QObject):
             "Darwin": f"macos-{ARCH}",
         }.get(system)
 
-    def _get_platform_value(self, value, platform_key: str | None):
-        if isinstance(value, dict):
-            return value.get(platform_key or "")
-        return value
-
     def _get_archive_extension(self, url: str) -> str:
         url_path = url.split("?", 1)[0].lower()
         if url_path.endswith(".tar.gz"):

@@ -1,6 +1,5 @@
 """UI tests for test widgets."""
 
-import contextlib
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import cast
@@ -277,29 +276,81 @@ class TestModWidgets:
         from unittest.mock import patch
 
         from models.mod_models import ModInfo
-        from ui.utils.ui_utils import safe_stop_thread
         from ui.widgets.mod.mod_card_widget import ModCardWidget
-        mod_data = ModInfo(id='test_mod', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune')
-        mod_data.is_gamebanana_mod = False
-        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'):
+        mod_data = ModInfo(id='gb_mod_999', name='Test Mod', version='1.0.0', author='Test Author', description='Test description', game_version='', description_url='', downloads=0, game='deltarune')
+        with patch('ui.widgets.mod.base_mod_widget.load_mod_icon_universal'), patch(
+            'ui.widgets.mod.mod_card_widget.QTimer.singleShot'
+        ) as single_shot:
             widget = ModCardWidget(mod_data, parent=None)
             assert widget is not None
             assert isinstance(widget, QWidget)
-        if hasattr(widget, '_compatibility_thread') and widget._compatibility_thread:
-            thread = widget._compatibility_thread
-            try:
-                thread.blockSignals(True)
-                with contextlib.suppress(TypeError, RuntimeError):
-                    thread.compatibility_checked.disconnect()
-                with contextlib.suppress(TypeError, RuntimeError):
-                    thread.finished.disconnect()
-                thread.blockSignals(False)
-            except Exception as e:
-                import logging
-                logging.debug(f'Thread cleanup error in test: {e}')
-            safe_stop_thread(thread, timeout=1000)
+        assert single_shot.call_args.args[0] == 350
+        assert single_shot.call_args.args[1].__self__ is widget
         widget.deleteLater()
         _drain_events(qapp)
+
+    def test_mod_card_widget_uses_cached_compatibility_without_job(self, qapp):
+        from unittest.mock import patch
+
+        from adapters.gamebanana_adapter import GameBananaAPI
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.mod_card_widget import (
+            ModCardWidget,
+            _compatibility_job_pool,
+        )
+
+        mod_data = ModInfo(id="gb_mod_123", name="Test Mod", version="1.0.0", author="Test", description="Test", game_version="", description_url="", downloads=0, game="deltarune")
+        cached = {"supported_files": [{"name": "data.win"}], "compatibility_checked": True}
+        previous = GameBananaAPI._compatibility_cache.get(123)
+        widget = None
+        GameBananaAPI._compatibility_cache[123] = cached
+        try:
+            assert _compatibility_job_pool.maxThreadCount() == 3
+            with patch("ui.widgets.mod.base_mod_widget.load_mod_icon_universal"), patch(
+                "ui.widgets.mod.mod_card_widget.CompatibilityCheckJob"
+            ) as job:
+                widget = ModCardWidget(mod_data)
+                widget._do_start_compatibility_check()
+
+            job.assert_not_called()
+            assert mod_data.gamebanana_supported_files == cached["supported_files"]
+            assert mod_data.gamebanana_compatibility_checked is True
+        finally:
+            if previous is None:
+                GameBananaAPI._compatibility_cache.pop(123, None)
+            else:
+                GameBananaAPI._compatibility_cache[123] = previous
+            if widget is not None:
+                widget.deleteLater()
+            _drain_events(qapp)
+
+    def test_mod_card_widget_retries_compatibility_after_start_failure(self, qapp):
+        from unittest.mock import patch
+
+        from adapters.gamebanana_adapter import GameBananaAPI
+        from models.mod_models import ModInfo
+        from ui.widgets.mod.mod_card_widget import ModCardWidget
+
+        mod_data = ModInfo(id="gb_mod_124", name="Test Mod", version="1.0.0", author="Test", description="Test", game_version="", description_url="", downloads=0, game="deltarune")
+        previous = GameBananaAPI._compatibility_cache.pop(124, None)
+        widget = None
+        try:
+            with patch("ui.widgets.mod.base_mod_widget.load_mod_icon_universal"), patch(
+                "ui.widgets.mod.mod_card_widget.QTimer.singleShot"
+            ), patch(
+                "ui.widgets.mod.mod_card_widget._compatibility_job_pool.start",
+                side_effect=RuntimeError,
+            ):
+                widget = ModCardWidget(mod_data)
+                widget._do_start_compatibility_check()
+
+            assert widget._compatibility_job_queued is False
+        finally:
+            if previous is not None:
+                GameBananaAPI._compatibility_cache[124] = previous
+            if widget is not None:
+                widget.deleteLater()
+            _drain_events(qapp)
 
     def test_selected_mod_card_keeps_select_border_on_hover(self, qapp):
         """Checks that selected mod card keeps select border on hover."""

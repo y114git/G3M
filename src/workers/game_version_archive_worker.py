@@ -11,17 +11,11 @@ from PyQt6.QtCore import pyqtSignal
 from config.config import GAME_VERSION_MANIFEST_FILENAME
 from services.localization_service import tr
 from ui.utils.thread_lifetime import ManagedQThread
+from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.network_utils import get_session
 from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_emit(owner: str, signal, *args, emitter=None) -> None:
-    try:
-        (emitter or signal.emit)(*args)
-    except Exception as e:
-        logger.warning("%s: failed to emit signal: %s", owner, e, exc_info=True)
 
 
 class CreateVersionWorker(ManagedQThread):

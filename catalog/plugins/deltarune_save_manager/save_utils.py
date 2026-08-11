@@ -4,25 +4,10 @@ This module contains functions that are specific to save file handling
 and should not be part of the main launcher codebase.
 """
 import os
-import platform
 import re
 
 SAVE_SLOT_FINISH_MAP = {0: 3, 1: 4, 2: 5}
 
-def get_default_save_path() -> str:
-    """
-    Get the default save path for Deltarune based on the operating system.
-
-    Returns:
-        Default save path for Deltarune saves
-    """
-    system = platform.system()
-    if system == 'Windows':
-        return os.path.join(os.getenv('APPDATA', ''), 'DELTARUNE')
-    elif system == 'Darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'DELTARUNE')
-    else:
-        return os.path.join(os.path.expanduser('~'), '.config', 'DELTARUNE')
 
 def is_valid_save_path(path: str) -> bool:
     """

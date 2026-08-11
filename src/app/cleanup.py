@@ -10,11 +10,11 @@ from PyQt6.QtWidgets import QApplication
 from config.config import THREAD_WAIT_TIMEOUT
 from services.background_operations import background_operations
 from ui.utils.ui_utils import safe_stop_thread
+from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
 
 logger = logging.getLogger(__name__)
 
 _THREAD_ATTRS = (
-    "_compatibility_thread",
     "_mod_scan_thread",
     "_scan_thread",
     "_bg_loader",
@@ -157,6 +157,8 @@ def perform_close_cleanup(w):
             pool.clear()
             with contextlib.suppress(Exception):
                 pool.waitForDone(THREAD_WAIT_TIMEOUT)
+        with contextlib.suppress(Exception):
+            shutdown_compatibility_job_pool(THREAD_WAIT_TIMEOUT)
         background_operations.cancel_threads(THREAD_WAIT_TIMEOUT)
         w.game_launcher._cleanup_direct_launch_files()
         if hasattr(w.game_launcher, "mod_patcher"):
