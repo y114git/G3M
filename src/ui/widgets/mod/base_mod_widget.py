@@ -166,13 +166,9 @@ class BaseModWidget(QFrame):
         self.description_label.setWordWrap(True)
         self.description_label.setObjectName("secondaryText")
         info_layout.addWidget(self.description_label)
-        self._create_tags_layout_if_needed(info_layout)
         info_layout.addStretch()
         main_layout.addLayout(info_layout, 1)
         self.main_layout = main_layout
-
-    def _create_tags_layout_if_needed(self, info_layout):
-        pass
 
     def _resolve_local_icon_fallback(self):
         key = get_mod_id(self.mod_data)

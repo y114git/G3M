@@ -69,6 +69,45 @@ def test_discovery_skips_symlinks(tmp_path):
     ) == []
 
 
+def test_discovery_follows_explicit_symlink(tmp_path):
+    import pytest
+
+    source = tmp_path / "mod"
+    source.mkdir()
+    outside = tmp_path / "shared" / "icon.png"
+    outside.parent.mkdir()
+    outside.write_bytes(b"icon")
+    try:
+        (source / "icon.png").symlink_to(outside)
+    except OSError as error:
+        pytest.skip(f"symlinks unavailable: {error}")
+
+    candidates = discover_directory_candidates(
+        str(source), str(tmp_path / "game"), priority=3, follow_symlinks=True
+    )
+
+    assert [Path(item.target).name for item in candidates] == ["icon.png"]
+    assert Path(candidates[0].source).read_bytes() == b"icon"
+
+
+def test_discovery_does_not_follow_directory_link_cycle(tmp_path):
+    import pytest
+
+    source = tmp_path / "mod"
+    source.mkdir()
+    (source / "icon.png").write_bytes(b"icon")
+    try:
+        (source / "loop").symlink_to(source, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"symlinks unavailable: {error}")
+
+    candidates = discover_directory_candidates(
+        str(source), str(tmp_path / "game"), priority=3, follow_symlinks=True
+    )
+
+    assert [Path(item.target).name for item in candidates] == ["icon.png"]
+
+
 def test_apply_uses_random_exclusive_temporary_file(tmp_path, monkeypatch):
     source = tmp_path / "source.txt"
     target = tmp_path / "game" / "target.txt"
@@ -88,3 +127,15 @@ def test_apply_uses_random_exclusive_temporary_file(tmp_path, monkeypatch):
     )
     assert target.read_text(encoding="utf-8") == "new"
     assert calls and calls[0] != str(target.with_name(f".{target.name}.g3m-tmp"))
+
+
+def test_apply_aborts_when_backup_manifest_cannot_be_saved(tmp_path):
+    source = tmp_path / "source.txt"
+    target = tmp_path / "game" / "target.txt"
+    source.write_text("new", encoding="utf-8")
+
+    assert not apply_override_plan(
+        [OverrideCandidate(str(source), str(target), 1)],
+        backup_or_mark=lambda _path: False,
+    )
+    assert not target.exists()

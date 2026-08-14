@@ -67,6 +67,26 @@ def test_recovery_has_explicit_state_sequence():
     ]
 
 
+@pytest.mark.parametrize(
+    "state",
+    [LaunchState.PREPARING, LaunchState.BACKING_UP, LaunchState.APPLYING],
+)
+def test_cancelled_launch_can_start_again(state):
+    transaction = LaunchTransaction()
+    transaction.begin()
+    if state == LaunchState.BACKING_UP:
+        transaction.transition(LaunchState.BACKING_UP)
+    elif state == LaunchState.APPLYING:
+        transaction.begin_apply()
+
+    assert transaction.state == state
+    transaction.cancel()
+    assert transaction.state == LaunchState.CANCELLED
+    transaction.begin()
+
+    assert transaction.state == LaunchState.PREPARING
+
+
 def test_invalid_transition_is_rejected():
     transaction = LaunchTransaction()
 

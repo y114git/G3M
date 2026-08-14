@@ -64,7 +64,7 @@ class G3MToolManager:
     def _find_executable(self) -> str | None:
         custom_path = self._get_configured_g3mtool_path()
         if custom_path:
-            if os.path.exists(custom_path):
+            if os.path.isfile(custom_path):
                 return custom_path
             logger.warning(
                 f"Custom G3MTool path not found, falling back to bundled: {custom_path}"
@@ -74,7 +74,7 @@ class G3MToolManager:
         base_path = resource_path(f"assets/bin/g3mtool_{self.platform}")
         exe_name = "G3MTool.exe" if self.platform == "windows" else "G3MTool"
         exe_path = os.path.join(base_path, exe_name)
-        if os.path.exists(exe_path):
+        if os.path.isfile(exe_path):
             if self.platform != "windows":
                 try:
                     os.chmod(exe_path, 0o700)
@@ -100,7 +100,7 @@ class G3MToolManager:
 
     def get_unavailable_reason(self) -> str:
         custom_path = self._get_configured_g3mtool_path()
-        if custom_path and not os.path.exists(custom_path):
+        if custom_path and not os.path.isfile(custom_path):
             return tr("errors.custom_g3mtool_not_found", path=custom_path)
         return tr("errors.g3mtool_not_available")
 

@@ -43,7 +43,7 @@
     "language_name": "简体中文",
     "font": "NotoSansSC-Bold.ttf",
     "qt_translation": "qtbase_zh_cn",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "封锁列表管理器",
@@ -1234,6 +1234,7 @@
     "preview_stop": "停止",
     "image_preview_hint": "图片预览。双击文件可用系统查看器打开。",
     "audio_preview_hint": "{file}\n\n音频预览已准备好。使用上方的播放 / 停止，或双击文件用系统查看器打开。",
+    "audio_playback_unavailable": "系统未安装音频后端，无法播放音频。你仍可以使用系统查看器打开该文件。",
     "multi_mod_resource_title": "此资源被 {count} 个已勾选模组触及：{resource_type}/{name}",
     "multi_data_resource_title": "此资源出现在 {mod} 的 {count} 个 DATA 条目中：{resource_type}/{name}",
     "preview_file_too_large": "{file}\n\n此文件大小为 {size}，超过预览限制 ({limit})。它已列在 patch 中，但诊断不会将其加载到内存。"

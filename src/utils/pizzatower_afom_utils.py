@@ -100,7 +100,8 @@ def _copy_tree_contents(
                         continue
                     target_file = os.path.join(target_root, rel_path)
                     os.makedirs(os.path.dirname(target_file), exist_ok=True)
-                    backup_or_mark(target_file)
+                    if backup_or_mark(target_file) is False:
+                        return False
                     shutil.copy2(entry.path, target_file)
         return True
     except Exception as e:

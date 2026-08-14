@@ -17,15 +17,14 @@ from ui.common.styling import (
     install_panel_style_handler,
     qt_hex_to_display_hex,
 )
+from ui.utils.audio_utils import _play_sound_process, is_audio_playback_available
 from utils.path_utils import resource_path
 
 logger = logging.getLogger(__name__)
 
 
 def _play_background_music_process(music_path: str) -> None:
-    from playsound3 import playsound
-
-    playsound(music_path)
+    _play_sound_process(music_path)
 
 
 class CustomizationManager(QObject):
@@ -114,6 +113,9 @@ class CustomizationManager(QObject):
         music_path = self.get_background_music_path()
         if not music_path or not os.path.exists(music_path):
             self.stop_background_music()
+            return
+        if not is_audio_playback_available():
+            logger.debug("Background music disabled: gst-play-1.0 is unavailable")
             return
         try:
             self._music_starting = True

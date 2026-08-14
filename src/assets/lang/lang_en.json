@@ -43,7 +43,7 @@
     "language_name": "English",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_en",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "Blocklist Manager",
@@ -1261,6 +1261,7 @@
     "preview_stop": "Stop",
     "image_preview_hint": "Image preview. Double-click the file to open it with the system viewer.",
     "audio_preview_hint": "{file}\n\nAudio preview is ready. Use Play / Stop above, or double-click the file to open it with the system viewer.",
+    "audio_playback_unavailable": "Audio playback is unavailable because the system audio backend is not installed. You can still open the file with the system viewer.",
     "multi_mod_resource_title": "This resource is touched by {count} checked mods: {resource_type}/{name}",
     "multi_data_resource_title": "This resource appears in {count} DATA entries from {mod}: {resource_type}/{name}",
     "preview_file_too_large": "{file}\n\nThis file is {size}, which is larger than the preview limit ({limit}). It is listed in the patch, but diagnostics will not load it into memory."

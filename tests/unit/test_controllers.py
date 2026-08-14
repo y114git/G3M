@@ -2148,6 +2148,186 @@ class TestThemeController:
 class TestGameLaunchController:
     """Tests for controllers."""
 
+    def test_launch_after_completed_cancellation_starts_new_operation(self, qapp):
+        from controllers.game_launch_controller import GameLaunchController
+
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            external_game_process_name="",
+            is_installing=False,
+            operation_cancelled=True,
+            is_patching=False,
+            initialization_completed=True,
+            local_config={},
+            action_button_text=None,
+            action_button_enabled=True,
+            progress_bar_visible=True,
+            progress_bar_value=0,
+            current_task=None,
+        )
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=Mock(),
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=SimpleNamespace(
+                _patching_thread=None,
+                _plugin_hook_thread=None,
+            ),
+            customization_service=Mock(),
+            app_window=Mock(),
+        )
+        controller.launch_game = Mock()
+
+        controller.on_action_button_click()
+
+        assert app_state.operation_cancelled is False
+        controller.launch_game.assert_called_once_with()
+        controller._external_game_timer.stop()
+        qapp.processEvents()
+
+    def test_cancelling_patching_delegates_to_worker(self, qapp):
+        from controllers.game_launch_controller import GameLaunchController
+
+        patching_thread = Mock()
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            external_game_process_name="",
+            is_installing=False,
+            operation_cancelled=False,
+            is_patching=True,
+            initialization_completed=True,
+            local_config={},
+            action_button_text=None,
+            action_button_enabled=True,
+            current_task=patching_thread,
+        )
+        launcher = SimpleNamespace(
+            _patching_thread=patching_thread,
+            _plugin_hook_thread=None,
+            cancel_pending_launch=Mock(),
+        )
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        feedback_service = Mock()
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=launcher,
+            customization_service=Mock(),
+            app_window=SimpleNamespace(library_display=None),
+        )
+
+        controller._cancel_patching_operation()
+
+        patching_thread.cancel.assert_called_once_with()
+        assert launcher._patching_thread is patching_thread
+        assert app_state.action_button_enabled is False
+        launcher.cancel_pending_launch.assert_not_called()
+        feedback_service.update_status.assert_called_once()
+        controller._external_game_timer.stop()
+        qapp.processEvents()
+
+    def test_cancelling_modpack_delegates_to_worker(self, qapp):
+        from controllers.game_launch_controller import GameLaunchController
+
+        modpack_thread = Mock()
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            external_game_process_name="",
+            is_installing=False,
+            operation_cancelled=False,
+            is_patching=True,
+            initialization_completed=True,
+            local_config={},
+            action_button_text=None,
+            action_button_enabled=True,
+            current_task=modpack_thread,
+        )
+        launcher = SimpleNamespace(
+            _patching_thread=None,
+            _plugin_hook_thread=None,
+            cancel_pending_launch=Mock(),
+        )
+        library_display = SimpleNamespace(
+            _modpack_thread=modpack_thread,
+            _modpack_dir="C:/Temp/Pack",
+        )
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        feedback_service = Mock()
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=launcher,
+            customization_service=Mock(),
+            app_window=SimpleNamespace(library_display=library_display),
+        )
+
+        controller._cancel_patching_operation()
+
+        modpack_thread.cancel.assert_called_once_with()
+        assert library_display._modpack_thread is modpack_thread
+        assert app_state.action_button_enabled is False
+        launcher.cancel_pending_launch.assert_not_called()
+        feedback_service.update_status.assert_called_once()
+        controller._external_game_timer.stop()
+        qapp.processEvents()
+
+    def test_cancelling_without_worker_delegates_to_launcher(self, qapp):
+        from controllers.game_launch_controller import GameLaunchController
+
+        app_state = SimpleNamespace(
+            game_mode=SimpleNamespace(supports_full_install=False),
+            game_is_running=False,
+            external_game_process_name="",
+            is_installing=False,
+            operation_cancelled=False,
+            is_patching=True,
+            initialization_completed=True,
+            local_config={},
+            action_button_text=None,
+            action_button_enabled=True,
+            current_task=None,
+        )
+        launcher = SimpleNamespace(
+            _patching_thread=None,
+            _plugin_hook_thread=None,
+            cancel_pending_launch=Mock(),
+        )
+        used_mods_service = Mock()
+        used_mods_service.check_used_mods_need_updates.return_value = False
+        feedback_service = Mock()
+        controller = GameLaunchController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            used_mods_service=used_mods_service,
+            settings_service=Mock(),
+            game_launcher=launcher,
+            customization_service=Mock(),
+            app_window=SimpleNamespace(library_display=None),
+        )
+
+        controller._cancel_patching_operation()
+
+        launcher.cancel_pending_launch.assert_called_once_with()
+        feedback_service.update_status.assert_called_once()
+        controller._external_game_timer.stop()
+        qapp.processEvents()
+
     def test_game_launch_controller_initialization(
         self, app_state, feedback_service, qapp
     ):

@@ -43,7 +43,7 @@
     "language_name": "Русский",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_ru",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "Менеджер блоклиста",
@@ -1261,6 +1261,7 @@
     "preview_stop": "Стоп",
     "image_preview_hint": "Preview изображения. Двойной клик откроет файл системным просмотрщиком.",
     "audio_preview_hint": "{file}\n\nPreview аудио готов. Используйте Воспроизвести / Стоп сверху или двойной клик, чтобы открыть файл системным просмотрщиком.",
+    "audio_playback_unavailable": "Воспроизведение аудио недоступно: системный аудиобэкенд не установлен. Файл всё ещё можно открыть системным просмотрщиком.",
     "multi_mod_resource_title": "Этот ресурс затрагивают {count} отмеченных мода: {resource_type}/{name}",
     "multi_data_resource_title": "Этот ресурс встречается в {count} DATA-файлах мода {mod}: {resource_type}/{name}",
     "preview_file_too_large": "{file}\n\nРазмер файла {size}, это больше лимита preview ({limit}). Файл есть в патче, но диагностика не будет загружать его в память."

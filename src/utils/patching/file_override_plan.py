@@ -24,16 +24,18 @@ def discover_directory_candidates(
     excluded_extensions: tuple[str, ...] = (),
     excluded_names: set[str] | None = None,
     exclude_relative=None,
+    follow_symlinks: bool = False,
 ) -> list[OverrideCandidate]:
-    """Enumerate safe regular files without following links or reading content."""
+    """Enumerate regular override files without reading their content."""
     source_root = os.path.abspath(source_root)
     resolved_root = os.path.normcase(os.path.realpath(source_root))
     excluded_names = {name.casefold() for name in (excluded_names or set())}
     excluded_extensions = tuple(ext.casefold() for ext in excluded_extensions)
-    pending = [(source_root, "")]
+    pending = [(source_root, "", False)]
+    visited_directories = {resolved_root} if follow_symlinks else set()
     result: list[OverrideCandidate] = []
     while pending:
-        directory, relative_dir = pending.pop()
+        directory, relative_dir, linked_directory = pending.pop()
         try:
             entries = sorted(os.scandir(directory), key=lambda entry: entry.name.casefold())
         except OSError:
@@ -41,15 +43,22 @@ def discover_directory_candidates(
         for entry in entries:
             relative = os.path.join(relative_dir, entry.name) if relative_dir else entry.name
             try:
-                if entry.is_symlink():
+                is_link = entry.is_symlink()
+                if is_link and not follow_symlinks:
                     continue
                 resolved = os.path.normcase(os.path.realpath(entry.path))
-                if os.path.commonpath((resolved_root, resolved)) != resolved_root:
+                if (
+                    not (is_link or linked_directory)
+                    and os.path.commonpath((resolved_root, resolved)) != resolved_root
+                ):
                     continue
-                if entry.is_dir(follow_symlinks=False):
-                    pending.append((entry.path, relative))
+                if entry.is_dir(follow_symlinks=follow_symlinks):
+                    if follow_symlinks and resolved in visited_directories:
+                        continue
+                    visited_directories.add(resolved)
+                    pending.append((entry.path, relative, linked_directory or is_link))
                     continue
-                if not entry.is_file(follow_symlinks=False):
+                if not entry.is_file(follow_symlinks=follow_symlinks):
                     continue
             except (OSError, ValueError):
                 continue
@@ -120,7 +129,8 @@ def apply_override_plan(
             return False
         target = Path(candidate.target)
         target.parent.mkdir(parents=True, exist_ok=True)
-        backup_or_mark(str(target))
+        if backup_or_mark(str(target)) is False:
+            return False
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{target.name}.", suffix=".g3m-tmp", dir=target.parent
         )

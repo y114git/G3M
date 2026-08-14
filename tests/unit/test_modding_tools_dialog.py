@@ -20,8 +20,21 @@ from ui.dialogs.modding_tools_dialog import (
     _DataConvertTab,
     _DataConvertWorkerThread,
     _MergeTab,
+    _mod_relative_file_path,
     _PatchTab,
 )
+
+
+def test_mod_relative_file_path_rejects_paths_outside_mod_folder(tmp_path):
+    mod_folder = tmp_path / "mod"
+    mod_folder.mkdir()
+    source = mod_folder / "build.csx"
+    source.write_text("// fake", encoding="utf-8")
+    outside = tmp_path / "outside.csx"
+    outside.write_text("// fake", encoding="utf-8")
+
+    assert _mod_relative_file_path(str(mod_folder), str(source)) == "build.csx"
+    assert _mod_relative_file_path(str(mod_folder), str(outside)) is None
 
 
 def test_patch_tab_warning_failure_does_not_start_worker(monkeypatch):
@@ -690,6 +703,142 @@ def test_data_convert_accepts_csx_source(tmp_path, monkeypatch):
     assert converted_config["files"]["deltarune_1"]["data_file_path"] == "data.g3mpatch"
 
 
+def test_data_convert_reuses_csx_source_for_multiple_game_files(tmp_path, monkeypatch):
+    """Checks that a shared CSX entry is converted separately for every target."""
+    class _StrictFakeG3M(_FakeG3M):
+        def execute(self, *args, output_path=None, **kwargs):
+            assert output_path and output_path.endswith(".win")
+            return super().execute(*args, output_path=output_path, **kwargs)
+
+    mod_folder = tmp_path / "mod"
+    versions_dir = mod_folder / "mod_versions"
+    mod_folder.mkdir(parents=True)
+    versions_dir.mkdir()
+    (mod_folder / "build.csx").write_text("// fake script", encoding="utf-8")
+    game_dir = tmp_path / "game"
+    game_dir.mkdir()
+    (game_dir / "data.win").write_text("original", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "models.game_modes.get_game",
+        lambda game: SimpleNamespace(
+            get_tab=lambda file_key: SimpleNamespace(tab_id=file_key)
+        ),
+    )
+    monkeypatch.setattr(
+        "utils.mod.config_parser.resolve_mod_file_path",
+        lambda folder, stored_path: str(mod_folder / stored_path),
+    )
+    monkeypatch.setattr(
+        "utils.path_utils.find_chapter_resource_dir",
+        lambda game_path, chapter_id: str(game_dir),
+    )
+
+    config_data = {
+        "version": "1.2.3",
+        "game": "deltarune",
+        "files": {
+            "deltarune_1": {"data_file_path": "build.csx"},
+            "deltarune_2": {"data_file_path": "build.csx"},
+        },
+    }
+    worker = _DataConvertWorkerThread(
+        _StrictFakeG3M(),
+        str(mod_folder),
+        config_data,
+        str(tmp_path / "game_root"),
+        "g3mpatch",
+    )
+    result = []
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert result == [
+        (
+            True,
+            tr(
+                "modding_tools.convert_data_success",
+                count=2,
+                version="1.2.3 - g3mpatch",
+            ),
+        )
+    ]
+    version_zip = versions_dir / "1.2.3 - g3mpatch.zip"
+    with zipfile.ZipFile(version_zip) as zf:
+        converted_config = json.loads(zf.read("mod_config.json").decode("utf-8"))
+        assert "build_deltarune_1.g3mpatch" in zf.namelist()
+        assert "build_deltarune_2.g3mpatch" in zf.namelist()
+        assert "build.csx" not in zf.namelist()
+    assert (
+        converted_config["files"]["deltarune_1"]["data_file_path"]
+        == "build_deltarune_1.g3mpatch"
+    )
+    assert (
+        converted_config["files"]["deltarune_2"]["data_file_path"]
+        == "build_deltarune_2.g3mpatch"
+    )
+    assert config_data["files"]["deltarune_1"]["data_file_path"] == "build.csx"
+    assert config_data["files"]["deltarune_2"]["data_file_path"] == "build.csx"
+
+
+def test_data_convert_does_not_overwrite_same_stem_outputs(tmp_path, monkeypatch):
+    mod_folder = tmp_path / "mod"
+    versions_dir = mod_folder / "mod_versions"
+    mod_folder.mkdir(parents=True)
+    versions_dir.mkdir()
+    (mod_folder / "build.csx").write_text("// fake script", encoding="utf-8")
+    (mod_folder / "build.xdelta").write_text("fake patch", encoding="utf-8")
+    game_dir = tmp_path / "game"
+    game_dir.mkdir()
+    (game_dir / "data.win").write_text("original", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "models.game_modes.get_game",
+        lambda _game: SimpleNamespace(
+            get_tab=lambda file_key: SimpleNamespace(tab_id=file_key)
+        ),
+    )
+    monkeypatch.setattr(
+        "utils.mod.config_parser.resolve_mod_file_path",
+        lambda folder, stored_path: str(mod_folder / stored_path),
+    )
+    monkeypatch.setattr(
+        "utils.path_utils.find_chapter_resource_dir",
+        lambda _game_path, _chapter_id: str(game_dir),
+    )
+
+    worker = _DataConvertWorkerThread(
+        _FakeG3M(),
+        str(mod_folder),
+        {
+            "version": "1.2.3",
+            "game": "deltarune",
+            "files": {
+                "deltarune_1": {"data_file_path": "build.csx"},
+                "deltarune_2": {"data_file_path": "build.xdelta"},
+            },
+        },
+        str(tmp_path / "game_root"),
+        "g3mpatch",
+    )
+    result = []
+    worker.result_ready.connect(lambda success, message: result.append((success, message)))
+
+    worker.run()
+
+    assert result[0][0] is True
+    with zipfile.ZipFile(versions_dir / "1.2.3 - g3mpatch.zip") as zf:
+        config = json.loads(zf.read("mod_config.json"))
+        assert "build.g3mpatch" in zf.namelist()
+        assert "build_deltarune_2.g3mpatch" in zf.namelist()
+    assert config["files"]["deltarune_1"]["data_file_path"] == "build.g3mpatch"
+    assert (
+        config["files"]["deltarune_2"]["data_file_path"]
+        == "build_deltarune_2.g3mpatch"
+    )
+
+
 def test_data_convert_preserves_chapter_relative_path_in_converted_config(
     tmp_path, monkeypatch
 ):
@@ -809,6 +958,33 @@ def test_convert_worker_keeps_generated_patch_even_if_roundtrip_would_fail(tmp_p
     result = []
     worker.result_ready.connect(lambda rc, out, err: result.append((rc, out, err)))
 
+    worker.run()
+
+    assert result == [(0, "", "")]
+    assert output_path.exists()
+
+
+def test_convert_worker_uses_the_original_data_extension_for_temporary_output(tmp_path):
+    class _StrictFakeG3M(_FakeG3M):
+        def xpatch_apply(self, _original, _patch, output, **kwargs):
+            assert output and output.endswith(".ios")
+            return super().xpatch_apply(_original, _patch, output, **kwargs)
+
+    original_path = tmp_path / "original.ios"
+    source_patch = tmp_path / "source.xdelta"
+    output_path = tmp_path / "converted.g3mpatch"
+    original_path.write_text("original", encoding="utf-8")
+    source_patch.write_text("source patch", encoding="utf-8")
+
+    worker = _ConvertWorkerThread(
+        _StrictFakeG3M(),
+        str(original_path),
+        str(source_patch),
+        str(output_path),
+        False,
+    )
+    result = []
+    worker.result_ready.connect(lambda rc, out, err: result.append((rc, out, err)))
     worker.run()
 
     assert result == [(0, "", "")]

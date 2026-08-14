@@ -43,7 +43,7 @@
     "language_name": "Español",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_es",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "Gestor de Blocklist",
@@ -1248,6 +1248,7 @@
     "preview_stop": "Detener",
     "image_preview_hint": "Vista previa de imagen. Doble clic abre el archivo con el visor del sistema.",
     "audio_preview_hint": "{file}\n\nLa vista previa de audio está lista. Usa Reproducir / Detener arriba, o doble clic para abrir el archivo con el visor del sistema.",
+    "audio_playback_unavailable": "La reproducción de audio no está disponible porque falta el sistema de audio. Aún puedes abrir el archivo con el visor del sistema.",
     "multi_mod_resource_title": "Este recurso lo tocan {count} mods marcados: {resource_type}/{name}",
     "multi_data_resource_title": "Este recurso aparece en {count} entradas DATA de {mod}: {resource_type}/{name}",
     "preview_file_too_large": "{file}\n\nEste archivo mide {size}, más que el límite de vista previa ({limit}). Está listado en el patch, pero el diagnóstico no lo cargará en memoria."

@@ -1130,6 +1130,13 @@ class LibraryDisplayController:
                 logger.error(f"Fallback refresh also failed: {e2}", exc_info=True)
 
     def _on_modpack_finished(self, success: bool, modpack_dir: str):
+        thread = getattr(self, "_modpack_thread", None)
+        cancelled = bool(
+            thread
+            and (thread.isInterruptionRequested() or getattr(thread, "_cancelled", False))
+        )
+        self._modpack_thread = None
+        self._modpack_dir = None
         self.app_state.is_patching = False
         self.app_state.progress_bar_visible = False
         self.app_state.action_button_text = tr("ui.launch_button")
@@ -1151,9 +1158,18 @@ class LibraryDisplayController:
                     logger.warning(
                         f"Failed to remove modpack directory {modpack_dir}: {e}"
                     )
-            self._safe_feedback_call(
-                "show_message",
-                "error",
-                "errors.error",
-                tr("errors.modpack_creation_failed"),
-            )
+            if cancelled:
+                from config.config import UI_COLORS
+
+                self._safe_feedback_call(
+                    "update_status",
+                    tr("status.operation_cancelled"),
+                    UI_COLORS["status_warning"],
+                )
+            else:
+                self._safe_feedback_call(
+                    "show_message",
+                    "error",
+                    "errors.error",
+                    tr("errors.modpack_creation_failed"),
+                )

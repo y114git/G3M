@@ -363,6 +363,28 @@ class GameLauncher(QObject):
         if controller and hasattr(controller, "update_button_state"):
             controller.update_button_state()
 
+    def cancel_pending_launch(self, hook: str | None = None) -> None:
+        """Restore any applied files after the user cancels before the game starts."""
+        self.launch_transaction.cancel()
+        self._cleanup_direct_launch_files()
+        self._finish_background_launch_operation()
+        if hook:
+            try:
+                self._execute_plugin_hook(
+                    "mod_apply_cancelled", {"hook": hook, "reason": "cancelled"}
+                )
+            except Exception:
+                logger.warning("Cancelled launch hook failed", exc_info=True)
+            self._safe_discord_rich_presence_call(
+                "on_mod_apply_cancelled", {"hook": hook, "reason": "cancelled"}
+            )
+        if self.restore_window_callback:
+            self.restore_window_callback()
+        parent = self.parent()
+        controller = getattr(parent, "game_launch", None) if parent else None
+        if controller and hasattr(controller, "update_button_state"):
+            controller.update_button_state()
+
     def _execute_game(self, launch_config: dict[str, Any], vanilla_mode: bool = False):
         target_path = launch_config.get("target")
         working_directory = launch_config.get("cwd")
@@ -861,13 +883,14 @@ class GameLauncher(QObject):
             finally:
                 self._patching_thread = None
         if not success:
-            self._finish_background_launch_operation()
             if patching_thread and (
                 patching_thread.isInterruptionRequested()
                 or getattr(patching_thread, "_cancelled", False)
             ):
                 logger.info("Multi-mod patching was cancelled by user")
+                self.cancel_pending_launch("patching")
             else:
+                self._finish_background_launch_operation()
                 self._handle_launch_failure()
             return
         logger.info("Multi-mod patching completed successfully")
@@ -971,13 +994,15 @@ class GameLauncher(QObject):
         selections = hook_args[0] if hook_args else {}
         needs_multi_mod = bool(hook_args[1]) if len(hook_args) > 1 else False
         if not success:
-            self._finish_background_launch_operation()
             if thread and (
                 thread.isInterruptionRequested() or getattr(thread, "_cancelled", False)
             ):
                 logger.info("Plugin hook execution was cancelled by user")
-            self._cleanup_direct_launch_files()
-            self._handle_launch_failure("plugin")
+                self.cancel_pending_launch()
+            else:
+                self._finish_background_launch_operation()
+                self._cleanup_direct_launch_files()
+                self._handle_launch_failure("plugin")
             return
         self._finalize_launch_after_plugin_hooks(selections, needs_multi_mod)
 

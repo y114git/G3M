@@ -53,6 +53,7 @@ from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
     get_dialog_theme_values,
 )
+from ui.utils.audio_utils import is_audio_playback_available
 from ui.utils.thread_lifetime import ManagedQThread
 from utils.mod.utils import get_mod_id, get_mod_name
 from utils.native_integration import get_save_file_name
@@ -1477,6 +1478,15 @@ class ModDiagnosticsDialog(QDialog):
             )
             return
         if self._looks_audio_like(path):
+            if not is_audio_playback_available():
+                logger.debug("Audio preview disabled: gst-play-1.0 is unavailable")
+                self._audio_status.setText(
+                    tr("diagnostics.audio_playback_unavailable")
+                )
+                self._preview_compare_panel.setPlainText(
+                    tr("diagnostics.audio_playback_unavailable")
+                )
+                return
             self._current_audio_path = path
             self._audio_play_btn.setEnabled(True)
             self._audio_stop_btn.setEnabled(True)
@@ -1496,6 +1506,9 @@ class ModDiagnosticsDialog(QDialog):
 
     def _play_preview_audio(self) -> None:
         if not self._current_audio_path:
+            return
+        if not is_audio_playback_available():
+            logger.debug("Audio preview disabled: gst-play-1.0 is unavailable")
             return
         self._stop_preview_audio()
         process = Process(

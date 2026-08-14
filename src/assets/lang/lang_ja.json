@@ -43,7 +43,7 @@
     "language_name": "日本語",
     "font": "NotoSansJP-Bold.ttf",
     "qt_translation": "qtbase_ja",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "ブロックリストマネージャー",
@@ -1240,6 +1240,7 @@
     "preview_stop": "停止",
     "image_preview_hint": "画像プレビューです。ダブルクリックするとシステムビューアで開きます。",
     "audio_preview_hint": "{file}\n\n音声プレビューの準備ができました。上の再生 / 停止を使うか、ダブルクリックしてシステムビューアで開けます。",
+    "audio_playback_unavailable": "システムの音声バックエンドがないため、音声を再生できません。ファイルはシステムビューアで開けます。",
     "multi_mod_resource_title": "このリソースは {count} 個のチェック済み mod が変更します: {resource_type}/{name}",
     "multi_data_resource_title": "このリソースは {mod} の {count} 個の DATA エントリにあります: {resource_type}/{name}",
     "preview_file_too_large": "{file}\n\nこのファイルは {size} で、プレビュー上限 ({limit}) を超えています。Patch には記録されていますが、診断ではメモリに読み込みません。"

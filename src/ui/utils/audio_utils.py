@@ -2,6 +2,8 @@
 
 import logging
 import os
+import shutil
+import sys
 from multiprocessing import Process
 
 from utils.path_utils import get_user_data_root
@@ -9,10 +11,18 @@ from utils.path_utils import get_user_data_root
 logger = logging.getLogger(__name__)
 
 
-def _play_sound_process(sound_path: str) -> None:
-    from playsound3 import playsound
+def is_audio_playback_available() -> bool:
+    """Return whether the bundled audio backend is available on this platform."""
+    return not sys.platform.startswith("linux") or shutil.which("gst-play-1.0") is not None
 
-    playsound(os.path.abspath(sound_path))
+
+def _play_sound_process(sound_path: str) -> None:
+    try:
+        from playsound3 import playsound
+
+        playsound(os.path.abspath(sound_path))
+    except Exception as error:
+        logger.debug("Audio playback failed for %s: %s", sound_path, error)
 
 
 class AudioManager:
@@ -38,6 +48,9 @@ class AudioManager:
                 sound_path = candidate
                 break
         if not sound_path:
+            return
+        if not is_audio_playback_available():
+            logger.debug("Startup sound disabled: gst-play-1.0 is unavailable")
             return
         try:
             self.stop_g3m_sound()

@@ -1,3 +1,12 @@
+### Version 3.3.3 — 15.08.26
+
+- **Other Improvements and Bug Fixes**
+
+  - G3M recovers cleanly when a launch is cancelled, so you can start another launch right away.
+  - G3MTool handles more compatible merge combinations and keeps script-only changes when creating a patch.
+  - Modding Tools keeps shared scripts and same-named patch files separate during conversion.
+  - Backup recovery, log cleanup, and image loading handle interrupted work more reliably.
+
 ### Version 3.3.2 — 11.08.26
 
 - **Patching and Merging**

@@ -43,7 +43,7 @@
     "language_name": "繁體中文",
     "font": "NotoSans-Bold.ttf",
     "qt_translation": "qtbase_zh_tw",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "封鎖清單管理器",
@@ -1234,6 +1234,7 @@
     "preview_stop": "停止",
     "image_preview_hint": "圖片預覽。雙擊檔案可用系統檢視器開啟。",
     "audio_preview_hint": "{file}\n\n音訊預覽已準備好。使用上方的播放 / 停止，或雙擊檔案用系統檢視器開啟。",
+    "audio_playback_unavailable": "系統未安裝音訊後端，因此無法播放音訊。仍可使用系統檢視器開啟檔案。",
     "multi_mod_resource_title": "此資源被 {count} 個已勾選模組觸及：{resource_type}/{name}",
     "multi_data_resource_title": "此資源出現在 {mod} 的 {count} 個 DATA 項目中：{resource_type}/{name}",
     "preview_file_too_large": "{file}\n\n此檔案大小為 {size}，超過預覽限制 ({limit})。它已列在 patch 中，但診斷不會將其載入記憶體。"
