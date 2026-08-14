@@ -106,6 +106,10 @@ class LaunchTransaction:
         self.transition(LaunchState.BACKING_UP)
         self.transition(LaunchState.APPLYING)
 
+    def cancel(self) -> None:
+        if LaunchState.CANCELLED in _ALLOWED_TRANSITIONS[self.state]:
+            self.transition(LaunchState.CANCELLED)
+
     def mark_deployed(self, capture: Callable[[], bool]) -> bool:
         if not capture():
             self.fail("deployed-state")

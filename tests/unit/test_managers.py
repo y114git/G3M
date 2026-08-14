@@ -789,6 +789,68 @@ class TestLaunchManager:
         launcher.restore_window_callback.assert_called_once()
         parent.game_launch.update_button_state.assert_called_once()
 
+    def test_cancelled_launch_restores_backups_and_can_start_again(
+        self, app_state, feedback_service, tmp_path
+    ):
+        from services.backup_service import BackupManager
+        from services.launch_service import GameLauncher
+        from services.launch_transaction import LaunchState
+
+        target = tmp_path / "data.win"
+        target.write_bytes(b"ORIGINAL")
+        launcher = GameLauncher(app_state, feedback_service, Mock())
+        launcher.mod_patcher.backup_service = BackupManager(str(tmp_path / "backups"))
+        assert launcher.mod_patcher.backup_service.backup_file(
+            "deltarune_1", str(target)
+        )
+        target.write_bytes(b"MODDED")
+        launcher.launch_transaction.begin()
+        launcher.launch_transaction.begin_apply()
+
+        launcher.cancel_pending_launch()
+        launcher.launch_transaction.begin()
+
+        assert target.read_bytes() == b"ORIGINAL"
+        assert launcher.launch_transaction.state == LaunchState.PREPARING
+
+    @pytest.mark.parametrize("thread_attr", ["_patching_thread", "_plugin_hook_thread"])
+    def test_cancelled_background_launch_restores_before_next_launch(
+        self, app_state, feedback_service, tmp_path, thread_attr
+    ):
+        from services.backup_service import BackupManager
+        from services.launch_service import GameLauncher
+        from services.launch_transaction import LaunchState
+
+        target = tmp_path / "data.win"
+        target.write_bytes(b"ORIGINAL")
+        launcher = GameLauncher(app_state, feedback_service, Mock())
+        launcher.mod_patcher.backup_service = BackupManager(str(tmp_path / "backups"))
+        assert launcher.mod_patcher.backup_service.backup_file(
+            "deltarune_1", str(target)
+        )
+        target.write_bytes(b"MODDED")
+        launcher.launch_transaction.begin()
+        launcher.launch_transaction.begin_apply()
+        thread = Mock(patcher=launcher.mod_patcher, _cancelled=True)
+        thread.isInterruptionRequested.return_value = True
+        setattr(launcher, thread_attr, thread)
+        launcher._execute_plugin_hook = Mock()
+
+        with patch("services.launch_service.retire_qthread"):
+            if thread_attr == "_patching_thread":
+                launcher._on_patching_finished({}, False)
+            else:
+                launcher._on_plugin_hook_finished(({}, True), False)
+
+        assert target.read_bytes() == b"ORIGINAL"
+        assert launcher.launch_transaction.state == LaunchState.COMPLETED
+        if thread_attr == "_patching_thread":
+            launcher._execute_plugin_hook.assert_called_once_with(
+                "mod_apply_cancelled", {"hook": "patching", "reason": "cancelled"}
+            )
+        else:
+            launcher._execute_plugin_hook.assert_not_called()
+
     def test_empty_profile_restores_pending_mod_before_launch(
         self, app_state, feedback_service, tmp_path
     ):
@@ -825,7 +887,9 @@ class TestLaunchManager:
         launcher.mod_patcher.backup_service = manager
         assert manager.backup_file("undertale", str(target))
         target.write_bytes(b"MODDED")
-        os.remove(manager.original_files["undertale"][str(target)])
+        backup = manager.original_files["undertale"][str(target)]
+        assert backup is not None
+        os.remove(backup)
         launcher._continue_after_patching = Mock()
         launcher._handle_launch_failure = Mock()
 

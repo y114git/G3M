@@ -86,7 +86,7 @@ class CreateModpackThread(ManagedQThread):
         self.requestInterruption()
         self._warning_event.set()
         if self.patcher:
-            self.patcher._cancelled = True
+            self.patcher.cancel()
         _safe_emit(self.__class__.__name__, self.status_update, "Operation cancelled", "error")
 
     def confirm_warning(self, accepted: bool):
@@ -162,16 +162,6 @@ class CreateModpackThread(ManagedQThread):
             if self.isInterruptionRequested() or self._cancelled:
                 self.patcher.cancel()
                 success = False
-                if os.path.exists(self.modpack_dir):
-                    try:
-                        shutil.rmtree(self.modpack_dir, ignore_errors=True)
-                        logger.info(
-                            f"Cancelled modpack creation, removed directory: {self.modpack_dir}"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to remove cancelled modpack directory: {e}"
-                        )
             if success and (not (self.isInterruptionRequested() or self._cancelled)):
                 if self.xdelta_modpack:
                     self._create_xdelta_patches()
@@ -192,6 +182,10 @@ class CreateModpackThread(ManagedQThread):
             )
             success = False
         finally:
+            if self.isInterruptionRequested() or self._cancelled:
+                success = False
+                if os.path.exists(self.modpack_dir):
+                    shutil.rmtree(self.modpack_dir, ignore_errors=True)
             if self.patcher:
                 try:
                     for sig in (

@@ -1,5 +1,6 @@
 """Non-modal Modding Tools dialog with Convert DATA, Patch, Merge, Info, Diff tabs."""
 
+import copy
 import json
 import logging
 import os
@@ -35,7 +36,11 @@ from ui.common.dialog_theme import (
 )
 from ui.common.feedback import FeedbackManager
 from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
-from utils.file_utils import cleanup_temporary_directory, managed_temporary_directory
+from utils.file_utils import (
+    cleanup_temporary_directory,
+    managed_temporary_directory,
+    sanitize_filename,
+)
 from utils.native_integration import (
     get_existing_directory,
     get_open_file_name,
@@ -182,6 +187,20 @@ def _is_xdelta_source(path: str) -> bool:
 
 def _is_csx_source(path: str) -> bool:
     return str(path or "").lower().endswith(".csx")
+
+
+def _mod_relative_file_path(root: str, path: str) -> str | None:
+    """Return a real mod-relative file path, rejecting escapes and links."""
+    try:
+        root_path = os.path.realpath(root)
+        candidate = os.path.realpath(path)
+        if os.path.commonpath(
+            (os.path.normcase(root_path), os.path.normcase(candidate))
+        ) != os.path.normcase(root_path):
+            return None
+    except (OSError, ValueError):
+        return None
+    return os.path.relpath(candidate, root_path)
 
 
 def _apply_source_to_data(
@@ -445,7 +464,9 @@ class _ConvertWorkerThread(ManagedQThread):
     def run(self):
         try:
             with managed_temporary_directory(prefix="g3m_convert_") as tmp:
-                temp_modified = os.path.join(tmp, "modified.tmp")
+                temp_modified = os.path.join(
+                    tmp, f"modified{os.path.splitext(self._orig)[1] or '.win'}"
+                )
                 rc, out, err = _apply_source_to_data(
                     self._g3m,
                     self._orig,
@@ -958,7 +979,7 @@ class _DataConvertWorkerThread(ManagedQThread):
         super().__init__(parent)
         self._g3m = g3m
         self._mod_folder = mod_folder
-        self._config_data = config_data
+        self._config_data = copy.deepcopy(config_data)
         self._game_path = game_path
         self._target_mode = target_mode
 
@@ -990,6 +1011,10 @@ class _DataConvertWorkerThread(ManagedQThread):
                     continue
                 if not os.path.isfile(patch_path):
                     continue
+                patch_rel_path = _mod_relative_file_path(self._mod_folder, patch_path)
+                if not patch_rel_path:
+                    logger.warning("Skipping DATA conversion source outside mod folder: %s", patch_path)
+                    continue
                 tab = game_def.get_tab(file_key) if game_def else None
                 chapter_id = tab.tab_id if tab else file_key
                 resource_dir = find_chapter_resource_dir(self._game_path, chapter_id)
@@ -1006,7 +1031,12 @@ class _DataConvertWorkerThread(ManagedQThread):
                     )
                     return
                 items.append(
-                    (ch_info, os.path.relpath(patch_path, self._mod_folder), original)
+                    (
+                        file_key,
+                        ch_info,
+                        patch_rel_path,
+                        original,
+                    )
                 )
 
             if not items:
@@ -1014,6 +1044,10 @@ class _DataConvertWorkerThread(ManagedQThread):
                 return
 
             total = len(items)
+            source_counts = {}
+            for _, _, patch_rel_path, _ in items:
+                source_key = os.path.normcase(os.path.normpath(patch_rel_path))
+                source_counts[source_key] = source_counts.get(source_key, 0) + 1
 
             version = self._config_data.get("version", "1.0.0")
             version = (version.split("|", 1)[0].strip() if version else "") or "1.0.0"
@@ -1033,7 +1067,42 @@ class _DataConvertWorkerThread(ManagedQThread):
                     ignore=shutil.ignore_patterns("mod_versions"),
                 )
                 converted = 0
-                for i, (ch_info, patch_rel_path, original) in enumerate(items):
+                source_paths_to_remove = set()
+                source_paths = {
+                    os.path.normcase(os.path.abspath(os.path.join(converted_mod_folder, patch_rel_path)))
+                    for _, _, patch_rel_path, _ in items
+                }
+                output_paths = set()
+
+                def reserve_output_path(directory, name, file_key, index):
+                    candidate = os.path.join(directory, name)
+                    candidate_key = os.path.normcase(os.path.abspath(candidate))
+                    if (
+                        candidate_key not in source_paths
+                        and candidate_key not in output_paths
+                        and not os.path.lexists(candidate)
+                    ):
+                        output_paths.add(candidate_key)
+                        return candidate
+                    stem, extension = os.path.splitext(name)
+                    suffix = sanitize_filename(file_key) or str(index)
+                    candidate = os.path.join(directory, f"{stem}_{suffix}{extension}")
+                    candidate_key = os.path.normcase(os.path.abspath(candidate))
+                    duplicate = 2
+                    while (
+                        candidate_key in source_paths
+                        or candidate_key in output_paths
+                        or os.path.lexists(candidate)
+                    ):
+                        candidate = os.path.join(
+                            directory, f"{stem}_{suffix}_{duplicate}{extension}"
+                        )
+                        candidate_key = os.path.normcase(os.path.abspath(candidate))
+                        duplicate += 1
+                    output_paths.add(candidate_key)
+                    return candidate
+
+                for i, (file_key, ch_info, patch_rel_path, original) in enumerate(items):
                     if self.isInterruptionRequested():
                         return
                     patch_path = os.path.join(converted_mod_folder, patch_rel_path)
@@ -1046,7 +1115,10 @@ class _DataConvertWorkerThread(ManagedQThread):
                         )
                     )
                     with managed_temporary_directory(prefix="g3m_modconv_file_") as work_dir:
-                        temp_modified = os.path.join(work_dir, "modified.tmp")
+                        temp_modified = os.path.join(
+                            work_dir,
+                            f"modified{os.path.splitext(original)[1] or '.win'}",
+                        )
                         rc, _, err = _apply_source_to_data(
                             self._g3m, original, patch_path, temp_modified
                         )
@@ -1057,7 +1129,9 @@ class _DataConvertWorkerThread(ManagedQThread):
                                 original, self._target_mode
                             )
                             new_name = _rename_data_output_name(target_name)
-                            new_path = os.path.join(os.path.dirname(patch_path), new_name)
+                            new_path = reserve_output_path(
+                                os.path.dirname(patch_path), new_name, file_key, i
+                            )
                             is_patch_source = (
                                 _is_g3mpatch_source(patch_path)
                                 or _is_xdelta_source(patch_path)
@@ -1083,8 +1157,14 @@ class _DataConvertWorkerThread(ManagedQThread):
                             if rc != 0:
                                 self.result_ready.emit(False, err)
                                 return
-                            new_name = f"{os.path.splitext(os.path.basename(patch_path))[0]}{'.xdelta' if self._target_mode == 'xdelta' else '.g3mpatch'}"
-                            new_path = os.path.join(os.path.dirname(patch_path), new_name)
+                            source_key = os.path.normcase(os.path.normpath(patch_rel_path))
+                            patch_stem = os.path.splitext(os.path.basename(patch_path))[0]
+                            if source_counts[source_key] > 1:
+                                patch_stem = f"{patch_stem}_{sanitize_filename(file_key) or i}"
+                            new_name = f"{patch_stem}{'.xdelta' if self._target_mode == 'xdelta' else '.g3mpatch'}"
+                            new_path = reserve_output_path(
+                                os.path.dirname(patch_path), new_name, file_key, i
+                            )
                             if self._target_mode == "xdelta":
                                 rc, _, err = self._g3m.xpatch_create(
                                     original, temp_modified, new_path
@@ -1100,12 +1180,15 @@ class _DataConvertWorkerThread(ManagedQThread):
                                 self.result_ready.emit(False, err)
                                 return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
-                        with suppress(OSError):
-                            os.remove(patch_path)
+                        source_paths_to_remove.add(patch_path)
                     ch_info["data_file_path"] = os.path.relpath(
                         new_path, converted_mod_folder
                     ).replace("\\", "/")
                     converted += 1
+
+                for source_path in source_paths_to_remove:
+                    with suppress(OSError):
+                        os.remove(source_path)
 
                 from utils.mod.config_parser import build_mod_config_data
 

@@ -6,7 +6,7 @@ import os
 import weakref
 
 from PyQt6 import sip
-from PyQt6.QtCore import QEvent, QObject, QRectF, Qt, QThreadPool
+from PyQt6.QtCore import QEvent, QObject, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QRegion
 from PyQt6.QtWidgets import QLabel
 
@@ -1187,10 +1187,13 @@ def load_mod_icon_universal(
         ):
             try:
                 from services.background_operations import background_operations
-                from ui.utils.image_loader import ImageLoaderRunnable
+                from ui.utils.image_loader import (
+                    ImageLoaderRunnable,
+                    get_image_loader_pool,
+                )
                 from workers import WorkerSignals
 
-                pool = QThreadPool.globalInstance()
+                pool = get_image_loader_pool()
                 signals = WorkerSignals()
                 label_ref = weakref.ref(icon_label)
 

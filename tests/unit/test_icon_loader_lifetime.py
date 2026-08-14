@@ -29,11 +29,7 @@ def test_icon_loader_signals_outlive_deleted_label(qapp):
         screenshots_url=[],
     )
 
-    with patch.object(
-        __import__("ui.common.styling", fromlist=["QThreadPool"]).QThreadPool,
-        "globalInstance",
-        return_value=pool,
-    ):
+    with patch("ui.utils.image_loader.get_image_loader_pool", return_value=pool):
         load_mod_icon_universal(label, mod)
 
     assert pool.runnable is not None

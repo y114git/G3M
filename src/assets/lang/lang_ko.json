@@ -43,7 +43,7 @@
     "language_name": "한국어",
     "font": "NotoSansKR-Bold.ttf",
     "qt_translation": "qtbase_ko",
-    "version": "3.3.2"
+    "version": "3.3.3"
   },
   "blocklist": {
     "title": "차단 매니저",
@@ -1239,6 +1239,7 @@
     "preview_stop": "정지",
     "image_preview_hint": "이미지 미리보기입니다. 더블 클릭하면 시스템 뷰어로 엽니다.",
     "audio_preview_hint": "{file}\n\n오디오 미리보기가 준비되었습니다. 위의 재생 / 정지를 사용하거나 더블 클릭해 시스템 뷰어로 여세요.",
+    "audio_playback_unavailable": "시스템 오디오 백엔드가 설치되지 않아 오디오를 재생할 수 없습니다. 시스템 뷰어로 파일을 열 수 있습니다.",
     "multi_mod_resource_title": "이 리소스는 선택된 모드 {count}개가 건드립니다: {resource_type}/{name}",
     "multi_data_resource_title": "이 리소스는 {mod}의 DATA 항목 {count}개에 있습니다: {resource_type}/{name}",
     "preview_file_too_large": "{file}\n\n이 파일은 {size}이며 미리보기 제한({limit})보다 큽니다. Patch에는 기록되어 있지만 진단은 메모리에 로드하지 않습니다."

@@ -214,6 +214,7 @@ class TestBackupRestoration:
             file.write(b"ORIGINAL")
         assert manager.backup_file("undertale", target)
         backup = manager.original_files["undertale"][target]
+        assert backup is not None
         os.remove(backup)
 
         assert manager.restore_all_backups() is False
@@ -300,9 +301,11 @@ class TestBackupRestoration:
         with open(target, "rb") as file:
             assert file.read() == b"USER_CHANGE"
         assert patcher.last_restore_external_changes == [target]
-        assert os.path.isdir(patcher.last_restore_conflict_archive)
+        archive = patcher.last_restore_conflict_archive
+        assert archive is not None
+        assert os.path.isdir(archive)
         assert os.path.isfile(
-            os.path.join(patcher.last_restore_conflict_archive, "session.json")
+            os.path.join(archive, "session.json")
         )
         assert not os.path.exists(manifest)
         assert not os.path.exists(backup_dir)

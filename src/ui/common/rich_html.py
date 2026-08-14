@@ -15,7 +15,7 @@ from collections import OrderedDict
 from pathlib import PureWindowsPath
 from urllib.parse import quote
 
-from PyQt6.QtCore import QObject, QRectF, QRunnable, Qt, QThreadPool, QUrl, pyqtSignal
+from PyQt6.QtCore import QObject, QRectF, QRunnable, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QImage, QPainter, QTextDocument
 from PyQt6.QtWidgets import QTextBrowser, QTextEdit
 
@@ -29,6 +29,7 @@ from config.config import (
 )
 from services.background_operations import background_operations
 from services.localization_service import tr
+from ui.utils.image_loader import get_image_loader_pool
 from utils.network_utils import get_session
 
 logger = logging.getLogger(__name__)
@@ -730,7 +731,7 @@ def load_remote_images(
         current["height"] = max(current.get("height", 0), request.get("height", 0))
 
     signals = _ImageSignals(browser)
-    pool = QThreadPool.globalInstance()
+    pool = get_image_loader_pool()
 
     def _apply_image_resource(url: str, image: QImage):
         request = requests_by_url.get(url, {})

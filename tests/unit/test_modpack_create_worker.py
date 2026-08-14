@@ -36,3 +36,19 @@ def test_modpack_create_worker_suppresses_emit_failure_after_error(
 
     assert "CreateModpackThread failed" in caplog.text
     assert "CreateModpackThread: failed to emit" in caplog.text
+
+
+def test_modpack_cancel_stops_active_patcher(tmp_path):
+    worker = CreateModpackThread(
+        chapter_mods={},
+        modpack_name="Pack",
+        modpack_dir=str(tmp_path / "pack"),
+        app_state=Mock(),
+        mod_service=Mock(),
+    )
+    worker.patcher = Mock()
+
+    worker.cancel()
+
+    assert worker._cancelled is True
+    worker.patcher.cancel.assert_called_once_with()

@@ -90,7 +90,6 @@ class ModPatchingThread(ManagedQThread):
         success = False
         try:
             if self.isInterruptionRequested() or self._cancelled:
-                _safe_emit(self.__class__.__name__, self.result_ready, False)
                 return
             self.patcher = G3MToolPatchingService(
                 self.app_state, self.mod_service, None
@@ -117,7 +116,6 @@ class ModPatchingThread(ManagedQThread):
             self.patcher._session_manifest_path = self.session_manifest_path
             self.patcher.warning_handler = self._request_warning_confirmation
             if self.isInterruptionRequested() or self._cancelled:
-                _safe_emit(self.__class__.__name__, self.result_ready, False)
                 return
             mods_by_id = {
                 str(getattr(mod, "id", "")): mod
@@ -136,10 +134,7 @@ class ModPatchingThread(ManagedQThread):
             )
             if self.isInterruptionRequested() or self._cancelled:
                 self.patcher.cancel()
-                if self.patcher:
-                    self._restore_backups()
                 success = False
-            _safe_emit(self.__class__.__name__, self.result_ready, success)
         except Exception as e:
             logger.error(f"ModPatchingThread failed: {e}", exc_info=True)
             _safe_emit(
@@ -148,13 +143,14 @@ class ModPatchingThread(ManagedQThread):
                 f"Patching failed: {e!s}",
                 "error",
             )
-            _safe_emit(self.__class__.__name__, self.result_ready, False)
         finally:
-            if self.patcher:
-                failed = (
-                    self.isInterruptionRequested() or self._cancelled or not success
-                )
-                if failed:
-                    self._restore_backups()
-
-                self.patcher.cleanup(force=True)
+            try:
+                if self.patcher:
+                    failed = (
+                        self.isInterruptionRequested() or self._cancelled or not success
+                    )
+                    if failed:
+                        self._restore_backups()
+                    self.patcher.cleanup(force=True)
+            finally:
+                _safe_emit(self.__class__.__name__, self.result_ready, success)

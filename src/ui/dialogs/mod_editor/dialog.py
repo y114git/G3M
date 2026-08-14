@@ -1228,47 +1228,31 @@ class ModEditorDialog(QDialog):
         self.icon_preview.setText(tr("ui.icon_preview"))
 
     def _load_icon_from_url(self, url):
-        from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
         from PyQt6.QtGui import QImage
 
         from services.background_operations import background_operations
+        from ui.utils.image_loader import ImageLoaderRunnable, get_image_loader_pool
+        from workers import WorkerSignals
 
         self.icon_preview.setText(tr("ui.loading_placeholder"))
 
-        class _Signals(QObject):
-            loaded = pyqtSignal(QImage)
-
         request_id = self._icon_request_id
-        signals = _Signals()
+        signals = WorkerSignals()
         self._icon_fetch_signals.add(signals)
-        signals.loaded.connect(
+        signals.result.connect(
             lambda image, request_id=request_id, signals=signals: self._apply_url_icon(
-                image, request_id, signals
+                image if isinstance(image, QImage) else QImage(), request_id, signals
+            )
+        )
+        signals.error.connect(
+            lambda _url, _message, request_id=request_id, signals=signals: self._apply_url_icon(
+                QImage(), request_id, signals
             )
         )
 
-        class _IconFetch(QRunnable):
-            def __init__(self, url, signals) -> None:
-                super().__init__()
-                self._url, self._signals = url, signals
-
-            def run(self):
-                try:
-                    from utils.network_utils import get_session
-
-                    resp = get_session().get(self._url, timeout=10)
-                    resp.raise_for_status()
-                    img = QImage()
-                    if img.loadFromData(resp.content) and not img.isNull():
-                        self._signals.loaded.emit(img)
-                    else:
-                        self._signals.loaded.emit(QImage())
-                except Exception:
-                    self._signals.loaded.emit(QImage())
-
         background_operations.start_runnable(
-            QThreadPool.globalInstance(),
-            _IconFetch(url, signals),
+            get_image_loader_pool(),
+            ImageLoaderRunnable(url, signals),
         )
 
     def _set_icon_pixmap(self, px):

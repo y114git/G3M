@@ -240,8 +240,8 @@ def _copy_override_file(
                 return False
         return True
 
-    if not is_modpack:
-        patcher._backup_or_mark_file(chapter_id, target_path)
+    if not is_modpack and patcher._backup_or_mark_file(chapter_id, target_path) is False:
+        return False
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     try:
         shutil.copy2(source_path, target_path)
@@ -393,13 +393,14 @@ def apply_xdelta_override(
         ):
             return False
         if fallback_target:
-            patcher._backup_or_mark_file(chapter_id, fallback_target)
+            if patcher._backup_or_mark_file(chapter_id, fallback_target) is False:
+                return False
             shutil.copy2(source_path, fallback_target)
         return None
     patch_applied = False
     for tf in target_files:
-        if chapter_id is not None and patcher.backup_service and os.path.exists(tf):
-            patcher.backup_service.backup_file(chapter_id, tf)
+        if chapter_id is not None and patcher._backup_or_mark_file(chapter_id, tf) is False:
+            return False
         if patcher._apply_xdelta_to_file(tf, source_path):
             patcher.patching_logger.info(
                 f"Applied xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}"
@@ -414,7 +415,8 @@ def apply_xdelta_override(
             patcher.patching_logger.warning(
                 f"Xdelta patch {file_name}{label} could not be applied to any target files, copying as regular file"
             )
-            patcher._backup_or_mark_file(chapter_id, fallback_target)
+            if patcher._backup_or_mark_file(chapter_id, fallback_target) is False:
+                return False
             shutil.copy2(source_path, fallback_target)
         else:
             patcher.patching_logger.warning(
@@ -484,7 +486,8 @@ def extract_archive_to_target(
                             label=" from archive",
                         )
                         continue
-                    patcher._backup_or_mark_file(chapter_id, target_file)
+                    if patcher._backup_or_mark_file(chapter_id, target_file) is False:
+                        return False
                     shutil.copy2(source_file, target_file)
         patcher.patching_logger.debug(f"Extracted archive: {archive_path}")
         return True
@@ -725,8 +728,8 @@ def apply_file_overrides(
             target_path = os.path.join(target_dir, rel_path)
             if os.path.normpath(source_path) in processed_archives:
                 continue
-            if not is_modpack:
-                patcher._backup_or_mark_file(chapter_id, target_path)
+            if not is_modpack and patcher._backup_or_mark_file(chapter_id, target_path) is False:
+                return False
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
             try:
                 shutil.copy2(source_path, target_path)

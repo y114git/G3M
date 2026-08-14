@@ -77,6 +77,40 @@ def test_mod_patching_worker_passes_nested_steps_to_patcher(monkeypatch):
     assert received == [(plans, False)]
 
 
+def test_mod_patching_worker_reports_cancellation_after_restoring_backups(monkeypatch):
+    calls = []
+
+    class _Patcher:
+        backup_service = Mock(original_files={"game": {}}, added_files={})
+
+        def __init__(self, *_args) -> None:
+            self.progress_update = Mock()
+            self.status_update = Mock()
+
+        def process_patch_plan(self, *_args, **_kwargs):
+            worker._cancelled = True
+            return False
+
+        def cancel(self):
+            calls.append("cancel")
+
+        def restore_all_backups(self):
+            calls.append("restore")
+
+        def cleanup(self, force=False):
+            calls.append("cleanup")
+
+    monkeypatch.setattr("workers.mod.patching_worker.G3MToolPatchingService", _Patcher)
+    worker = ModPatchingThread(Mock(all_mods=[]), Mock(), PatchPlan(), "session.json")
+    results = []
+    worker.result_ready.connect(lambda success: (calls.append("result"), results.append(success)))
+
+    worker.run()
+
+    assert results == [False]
+    assert calls == ["cancel", "restore", "cleanup", "result"]
+
+
 def test_mod_patching_worker_resolves_selected_mod_not_yet_in_global_catalog(
     monkeypatch,
 ):

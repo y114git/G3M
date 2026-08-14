@@ -11,7 +11,7 @@ import time
 from typing import Any, cast, override
 
 from PyQt6 import sip as _sip
-from PyQt6.QtCore import Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
@@ -42,7 +42,7 @@ from ui.common.styling import (
     install_widget_update_handler,
     round_pixmap,
 )
-from ui.utils.image_loader import ImageLoaderRunnable
+from ui.utils.image_loader import ImageLoaderRunnable, get_image_loader_pool
 from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import UIAnimator
 from utils.mod.utils import get_mod_id
@@ -260,7 +260,7 @@ class ScreenshotViewerDialog(QDialog):
         super().__init__(parent)
         self._urls = urls
         self._index = index
-        self._loader = cast(QThreadPool, QThreadPool.globalInstance())
+        self._loader = get_image_loader_pool()
         self._label = QLabel()
         self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._prev = QPushButton("←")
@@ -394,7 +394,7 @@ class ModDetailsOverlay(QWidget):
         self._ss_index = 0
         self._description_html = ""
         self._last_description_width = 0
-        self._thread_pool = cast(QThreadPool, QThreadPool.globalInstance())
+        self._thread_pool = get_image_loader_pool()
         self._original_resize_event = None
         self._last_geometry = None
         self._cleanup_started = False

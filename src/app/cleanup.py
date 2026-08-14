@@ -2,6 +2,7 @@
 
 import contextlib
 import logging
+import time
 from collections.abc import Iterable, Mapping
 
 from PyQt6.QtCore import QObject, QThread, QThreadPool
@@ -9,6 +10,7 @@ from PyQt6.QtWidgets import QApplication
 
 from config.config import THREAD_WAIT_TIMEOUT
 from services.background_operations import background_operations
+from ui.utils.image_loader import shutdown_image_loader_pool
 from ui.utils.ui_utils import safe_stop_thread
 from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
 
@@ -152,14 +154,22 @@ def perform_close_cleanup(w):
                 _thread_running_state(thread),
                 thread,
             )
+        shutdown_started = time.monotonic()
+
+        def remaining_timeout_ms() -> int:
+            elapsed_ms = int((time.monotonic() - shutdown_started) * 1000)
+            return max(0, THREAD_WAIT_TIMEOUT - elapsed_ms)
+
         pool = QThreadPool.globalInstance()
         if pool is not None:
             pool.clear()
             with contextlib.suppress(Exception):
-                pool.waitForDone(THREAD_WAIT_TIMEOUT)
+                pool.waitForDone(remaining_timeout_ms())
         with contextlib.suppress(Exception):
-            shutdown_compatibility_job_pool(THREAD_WAIT_TIMEOUT)
-        background_operations.cancel_threads(THREAD_WAIT_TIMEOUT)
+            shutdown_compatibility_job_pool(remaining_timeout_ms())
+        with contextlib.suppress(Exception):
+            shutdown_image_loader_pool(remaining_timeout_ms())
+        background_operations.cancel_threads(remaining_timeout_ms())
         w.game_launcher._cleanup_direct_launch_files()
         if hasattr(w.game_launcher, "mod_patcher"):
             w.game_launcher.mod_patcher.cleanup_processes_and_temp_files()

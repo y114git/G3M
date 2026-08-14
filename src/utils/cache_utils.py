@@ -7,19 +7,16 @@ from collections import OrderedDict
 
 from PyQt6.QtGui import QImage
 
-from config.config import IMAGE_CACHE_MAX_SIZE, NETWORK_SEMAPHORE_LIMIT
+from config.config import IMAGE_CACHE_MAX_SIZE
 
 logger = logging.getLogger(__name__)
 
 try:
     _IMG_CACHE: OrderedDict[str, QImage] = OrderedDict()
-    _IMG_CACHE_LOCK, _NET_SEM = (
-        threading.RLock(),
-        threading.Semaphore(NETWORK_SEMAPHORE_LIMIT),
-    )
+    _IMG_CACHE_LOCK = threading.RLock()
 except (ValueError, RuntimeError) as e:
     logger.warning(f"cache: failed to initialize cache/locks: {e}")
-    _IMG_CACHE, _IMG_CACHE_LOCK, _NET_SEM = OrderedDict(), None, None
+    _IMG_CACHE, _IMG_CACHE_LOCK = OrderedDict(), None
 
 
 @contextlib.contextmanager

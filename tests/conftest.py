@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PyQt6.QtCore import QObject
+from PyQt6.QtCore import QObject, QThreadPool
 from PyQt6.QtWidgets import QApplication
 
 from models.app_state import AppState
@@ -66,6 +66,23 @@ def _close_widgets(app: QApplication) -> None:
             logging.debug("_close_widgets: failed closing top-level widget: %s", e, exc_info=True)
 
 
+def _shutdown_qt_pools() -> None:
+    try:
+        timeout_ms = int(os.getenv("WAIT_FOR_DONE_TIMEOUT_MS", "5000"))
+    except ValueError:
+        timeout_ms = 5000
+    pool = QThreadPool.globalInstance()
+    if pool is not None:
+        pool.clear()
+        if pool.activeThreadCount() > 0:
+            pool.waitForDone(timeout_ms)
+    from ui.utils.image_loader import shutdown_image_loader_pool
+    from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
+
+    shutdown_compatibility_job_pool(timeout_ms)
+    shutdown_image_loader_pool(timeout_ms)
+
+
 @pytest.fixture(scope='session')
 def qapp():
     app = QApplication.instance()
@@ -74,18 +91,11 @@ def qapp():
     assert isinstance(app, QApplication)
     yield app
 
-    from PyQt6.QtCore import QThread, QThreadPool
+    from PyQt6.QtCore import QThread
 
     from ui.utils.ui_utils import safe_stop_thread
     _pump_events(app)
-    thread_pool = QThreadPool.globalInstance()
-    if thread_pool is not None:
-        thread_pool.clear()
-        if thread_pool.activeThreadCount() > 0:
-            thread_pool.waitForDone(200)
-    from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
-
-    shutdown_compatibility_job_pool(200)
+    _shutdown_qt_pools()
     for widget in app.allWidgets():
         for attr_name in _THREAD_ATTRS:
             try:
@@ -134,7 +144,6 @@ def cleanup_threads(request):
     app = QApplication.instance()
     if not isinstance(app, QApplication):
         return
-    from PyQt6.QtCore import QThreadPool
     _pump_events(app)
     try:
         _stop_known_widget_threads(app)
@@ -142,18 +151,7 @@ def cleanup_threads(request):
         logging.debug(f'cleanup_threads: failed during thread cleanup sweep: {e}', exc_info=True)
     _close_widgets(app)
     _pump_events(app)
-    try:
-        timeout_ms = int(os.getenv("WAIT_FOR_DONE_TIMEOUT_MS", "5000"))
-    except ValueError:
-        timeout_ms = 5000
-    pool = QThreadPool.globalInstance()
-    if pool is not None:
-        pool.clear()
-        if pool.activeThreadCount() > 0:
-            pool.waitForDone(timeout_ms)
-    from ui.widgets.mod.mod_card_widget import shutdown_compatibility_job_pool
-
-    shutdown_compatibility_job_pool(timeout_ms)
+    _shutdown_qt_pools()
     _pump_events(app)
 
 

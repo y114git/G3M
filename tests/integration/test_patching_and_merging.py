@@ -7,7 +7,7 @@ import os
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 
@@ -75,6 +75,32 @@ def test_patching_logger_reuses_the_active_file_handler(tmp_path, monkeypatch):
             handler.close()
 
 
+def test_patching_logger_reopens_after_rotation_for_a_new_service(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "services.g3mtool_patching_service.get_user_data_root",
+        lambda: str(tmp_path),
+    )
+    patching_logger = logging.getLogger("patching")
+    for handler in list(patching_logger.handlers):
+        patching_logger.removeHandler(handler)
+        handler.close()
+
+    try:
+        first = G3MToolPatchingService(Mock(local_config={}), Mock())
+        first.patching_logger.info("first service")
+        old_handler = first.patching_logger.handlers[0]
+        old_handler.flush()
+
+        second = G3MToolPatchingService(Mock(local_config={}), Mock())
+
+        assert old_handler not in second.patching_logger.handlers
+        assert any((tmp_path / "logs" / "patching").glob("patching_*.log"))
+    finally:
+        for handler in list(patching_logger.handlers):
+            patching_logger.removeHandler(handler)
+            handler.close()
+
+
 def test_patching_log_rotation_tolerates_a_disappearing_file(tmp_path, monkeypatch):
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
@@ -130,7 +156,7 @@ class TestG3MToolAdapter:
             lambda relative_path: f"C:/bundle/{relative_path}",
         )
         monkeypatch.setattr(
-            "adapters.g3mtool_adapter.os.path.exists", lambda _path: True
+            "adapters.g3mtool_adapter.os.path.isfile", lambda _path: True
         )
         info = Mock()
         monkeypatch.setattr("adapters.g3mtool_adapter.logger.info", info)
@@ -253,7 +279,7 @@ class TestG3MToolAdapter:
             lambda: {"custom_g3mtool_path": "/tools/G3MTool.exe"},
         )
         monkeypatch.setattr(
-            "adapters.g3mtool_adapter.os.path.exists", lambda _path: False
+            "adapters.g3mtool_adapter.os.path.isfile", lambda _path: False
         )
 
         assert g3mtool.get_unavailable_reason() == tr(
@@ -567,7 +593,7 @@ class TestG3MToolAdapter:
             local_config={"custom_g3mtool_path": "/tools/G3MTool-custom"}
         )
         monkeypatch.setattr(
-            "adapters.g3mtool_adapter.os.path.exists",
+            "adapters.g3mtool_adapter.os.path.isfile",
             lambda path: path == "/tools/G3MTool-custom",
         )
         g3mtool = G3MToolManager(app_state)
@@ -1194,7 +1220,7 @@ class TestXdeltaPatchApplication:
         output_path = tmp_path / "patched_data.win"
         data_win_path.write_bytes(b"ORIGINAL")
         patch_file.write_bytes(b"PATCH")
-        patcher.g3mtool.xpatch_apply = Mock(return_value=(0, "", ""))
+        patcher.g3mtool.apply_patch = Mock(return_value=(0, "", ""))
         patcher.warning_handler = Mock(return_value=True)
 
         result = patcher._apply_single_mod(
@@ -1209,6 +1235,13 @@ class TestXdeltaPatchApplication:
 
         assert result is True
         assert output_path.read_bytes() == b"ORIGINAL"
+        patcher.g3mtool.apply_patch.assert_called_once_with(
+            str(data_win_path),
+            str(patch_file),
+            str(output_path),
+            log_path=str(tmp_path / "g3mtool.log"),
+            progress_callback=ANY,
+        )
         patcher.warning_handler.assert_called_once()
 
 
@@ -1722,6 +1755,46 @@ class TestG3MPatchProgressText:
         installed = localappdata / "Frickbears3" / "addons" / "Wario"
         assert (installed / "icon.png").read_bytes() == b"guard icon"
         assert not (target / "_icon.png").exists()
+
+    def test_configured_frickbears3_addon_follows_linked_files(self, tmp_path, monkeypatch):
+        app_state = Mock()
+        app_state.local_config = {}
+        mod_service = Mock()
+        source = tmp_path / "mod"
+        shared_guard = tmp_path / "shared" / "Wario"
+        shared_guard.mkdir(parents=True)
+        (shared_guard / "icon.png").write_bytes(b"guard icon")
+        (source / "addons").mkdir(parents=True)
+        try:
+            (source / "addons" / "Wario").symlink_to(
+                shared_guard, target_is_directory=True
+            )
+        except OSError as error:
+            pytest.skip(f"symlinks unavailable: {error}")
+        target = tmp_path / "game"
+        target.mkdir()
+        localappdata = tmp_path / "localappdata"
+        monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+        mod = Mock()
+        mod_service.get_mod_folder_path.return_value = str(source)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        patcher.backup_service = Mock()
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.has_mod_configured_chapter_entry",
+            lambda *_args: True,
+        )
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.get_mod_configured_extra_files",
+            lambda *_args: ["addons/"],
+        )
+        monkeypatch.setattr(patcher, "_resolve_mod_game", lambda _mod: "frickbears3")
+
+        assert patcher._apply_ordered_file_overrides(
+            [(mod, str(source))], str(target), "frickbears3", False, 0, 100
+        )
+        installed = localappdata / "Frickbears3" / "addons" / "Wario"
+        assert (installed / "icon.png").read_bytes() == b"guard icon"
 
     def test_multi_patch_merge_reports_progress_after_normalization(self, tmp_path):
         """Checks that merge progress follows the input-normalization window."""

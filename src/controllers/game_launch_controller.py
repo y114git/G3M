@@ -172,95 +172,22 @@ class GameLaunchController(QObject):
             and hasattr(library_display, "_modpack_thread")
             and (library_display._modpack_thread == self.app_state.current_task)
         )
-        modpack_dir = (
-            getattr(library_display, "_modpack_dir", None)
-            if is_modpack_creation
-            else None
-        )
         patching_thread = getattr(self.game_launcher, "_patching_thread", None)
         plugin_thread = getattr(self.game_launcher, "_plugin_hook_thread", None)
         if patching_thread:
-            try:
-                patching_thread.progress_update.disconnect()
-                patching_thread.status_update.disconnect()
-                patching_thread.result_ready.disconnect()
-                patching_thread.finished.disconnect()
-                if hasattr(patching_thread, "warning_confirmation_needed"):
-                    patching_thread.warning_confirmation_needed.disconnect()
-            except (TypeError, RuntimeError) as error:
-                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
             patching_thread.cancel()
-            if patching_thread.isRunning():
-                if hasattr(patching_thread, "_warning_event"):
-                    patching_thread._warning_event.set()
-                patching_thread.wait(5000)
-            try:
-                if patching_thread.patcher:
-                    if (
-                        patching_thread.patcher.backup_service
-                        and patching_thread.patch_plan.sections
-                    ):
-                        for section_id, _steps in patching_thread.patch_plan.sections:
-                            patching_thread.patcher.backup_service.restore_backups(
-                                section_id
-                            )
-                            logger.info(
-                                "[CANCEL] Restored backups for section %s", section_id
-                            )
-                    patching_thread.patcher.cleanup(force=True)
-                if not patching_thread.isRunning():
-                    patching_thread.deleteLater()
-            except Exception as e:
-                logger.error(
-                    f"Error cleaning up cancelled patching thread: {e}", exc_info=True
-                )
-            finally:
-                self.game_launcher._patching_thread = None
-            runtime_service = getattr(self.app, "plugin_runtime_service", None)
-            if runtime_service:
-                with contextlib.suppress(Exception):
-                    runtime_service.execute_hook(
-                        "mod_apply_cancelled",
-                        {"hook": "patching", "reason": "cancelled"},
-                    )
-            drp_service = getattr(self.app, "discord_rich_presence_service", None)
-            if drp_service:
-                with contextlib.suppress(Exception):
-                    drp_service.on_mod_apply_cancelled(
-                        {"hook": "patching", "reason": "cancelled"}
-                    )
-        if plugin_thread:
-            try:
-                plugin_thread.progress_update.disconnect()
-                plugin_thread.status_update.disconnect()
-                plugin_thread.result_ready.disconnect()
-                plugin_thread.finished.disconnect()
-            except (TypeError, RuntimeError) as error:
-                logger.debug("Best-effort operation failed: %s", error, exc_info=True)
+            self.app_state.action_button_enabled = False
+        elif plugin_thread:
             plugin_thread.cancel()
-            if plugin_thread.isRunning():
-                plugin_thread.wait(5000)
-            with contextlib.suppress(Exception):
-                if not plugin_thread.isRunning():
-                    plugin_thread.deleteLater()
-            self.game_launcher._plugin_hook_thread = None
-        if is_modpack_creation and modpack_dir and os.path.exists(modpack_dir):
-            try:
-                import shutil
-
-                shutil.rmtree(modpack_dir, ignore_errors=True)
-                logger.info(
-                    f"Cancelled modpack creation, removed directory: {modpack_dir}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to remove cancelled modpack directory: {e}")
-            if library_display:
-                library_display._modpack_thread = None
-                library_display._modpack_dir = None
-        self.app_state.is_patching = False
-        self._reset_progress_bar()
-        self.app_state.clear_current_task()
-        self.app_state.action_button_text = None
+            self.app_state.action_button_enabled = False
+        elif is_modpack_creation:
+            self.app_state.current_task.cancel()
+            self.app_state.action_button_enabled = False
+        else:
+            self.game_launcher.cancel_pending_launch()
+        self._safe_update_status(
+            tr("status.operation_cancelled"), UI_COLORS["status_info"]
+        )
 
     def _cancel_operation(self, operation_type: str):
         if operation_type == "install":
@@ -270,6 +197,7 @@ class GameLaunchController(QObject):
             self.app_state.cancel_current_operation()
         elif operation_type == "patching":
             self._cancel_patching_operation()
+            return
         self._safe_update_status(
             tr("status.operation_cancelled"), UI_COLORS["status_info"]
         )
@@ -300,8 +228,7 @@ class GameLaunchController(QObject):
         if self.used_mods_service.check_used_mods_need_updates():
             self.update_mods_in_use()
             return
-        if self.app_state.operation_cancelled:
-            return
+        self.app_state.operation_cancelled = False
         if not self.app_state.is_patching:
             self.app_state.action_button_enabled = False
         self.app_state.progress_bar_visible = False

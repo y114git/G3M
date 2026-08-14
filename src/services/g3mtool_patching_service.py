@@ -37,7 +37,12 @@ from services.warning_service import (
     create_warning_event,
     is_warning_enabled,
 )
-from utils.file_utils import ensure_writable, get_chapter_folder_name, safe_rmtree
+from utils.file_utils import (
+    ensure_writable,
+    get_chapter_folder_name,
+    safe_remove,
+    safe_rmtree,
+)
 from utils.frickbears3_addons_utils import (
     is_addons_subpath,
     is_top_level_addons_archive,
@@ -107,6 +112,17 @@ def _rotate_patching_files():
         src = os.path.join(logs_dir, name)
         try:
             if os.path.isfile(src) and os.path.getsize(src) > 0:
+                if name == "patching.log":
+                    normalized_src = os.path.normcase(os.path.abspath(src))
+                    patching_logger = logging.getLogger("patching")
+                    for handler in list(patching_logger.handlers):
+                        if (
+                            isinstance(handler, logging.FileHandler)
+                            and os.path.normcase(os.path.abspath(handler.baseFilename))
+                            == normalized_src
+                        ):
+                            patching_logger.removeHandler(handler)
+                            handler.close()
                 base, ext = os.path.splitext(name)
                 suffix = f"{os.getpid()}_{uuid.uuid4().hex[:8]}_{ts}"
                 dst = os.path.join(archive_dir, f"{base}_{suffix}{ext}")
@@ -154,10 +170,17 @@ def _get_patching_logger() -> logging.Logger:
     for handler in logger.handlers:
         handler_path = getattr(handler, "baseFilename", None)
         if (
-            handler_path
+            isinstance(handler, logging.FileHandler)
+            and handler_path
             and os.path.normcase(os.path.abspath(handler_path)) == normalized_path
         ):
-            return logger
+            try:
+                if handler.stream and os.path.samestat(
+                    os.fstat(handler.stream.fileno()), os.stat(log_path)
+                ):
+                    return logger
+            except OSError:
+                pass
 
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
@@ -505,13 +528,6 @@ class G3MToolPatchingService(QObject):
                         self._restore_all(section_mods)
                     return False
 
-                if not is_modpack and not self._write_session_manifest():
-                    self.patching_logger.error(
-                        "Patching aborted because the recovery manifest could not be saved"
-                    )
-                    self._restore_all(section_mods)
-                    return False
-
             self._emit_progress(
                 96 if is_modpack else 100, tr("status.patching_completed")
             )
@@ -687,17 +703,7 @@ class G3MToolPatchingService(QObject):
                 )
             return success
 
-        if (
-            not is_modpack
-            and self.backup_service
-            and not self.backup_service.backup_file(chapter_id, data_win_path)
-        ):
-            self.patching_logger.error(
-                f"CRITICAL: Failed to backup {data_win_path} - aborting to protect game files"
-            )
-            self.status_update.emit(
-                tr("errors.backup_failed", path=data_win_path), "error"
-            )
+        if not is_modpack and not self._backup_or_mark_file(chapter_id, data_win_path):
             return False
 
         final_output_path = data_win_path
@@ -1036,6 +1042,7 @@ class G3MToolPatchingService(QObject):
                                     target,
                                     priority=priority,
                                     excluded_extensions=excluded_extensions,
+                                    follow_symlinks=True,
                                 )
                             )
                         elif os.path.isfile(entry["source"]):
@@ -1056,6 +1063,7 @@ class G3MToolPatchingService(QObject):
                                 or is_towers_subpath(path)
                                 or is_top_level_towers_archive(path)
                             ),
+                            follow_symlinks=True,
                         )
                     )
             plan = build_override_plan(
@@ -1409,31 +1417,54 @@ class G3MToolPatchingService(QObject):
             mod_root_dir=mod_root_dir,
         )
 
-    def _backup_or_mark_file(self, chapter_id, target_file: str) -> None:
+    def _backup_or_mark_file(self, chapter_id, target_file: str) -> bool:
         if chapter_id is None or not self.backup_service:
-            return
+            return True
         if os.path.exists(target_file):
-            self.backup_service.backup_file(chapter_id, target_file)
+            if not self.backup_service.backup_file(chapter_id, target_file):
+                self.patching_logger.error(
+                    "CRITICAL: Failed to backup %s - aborting to protect game files",
+                    target_file,
+                )
+                self.status_update.emit(tr("errors.backup_failed", path=target_file), "error")
+                return False
         else:
             self.backup_service.mark_file_added(chapter_id, target_file)
+        if self._write_session_manifest():
+            return True
+        self.patching_logger.error(
+            "Patching aborted because the recovery manifest could not be saved"
+        )
+        return False
 
     def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:
         """Apply xdelta patch to a non-data.win file (used by file_override_utils)."""
         if not self.g3mtool.is_available():
             return False
-        temp_output = target_file + ".tmp"
+        try:
+            descriptor, temp_output = tempfile.mkstemp(
+                prefix=f".{os.path.basename(target_file)}.",
+                suffix=".tmp",
+                dir=os.path.dirname(target_file) or ".",
+            )
+        except OSError as error:
+            self.patching_logger.debug(
+                "_apply_xdelta_to_file: failed to create temporary output: %s", error
+            )
+            return False
+        os.close(descriptor)
+        safe_remove(temp_output)
         returncode = self.g3mtool.xpatch_apply(target_file, patch_path, temp_output)[0]
-        if returncode == 0 and os.path.exists(temp_output):
+        if returncode == 0 and os.path.isfile(temp_output):
             try:
-                shutil.move(temp_output, target_file)
+                os.replace(temp_output, target_file)
                 return True
             except Exception as e:
                 self.patching_logger.debug(
                     f"_apply_xdelta_to_file: failed to move patched output into place: {e}",
                     exc_info=True,
                 )
-        if os.path.exists(temp_output):
-            os.remove(temp_output)
+        safe_remove(temp_output)
         return False
 
     def _get_mod_source_dir(self, mod_data: Any, chapter_id: str) -> str | None:
