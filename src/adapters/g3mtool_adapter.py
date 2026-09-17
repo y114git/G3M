@@ -371,7 +371,7 @@ class G3MToolManager:
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> tuple[int, str, str]:
         """Call g3mtool info <target> [--verbose]."""
-        cmd = ["info", target]
+        cmd = ["info", target, "--json"] # The [--json] argument is so it's easily readable in Python
         if verbose:
             cmd.append("--verbose")
         return self._run_command(cmd, progress_callback=progress_callback)

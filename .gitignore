@@ -1,0 +1,4 @@
+build/G3MExecutable
+__pycache__
+dist
+G3M.egg-info

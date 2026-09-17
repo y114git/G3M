@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from collections.abc import Callable
 
+from adapters.g3mtool_adapter import G3MToolManager
+from collections.abc import Callable
+from services.game_runner import _load_config
 from utils.file_utils import remove_archive_extension
+from utils.path_utils import get_user_data_root
 from utils.pizzatower_afom_utils import _copy_tree_contents, _extract_archive_contents
 
 logger = logging.getLogger(__name__)
@@ -14,6 +18,17 @@ logger = logging.getLogger(__name__)
 
 def get_frickbears3_addons_dir() -> str:
     localappdata = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or os.path.expanduser("~")
+
+    # Just in case the save location got changed by one of the mods earlier or directly where the data.win is located
+    g3mtool = G3MToolManager()
+    if g3mtool.is_available():
+        config = _load_config()
+        if config.get("frickbears3_game_path", ""):
+            info = g3mtool.info(target=(os.path.join(config["frickbears3_game_path"], "data.win")))
+            data = json.loads(info[1])
+            info = data.get("GeneralInfo", data.get("generalInfo", {"name": "Frickbears3"}))
+            return os.path.join(localappdata, info["name"], "addons")
+
     return os.path.join(localappdata, "Frickbears3", "addons")
 
 

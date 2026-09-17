@@ -36,6 +36,8 @@ from adapters.g3mtool_adapter import G3MToolManager
 from config.config import MOD_CONFIG_FILENAME
 from models.game_modes import get_all_games, get_game
 from services.backup_service import BackupManager
+from services.game_runner import _load_config
+from services.plugins.shortcut_service import ShortcutPluginContext
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
 from ui.common.styling import (
     apply_stylesheet_if_changed,
@@ -1587,6 +1589,59 @@ class CustomSavesFoldersPlugin:
                 shutil.rmtree(work_dir, ignore_errors=True)
             return False, str(error)
 
+    def _move_addons_to_new_folder(self, game_id: str, old_folder_name: str, new_folder_name: str, context):
+        if game_id != "frickbears3": return # This is only necessary for this game at the moment
+        if old_folder_name == "": return # There has to be a reference to the original save file
+        backup_manager = self._active_session.backup_manager
+
+        used_mods = []
+        mods_root = get_profile_mods_root(self._state.active_profile())
+        seen_ids = set()
+        for folder in sorted(os.listdir(mods_root), key=str.casefold):
+            folder_path = os.path.join(mods_root, folder)
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+            if not os.path.isfile(config_path):
+                continue
+            try:
+                with open(config_path, encoding="utf-8") as handle:
+                    config_data = json.load(handle)
+                normalize_mod_config_data(config_data, mod_root_path=folder_path)
+            except Exception:
+                logger.debug("Skipping unreadable mod config: %s", config_path)
+                continue
+            if str(config_data.get("game", "") or "").strip() != game_id:
+                continue
+            mod_id = _canonical_mod_id(get_mod_id(config_data) or folder)
+            if not mod_id or mod_id in seen_ids:
+                continue
+            seen_ids.add(mod_id)
+            if isinstance(context, ShortcutPluginContext):
+                for step in context.shortcut_config["launch_plan"]["patch_plan"]["sections"][game_id]:
+                    for used_mod in step:
+                        if mod_id == used_mod: used_mods.append(folder)
+            else:
+                for used_mod in context.app_state.local_config[f"used_mods_{game_id}"][game_id]:
+                    if mod_id == used_mod: used_mods.append(folder)
+
+        appdata = "LOCALAPPDATA"
+        addon_folder = "addons"
+        for folder in sorted(os.listdir(mods_root), key=str.casefold):
+            if not folder in used_mods: continue
+            folder_path = os.path.join(mods_root, folder)
+            for f in sorted(os.listdir(folder_path), key=str.casefold):
+                if f == addon_folder:
+                    addons = sorted(os.listdir(os.path.join(folder_path, f)), key=str.casefold)
+                    addons_src = os.path.join(os.getenv(appdata), old_folder_name, addon_folder)
+                    addons_dest = os.path.join(os.getenv(appdata), new_folder_name, addon_folder)
+                    backup_manager.mark_file_added(game_id, addons_dest)
+                    if not os.path.exists(addons_dest):
+                        os.makedirs(addons_dest, exist_ok=True)
+                    for addon in addons:
+                        if not addon in os.listdir(addons_dest):
+                            backup_manager.mark_file_added(game_id, os.path.join(addons_dest, addon))
+                            shutil.move(os.path.join(addons_src, addon), os.path.join(addons_dest, addon))
+                    break
+
     def on_after_mod_apply_before_launch(self, context, *_args):
         game_mode = getattr(context.app_state, "game_mode", None)
         if game_mode is None or self._state is None:
@@ -1600,10 +1655,18 @@ class CustomSavesFoldersPlugin:
         if not folder:
             return True
         task_runtime = getattr(context, "task_runtime", None)
+        folder_name_old = "" # In case the save was changed prior to this point
+        g3mtool = G3MToolManager(context.app_state)
+        if g3mtool.is_available():
+            info = g3mtool.info(target=(os.path.join(context.app_state.local_config[f"{game_mode.game_id}_game_path"], "data.win")))
+            data = json.loads(info[1])
+            info = data.get("GeneralInfo", data.get("generalInfo", {"name": folder_name_old}))
+            folder_name_old = info["name"]
         ok, error = self._apply_name_to_targets(
             game_mode.game_id, folder["name"], task_runtime
         )
         if ok:
+            self._move_addons_to_new_folder(game_mode.game_id, folder_name_old, folder["name"], context)
             return True
         if error == "cancelled":
             return False
@@ -1622,8 +1685,18 @@ class CustomSavesFoldersPlugin:
         if not folder_name or not game_id:
             return True
         task_runtime = getattr(context, "task_runtime", None)
+        folder_name_old = "" # In case the save was changed prior to this point
+        g3mtool = G3MToolManager()
+        if g3mtool.is_available():
+            config = _load_config()
+            if config.get(f"{game_id}_game_path", ""):
+                info = g3mtool.info(target=(os.path.join(config[f"{game_id}_game_path"], "data.win")))
+                data = json.loads(info[1])
+                info = data.get("GeneralInfo", data.get("generalInfo", {"name": folder_name_old}))
+                folder_name_old = info["name"]
         ok, error = self._apply_name_to_targets(game_id, folder_name, task_runtime)
         if ok:
+            self._move_addons_to_new_folder(game_id, folder_name_old, folder_name, shortcut_context)
             return True
         if error == "cancelled":
             return False
