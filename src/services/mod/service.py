@@ -1023,15 +1023,21 @@ class ModManager(QObject):
                 metadata = {}
             else:
                 try:
-                    metadata = load_json(self.app_state.mods_metadata_path) or {}
+                    metadata = load_json(self.app_state.mods_metadata_path)
                 except Exception as e:
                     logger.warning(f"add_playtime_hours: failed to read metadata: {e}")
-                    metadata = {}
+                    return
+            if not isinstance(metadata, dict):
+                logger.warning("add_playtime_hours: metadata is not an object")
+                return
             changed = False
             for mod_id in mod_ids:
                 if not mod_id:
                     continue
                 entry = metadata.setdefault(mod_id, {})
+                if not isinstance(entry, dict):
+                    logger.warning("add_playtime_hours: invalid mod metadata entry")
+                    continue
                 current = self._normalize_playtime_hours(entry.get("playtime_hours", 0))
                 entry["playtime_hours"] = round(current + hours, 4)
                 changed = True

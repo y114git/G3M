@@ -42,7 +42,6 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.14"
-  G3MTOOL_REPO: https://github.com/y114git/G3MTool.git
   G3MTOOL_BRANCH: main
   RELEASE_VERSION: ${{ inputs.version_and_tag || 'dev' }}
   RELEASE_TAG_FINAL: ${{ inputs.version_and_tag }}
@@ -59,7 +58,7 @@ jobs:
       matrix:
         include:
           - label: Linux
-            runs_on: ubuntu-22.04
+            runs_on: ubuntu-24.04
             artifact_name: G3M-Linux
             g3mtool_runtime: linux-x64
             g3mtool_dir: src/assets/bin/g3mtool_linux
@@ -83,7 +82,7 @@ jobs:
             g3mtool_dir: src/assets/bin/g3mtool_windows
             startup_target: G3M.exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set archive names
         id: set_names
@@ -123,49 +122,36 @@ jobs:
         run: brew install upx || true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: pyproject.toml
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip wheel
           python -m pip install ".[build,test]"
 
-      - name: Build G3MTool from latest source
-        if: runner.os != 'Windows'
-        run: |
-          rm -rf g3mtool-src
-          git init g3mtool-src
-          git -C g3mtool-src remote add origin "${{ env.G3MTOOL_REPO }}"
-          git -C g3mtool-src fetch --depth 1 origin "${{ env.G3MTOOL_BRANCH }}"
-          git -C g3mtool-src checkout FETCH_HEAD
-          mkdir -p "${{ matrix.g3mtool_dir }}"
-          dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
-          rm -rf g3mtool-src
+      - name: Build bundled G3MTool
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
 
-      - name: Build G3MTool from latest source (Windows)
+      - name: Checkout G3MTool source
+        uses: actions/checkout@v7
+        with:
+          repository: y114git/G3MTool
+          ref: ${{ env.G3MTOOL_BRANCH }}
+          path: g3mtool-src
+          persist-credentials: false
+
+      - name: Publish bundled G3MTool
         shell: pwsh
-        run: |
-          if (Test-Path g3mtool-src) { Remove-Item g3mtool-src -Recurse -Force }
-          git init g3mtool-src
-          git -C g3mtool-src remote add origin "${{ env.G3MTOOL_REPO }}"
-          git -C g3mtool-src fetch --depth 1 origin "${{ env.G3MTOOL_BRANCH }}"
-          git -C g3mtool-src checkout FETCH_HEAD
-          New-Item -ItemType Directory -Force -Path "${{ matrix.g3mtool_dir }}" | Out-Null
-          dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
-          Remove-Item g3mtool-src -Recurse -Force
-
-      - name: Ensure G3MTool is executable
-        if: runner.os != 'Windows'
-        run: chmod +x "${{ matrix.g3mtool_dir }}"/* 2>/dev/null || true
+        env:
+          G3MTOOL_RUNTIME: ${{ matrix.g3mtool_runtime }}
+          G3MTOOL_OUTPUT: ${{ matrix.g3mtool_dir }}
+        run: dotnet publish g3mtool-src/G3MToolCLI -c Release -r $env:G3MTOOL_RUNTIME -o $env:G3MTOOL_OUTPUT
 
       - name: Build UnRAR from source
         if: runner.os != 'Windows'
@@ -251,7 +237,7 @@ jobs:
           STARTUP_LAUNCH_TARGET: dist/${{ matrix.startup_target }}
         run: python tests/integration/test_startup.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ steps.set_names.outputs.archive_path }}
@@ -284,7 +270,7 @@ jobs:
           if (-not $exe) { Write-Error 'Installer not found'; exit 1 }
           Compress-Archive -Path $exe.FullName -DestinationPath "${{ steps.set_names.outputs.setup_archive_path }}" -Force
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: runner.os == 'Windows'
         with:
           name: G3M-Windows-Setup
@@ -297,17 +283,20 @@ jobs:
     if: ${{ inputs.publish_release != false }}
     steps:
       - name: Validate release inputs
+        env:
+          REQUESTED_TAG: ${{ inputs.version_and_tag }}
+          REQUESTED_NAME: ${{ inputs.release_name }}
         run: |
-          if [ -z "${{ inputs.version_and_tag }}" ]; then
+          if [ -z "$REQUESTED_TAG" ]; then
             echo "ERROR: version_and_tag is required when publishing release"
             exit 1
           fi
-          if [ -z "${{ inputs.release_name }}" ]; then
+          if [ -z "$REQUESTED_NAME" ]; then
             echo "ERROR: release_name is required when publishing release"
             exit 1
           fi
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ./release_assets
           merge-multiple: true
@@ -315,40 +304,9 @@ jobs:
       - name: List gathered assets
         run: find ./release_assets -type f -name "*.zip" -print
 
-      - name: Get existing release
-        id: get_release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              const release = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag: '${{ env.RELEASE_TAG_FINAL }}'
-              });
-              return release.data;
-            } catch (error) {
-              if (error.status === 404) return null;
-              throw error;
-            }
-
-      - name: Delete existing release assets if release exists
-        if: steps.get_release.outputs.result != 'null'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const release = JSON.parse('${{ steps.get_release.outputs.result }}');
-            for (const asset of release.assets) {
-              console.log('Deleting existing asset:', asset.name);
-              await github.rest.repos.deleteReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                asset_id: asset.id,
-              });
-            }
 
       - name: Create or update GitHub Release and upload assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG_FINAL }}
           name: ${{ env.RELEASE_NAME_FINAL }}
@@ -357,6 +315,7 @@ jobs:
           generate_release_notes: true
           make_latest: true
           fail_on_unmatched_files: true
+          overwrite_files: true
           files: |
             release_assets/*.zip
 

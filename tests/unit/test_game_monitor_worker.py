@@ -2,13 +2,17 @@
 
 from unittest.mock import Mock, patch
 
-from services.game_detection_service import GameProcessTracker
+from services.game_detection_service import (
+    GameProcessTracker,
+    is_process_identity_running,
+)
 from workers.game_monitor_worker import GameMonitorWorker
 
 
-def test_monitor_waits_long_enough_for_wrapped_process_to_spawn_game(qapp):
-    """Checks that wrapper process exit does not end monitoring before game appears."""
+def test_monitor_waits_long_enough_while_launcher_still_runs(qapp):
+    """Checks that the monitor waits for a game launched by a running wrapper."""
     process = Mock(pid=1234)
+    process.poll.return_value = None
     checks = [False] * 12 + [True, True, False, False, False, False]
     seen_checks = []
 
@@ -28,6 +32,30 @@ def test_monitor_waits_long_enough_for_wrapped_process_to_spawn_game(qapp):
     assert len(seen_checks) > 12
     assert finished == [False]
     process.wait.assert_not_called()
+
+
+def test_monitor_waits_for_game_after_launcher_exits(qapp):
+    """Checks that a handoff from launcher to game can complete during startup."""
+    process = Mock(pid=1234)
+    process.poll.return_value = 0
+    checks = [False, False, True, False, False, False, False]
+    seen_checks = []
+
+    def fake_refresh():
+        seen_checks.append(True)
+        return checks.pop(0) if checks else False
+
+    with patch("workers.game_monitor_worker.GameProcessTracker"):
+        worker = GameMonitorWorker(process, False)
+    worker._refresh_tracked_processes = fake_refresh
+    finished = []
+    worker.finished.connect(lambda vanilla: finished.append(vanilla))
+
+    with patch("workers.game_monitor_worker.time.sleep"):
+        worker.run()
+
+    assert len(seen_checks) == 7
+    assert finished == [False]
 
 
 def test_monitor_restores_promptly_after_confirmed_exit(qapp):
@@ -135,6 +163,16 @@ def test_monitor_keeps_child_after_launcher_handoff(qapp):
         tracker = GameProcessTracker(100, ("DELTARUNE.exe",))
         assert tracker.refresh() is True
         assert tracker.tracked == {game}
+
+
+def test_zombie_process_is_not_tracked_as_running():
+    process = Mock()
+    process.is_running.return_value = True
+    process.status.return_value = "zombie"
+    process.create_time.return_value = 1.0
+
+    with patch("services.game_detection_service.psutil.Process", return_value=process):
+        assert is_process_identity_running((100, 1.0)) is False
 
 
 def test_monitor_uses_known_process_names_when_none_are_supplied():

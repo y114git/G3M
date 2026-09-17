@@ -105,6 +105,7 @@ def mod_on_disk(shortcut_temp_dir):
 
 class TestParseShortcutArg:
     """Tests for shortcut."""
+
     def test_parse_base64(self):
         """Checks that parsing base64."""
         cfg = {"game_id": "deltarune", "chapter_mods": {"deltarune_2": "gb_mod_123"}}
@@ -145,7 +146,23 @@ class TestShortcutLaunch:
 
         assert tracker.refresh.call_count == 305
 
-    def test_launch_game_sanitizes_linux_env_for_wine(self, game_mode, shortcut_temp_dir):
+    def test_wait_for_game_exit_keeps_polling_after_launcher_exits(self):
+        tracker = MagicMock()
+        tracker.refresh.side_effect = [False, False, True, False, False, False, False]
+        process = MagicMock()
+        process.poll.return_value = 0
+        with (
+            patch("services.game_runner.GameProcessTracker", return_value=tracker),
+            patch("services.game_runner.platform.system", return_value="Windows"),
+            patch("services.game_runner.time.sleep"),
+        ):
+            _wait_for_game_exit(process, ("DELTARUNE.exe",), set())
+
+        assert tracker.refresh.call_count == 7
+
+    def test_launch_game_sanitizes_linux_env_for_wine(
+        self, game_mode, shortcut_temp_dir
+    ):
         game_path = os.path.join(shortcut_temp_dir, "game")
         os.makedirs(game_path, exist_ok=True)
 
@@ -164,7 +181,9 @@ class TestShortcutLaunch:
                 "services.game_runner._get_executable_path",
                 return_value=os.path.join(game_path, "DELTARUNE.exe"),
             ),
-            patch("services.game_runner.subprocess.Popen", return_value=fake_process) as popen,
+            patch(
+                "services.game_runner.subprocess.Popen", return_value=fake_process
+            ) as popen,
             patch("services.game_runner._wait_for_game_exit"),
             patch.dict(
                 "services.game_runner.os.environ",
@@ -179,9 +198,15 @@ class TestShortcutLaunch:
             process = _launch_game(shortcut_config, game_mode, local_config, game_path)
 
         assert process is fake_process
-        assert popen.call_args.args[0] == ["wine", os.path.join(game_path, "DELTARUNE.exe")]
+        assert popen.call_args.args[0] == [
+            "wine",
+            os.path.join(game_path, "DELTARUNE.exe"),
+        ]
         assert popen.call_args.kwargs["cwd"] == game_path
-        assert popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"] == "/usr/lib:/usr/local/lib"
+        assert (
+            popen.call_args.kwargs["env"]["LD_LIBRARY_PATH"]
+            == "/usr/lib:/usr/local/lib"
+        )
 
     def test_launch_game_uses_custom_wine_path(self, game_mode, shortcut_temp_dir):
         game_path = os.path.join(shortcut_temp_dir, "game")
@@ -205,7 +230,9 @@ class TestShortcutLaunch:
                 "services.game_runner._get_executable_path",
                 return_value=os.path.join(game_path, "DELTARUNE.exe"),
             ),
-            patch("services.game_runner.subprocess.Popen", return_value=fake_process) as popen,
+            patch(
+                "services.game_runner.subprocess.Popen", return_value=fake_process
+            ) as popen,
             patch("services.game_runner._wait_for_game_exit"),
         ):
             process = _launch_game(shortcut_config, game_mode, local_config, game_path)
@@ -216,7 +243,9 @@ class TestShortcutLaunch:
             os.path.join(game_path, "DELTARUNE.exe"),
         ]
 
-    def test_launch_game_uses_wine64_when_wine_missing(self, game_mode, shortcut_temp_dir):
+    def test_launch_game_uses_wine64_when_wine_missing(
+        self, game_mode, shortcut_temp_dir
+    ):
         game_path = os.path.join(shortcut_temp_dir, "game")
         os.makedirs(game_path, exist_ok=True)
 
@@ -239,7 +268,9 @@ class TestShortcutLaunch:
                 "utils.process_utils.shutil.which",
                 side_effect=lambda name: None if name == "wine" else "/usr/bin/wine64",
             ),
-            patch("services.game_runner.subprocess.Popen", return_value=fake_process) as popen,
+            patch(
+                "services.game_runner.subprocess.Popen", return_value=fake_process
+            ) as popen,
             patch("services.game_runner._wait_for_game_exit"),
         ):
             process = _launch_game(shortcut_config, game_mode, local_config, game_path)
@@ -262,6 +293,7 @@ class TestShortcutLaunch:
 
 class TestFindModSourceDir:
     """Tests for shortcut."""
+
     PATCH_TARGET = "services.game_runner.get_profile_mods_root"
 
     def test_find_existing_mod(self, mod_on_disk, shortcut_temp_dir):
@@ -299,6 +331,7 @@ class TestFindModSourceDir:
 
 class TestCollectChapterData:
     """Tests for shortcut."""
+
     def test_chapter_mode_all_vanilla(
         self, mock_used_mods_service_empty, mock_app_state
     ):
@@ -343,8 +376,7 @@ class TestCollectChapterData:
         assert result is not None
         patch_plan, _ = result
         assert all(
-            steps == (("base",), ("addon",))
-            for _section, steps in patch_plan.sections
+            steps == (("base",), ("addon",)) for _section, steps in patch_plan.sections
         )
 
     def test_non_chapter_mode_vanilla(
@@ -404,9 +436,7 @@ def test_shortcut_executes_serialized_plan_through_canonical_patcher(
     monkeypatch.setattr(
         "services.game_runner.get_user_data_root", lambda: str(tmp_path)
     )
-    plan = PatchPlan.from_dict(
-        {"sections": {"deltarune_2": [["base"], ["addon"]]}}
-    )
+    plan = PatchPlan.from_dict({"sections": {"deltarune_2": [["base"], ["addon"]]}})
 
     patcher = _execute_patch_plan(plan, str(tmp_path), game_mode, {})
 
@@ -439,7 +469,9 @@ def test_execute_patch_plan_restores_before_cleanup_on_failure(monkeypatch, tmp_
     monkeypatch.setattr(
         "services.g3mtool_patching_service.G3MToolPatchingService", Patcher
     )
-    monkeypatch.setattr("services.game_runner.get_user_data_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "services.game_runner.get_user_data_root", lambda: str(tmp_path)
+    )
     plan = PatchPlan.from_dict({"sections": {}})
 
     assert _execute_patch_plan(plan, str(tmp_path), MagicMock(), {}) is None
@@ -448,11 +480,10 @@ def test_execute_patch_plan_restores_before_cleanup_on_failure(monkeypatch, tmp_
 
 class TestBuildShortcutConfig:
     """Tests for shortcut."""
+
     def test_basic_config(self, mock_app_state):
         """Checks that basicing config."""
-        patch_plan = PatchPlan.from_dict(
-            {"sections": {"deltarune_2": [["test_mod"]]}}
-        )
+        patch_plan = PatchPlan.from_dict({"sections": {"deltarune_2": [["test_mod"]]}})
         cfg = _build_shortcut_config(mock_app_state, patch_plan)
         assert cfg["game_id"] == "deltarune"
         assert cfg["chapter_mode"] is True
@@ -472,9 +503,7 @@ class TestBuildShortcutConfig:
         assert cfg["chapter_mode"] is False
 
     def test_includes_plugin_state_when_present(self, mock_app_state):
-        patch_plan = PatchPlan.from_dict(
-            {"sections": {"deltarune_2": [["test_mod"]]}}
-        )
+        patch_plan = PatchPlan.from_dict({"sections": {"deltarune_2": [["test_mod"]]}})
         plugin_context = ShortcutPluginContext({"game_id": "deltarune"})
         plugin_context.set_plugin_state("custom_saves_folders", {"folder": "SOJ"})
         plugin_context.add_summary_line("Save Folder", "SOJ")
@@ -486,6 +515,7 @@ class TestBuildShortcutConfig:
 
 class TestValidatePrerequisites:
     """Tests for shortcut."""
+
     def test_valid_vanilla(self, mock_app_state):
         """Checks that validing vanilla."""
         error = _validate_shortcut_prerequisites(mock_app_state, False)
@@ -532,6 +562,7 @@ class TestValidatePrerequisites:
 
 class TestGenerateShortcutFilename:
     """Tests for shortcut."""
+
     def test_with_mod(self, game_mode, mock_mod_data):
         """Checks that withing with mod."""
         name = _generate_shortcut_filename(game_mode, {"deltarune_2": mock_mod_data})
@@ -553,6 +584,7 @@ class TestGenerateShortcutFilename:
 
 class TestGetPlatformExtension:
     """Tests for shortcut."""
+
     def test_returns_valid_extension(self):
         """Checks that returnsing valid extension."""
         ext = _get_platform_extension()
@@ -562,6 +594,7 @@ class TestGetPlatformExtension:
 
 class TestWriteShortcutFile:
     """Tests for shortcut."""
+
     def test_write_creates_file(self, shortcut_temp_dir):
         """Checks that writing creates file."""
         cfg = {
@@ -632,14 +665,20 @@ class TestWriteShortcutFile:
 
 
 class TestShortcutDialog:
-    def test_summary_includes_plugin_toggle_and_summary_lines(self, qapp, mock_app_state):
+    def test_summary_includes_plugin_toggle_and_summary_lines(
+        self, qapp, mock_app_state
+    ):
         plugin_context = MagicMock()
         plugin_context.enabled = True
         plugin_context.summary_lines = [("Save Folder", "SOJ")]
         dialog = ShortcutDialog(
             mock_app_state.game_mode,
             {"deltarune_2": None},
-            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            {
+                "chapter_mode": True,
+                "launch_via_steam": False,
+                "direct_launch_chapter": "",
+            },
             plugin_context,
         )
         try:
@@ -652,7 +691,11 @@ class TestShortcutDialog:
         dialog = ShortcutDialog(
             mock_app_state.game_mode,
             {"deltarune_2": None},
-            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            {
+                "chapter_mode": True,
+                "launch_via_steam": False,
+                "direct_launch_chapter": "",
+            },
             None,
         )
         try:
@@ -680,11 +723,17 @@ class TestShortcutDialog:
         finally:
             dialog.close()
 
-    def test_dialog_uses_larger_size_and_checkbox_starts_unchecked(self, qapp, mock_app_state):
+    def test_dialog_uses_larger_size_and_checkbox_starts_unchecked(
+        self, qapp, mock_app_state
+    ):
         dialog = ShortcutDialog(
             mock_app_state.game_mode,
             {"deltarune_2": None},
-            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            {
+                "chapter_mode": True,
+                "launch_via_steam": False,
+                "direct_launch_chapter": "",
+            },
             ShortcutPluginContext({"game_id": "deltarune"}),
             [],
         )
@@ -695,7 +744,9 @@ class TestShortcutDialog:
         finally:
             dialog.close()
 
-    def test_disable_plugin_actions_hides_plugin_section(self, qapp, mock_app_state):
+    def test_disable_plugin_actions_hides_plugin_section(
+        self, qapp, qtbot, mock_app_state
+    ):
         plugin_context = ShortcutPluginContext({"game_id": "deltarune"})
         plugin_context.add_summary_line("Save Folder", "SOJ")
         plugin_blocks = [
@@ -714,13 +765,18 @@ class TestShortcutDialog:
         dialog = ShortcutDialog(
             mock_app_state.game_mode,
             {"deltarune_2": None},
-            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            {
+                "chapter_mode": True,
+                "launch_via_steam": False,
+                "direct_launch_chapter": "",
+            },
             plugin_context,
             plugin_blocks,
         )
         try:
             dialog.show()
-            qapp.processEvents()
+            qtbot.waitExposed(dialog)
+            qtbot.waitUntil(lambda: dialog.height() == dialog.sizeHint().height())
             height_before = dialog.height()
             assert dialog.plugin_section_widget.isHidden() is False
             assert "Save Folder: SOJ" in dialog.summary_label.text()
@@ -728,7 +784,7 @@ class TestShortcutDialog:
             qapp.processEvents()
             assert dialog.plugin_section_widget.isHidden() is True
             assert "Save Folder: SOJ" not in dialog.summary_label.text()
-            assert dialog.height() < height_before
+            qtbot.waitUntil(lambda: dialog.height() < height_before)
         finally:
             dialog.close()
 
@@ -750,7 +806,11 @@ class TestShortcutDialog:
         dialog = ShortcutDialog(
             mock_app_state.game_mode,
             {"deltarune_2": None},
-            {"chapter_mode": True, "launch_via_steam": False, "direct_launch_chapter": ""},
+            {
+                "chapter_mode": True,
+                "launch_via_steam": False,
+                "direct_launch_chapter": "",
+            },
             plugin_context,
             plugin_blocks,
         )
@@ -762,12 +822,16 @@ class TestShortcutDialog:
 
 
 class TestShortcutPluginHooks:
-    def test_shortcut_configure_logging_installs_process_exit_logging(self, monkeypatch, tmp_path):
+    def test_shortcut_configure_logging_installs_process_exit_logging(
+        self, monkeypatch, tmp_path
+    ):
         from services import game_runner
 
         registered = []
         monkeypatch.setattr(game_runner, "get_user_data_root", lambda: str(tmp_path))
-        monkeypatch.setattr(game_runner.atexit, "register", lambda callback: registered.append(callback))
+        monkeypatch.setattr(
+            game_runner.atexit, "register", lambda callback: registered.append(callback)
+        )
 
         game_runner._configure_logging()
         registered[0]()
@@ -789,7 +853,10 @@ class TestShortcutPluginHooks:
         assert result is False
 
     def test_execute_shortcut_plugin_hook_defaults_true_without_runtime(self):
-        assert execute_shortcut_plugin_hook(None, "before_mod_apply_shortcut", MagicMock()) is True
+        assert (
+            execute_shortcut_plugin_hook(None, "before_mod_apply_shortcut", MagicMock())
+            is True
+        )
 
 
 class TestShortcutPluginContext:
@@ -862,7 +929,9 @@ class TestShortcutButtonFlow:
                 "controllers.shortcut_controller.get_save_file_name",
                 return_value=("C:/tmp/test.vbs", "VBScript (*.vbs)"),
             ),
-            patch("controllers.shortcut_controller._write_shortcut_file") as write_shortcut,
+            patch(
+                "controllers.shortcut_controller._write_shortcut_file"
+            ) as write_shortcut,
         ):
             from controllers.shortcut_controller import on_shortcut_button_click
 
@@ -927,7 +996,9 @@ class TestShortcutButtonFlow:
                 "controllers.shortcut_controller.get_save_file_name",
                 return_value=("C:/tmp/test.vbs", "VBScript (*.vbs)"),
             ),
-            patch("controllers.shortcut_controller._write_shortcut_file") as write_shortcut,
+            patch(
+                "controllers.shortcut_controller._write_shortcut_file"
+            ) as write_shortcut,
         ):
             from controllers.shortcut_controller import on_shortcut_button_click
 

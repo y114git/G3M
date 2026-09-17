@@ -23,9 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config.config import (
-    QSS_ARROW_LABEL,
     QSS_BOLD_LABEL,
-    QSS_BOLD_TRANSPARENT,
     QSS_PADDING_LEFT_5,
     QSS_SETTINGS_TAB_ALIGNMENT,
     SETTINGS_COLOR_CONFIG,
@@ -44,7 +42,7 @@ from ui.common.styling import (
     install_widget_update_handler,
 )
 from ui.utils.ui_utils import UIAnimator
-from ui.widgets.shared.custom_controls import NoScrollComboBox
+from ui.widgets.shared.custom_controls import NoScrollComboBox, SectionToggle
 from utils.path_utils import (
     colored_icon,
     get_default_user_data_root,
@@ -281,46 +279,22 @@ class SettingsViewBuilder:
         section_layout.setSpacing(6)
 
         header = QWidget(section)
-        header.setCursor(Qt.CursorShape.PointingHandCursor)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(4)
 
-        from ui.common.styling import get_section_line_color
-
-        line_color = get_section_line_color(self.app_state.local_config)
-        line_style = f"color: {line_color};"
-
-        line_left = QFrame()
-        line_left.setFrameShape(QFrame.Shape.HLine)
-        line_left.setFrameShadow(QFrame.Shadow.Sunken)
-        line_left.setStyleSheet(line_style)
-        header_layout.addWidget(line_left, 1)
-
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(QSS_BOLD_TRANSPARENT)
-        header_layout.addWidget(title_lbl)
+        title_toggle = SectionToggle(
+            title, header, expanded=not is_collapsed, centered=True
+        )
+        header_layout.addStretch()
+        header_layout.addWidget(title_toggle)
 
         reset_btn = self._create_icon_btn("⭯", app_state=self.app_state)
         reset_btn.setToolTip(tr("buttons.reset_settings"))
         if not self.app_state.local_config.get("show_reset_buttons", False):
             reset_btn.setVisible(False)
         header_layout.addWidget(reset_btn)
-
-        arrow = QLabel("\u25b6" if is_collapsed else "\u25bc")
-        arrow.setStyleSheet(QSS_ARROW_LABEL)
-        header_layout.addWidget(arrow)
-
-        line_right = QFrame()
-        line_right.setFrameShape(QFrame.Shape.HLine)
-        line_right.setFrameShadow(QFrame.Shadow.Sunken)
-        line_right.setStyleSheet(line_style)
-        header_layout.addWidget(line_right, 1)
-
-        if "_section_lines" not in self.widgets:
-            self.widgets["_section_lines"] = []
-        self.widgets["_section_lines"].append(line_left)
-        self.widgets["_section_lines"].append(line_right)
+        header_layout.addStretch()
 
         content = QWidget(section)
         content_layout = QVBoxLayout(content)
@@ -329,15 +303,13 @@ class SettingsViewBuilder:
         if is_collapsed:
             content.setVisible(False)
 
-        def toggle_section(event=None):
-            vis = not content.isVisible()
-            arrow.setText("\u25bc" if vis else "\u25b6")
+        def toggle_section(vis):
             UIAnimator.collapse_expand(content, vis, 200, self.app_state)
             cm = self.app_state.local_config.get("settings_collapsed_sections", {})
             cm[section_key] = not vis
             self.app_state.local_config["settings_collapsed_sections"] = cm
 
-        cast(Any, header).mousePressEvent = toggle_section
+        title_toggle.toggled.connect(toggle_section)
 
         section_layout.addWidget(header)
         section_layout.addWidget(content)
@@ -345,11 +317,11 @@ class SettingsViewBuilder:
         if lang_key:
             if "_section_headers" not in self.widgets:
                 self.widgets["_section_headers"] = []
-            self.widgets["_section_headers"].append((title_lbl, lang_key))
+            self.widgets["_section_headers"].append((title_toggle, lang_key))
 
         if "_collapsible_toggles" not in self.widgets:
             self.widgets["_collapsible_toggles"] = []
-        self.widgets["_collapsible_toggles"].append(toggle_section)
+        self.widgets["_collapsible_toggles"].append(title_toggle.click)
 
         if "_section_reset_buttons" not in self.widgets:
             self.widgets["_section_reset_buttons"] = []
@@ -453,7 +425,9 @@ class SettingsViewBuilder:
 
         row_label = self._styled_label(label_text, bold=True)
         row_label.setMinimumWidth(150)
-        row_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         row_layout.addWidget(row_label)
 
         path_edit = _ElidedPathLineEdit(row_widget)
@@ -942,13 +916,17 @@ class SettingsViewBuilder:
         )
         gs_layout.addWidget(games_manager_button)
         cl.addWidget(game_selector_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        game_path_row, game_path_label, game_path_edit, game_path_browse_button, game_path_reset_button = (
-            self._create_path_input_row(
-                object_prefix="settings_game_path",
-                label_text=tr("ui.settings_game_path_label"),
-                browse_tooltip=tr("tooltips.select_game"),
-                reset_action="game_paths",
-            )
+        (
+            game_path_row,
+            game_path_label,
+            game_path_edit,
+            game_path_browse_button,
+            game_path_reset_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_game_path",
+            label_text=tr("ui.settings_game_path_label"),
+            browse_tooltip=tr("tooltips.select_game"),
+            reset_action="game_paths",
         )
         cl.addWidget(game_path_row, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -1024,17 +1002,13 @@ class SettingsViewBuilder:
             mo_layout.addWidget(cb)
             self.widgets[f"{key}_checkbox"] = cb
         cl.addWidget(cont, alignment=Qt.AlignmentFlag.AlignCenter)
-        cl.addWidget(
-            manage_warnings_button, alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        cl.addWidget(manage_warnings_button, alignment=Qt.AlignmentFlag.AlignCenter)
         clear_g3mtool_cache_button = self._styled_button(
             tr("buttons.clear_g3mtool_cache"),
             180,
             tr("tooltips.clear_g3mtool_cache"),
         )
-        cl.addWidget(
-            clear_g3mtool_cache_button, alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        cl.addWidget(clear_g3mtool_cache_button, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(sec)
 
         sec_adv, cl_adv = self._collapsible_section(
@@ -1135,7 +1109,9 @@ class SettingsViewBuilder:
         self.widgets["settings_reset_wine_button"] = reset_wine_button
         self.widgets["settings_custom_portproton_label"] = portproton_label
         self.widgets["settings_custom_portproton_edit"] = portproton_path_edit
-        self.widgets["settings_custom_portproton_button"] = select_portproton_path_button
+        self.widgets["settings_custom_portproton_button"] = (
+            select_portproton_path_button
+        )
         self.widgets["settings_reset_portproton_button"] = portproton_reset_button
         return self._wrap_in_scroll(page, parent)
 

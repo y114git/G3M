@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -31,6 +32,7 @@ from presentation.drag_drop import (
 from services.localization_service import tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
+    build_progress_bar_stylesheet,
     get_dialog_text_color,
     get_dialog_theme_values,
 )
@@ -123,9 +125,7 @@ def _apply_version_zip(mod_folder: str, zip_path: str):
         )
         current_metadata = current_config.get("metadata", {})
         current_mod_id = (
-            current_metadata.get("id")
-            if isinstance(current_metadata, dict)
-            else None
+            current_metadata.get("id") if isinstance(current_metadata, dict) else None
         ) or current_config.get("id")
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
@@ -145,7 +145,9 @@ def _apply_version_zip(mod_folder: str, zip_path: str):
             save_json(staged_config_path, staged_config)
         for item in os.listdir(mod_folder):
             if item != MOD_VERSIONS_DIR:
-                shutil.move(os.path.join(mod_folder, item), os.path.join(backup_dir, item))
+                shutil.move(
+                    os.path.join(mod_folder, item), os.path.join(backup_dir, item)
+                )
         staged_current = True
         for item in os.listdir(content_path):
             src = os.path.join(content_path, item)
@@ -160,7 +162,9 @@ def _apply_version_zip(mod_folder: str, zip_path: str):
         if staged_current:
             _clear_mod_folder(mod_folder)
             for item in os.listdir(backup_dir):
-                shutil.move(os.path.join(backup_dir, item), os.path.join(mod_folder, item))
+                shutil.move(
+                    os.path.join(backup_dir, item), os.path.join(mod_folder, item)
+                )
         raise
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -291,6 +295,11 @@ class _VersionItemWidget(QFrame):
         left.setSpacing(2)
         self._name_label = QLabel(self._info["name"])
         self._name_label.setObjectName("mod_version_name")
+        self._name_label.setTextFormat(Qt.TextFormat.PlainText)
+        self._name_label.setWordWrap(True)
+        self._name_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         font = self._name_label.font()
         font.setBold(True)
         self._name_label.setFont(font)
@@ -441,20 +450,8 @@ class ModVersionsDialog(QDialog):
                 font-size: 13px;
                 color: {theme["secondary_text"]};
             }}
-            QProgressBar {{
-                background-color: {theme["background"]};
-                border: 2px solid {theme["border"]};
-                border-radius: 4px;
-                text-align: center;
-                font-size: 10px;
-                color: {theme["main_text"]};
-            }}
-            QProgressBar::chunk {{
-                background-color: {theme["secondary_text"]};
-                border-radius: 3px;
-            }}
         """
-        self.setStyleSheet(base + extra)
+        self.setStyleSheet(base + extra + build_progress_bar_stylesheet(theme))
 
     def _populate(self):
         self._clear_list()
@@ -661,7 +658,9 @@ class ModVersionsDialog(QDialog):
 
         mod_id_str = get_gamebanana_mod_id(self._mod_data)
         if not mod_id_str:
-            self._safe_warning(tr("errors.error"), tr("errors.invalid_gamebanana_mod_id"))
+            self._safe_warning(
+                tr("errors.error"), tr("errors.invalid_gamebanana_mod_id")
+            )
             return
         mod_id = int(mod_id_str)
         itemtype = get_gamebanana_item_type(self._mod_data)

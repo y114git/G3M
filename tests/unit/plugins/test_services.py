@@ -28,6 +28,25 @@ class _DummySettingsService:
         self._files[path] = json.loads(json.dumps(data))
 
 
+@pytest.mark.parametrize("background_task", [False, True])
+def test_plugin_interruption_only_propagates_for_cancellable_tasks(background_task):
+    runtime = PluginRuntimeService.__new__(PluginRuntimeService)
+    record = Mock(enabled=True, path="plugin", status="installed")
+    plugin = Mock()
+    plugin.on_before_restore_after_exit.side_effect = InterruptedError("interrupted")
+    runtime._installed = {"sample": record}
+    runtime._instances = {"sample": plugin}
+    runtime._build_context = Mock()
+
+    if background_task:
+        with pytest.raises(InterruptedError):
+            runtime.execute_hook_with_runtime("before_restore_after_exit", Mock())
+        assert record.status == "installed"
+    else:
+        assert runtime.execute_hook("before_restore_after_exit") == []
+        assert record.status == "broken"
+
+
 class _CatalogSpy:
     def __init__(self, entries=None) -> None:
         self.calls = []

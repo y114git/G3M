@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.config import UI_COLORS
 from models.download_models import SourceKind, TargetKind
 from models.plugin_models import PLUGIN_API_VERSION
 from services.localization_service import localization_service, tr
@@ -280,6 +281,17 @@ class PluginsController:
         button = get_theme_color(self.app_state.local_config, "elements")
         hover = get_theme_color(self.app_state.local_config, "hover")
         text = get_theme_color(self.app_state.local_config, "main_text")
+        success = get_theme_color(
+            self.app_state.local_config, "success", UI_COLORS["status_success"]
+        )
+        warning = get_theme_color(
+            self.app_state.local_config, "warning", UI_COLORS["status_warning"]
+        )
+        disabled_bg = get_theme_color(self.app_state.local_config, "disabled_bg")
+        disabled_text = get_theme_color(self.app_state.local_config, "disabled_text")
+        disabled_border = get_theme_color(
+            self.app_state.local_config, "disabled_border"
+        )
         radius = get_border_radius(self.app_state.local_config)
         card.setStyleSheet(
             card.styleSheet()
@@ -297,7 +309,7 @@ QPushButton#cardButton:hover {{
     background-color: {hover};
 }}
 QPushButton#cardButtonDownload {{
-    background-color: #4CAF50;
+    background-color: {success};
     color: {text};
     border: 2px solid {border};
     border-radius: {radius}px;
@@ -306,20 +318,20 @@ QPushButton#cardButtonDownload {{
     font-size: {button_font_size}px;
 }}
 QPushButton#cardButtonDownload:hover {{
-    background-color: #5cb85c;
+    background-color: {hover};
 }}
 QPushButton#cardButtonUninstall {{
-    background-color: #d68b2a;
+    background-color: {warning};
 }}
 QPushButton#cardButtonUninstall:hover {{
-    background-color: #e29c3f;
+    background-color: {hover};
 }}
 QPushButton#cardButtonDownload:disabled,
 QPushButton#cardButton:disabled,
 QPushButton#cardButtonUninstall:disabled {{
-    background-color: #3b3b3b;
-    color: #808080;
-    border-color: #808080;
+    background-color: {disabled_bg};
+    color: {disabled_text};
+    border-color: {disabled_border};
 }}
 """
         )

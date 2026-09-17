@@ -107,6 +107,7 @@ class _FeedCard(QFrame):
         self.image_label = QLabel()
         self.image_label.setFixedSize(112, 70)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setVisible(bool(item.image_url))
         row.addWidget(self.image_label)
 
         text_layout = QVBoxLayout()
@@ -121,6 +122,7 @@ class _FeedCard(QFrame):
 
         self.meta_label = QLabel()
         self.meta_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.meta_label.setWordWrap(True)
         self.meta_label.setObjectName("communityFeedMeta")
         text_layout.addWidget(self.meta_label)
         row.addLayout(text_layout, 1)
@@ -188,11 +190,13 @@ class CommunityDialog(QDialog):
         filters = QHBoxLayout()
         self.game_label = QLabel()
         self.game_combo = QComboBox()
+        self.game_label.setBuddy(self.game_combo)
         self.game_combo.addItem("", None)
         for game in self._games:
             self.game_combo.addItem(game.name, game.id)
         self.feed_label = QLabel()
         self.feed_combo = QComboBox()
+        self.feed_label.setBuddy(self.feed_combo)
         self.feed_combo.addItem("", "New")
         self.feed_combo.addItem("", "Featured")
         self.refresh_button = QPushButton()

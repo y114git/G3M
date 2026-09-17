@@ -1,6 +1,14 @@
+### Version 3.3.4 — 01.09.26
+
+- **Improvements and Bug Fixes**
+
+  - Fixed Bad CPU Error on macOS-arm64. G3MTool using separate xdelta for x64 and arm64 architectures for macOS now.
+  - Fixed bug when G3M couldn't detect whether game is stopped on Linux Mint.
+  - Fixed bug when G3M couldn't convert or merge Pet.Net mods.
+
 ### Version 3.3.3 — 15.08.26
 
-- **Other Improvements and Bug Fixes**
+- **Improvements and Bug Fixes**
 
   - G3M recovers cleanly when a launch is cancelled, so you can start another launch right away.
   - G3MTool handles more compatible merge combinations and keeps script-only changes when creating a patch.

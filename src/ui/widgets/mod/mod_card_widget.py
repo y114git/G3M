@@ -31,9 +31,34 @@ _compatibility_job_pool = QThreadPool()
 _compatibility_job_pool.setMaxThreadCount(3)
 
 
+class _CompatibilityJobRegistry(QObject):
+    """Keeps job signals alive until their queued completion handler runs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._jobs = {}
+
+    def retain(self, job) -> None:
+        self._jobs[job.signals] = job
+        job.signals.finished.connect(self._release)
+
+    def release(self, job) -> None:
+        self._jobs.pop(job.signals, None)
+
+    def _release(self, _mod_data) -> None:
+        self._jobs.pop(self.sender(), None)
+
+    def clear(self) -> None:
+        self._jobs.clear()
+
+
+_compatibility_jobs = _CompatibilityJobRegistry()
+
+
 def shutdown_compatibility_job_pool(timeout_ms: int) -> None:
     _compatibility_job_pool.clear()
     _compatibility_job_pool.waitForDone(timeout_ms)
+    _compatibility_jobs.clear()
 
 
 class CompatibilityCheckJobSignals(QObject):
@@ -46,6 +71,12 @@ class CompatibilityCheckJob(QRunnable):
         super().__init__()
         self.mod_data = mod_data
         self.signals = CompatibilityCheckJobSignals()
+
+    def _emit(self, signal, *args) -> None:
+        try:
+            signal.emit(*args)
+        except RuntimeError:
+            logger.debug("Compatibility check finished after its UI was released")
 
     def run(self):
         try:
@@ -60,14 +91,14 @@ class CompatibilityCheckJob(QRunnable):
             api = GameBananaAPI()
             itemtype = "Wip" if gb_type == "wip" else "Mod"
             compat = api.get_supported_files_for_mod(int(gb_id), itemtype=itemtype)
-            self.signals.compatibility_checked.emit(self.mod_data, compat)
+            self._emit(self.signals.compatibility_checked, self.mod_data, compat)
         except Exception as e:
             logger.warning(
                 f"CompatibilityCheckJob: Error checking compatibility: {e}",
                 exc_info=True,
             )
         finally:
-            self.signals.finished.emit(self.mod_data)
+            self._emit(self.signals.finished, self.mod_data)
 
 
 class ModCardWidget(BaseModWidget):
@@ -269,8 +300,13 @@ class ModCardWidget(BaseModWidget):
             job = CompatibilityCheckJob(self.mod_data)
             job.signals.compatibility_checked.connect(self._on_compatibility_checked)
             job.signals.finished.connect(self._on_compatibility_job_finished)
+            _compatibility_jobs.retain(job)
             self._compatibility_job_queued = True
-            _compatibility_job_pool.start(job)
+            try:
+                _compatibility_job_pool.start(job)
+            except Exception:
+                _compatibility_jobs.release(job)
+                raise
         except Exception as e:
             self._compatibility_job_queued = False
             logger.warning(

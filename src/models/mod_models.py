@@ -100,6 +100,34 @@ class BaseModInfo:
     files: dict[str, ModFileData] = field(default_factory=dict)
     playtime_hours: float = 0.0
 
+    @staticmethod
+    def _parse_common_fields(data_dict: dict[str, Any]) -> dict[str, Any]:
+        from services.localization_service import tr
+
+        return {
+            "id": _get_metadata_value(data_dict, "id", ""),
+            "name": _get_metadata_value(data_dict, "name", "Unknown Mod"),
+            "version": _get_metadata_value(data_dict, "version", "1.0.0"),
+            "author": _get_metadata_value(data_dict, "author", tr("defaults.unknown")),
+            "description": _get_metadata_value(
+                data_dict,
+                "description",
+                data_dict.get(
+                    LEGACY_DESCRIPTION_KEY, tr("status.no_description_status")
+                ),
+            ),
+            "game": _get_metadata_value(data_dict, "game", "deltarune"),
+            "game_version": _get_metadata_value(
+                data_dict, "game_version", tr("defaults.not_specified")
+            ),
+            "icon": _get_metadata_value(
+                data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)
+            ),
+            "tags": _get_metadata_value(data_dict, "tags", []),
+            "homepage": _get_metadata_value(data_dict, "homepage", None),
+            "files": _parse_files_dict(data_dict),
+        }
+
     def get_file_data(self, chapter_id: str) -> ModFileData | None:
         """Get file data by the normalized content section id."""
         return self.files.get(chapter_id)
@@ -150,27 +178,8 @@ class LocalModInfo(BaseModInfo):
 
     @classmethod
     def from_dict(cls, data_dict: dict[str, Any]) -> LocalModInfo:
-        from services.localization_service import tr
-
-        game = _get_metadata_value(data_dict, "game", "deltarune")
         return cls(
-            id=_get_metadata_value(data_dict, "id", ""),
-            name=_get_metadata_value(data_dict, "name", "Unknown Mod"),
-            version=_get_metadata_value(data_dict, "version", "1.0.0"),
-            author=_get_metadata_value(data_dict, "author", tr("defaults.unknown")),
-            description=_get_metadata_value(
-                data_dict,
-                "description",
-                data_dict.get(LEGACY_DESCRIPTION_KEY, tr("status.no_description_status")),
-            ),
-            game=game,
-            game_version=_get_metadata_value(
-                data_dict, "game_version", tr("defaults.not_specified")
-            ),
-            icon=_get_metadata_value(data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)),
-            tags=_get_metadata_value(data_dict, "tags", []),
-            homepage=_get_metadata_value(data_dict, "homepage", None),
-            files=_parse_files_dict(data_dict),
+            **cls._parse_common_fields(data_dict),
             playtime_hours=data_dict.get("playtime_hours", 0.0),
             added_date=data_dict.get("added_date"),
             last_updated=data_dict.get("last_updated"),
@@ -208,27 +217,8 @@ class BrowserModInfo(BaseModInfo):
 
     @classmethod
     def from_dict(cls, data_dict: dict[str, Any]) -> BrowserModInfo:
-        from services.localization_service import tr
-
-        game = _get_metadata_value(data_dict, "game", "deltarune")
         return cls(
-            id=_get_metadata_value(data_dict, "id", ""),
-            name=_get_metadata_value(data_dict, "name", "Unknown Mod"),
-            version=_get_metadata_value(data_dict, "version", "1.0.0"),
-            author=_get_metadata_value(data_dict, "author", tr("defaults.unknown")),
-            description=_get_metadata_value(
-                data_dict,
-                "description",
-                data_dict.get(LEGACY_DESCRIPTION_KEY, tr("status.no_description_status")),
-            ),
-            game=game,
-            game_version=_get_metadata_value(
-                data_dict, "game_version", tr("defaults.not_specified")
-            ),
-            icon=_get_metadata_value(data_dict, "icon", data_dict.get(LEGACY_ICON_KEY)),
-            tags=_get_metadata_value(data_dict, "tags", []),
-            homepage=_get_metadata_value(data_dict, "homepage", None),
-            files=_parse_files_dict(data_dict),
+            **cls._parse_common_fields(data_dict),
             description_url=_get_metadata_value(data_dict, "description_url", ""),
             downloads=data_dict.get("downloads"),
             like_count=data_dict.get("like_count"),

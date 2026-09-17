@@ -27,6 +27,7 @@ from presentation.drag_drop import (
 from services.localization_service import tr
 from ui.common.dialog_theme import (
     build_dialog_theme_stylesheet,
+    build_progress_bar_stylesheet,
     get_dialog_text_color,
     get_dialog_theme_values,
 )
@@ -67,10 +68,13 @@ class _VersionRecordWidget(QFrame):
         top.setSpacing(8)
         self._name_label = QLabel()
         self._name_label.setObjectName("game_versions_record_name")
+        self._name_label.setTextFormat(Qt.TextFormat.PlainText)
+        self._name_label.setWordWrap(True)
         self._name_label.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
         top.addWidget(self._name_label)
+        top.addStretch()
         self._status_label = QLabel()
         self._status_label.setObjectName("game_versions_record_status")
         top.addWidget(self._status_label)
@@ -85,6 +89,8 @@ class _VersionRecordWidget(QFrame):
 
         self._info_label = QLabel()
         self._info_label.setObjectName("game_versions_record_info")
+        self._info_label.setTextFormat(Qt.TextFormat.PlainText)
+        self._info_label.setWordWrap(True)
         layout.addWidget(self._info_label)
 
         btn_row = QHBoxLayout()
@@ -100,6 +106,7 @@ class _VersionRecordWidget(QFrame):
         self._export_btn = QPushButton()
         self._export_btn.setObjectName("game_versions_btn_export")
         self._export_btn.setToolTip(tr("tooltips.export_game_version"))
+        self._export_btn.setAccessibleName(tr("tooltips.export_game_version"))
         self._export_btn.clicked.connect(self._on_export)
         self._export_btn.setIcon(colored_icon("export", tc))
         self._export_btn.setIconSize(QSize(20, 20))
@@ -199,6 +206,7 @@ class _VersionRecordWidget(QFrame):
             colored_icon("export", get_dialog_text_color(self._app_state))
         )
         self._export_btn.setToolTip(tr("tooltips.export_game_version"))
+        self._export_btn.setAccessibleName(tr("tooltips.export_game_version"))
         self._delete_btn.setText(tr("game_versions.action_delete"))
         self._delete_btn.setToolTip(tr("tooltips.delete_game_version"))
         self._cancel_btn.setText(tr("game_versions.action_cancel"))
@@ -258,6 +266,7 @@ class GameVersionsDialog(QDialog):
         self._add_btn = QPushButton()
         self._add_btn.setObjectName("game_versions_add_btn")
         self._add_btn.setToolTip(tr("game_versions.add_tooltip"))
+        self._add_btn.setAccessibleName(tr("game_versions.add_tooltip"))
         self._add_btn.setIcon(colored_icon("add", tc))
         self._add_btn.setIconSize(QSize(20, 20))
         self._add_btn.setContentsMargins(0, 0, 0, 0)
@@ -338,20 +347,8 @@ class GameVersionsDialog(QDialog):
                 font-size: 13px;
                 color: {theme["secondary_text"]};
             }}
-            QProgressBar {{
-                background-color: {theme["background"]};
-                border: 2px solid {theme["border"]};
-                border-radius: 4px;
-                text-align: center;
-                font-size: 10px;
-                color: {theme["main_text"]};
-            }}
-            QProgressBar::chunk {{
-                background-color: {theme["secondary_text"]};
-                border-radius: 3px;
-            }}
         """
-        self.setStyleSheet(base + extra)
+        self.setStyleSheet(base + extra + build_progress_bar_stylesheet(theme))
 
     def _connect_signals(self):
         self._manager.record_added.connect(self._on_record_added)
@@ -549,6 +546,7 @@ class GameVersionsDialog(QDialog):
         self._close_btn.setToolTip(tr("tooltips.close_dialog"))
         self._empty_label.setText(tr("game_versions.empty_list"))
         self._add_btn.setToolTip(tr("game_versions.add_tooltip"))
+        self._add_btn.setAccessibleName(tr("game_versions.add_tooltip"))
         self._add_btn.setIcon(
             colored_icon("add", get_dialog_text_color(self._app_state))
         )

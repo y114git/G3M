@@ -132,6 +132,22 @@ def test_current_tenna_data_includes_all_five_chapters_and_associations():
     assert data["flagBitfields"]["meta"]
 
 
+def test_save_editor_mode_pages_use_the_theme_background(tmp_path, qapp):
+    module = _editor_module()
+    save_path = tmp_path / "filech1_0"
+    save_path.write_text("KRIS\n", encoding="utf-8")
+    app_state = SimpleNamespace(local_config={"custom_background_color": "#123456"})
+    dialog = module.SaveEditorDialog(str(save_path), app_state)
+
+    try:
+        assert dialog._simple_tab.objectName() == "saveEditorModePage"
+        assert dialog._advanced_tab.objectName() == "saveEditorModePage"
+        assert "QWidget#saveEditorModePage" in dialog.styleSheet()
+        assert "rgba(18, 52, 86, 128)" in dialog.styleSheet()
+    finally:
+        dialog.close()
+
+
 def test_v2_round_trip_preserves_extended_flag_tail():
     module = _editor_module()
     character = {

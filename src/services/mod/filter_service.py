@@ -190,7 +190,7 @@ def filter_and_sort_mods(
             continue
         if selected_tags:
             mod_tags = _get_mod_tags(mod, is_gb)
-            if not all(tag in mod_tags for tag in selected_tags):
+            if not any(tag in mod_tags for tag in selected_tags):
                 continue
         if selected_game and _get_mod_attr(mod, "game", "deltarune") != selected_game:
             continue

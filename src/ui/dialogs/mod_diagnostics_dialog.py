@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -183,22 +184,26 @@ class ModDiagnosticsDialog(QDialog):
         header.addWidget(self._close_btn)
         main.addLayout(header)
 
-        self._summary_row = QHBoxLayout()
+        self._summary_row = QGridLayout()
+        self._summary_row.setHorizontalSpacing(12)
+        self._summary_row.setVerticalSpacing(4)
         self._summary_labels: dict[str, QLabel] = {}
-        for key in (
-            "selected_mods",
-            "new_files",
-            "modified_files",
-            "conflicts",
-            "data_files",
-            "deep_analyzable_data_files",
-            "issues",
+        for index, (key, text_key) in enumerate(
+            (
+                ("selected_mods", "diagnostics.summary_mods"),
+                ("new_files", "diagnostics.summary_new"),
+                ("modified_files", "diagnostics.summary_modified"),
+                ("conflicts", "diagnostics.summary_conflicts"),
+                ("data_files", "diagnostics.summary_data"),
+                ("deep_analyzable_data_files", "diagnostics.summary_deep"),
+                ("issues", "diagnostics.summary_issues"),
+            )
         ):
-            label = QLabel("0")
+            label = QLabel(tr(text_key, count=0))
             label.setObjectName(f"diagnostics_summary_{key}")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._summary_labels[key] = label
-            self._summary_row.addWidget(label)
+            self._summary_row.addWidget(label, index // 4, index % 4)
         main.addLayout(self._summary_row)
 
         self._preflight_controls = QVBoxLayout()
@@ -241,6 +246,7 @@ class ModDiagnosticsDialog(QDialog):
         mods_layout = QVBoxLayout(self._mods_panel)
         mods_layout.setContentsMargins(0, 0, 0, 0)
         self._mods_label = QLabel(tr("diagnostics.mods"))
+        self._mods_label.setWordWrap(True)
         mods_layout.addWidget(self._mods_label)
         self._scope_label = QLabel("")
         self._scope_label.setWordWrap(True)
@@ -262,7 +268,7 @@ class ModDiagnosticsDialog(QDialog):
 
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
-        self._tabs.setUsesScrollButtons(False)
+        self._tabs.setUsesScrollButtons(True)
         self._overview = QTextEdit()
         self._overview.setReadOnly(True)
         self._file_tree = QTreeWidget()
@@ -1480,9 +1486,7 @@ class ModDiagnosticsDialog(QDialog):
         if self._looks_audio_like(path):
             if not is_audio_playback_available():
                 logger.debug("Audio preview disabled: gst-play-1.0 is unavailable")
-                self._audio_status.setText(
-                    tr("diagnostics.audio_playback_unavailable")
-                )
+                self._audio_status.setText(tr("diagnostics.audio_playback_unavailable"))
                 self._preview_compare_panel.setPlainText(
                     tr("diagnostics.audio_playback_unavailable")
                 )
@@ -1662,6 +1666,17 @@ class ModDiagnosticsDialog(QDialog):
         self._preflight_files_tree.setHeaderLabels(common_headers)
         self._scope_label.setText(self._scope_text())
         self._refresh_mod_row_labels()
+        if not self._report:
+            for key, text_key in (
+                ("selected_mods", "diagnostics.summary_mods"),
+                ("new_files", "diagnostics.summary_new"),
+                ("modified_files", "diagnostics.summary_modified"),
+                ("conflicts", "diagnostics.summary_conflicts"),
+                ("data_files", "diagnostics.summary_data"),
+                ("deep_analyzable_data_files", "diagnostics.summary_deep"),
+                ("issues", "diagnostics.summary_issues"),
+            ):
+                self._summary_labels[key].setText(tr(text_key, count=0))
         for index, key in enumerate(
             (
                 "diagnostics.tab_overview",

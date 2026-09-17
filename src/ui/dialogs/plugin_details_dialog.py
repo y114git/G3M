@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -136,6 +137,7 @@ class PluginDetailsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
         summary = QFrame(self)
+        summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         summary_layout = QHBoxLayout(summary)
         summary_layout.setSpacing(14)
         icon_column = QWidget(summary)
@@ -206,7 +208,7 @@ class PluginDetailsDialog(QDialog):
             row.addWidget(meta_value, 1)
             meta_layout.addLayout(row)
         summary_layout.addLayout(meta_layout, 1)
-        layout.addWidget(summary)
+        layout.addWidget(summary, 0, Qt.AlignmentFlag.AlignTop)
 
         if self.plugin is not None:
             settings_title = QLabel(tr("plugins.details_settings"))
@@ -221,10 +223,12 @@ class PluginDetailsDialog(QDialog):
 
         dr = get_border_radius(self.app_state.local_config)
         tc = get_theme_color(self.app_state.local_config, "main_text", "#e8e9eb")
+        if self.plugin is None:
+            layout.addStretch(1)
+        actions_layout = QHBoxLayout()
         if self.plugin is not None:
-            actions_layout = QHBoxLayout()
-            actions_layout.addStretch(1)
             delete_button = QPushButton(tr("plugins.details_delete"))
+            delete_button.setAutoDefault(False)
             self._delete_button = delete_button
             delete_button.setStyleSheet(
                 f"background-color: darkred; color: {tc}; border-radius: {dr}px;"
@@ -238,15 +242,19 @@ class PluginDetailsDialog(QDialog):
                 update_button.setToolTip(tr("tooltips.plugin_update"))
                 update_button.clicked.connect(self._request_update)
                 actions_layout.addWidget(update_button)
-            actions_layout.addStretch(1)
-            layout.addLayout(actions_layout)
         else:
             download_button = QPushButton(tr("plugins.action_download"))
             self._download_button = download_button
             download_button.setEnabled(self._can_download)
             download_button.setStyleSheet(f"color: {tc}; border-radius: {dr}px;")
             download_button.clicked.connect(self._request_download)
-            layout.addWidget(download_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+            actions_layout.addWidget(download_button)
+        actions_layout.addStretch(1)
+        self._close_button = QPushButton(tr("common.close"))
+        self._close_button.setDefault(True)
+        self._close_button.clicked.connect(self.reject)
+        actions_layout.addWidget(self._close_button)
+        layout.addLayout(actions_layout)
 
     def _build_settings_container(self):
         custom_widget = self.runtime_service.get_settings_widget(
@@ -385,12 +393,14 @@ class PluginDetailsDialog(QDialog):
         if field.get("description"):
             widget.setToolTip(_resolve_text(str(field["description"])))
         self._schema_controls.append((widget, field))
+        label.setBuddy(widget)
         layout.addWidget(widget, 1 if field_type not in {"action", "button"} else 0)
         return container
 
     def relocalize_ui(self) -> None:
         """Refresh G3M and plugin-provided localization keys in place."""
         self.setWindowTitle(self._display_name())
+        self._close_button.setText(tr("common.close"))
         if self._title_label is not None:
             self._title_label.setText(self._display_name())
         if self._description_label is not None:

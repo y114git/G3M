@@ -57,6 +57,8 @@ class PizzaOvenConversionDialog(QDialog):
         )
         self.start_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
+        self.start_button.setDefault(True)
+        self.cancel_button.setAutoDefault(False)
         layout.addWidget(button_box)
         self.relocalize_ui()
 

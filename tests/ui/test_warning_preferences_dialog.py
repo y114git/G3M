@@ -17,7 +17,9 @@ def test_warning_preferences_dialog_ignores_legacy_section_overrides(qapp):
         assert dialog.minimumWidth() >= 680
         assert skip_all_item.alignment() == Qt.AlignmentFlag.AlignCenter
         assert child.isEnabled() is True
-        assert dialog.warning_help_buttons["g3mpatch_original_hash_mismatch"].text() == "?"
+        assert (
+            dialog.warning_help_buttons["g3mpatch_original_hash_mismatch"].text() == "?"
+        )
         tooltip = dialog.warning_help_buttons[
             "g3mpatch_original_hash_mismatch"
         ].toolTip()
@@ -36,14 +38,15 @@ def test_warning_preferences_dialog_sections_collapse(qapp):
             "AppState", (), {"local_config": {"disable_animations": True}}
         )()
         section = dialog.section_content_widgets[WarningSeverity.MAJOR]
+        header = dialog.section_title_labels[WarningSeverity.MAJOR]
 
         assert section.isHidden() is False
-        assert dialog.section_arrows[WarningSeverity.MAJOR].text() == "▼"
+        assert header.arrowType() == Qt.ArrowType.DownArrow
 
         dialog._toggle_section(WarningSeverity.MAJOR)
 
         assert section.isHidden() is True
-        assert dialog.section_arrows[WarningSeverity.MAJOR].text() == "▶"
+        assert header.arrowType() == Qt.ArrowType.RightArrow
     finally:
         dialog.close()
 
@@ -53,8 +56,12 @@ def test_warning_preferences_dialog_skip_all_disables_warning_items(qapp):
     dialog = WarningPreferencesDialog(config)
     try:
         assert dialog.skip_all_checkbox.isChecked() is True
-        assert all(not checkbox.isEnabled() for checkbox in dialog.warning_checkboxes.values())
-        assert all(button.isEnabled() for button in dialog.warning_help_buttons.values())
+        assert all(
+            not checkbox.isEnabled() for checkbox in dialog.warning_checkboxes.values()
+        )
+        assert all(
+            button.isEnabled() for button in dialog.warning_help_buttons.values()
+        )
     finally:
         dialog.close()
 

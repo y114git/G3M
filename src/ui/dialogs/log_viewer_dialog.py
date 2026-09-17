@@ -42,7 +42,11 @@ def _get_app_font(app_state) -> str:
     ff = (app_state.local_config.get("custom_font_family") or "").strip()
     if not ff:
         parent = getattr(app_state, "_app_window", None)
-        ff = (getattr(parent, "custom_font_family", None) or "").strip() if parent else ""
+        ff = (
+            (getattr(parent, "custom_font_family", None) or "").strip()
+            if parent
+            else ""
+        )
     return f"'{ff}', {_DEFAULT_MONOSPACE}" if ff else _DEFAULT_MONOSPACE
 
 
@@ -169,7 +173,9 @@ class LogViewerDialog(QDialog):
 
         snapshot = self._service.read_snapshot(path, self._states.get(key))
         self._states[key] = snapshot.state
-        display_text = snapshot.full_text if path is not None else tr(self._empty_keys[key])
+        display_text = (
+            snapshot.full_text if path is not None else tr(self._empty_keys[key])
+        )
         if should_update or self._viewer.toPlainText() != display_text:
             self._viewer.setPlainText(display_text)
             if follow_output:
@@ -259,6 +265,7 @@ class LogViewerDialog(QDialog):
         self.setWindowTitle(tr("log_viewer.title"))
         self._close_button.setText(tr("common.close"))
         self._open_folder_button.setToolTip(tr("log_viewer.open_folder"))
+        self._open_folder_button.setAccessibleName(tr("log_viewer.open_folder"))
         tab_keys = (
             "log_viewer.tabs.g3m",
             "log_viewer.tabs.patching",

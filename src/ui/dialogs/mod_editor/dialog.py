@@ -6,13 +6,16 @@ import shutil
 import uuid
 from typing import override
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6 import sip
+from PyQt6.QtCore import QSize, Qt, QTimer
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -60,7 +63,7 @@ from ui.dialogs.mod_editor.storage import (
     find_unconfigured_root_entries,
     remove_stale_managed_files,
 )
-from ui.utils.ui_utils import UIAnimator
+from ui.widgets.shared.custom_controls import SectionToggle
 from utils.file_utils import get_file_filter, get_unique_mod_dir
 from utils.frickbears3_addons_utils import is_top_level_addons_archive
 from utils.mod.config_parser import (
@@ -318,19 +321,6 @@ class ModEditorDialog(QDialog):
                 border-radius: {self._br()}px;
                 background-color: {background};
             }}
-            QWidget[modEditorSectionHeader="true"] {{
-                background: transparent;
-            }}
-            QLabel[modEditorSectionTitle="true"] {{
-                color: {main_text};
-                font-size: 15px;
-                font-weight: 700;
-            }}
-            QLabel[modEditorSectionArrow="true"] {{
-                color: {secondary};
-                font-size: 14px;
-                font-weight: 700;
-            }}
             QFrame[fileActionsRow="true"] {{
                 border: 2px solid {border};
                 border-radius: {self._br()}px;
@@ -345,6 +335,9 @@ class ModEditorDialog(QDialog):
             }}
             QLineEdit, QComboBox {{
                 background-color: {elements};
+            }}
+            QLineEdit {{
+                qproperty-alignment: AlignLeft;
             }}
             QListWidget {{
                 background-color: {elements};
@@ -365,9 +358,6 @@ class ModEditorDialog(QDialog):
             }}
             """
         )
-        for section in self._section_widgets.values():
-            for line in section["lines"]:
-                line.setStyleSheet(f"color: {border};")
 
     def _build_collapsible_section(
         self, section_key: str, title_key: str, content: QWidget
@@ -377,44 +367,15 @@ class ModEditorDialog(QDialog):
         layout.setContentsMargins(0, 6, 0, 6)
         layout.setSpacing(6)
 
-        header = QWidget(container)
-        header.setProperty("modEditorSectionHeader", True)
-        header.setCursor(Qt.CursorShape.PointingHandCursor)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(6)
-
-        left_line = QFrame(header)
-        left_line.setFrameShape(QFrame.Shape.HLine)
-        header_layout.addWidget(left_line, 1)
-
-        title = QLabel(parent=header)
-        title.setProperty("modEditorSectionTitle", True)
-        header_layout.addWidget(title)
-
-        arrow = QLabel("\u25bc", header)
-        arrow.setProperty("modEditorSectionArrow", True)
-        header_layout.addWidget(arrow)
-
-        right_line = QFrame(header)
-        right_line.setFrameShape(QFrame.Shape.HLine)
-        header_layout.addWidget(right_line, 1)
-
-        def toggle_section(_event=None):
-            visible = not content.isVisible()
-            arrow.setText("\u25bc" if visible else "\u25b6")
-            UIAnimator.collapse_expand(content, visible, 200, self._app_state)
-
-        header.mousePressEvent = toggle_section
-        layout.addWidget(header)
+        header = SectionToggle(parent=container, centered=True)
+        header.toggled.connect(content.setVisible)
+        layout.addWidget(header, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(content)
         self._section_widgets[section_key] = {
             "title_key": title_key,
-            "title": title,
-            "arrow": arrow,
+            "title": header,
             "header": header,
             "content": content,
-            "lines": (left_line, right_line),
         }
         return container
 
@@ -425,93 +386,99 @@ class ModEditorDialog(QDialog):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._metadata_hint = hint
         parent.addWidget(hint)
+        fields = QFormLayout()
+        fields.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        fields.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        fields.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        fields.setHorizontalSpacing(16)
+        fields.setVerticalSpacing(10)
+        parent.addLayout(fields)
 
-        parent.addWidget(self._tr_label("ui.mod_name_label"))
+        def add_field(key, field):
+            label = self._tr_label(key)
+            if isinstance(field, QWidget):
+                label.setBuddy(field)
+            fields.addRow(label, field)
+
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(tr("ui.enter_mod_name"))
         self.name_edit.setToolTip(tr("tooltips.mod_editor_name"))
-        parent.addWidget(self.name_edit)
-        parent.addSpacing(6)
+        add_field("ui.mod_name_label", self.name_edit)
 
-        parent.addWidget(self._tr_label("ui.mod_author"))
         self.author_edit = QLineEdit()
         self.author_edit.setPlaceholderText(tr("ui.enter_author_name"))
         self.author_edit.setToolTip(tr("tooltips.mod_editor_author"))
-        parent.addWidget(self.author_edit)
-        parent.addSpacing(6)
+        add_field("ui.mod_author", self.author_edit)
 
-        parent.addWidget(self._tr_label("ui.short_description"))
         self.description_edit = QLineEdit()
         self.description_edit.setMaxLength(200)
         self.description_edit.setPlaceholderText(tr("ui.short_description_placeholder"))
         self.description_edit.setToolTip(tr("tooltips.mod_editor_description"))
-        parent.addWidget(self.description_edit)
-        parent.addSpacing(6)
+        add_field("ui.short_description", self.description_edit)
 
-        parent.addWidget(self._tr_label("ui.homepage"))
         self.homepage_edit = QLineEdit()
         self.homepage_edit.setPlaceholderText("https://example.com/mod-page")
         self.homepage_edit.setToolTip(tr("tooltips.mod_editor_homepage"))
-        parent.addWidget(self.homepage_edit)
+        add_field("ui.homepage", self.homepage_edit)
 
-        parent.addWidget(self._tr_label("files.icon_label"))
         icon_row = QHBoxLayout()
+        icon_row.setSpacing(8)
         self.icon_browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
             "",
             tr("ui.mod_editor_pick_icon_tooltip"),
         )
+        self.icon_browse_btn.setObjectName("downloadsBtn")
+        self.icon_browse_btn.setMinimumWidth(0)
+        self.icon_browse_btn.setIconSize(self._icon_size(22))
         self.icon_browse_btn.clicked.connect(self._browse_icon)
-        icon_row.addWidget(self.icon_browse_btn)
         self.icon_edit = QLineEdit()
         self.icon_edit.setPlaceholderText(tr("ui.icon_file_path_placeholder"))
         self.icon_edit.setToolTip(tr("tooltips.mod_editor_icon"))
         self.icon_edit.textChanged.connect(self._on_icon_text_changed)
-        icon_row.addWidget(self.icon_edit)
+        icon_row.addWidget(self.icon_edit, 1)
+        icon_row.addWidget(self.icon_browse_btn)
         self.icon_preview = QLabel()
-        self.icon_preview.setFixedSize(64, 64)
+        self.icon_preview.setFixedSize(72, 72)
         bc = self._color("border", "#039d5b")
-        pr = self._br(64, 64)
+        pr = self._br(72, 72)
         self.icon_preview.setStyleSheet(
             f"border: 2px solid {bc}; border-radius: {pr}px;"
         )
         self.icon_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.icon_preview.setText(tr("ui.icon_preview"))
         icon_row.addWidget(self.icon_preview)
-        parent.addLayout(icon_row)
-        parent.addSpacing(6)
+        add_field("files.icon_label", icon_row)
 
-        parent.addWidget(self._tr_label("ui.mod_tags_label"))
-        tags_row = QHBoxLayout()
+        tags_row = QGridLayout()
+        tags_row.setHorizontalSpacing(12)
         self.tag_textedit = QCheckBox(tr("tags.textedit_text"))
         self.tag_customization = QCheckBox(tr("tags.customization"))
         self.tag_gameplay = QCheckBox(tr("tags.gameplay"))
         self.tag_other = QCheckBox(tr("tags.other"))
-        for t in [
-            self.tag_textedit,
-            self.tag_customization,
-            self.tag_gameplay,
-            self.tag_other,
-        ]:
-            t.setToolTip(tr("tooltips.mod_editor_tags"))
-            tags_row.addWidget(t)
-        parent.addLayout(tags_row)
+        for index, checkbox in enumerate(
+            (
+                self.tag_textedit,
+                self.tag_customization,
+                self.tag_gameplay,
+                self.tag_other,
+            )
+        ):
+            checkbox.setToolTip(tr("tooltips.mod_editor_tags"))
+            tags_row.addWidget(checkbox, index // 2, index % 2)
+        add_field("ui.mod_tags_label", tags_row)
         if self.is_creating:
             self.tag_other.setChecked(True)
 
-        parent.addSpacing(6)
-        parent.addWidget(self._tr_label("ui.overall_mod_version"))
         self.version_edit = QLineEdit()
         self.version_edit.setPlaceholderText("1.0.0")
         self.version_edit.setToolTip(tr("tooltips.mod_editor_version"))
-        parent.addWidget(self.version_edit)
-        parent.addSpacing(6)
+        add_field("ui.overall_mod_version", self.version_edit)
 
-        parent.addWidget(self._tr_label("ui.game_version_label"))
         self.game_version_edit = QLineEdit()
         self.game_version_edit.setPlaceholderText("1.04")
         self.game_version_edit.setToolTip(tr("tooltips.mod_editor_game_version"))
-        parent.addWidget(self.game_version_edit)
+        add_field("ui.game_version_label", self.game_version_edit)
 
     def _build_info_files_section(self):
         frame = QFrame()
@@ -533,7 +500,7 @@ class ModEditorDialog(QDialog):
         )
         layout.addWidget(self._info_files_list)
 
-        buttons = QHBoxLayout()
+        buttons = QGridLayout()
         buttons.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._info_add_button = self._make_icon_text_button(
             "add_icon.svg", tr("ui.add_info_file")
@@ -559,15 +526,17 @@ class ModEditorDialog(QDialog):
             "delete_icon.svg", tr("ui.delete_info_file_entry")
         )
         self._info_delete_button.clicked.connect(self._delete_selected_info_file)
-        for button in (
-            self._info_add_button,
-            self._info_toggle_button,
-            self._info_up_button,
-            self._info_down_button,
-            self._info_reset_button,
-            self._info_delete_button,
+        for index, button in enumerate(
+            (
+                self._info_add_button,
+                self._info_toggle_button,
+                self._info_reset_button,
+                self._info_up_button,
+                self._info_down_button,
+                self._info_delete_button,
+            )
         ):
-            buttons.addWidget(button)
+            buttons.addWidget(button, index // 3, index % 3)
         layout.addLayout(buttons)
         return frame
 
@@ -865,10 +834,23 @@ class ModEditorDialog(QDialog):
     def _on_add_data(self, tab, layout):
         if getattr(tab, "_has_data_frame", False):
             return
-        self._create_file_frame(layout, "data")
+        path_edit = self._create_file_frame(layout, "data")
+        QTimer.singleShot(0, lambda: self._focus_file_input(path_edit))
 
     def _on_add_extra(self, layout):
-        self._create_file_frame(layout, "extra")
+        path_edit = self._create_file_frame(layout, "extra")
+        QTimer.singleShot(0, lambda: self._focus_file_input(path_edit))
+
+    @staticmethod
+    def _focus_file_input(path_edit: QLineEdit) -> None:
+        if sip.isdeleted(path_edit):
+            return
+        path_edit.setFocus()
+        parent = path_edit.parentWidget()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                parent.ensureWidgetVisible(path_edit)
+            parent = parent.parentWidget()
 
     def _create_file_frame(self, tab_layout, file_type):
         tab = self._get_tab_for_layout(tab_layout)
@@ -955,6 +937,7 @@ class ModEditorDialog(QDialog):
             self._update_extra_file_special_state(
                 tab_layout, path_edit, frame, special_hint_lbl
             )
+        return path_edit
 
     def _make_icon_text_button(self, icon, text, tooltip=None):
         button = QPushButton(text)
@@ -1096,7 +1079,7 @@ class ModEditorDialog(QDialog):
         self,
         layout,
         path_edit: QLineEdit,
-        frame: QFrame,
+        frame: QWidget,
         hint_label: QLabel | None = None,
     ) -> None:
         is_special = self._is_special_runtime_extra_path(layout, path_edit.text())
@@ -1212,16 +1195,7 @@ class ModEditorDialog(QDialog):
             if os.path.exists(logo):
                 px = QPixmap(logo)
                 if not px.isNull():
-                    pr = self._br(64, 64)
-                    scaled = px.scaled(
-                        64,
-                        64,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    self.icon_preview.setPixmap(
-                        round_pixmap(scaled, pr) if pr > 0 else scaled
-                    )
+                    self._set_icon_pixmap(px)
                     return
         except Exception as e:
             logger.warning(f"Load default icon failed: {e}")
@@ -1245,8 +1219,8 @@ class ModEditorDialog(QDialog):
             )
         )
         signals.error.connect(
-            lambda _url, _message, request_id=request_id, signals=signals: self._apply_url_icon(
-                QImage(), request_id, signals
+            lambda _url, _message, request_id=request_id, signals=signals: (
+                self._apply_url_icon(QImage(), request_id, signals)
             )
         )
 
@@ -1256,7 +1230,7 @@ class ModEditorDialog(QDialog):
         )
 
     def _set_icon_pixmap(self, px):
-        """Crop to square center, scale to 64x64, apply border radius."""
+        """Crop to square center, scale to the icon preview size, apply border radius."""
         if px.isNull():
             self.icon_preview.setText(tr("status.loading_error"))
             return
@@ -1264,14 +1238,17 @@ class ModEditorDialog(QDialog):
         cropped = px.copy(
             (px.width() - size) // 2, (px.height() - size) // 2, size, size
         )
-        pr = self._br(64, 64)
+        preview_size = self.icon_preview.width()
+        pr = self._br(preview_size, preview_size)
         scaled = cropped.scaled(
-            64,
-            64,
+            preview_size,
+            preview_size,
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
-        self.icon_preview.setPixmap(round_pixmap(scaled, pr) if pr > 0 else scaled)
+        self.icon_preview.setPixmap(
+            round_pixmap(scaled, pr, 2, self._color("border", "#039d5b"))
+        )
 
     def _apply_url_icon(self, image, request_id=None, signals=None):
         if signals is not None:

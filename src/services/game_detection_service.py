@@ -72,7 +72,11 @@ def is_process_identity_running(identity: ProcessIdentity) -> bool:
     pid, created_at = identity
     try:
         process = psutil.Process(pid)
-        return process.is_running() and process.create_time() == created_at
+        return (
+            process.is_running()
+            and process.status() != psutil.STATUS_ZOMBIE
+            and process.create_time() == created_at
+        )
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return False
 
@@ -124,12 +128,12 @@ def is_game_running(pid: object | None = None):
     return bool(get_matching_process_identities())
 
 
-def get_running_game_process_name() -> str | None:
-    process_names = {name.casefold() for name in get_all_process_names() if name}
+def get_running_game_process_name(process_names: tuple[str, ...] | list[str] | None = None) -> str | None:
+    normalized_names = {name.casefold() for name in (process_names or get_all_process_names()) if name}
     for proc in psutil.process_iter(["name"]):
         try:
             name = proc.info["name"]
-            if name and name.casefold() in process_names:
+            if name and name.casefold() in normalized_names:
                 return name
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue

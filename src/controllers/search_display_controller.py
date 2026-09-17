@@ -4,11 +4,10 @@ import contextlib
 import logging
 
 from PyQt6.QtCore import QEvent, QMetaObject, QObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QApplication, QGridLayout, QInputDialog
 
 from config.config import (
     GAMEBANANA_PER_PAGE,
-    QSS_LOADING_LABEL,
     SEARCH_EXHAUSTED_PAGE_SENTINEL,
 )
 from models.game_modes import (
@@ -21,7 +20,7 @@ from services.mod.filter_service import filter_and_sort_mods
 from ui.builders.shared_filters_builder import set_themed_button_icon
 from ui.common.styling import get_theme_color
 from ui.dialogs.blocklist_dialog import BlocklistDialog
-from ui.utils.ui_utils import DebounceTimer, safe_stop_thread
+from ui.utils.ui_utils import DebounceTimer, UIAnimator, safe_stop_thread
 from ui.widgets.mod.mod_card_widget import ModCardWidget
 from ui.widgets.mod.search_mod_card_widget import SearchModCardWidget
 from ui.widgets.mod_details_overlay import show_mod_details_overlay
@@ -43,8 +42,8 @@ class SearchDisplayController(QObject):
     """Manages search display, filtering, and mod interaction in search results."""
 
     LOAD_MORE_PAGES = 2
-    LOAD_MORE_PREFETCH_ROWS = 2
-    PREFETCH_MIN_VIEWPORTS = 2.5
+    LOAD_MORE_PREFETCH_ROWS = 0
+    PREFETCH_MIN_VIEWPORTS = 0.15
 
     ui_button_text_update = pyqtSignal(str, str)
     ui_button_tooltip_update = pyqtSignal(str, str)
@@ -74,12 +73,16 @@ class SearchDisplayController(QObject):
         self._update_filtered_mods_in_progress = False
         self._pending_filter_update = False
         self._exhausted_search_keys = set()
+        self._search_error = ""
         self.card_widget_cache: dict[str, ModCardWidget] = {}
         self._update_display_debounce = DebounceTimer(delay_ms=75)
         self._virtual_scroll_debounce = DebounceTimer(delay_ms=80)
         self._initial_mods_display_done = False
         self._layout_refresh_tries = 0
         self._last_virtual_card_range: tuple[int, int] | None = None
+        self._last_display_columns = None
+        self._centered_loading_indicator = None
+        self._layout_refresh_pending = False
 
     def _iter_layout_cards(self):
         """Yield all ModCardWidget instances currently in mod_list_layout."""
@@ -144,7 +147,7 @@ class SearchDisplayController(QObject):
 
     def _sync_mod_grid_metrics(self):
         layout = getattr(self.app, "mod_list_layout", None)
-        if not layout:
+        if layout is None:
             return False
         config = getattr(self.app_state, "local_config", None)
         spacing = SearchModCardWidget.grid_spacing_for_config(config)
@@ -167,6 +170,7 @@ class SearchDisplayController(QObject):
             int(card_width),
             int(grid_alignment),
         )
+        self.app.mod_list_columns = max(1, int(columns))
         if getattr(self, "_last_grid_metrics_key", None) == metrics_key:
             return False
         try:
@@ -179,7 +183,6 @@ class SearchDisplayController(QObject):
                 f"_sync_mod_grid_metrics: failed to apply layout metrics: {e}",
                 exc_info=True,
             )
-        self.app.mod_list_columns = max(1, int(columns))
         scroll = getattr(self.app, "mods_browser_scroll", None)
         if scroll:
             with contextlib.suppress(Exception):
@@ -249,17 +252,120 @@ class SearchDisplayController(QObject):
             return None
 
     def _place_loading_indicator(self, widget, position: int) -> None:
+        layout = getattr(self.app, "mod_list_layout", None)
+        column_span = 1
+        if isinstance(layout, QGridLayout):
+            position = max(position, layout.count())
+            column_span = self._mod_list_column_count()
         self._place_layout_widget(
             widget,
             self._next_full_grid_row_position(position),
+            column_span=column_span,
             alignment=Qt.AlignmentFlag.AlignCenter,
         )
+
+    def _remove_loading_indicator_at_position(self, position: int) -> None:
+        layout = getattr(self.app, "mod_list_layout", None)
+        if not isinstance(layout, QGridLayout):
+            return
+        row, column = divmod(max(0, position), self._mod_list_column_count())
+        item = layout.itemAtPosition(row, column)
+        widget = item.widget() if item else None
+        if getattr(widget, "objectName", lambda: "")() == "loading_indicator":
+            layout.removeWidget(widget)
+            widget.deleteLater()
+
+    @staticmethod
+    def _is_append_only_card_update(
+        existing_card_keys: set[str], current_page_cache_keys: set[str]
+    ) -> bool:
+        return (
+            bool(existing_card_keys) and existing_card_keys <= current_page_cache_keys
+        )
+
+    def _style_loading_indicator(self, widget) -> None:
+        config = getattr(self.app_state, "local_config", None)
+        secondary_text = get_theme_color(config, "secondary_text")
+        border = get_theme_color(config, "border")
+        widget.setStyleSheet(
+            f"font-size: 16px; padding: 10px 18px; color: {secondary_text}; "
+            f"border: 2px solid {border}; border-radius: 6px; background: transparent;"
+        )
+
+    def _position_centered_loading_indicator(self) -> None:
+        indicator = self._centered_loading_indicator
+        scroll = getattr(self.app, "mods_browser_scroll", None)
+        viewport = getattr(scroll, "viewport", lambda: None)()
+        if not indicator or not viewport:
+            return
+        indicator.resize(indicator.sizeHint())
+        indicator.move(
+            max(0, (viewport.width() - indicator.width()) // 2),
+            max(0, (viewport.height() - indicator.height()) // 2),
+        )
+
+    def _show_centered_loading_indicator(self) -> bool:
+        scroll = getattr(self.app, "mods_browser_scroll", None)
+        viewport = getattr(scroll, "viewport", lambda: None)()
+        if not viewport:
+            return False
+        indicator = self._centered_loading_indicator
+        if indicator is None:
+            from PyQt6.QtWidgets import QLabel
+
+            indicator = QLabel(viewport)
+            indicator.setObjectName("centered_loading_indicator")
+            indicator.setTextFormat(Qt.TextFormat.PlainText)
+            indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            self._centered_loading_indicator = indicator
+        indicator.setText(tr("ui.loading_placeholder"))
+        self._style_loading_indicator(indicator)
+        self._position_centered_loading_indicator()
+        indicator.show()
+        indicator.raise_()
+        return True
+
+    def _remove_centered_loading_indicator(self) -> None:
+        indicator = self._centered_loading_indicator
+        self._centered_loading_indicator = None
+        if indicator:
+            indicator.hide()
+            indicator.deleteLater()
 
     def _next_full_grid_row_position(self, position: int) -> int:
         columns = self._mod_list_column_count()
         if columns <= 1:
             return max(0, position)
         return ((max(0, position) + columns - 1) // columns) * columns
+
+    def _has_pending_gamebanana_pages(self) -> bool:
+        game_id = get_gamebanana_game_ids().get(self._get_selected_gamebanana_game())
+        if not game_id:
+            return False
+        search_key = (self.app_state.search_text or "").strip().lower()
+        if search_key:
+            search_pages = getattr(self.app_state, "gamebanana_search_loaded_pages", {})
+            loaded_pages = search_pages.get(search_key, {})
+        else:
+            loaded_pages = self.app_state.gamebanana_loaded_pages
+        last_page = loaded_pages.get(game_id)
+        return last_page is not None and 0 < last_page < SEARCH_EXHAUSTED_PAGE_SENTINEL
+
+    def _mods_for_complete_grid_rows(self, mods: list) -> list:
+        if not isinstance(getattr(self.app, "mod_list_layout", None), QGridLayout):
+            return mods
+        columns = self._mod_list_column_count()
+        remainder = len(mods) % columns
+        visible_count = len(mods) - remainder
+        if (
+            remainder
+            and visible_count
+            and self._has_pending_gamebanana_pages()
+            and not self._search_error
+        ):
+            return mods[:visible_count]
+        return mods
 
     def _remove_layout_widget(self, widget):
         if not hasattr(self.app, "mod_list_layout"):
@@ -269,9 +375,18 @@ class SearchDisplayController(QObject):
 
     def refresh_visible_layout(self):
         layout = getattr(self.app, "mod_list_layout", None)
-        if not layout:
+        if layout is None:
+            return
+        if self._update_display_in_progress:
             return
         if not self._sync_mod_grid_metrics():
+            self._update_virtual_visibility()
+            return
+        if (
+            self._last_display_columns is not None
+            and self._last_display_columns != self._mod_list_column_count()
+        ):
+            self.update_display()
             return
         visible_cards = [
             widget for widget in self._iter_layout_cards() if widget.isVisible()
@@ -303,8 +418,15 @@ class SearchDisplayController(QObject):
     def _queue_layout_refresh(self, force: bool = False) -> None:
         if force:
             self._last_grid_metrics_key = None
-        QTimer.singleShot(50, self.refresh_visible_layout)
-        QTimer.singleShot(0, self.refresh_visible_layout)
+        if self._layout_refresh_pending:
+            return
+        self._layout_refresh_pending = True
+
+        def refresh():
+            self._layout_refresh_pending = False
+            self.refresh_visible_layout()
+
+        QTimer.singleShot(50, refresh)
 
     def _finalize_mod_list_layout_refresh(self) -> None:
         layout = getattr(self.app, "mod_list_layout", None)
@@ -337,10 +459,9 @@ class SearchDisplayController(QObject):
                 if event_type in (
                     QEvent.Type.Show,
                     QEvent.Type.Resize,
-                    QEvent.Type.LayoutRequest,
-                    QEvent.Type.PolishRequest,
                 ):
                     self._queue_layout_refresh(force=True)
+                    self._position_centered_loading_indicator()
         except Exception:
             logger.debug(
                 "SearchDisplayController: eventFilter refresh failed",
@@ -394,6 +515,15 @@ class SearchDisplayController(QObject):
             except (RuntimeError, ValueError) as error:
                 logger.debug("Best-effort operation failed: %s", error, exc_info=True)
         self._active_search_timers.clear()
+
+    def _cancel_active_loads(self) -> None:
+        """Cancel results for the previous browser query before starting another."""
+        for thread in self._load_more_threads[:]:
+            with contextlib.suppress(RuntimeError):
+                thread.cancel()
+            self._cleanup_load_thread(thread)
+        self._load_more_threads.clear()
+        self.app_state.gamebanana_loading = False
 
     def _cleanup_load_thread(self, thread):
         try:
@@ -472,8 +602,12 @@ class SearchDisplayController(QObject):
             sort=sort_param,
             parent=self.app,
         )
+        request_failed = False
 
         def on_result(mods_list, request_id=identity, thread=load_thread):
+            if request_failed:
+                self._cleanup_load_thread(thread)
+                return
             try:
                 current_game_id = get_gamebanana_game_ids().get(
                     self._get_selected_gamebanana_game()
@@ -490,7 +624,6 @@ class SearchDisplayController(QObject):
                     or current_sort != request_id[2]
                     or current_page != request_id[1]
                 ):
-                    self.app_state.gamebanana_loading = False
                     self._cleanup_load_thread(thread)
                     return
                 self.app_state.gamebanana_loading = False
@@ -518,7 +651,24 @@ class SearchDisplayController(QObject):
                 self.app_state.gamebanana_loading = False
                 self.update_filtered_mods(preserve_page=True)
 
+        def on_error(message, color, request_id=identity):
+            nonlocal request_failed
+            current_game_id = get_gamebanana_game_ids().get(
+                self._get_selected_gamebanana_game()
+            )
+            if (
+                current_game_id != request_id[0]
+                or (self.app_state.search_text or "").strip() != request_id[3]
+                or self._get_selected_sort() != request_id[2]
+            ):
+                return
+            request_failed = True
+            self.app_state.gamebanana_loading = False
+            self.feedback_service.update_status(message, color)
+            self.update_filtered_mods(preserve_page=True)
+
         load_thread.result.connect(on_result)
+        load_thread.status.connect(on_error)
         load_thread.finished.connect(
             lambda thread=load_thread: self._cleanup_load_thread(thread)
         )
@@ -528,7 +678,11 @@ class SearchDisplayController(QObject):
     def _load_search_results_if_needed(
         self, items_needed: int | None = None, preferred_game: str | None = None
     ):
-        if not self.app_state.mods_loaded or self.app_state.gamebanana_loading:
+        if (
+            self._search_error
+            or not self.app_state.mods_loaded
+            or self.app_state.gamebanana_loading
+        ):
             return
         self._load_more_threads = [
             t for t in self._load_more_threads if t and t.isRunning()
@@ -586,7 +740,6 @@ class SearchDisplayController(QObject):
                     or current_sort != request_id[2]
                     or current_page != request_id[1]
                 ):
-                    self.app_state.gamebanana_loading = False
                     self._cleanup_load_thread(thread)
                     return
                 self.app_state.gamebanana_loading = False
@@ -603,8 +756,6 @@ class SearchDisplayController(QObject):
                     return
                 search_pages[game_id] = SEARCH_EXHAUSTED_PAGE_SENTINEL
                 self.update_filtered_mods(preserve_page=True)
-                if start_page == 1 and not (self.app_state.filtered_mods or []):
-                    self._show_no_results_and_clear_search(search_text)
             except Exception as e:
                 logger.error(
                     f"SearchDisplayController: Error loading search results: {e}",
@@ -613,25 +764,26 @@ class SearchDisplayController(QObject):
                 self.app_state.gamebanana_loading = False
                 self.update_filtered_mods(preserve_page=True)
 
+        def on_error(message, color):
+            if (
+                get_gamebanana_game_ids().get(self._get_selected_gamebanana_game())
+                != game_id
+                or (self.app_state.search_text or "").strip() != search_text
+                or self._get_selected_sort() != search_sort
+            ):
+                return
+            self.app_state.gamebanana_loading = False
+            self._search_error = message
+            self.feedback_service.update_status(message, color)
+            self.update_display()
+
+        search_thread.status.connect(on_error)
         search_thread.result.connect(on_result)
         search_thread.finished.connect(
             lambda thread=search_thread: self._cleanup_load_thread(thread)
         )
         self._load_more_threads.append(search_thread)
         search_thread.start()
-
-    def _show_no_results_and_clear_search(self, search_text: str):
-        if self.app_state.search_text != search_text:
-            return
-        msg_box = QMessageBox(self.app)
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        msg_box.setWindowTitle(tr("ui.search_tab"))
-        msg_box.setText(tr("ui.no_search_results"))
-        msg_box.exec()
-        if self.app_state.search_text == search_text:
-            self.app_state.search_text = ""
-            self._set_search_btn_icon(False)
-            self.load_mods_for_selected_game()
 
     def show_blocklist_dialog(self):
         try:
@@ -751,6 +903,7 @@ class SearchDisplayController(QObject):
             self._pending_display_update = True
             return
         self._update_display_in_progress = True
+        batch_processing_pending = False
         try:
             current_thread = QThread.currentThread()
             app_instance = QApplication.instance()
@@ -773,32 +926,53 @@ class SearchDisplayController(QObject):
                 self._update_display_in_progress = False
                 return
             self._sync_mod_grid_metrics()
-            current_page_mods = list(self.app_state.filtered_mods or [])
+            current_page_mods = self._mods_for_complete_grid_rows(
+                list(self.app_state.filtered_mods or [])
+            )
+            self._last_display_columns = self._mod_list_column_count()
             if not hasattr(self.app, "mod_list_widget"):
                 logger.warning("SearchDisplayController: mod_list_widget not available")
                 self._update_display_in_progress = False
                 return
+
+            has_visible_cards = any(
+                card.isVisible() for card in self._iter_layout_cards()
+            )
 
             def _remove_loading_indicators():
                 for widget in list(self._iter_loading_indicators()):
                     self._remove_layout_widget(widget)
                     widget.deleteLater()
 
-            def _add_loading_indicator(position: int):
+            def _add_status_indicator(position: int, message: str):
                 from PyQt6.QtCore import Qt
                 from PyQt6.QtWidgets import QLabel
 
-                loading_label = QLabel(tr("ui.loading_placeholder"))
+                loading_label = QLabel(message)
+                loading_label.setTextFormat(Qt.TextFormat.PlainText)
                 loading_label.setObjectName("loading_indicator")
                 loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                loading_label.setStyleSheet(QSS_LOADING_LABEL)
+                loading_label.setWordWrap(True)
+                self._style_loading_indicator(loading_label)
                 self._place_loading_indicator(loading_label, position)
 
+            if (
+                self.app_state.gamebanana_loading
+                and not current_page_mods
+                and has_visible_cards
+            ):
+                self._remove_centered_loading_indicator()
+                self._show_bottom_loading_indicator()
+                self._update_display_in_progress = False
+                return
             if not self.app_state.mods_loaded or (
-                self.app_state.gamebanana_loading and len(current_page_mods) == 0
+                self.app_state.gamebanana_loading
+                and len(current_page_mods) == 0
+                and not has_visible_cards
             ):
                 _remove_loading_indicators()
-                _add_loading_indicator(0)
+                if not self._show_centered_loading_indicator():
+                    _add_status_indicator(0, tr("ui.loading_placeholder"))
                 if (
                     not getattr(self.app, "_mods_display_ready_emitted", False)
                 ) and hasattr(self.app, "mods_display_ready"):
@@ -806,7 +980,8 @@ class SearchDisplayController(QObject):
                     self.app.mods_display_ready.emit()
                 self._update_display_in_progress = False
                 return
-            _remove_loading_indicators()
+            if has_visible_cards:
+                self._remove_centered_loading_indicator()
 
             def get_mod_cache_key(mod):
                 key = get_mod_id(mod)
@@ -822,53 +997,122 @@ class SearchDisplayController(QObject):
             }
             self._last_virtual_card_range = None
             existing_widgets_in_layout = {}
+            existing_card_keys = set()
             for i in range(self.app.mod_list_layout.count()):
                 item = self.app.mod_list_layout.itemAt(i)
-                if item and item.widget():
-                    widget = item.widget()
-                    if isinstance(widget, ModCardWidget):
-                        if hasattr(widget, "mod_data") and widget.mod_data:
-                            cache_key = get_mod_cache_key(widget.mod_data)
-                            existing_widgets_in_layout[cache_key] = (widget, i)
-                            if cache_key not in current_page_cache_keys:
-                                widget.hide()
-                        else:
-                            widget.hide()
-            batch_size = 15
+                widget = item.widget() if item else None
+                if (
+                    isinstance(widget, ModCardWidget)
+                    and hasattr(widget, "mod_data")
+                    and widget.mod_data
+                ):
+                    cache_key = get_mod_cache_key(widget.mod_data)
+                    existing_widgets_in_layout[cache_key] = (widget, i)
+                    existing_card_keys.add(cache_key)
+            is_append_only_update = self._is_append_only_card_update(
+                existing_card_keys, current_page_cache_keys
+            )
+            if not is_append_only_update:
+                for widget, _ in existing_widgets_in_layout.values():
+                    cache_key = get_mod_cache_key(widget.mod_data)
+                    if cache_key not in current_page_cache_keys:
+                        widget.hide()
+            batch_size = 8
             target_position = 0
+            pending_card_placements = []
             mods_to_process = [
                 (idx, mod)
                 for idx, mod in enumerate(current_page_mods)
                 if mod is not None
             ]
-            self.ui_widget_updates_enabled.emit("mod_list_widget", False)
             try:
 
                 def finish_widget_processing():
-                    for widget in list(self._iter_layout_cards()):
-                        widget_cache_key = (
-                            get_mod_cache_key(widget.mod_data)
-                            if hasattr(widget, "mod_data") and widget.mod_data
-                            else None
+                    widget_container = getattr(self.app, "mod_list_widget", None)
+                    scroll = getattr(self.app, "mods_browser_scroll", None)
+                    viewport = getattr(scroll, "viewport", lambda: None)()
+                    viewport_snapshot = None
+                    if pending_card_placements and viewport:
+                        from PyQt6.QtWidgets import QLabel
+
+                        viewport_snapshot = QLabel(viewport)
+                        viewport_snapshot.setPixmap(viewport.grab())
+                        viewport_snapshot.resize(viewport.size())
+                        viewport_snapshot.setAttribute(
+                            Qt.WidgetAttribute.WA_TransparentForMouseEvents
                         )
-                        try:
-                            if (
-                                widget_cache_key
-                                and widget_cache_key not in current_page_cache_keys
-                            ):
+                        viewport_snapshot.show()
+                        viewport_snapshot.raise_()
+                    updates_enabled = bool(
+                        widget_container
+                        and widget_container.updatesEnabled()
+                        and pending_card_placements
+                    )
+                    if updates_enabled:
+                        widget_container.setUpdatesEnabled(False)
+                    try:
+                        for card, position, animate in pending_card_placements:
+                            self._remove_loading_indicator_at_position(position)
+                            if not animate:
+                                card.show()
+                            self._place_layout_widget(card, position)
+                            card._mods_browser_position = position
+                            if hasattr(card, "update_action_button_state"):
+                                card.update_action_button_state()
+                            if animate:
+                                UIAnimator.fade_in(
+                                    card, duration=160, app_state=self.app_state
+                                )
+                        for widget in list(self._iter_layout_cards()):
+                            widget_cache_key = (
+                                get_mod_cache_key(widget.mod_data)
+                                if hasattr(widget, "mod_data") and widget.mod_data
+                                else None
+                            )
+                            try:
+                                if (
+                                    not is_append_only_update
+                                    and widget_cache_key
+                                    and widget_cache_key not in current_page_cache_keys
+                                ):
+                                    self._remove_layout_widget(widget)
+                                    widget.hide()
+                                elif not widget.isVisible():
+                                    widget.show()
+                            except Exception as e:
+                                if widget_cache_key:
+                                    logger.debug(f"Error refreshing widget layout: {e}")
                                 self._remove_layout_widget(widget)
                                 widget.hide()
-                            elif not widget.isVisible():
-                                widget.show()
-                        except Exception as e:
-                            if widget_cache_key:
-                                logger.debug(f"Error refreshing widget layout: {e}")
-                            self._remove_layout_widget(widget)
-                            widget.hide()
-                    self._finalize_mod_list_layout_refresh()
+                        self._finalize_mod_list_layout_refresh()
+                        self._remove_centered_loading_indicator()
+                    finally:
+                        if updates_enabled:
+                            widget_container.setUpdatesEnabled(True)
+                            widget_container.update()
+                        if viewport_snapshot:
+
+                            def restore_viewport_updates():
+                                with contextlib.suppress(RuntimeError):
+                                    viewport_snapshot.hide()
+                                    viewport_snapshot.deleteLater()
+
+                            QTimer.singleShot(40, restore_viewport_updates)
                     _remove_loading_indicators()
-                    if self.app_state.gamebanana_loading and current_page_mods:
-                        _add_loading_indicator(target_position)
+                    if self._search_error:
+                        from PyQt6.QtWidgets import QPushButton
+
+                        _add_status_indicator(target_position, self._search_error)
+                        retry = QPushButton(tr("downloads.action_retry"))
+                        retry.setObjectName("loading_indicator")
+                        retry.clicked.connect(self._retry_search)
+                        self._place_loading_indicator(retry, target_position + 1)
+                    elif self.app_state.gamebanana_loading and current_page_mods:
+                        _add_status_indicator(
+                            target_position, tr("ui.loading_placeholder")
+                        )
+                    elif not current_page_mods:
+                        _add_status_indicator(0, tr("ui.no_search_results"))
                     self.ui_widget_updates_enabled.emit("mod_list_widget", True)
                     self._update_display_in_progress = False
                     self._flush_pending_display()
@@ -904,13 +1148,11 @@ class SearchDisplayController(QObject):
                                         if hasattr(card, "update_installation_status"):
                                             card.update_installation_status()
                                 if not card_already_placed:
-                                    self._place_layout_widget(card, target_position)
+                                    card.hide()
+                                    pending_card_placements.append(
+                                        (card, target_position, False)
+                                    )
                                 card._mods_browser_position = target_position
-                                if (
-                                    not card_already_placed
-                                    and hasattr(card, "update_action_button_state")
-                                ):
-                                    card.update_action_button_state()
                                 target_position += 1
                             else:
                                 parent_widget = (
@@ -931,7 +1173,10 @@ class SearchDisplayController(QObject):
                                 card.details_requested.connect(self.show_details)
                                 if hasattr(card, "update_action_button_state"):
                                     card.update_action_button_state()
-                                self._place_layout_widget(card, target_position)
+                                card.hide()
+                                pending_card_placements.append(
+                                    (card, target_position, True)
+                                )
                                 card._mods_browser_position = target_position
                                 self.card_widget_cache[cache_key] = card
                                 target_position += 1
@@ -944,10 +1189,28 @@ class SearchDisplayController(QObject):
                     return batch_end
 
                 current_batch_start = 0
-                while current_batch_start < len(mods_to_process):
-                    batch_end = process_batch(current_batch_start)
-                    current_batch_start = batch_end
-                finish_widget_processing()
+
+                def process_next_batch():
+                    nonlocal batch_processing_pending, current_batch_start
+                    try:
+                        current_batch_start = process_batch(current_batch_start)
+                        if current_batch_start < len(mods_to_process):
+                            batch_processing_pending = True
+                            QTimer.singleShot(0, process_next_batch)
+                            return
+                        batch_processing_pending = False
+                        finish_widget_processing()
+                    except Exception as e:
+                        batch_processing_pending = False
+                        logger.error(
+                            f"SearchDisplayController: Error in batch processing: {e}",
+                            exc_info=True,
+                        )
+                        self.ui_widget_updates_enabled.emit("mod_list_widget", True)
+                        self._update_display_in_progress = False
+                        self._flush_pending_display()
+
+                process_next_batch()
             except Exception as e:
                 logger.error(
                     f"SearchDisplayController: Error in batch processing: {e}",
@@ -961,23 +1224,34 @@ class SearchDisplayController(QObject):
                 f"SearchDisplayController: Error in update_display: {e}", exc_info=True
             )
         finally:
-            if self._update_display_in_progress:
+            if self._update_display_in_progress and not batch_processing_pending:
                 self._update_display_in_progress = False
                 self._flush_pending_display()
+
+    def _retry_search(self):
+        if any(thread.isRunning() for thread in self._load_more_threads):
+            return
+        self._search_error = ""
+        for indicator in list(self._iter_loading_indicators()):
+            self._remove_layout_widget(indicator)
+            indicator.deleteLater()
+        self._load_search_results_if_needed()
 
     def _show_bottom_loading_indicator(self):
         """Append a Loading... label at the bottom of the current card list without redrawing existing cards."""
         if not hasattr(self.app, "mod_list_layout"):
             return
+        self._remove_centered_loading_indicator()
         layout = self.app.mod_list_layout
         for _indicator in self._iter_loading_indicators():
+            _indicator.setText(tr("ui.loading_placeholder"))
             return
         from PyQt6.QtWidgets import QLabel
 
         loading_label = QLabel(tr("ui.loading_placeholder"))
         loading_label.setObjectName("loading_indicator")
         loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        loading_label.setStyleSheet(QSS_LOADING_LABEL)
+        self._style_loading_indicator(loading_label)
         self._place_loading_indicator(loading_label, layout.count())
 
     def _first_visible_card_height(self) -> int:
@@ -1034,67 +1308,15 @@ class SearchDisplayController(QObject):
             self._load_more_gamebanana_mods_if_needed()
 
     def _update_virtual_visibility(self):
-        """Suppress repaints for cards outside the active row window."""
-        scroll = getattr(self.app, "mods_browser_scroll", None)
-        if not scroll:
-            return
-        try:
-            viewport = scroll.viewport()
-            vp_height = viewport.height() if viewport else 0
-        except Exception:
-            return
-        if vp_height <= 0:
-            return
-        try:
-            scroll_y = scroll.verticalScrollBar().value()
-        except Exception:
-            return
-        row_height = self._first_visible_card_height() + self._mod_list_spacing()
-        if row_height <= 0:
-            return
-        columns = self._mod_list_column_count()
-        buffer_rows = max(3, int((vp_height * 1.5) // row_height) + 1)
-        first_row = max(0, int(scroll_y // row_height) - buffer_rows)
-        last_row = int((scroll_y + vp_height) // row_height) + buffer_rows
-        wanted = (
-            first_row * columns,
-            max(first_row * columns, ((last_row + 1) * columns) - 1),
-        )
-        previous = self._last_virtual_card_range
-        self._last_virtual_card_range = wanted
-        ranges = [wanted]
-        if previous and previous != wanted:
-            ranges.append(previous)
-        total = len(self.app_state.filtered_mods or [])
-        visited = set()
-        for start, end in ranges:
-            for position in range(max(0, start), min(total, end + 1)):
-                if position in visited:
-                    continue
-                visited.add(position)
-                card = self._layout_card_at_position(position)
-                if card is None:
-                    continue
-                in_range = wanted[0] <= position <= wanted[1]
-                try:
-                    if card.updatesEnabled() != in_range:
-                        card.setUpdatesEnabled(in_range)
-                        if in_range:
-                            card.update()
-                except Exception as e:
-                    logger.debug(
-                        f"_update_virtual_visibility: failed to update card visibility state: {e}",
-                        exc_info=True,
-                    )
-        if previous is None:
-            disable_before = max(0, wanted[0] - columns * 2)
-            disable_after = min(total, wanted[1] + 1 + columns * 2)
-            for card in self._iter_layout_cards():
-                position = getattr(card, "_mods_browser_position", None)
-                if position is None or disable_before <= position < disable_after:
-                    continue
-                with contextlib.suppress(Exception):
-                    card.setUpdatesEnabled(False)
+        """Restore card updates after a layout change.
+
+        QWidget already clips painting to the scroll viewport. Disabling child
+        updates manually can leave the list blank while its parent repaints.
+        """
+        for card in self._iter_layout_cards():
+            if not card.updatesEnabled():
+                card.setUpdatesEnabled(True)
+                card.update()
 
     def on_scroll_value_changed(self, value: int):
         scroll = getattr(self.app, "mods_browser_scroll", None)
@@ -1155,12 +1377,14 @@ class SearchDisplayController(QObject):
     def load_mods_for_selected_game(self):
         if not hasattr(self.app, "modgame_combo"):
             return
+        self._cancel_active_loads()
         gamebanana_game = self._get_selected_gamebanana_game()
         if not gamebanana_game:
             gamebanana_game = "deltarune"
         game_id = get_gamebanana_game_ids().get(gamebanana_game)
         if not game_id:
             return
+        self._search_error = ""
         self._clear_current_gamebanana_mods()
         self.app_state.gamebanana_loaded_pages[game_id] = 0
         search_key = (self.app_state.search_text or "").strip().lower()

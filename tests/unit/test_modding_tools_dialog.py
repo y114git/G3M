@@ -19,6 +19,7 @@ from ui.dialogs.modding_tools_dialog import (
     _CreatePatchWorkerThread,
     _DataConvertTab,
     _DataConvertWorkerThread,
+    _DiffTab,
     _MergeTab,
     _mod_relative_file_path,
     _PatchTab,
@@ -63,6 +64,52 @@ def test_patch_tab_progress_ignores_deleted_status_label():
 
     tab._on_progress(25, "Working")
 
+    app.processEvents()
+
+
+def test_diff_tab_binds_full_report_by_keyword_and_keeps_progress(monkeypatch, tmp_path):
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    class _RecordingG3M:
+        def is_available(self):
+            return True
+
+        def diff(
+            self,
+            file1,
+            file2,
+            output_dir=None,
+            progress_callback=None,
+            *,
+            full_report=False,
+        ):
+            calls.append((file1, file2, output_dir, progress_callback, full_report))
+            progress_callback(50, "Diffing")
+            return 0, "", ""
+
+    started = []
+    monkeypatch.setattr(
+        "ui.dialogs.modding_tools_dialog._start_worker",
+        lambda _dialog, worker: started.append(worker),
+    )
+    tab = _DiffTab(_RecordingG3M(), SimpleNamespace(local_config={}))
+    tab._file1_row.set_path(str(tmp_path / "left.win"))
+    tab._file2_row.set_path(str(tmp_path / "right.win"))
+    tab._full_report_cb.setChecked(True)
+
+    tab._on_run()
+    progress = []
+    started[0].progress.connect(lambda percent, label: progress.append((percent, label)))
+    started[0].run()
+
+    assert calls[0][:3] == (str(tmp_path / "left.win"), str(tmp_path / "right.win"), tab._out_dir)
+    assert calls[0][3] is not None
+    assert calls[0][4] is True
+    assert progress == [(50, "Diffing")]
+
+    tab._cleanup_out_dir()
+    tab.deleteLater()
     app.processEvents()
 
 
@@ -222,7 +269,9 @@ class _FakeG3M:
         self._emit_progress(progress_callback, "Reading info")
         return 0, f"info:{target}:{verbose}", ""
 
-    def diff(self, file1, file2, output_dir=None, progress_callback=None):
+    def diff(
+        self, file1, file2, output_dir=None, progress_callback=None, *, full_report=False
+    ):
         self._emit_progress(progress_callback, "Diffing")
         return 0, f"diff:{file1}:{file2}:{output_dir}", ""
 

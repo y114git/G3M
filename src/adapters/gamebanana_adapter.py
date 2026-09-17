@@ -515,49 +515,87 @@ class GameBananaAPI:
     _TAG_MAP = [
         (
             "textedit",
-            ["text", "text changes", "translations", "text edits"],
+            (
+                "text",
+                "texts",
+                "translation",
+                "translations",
+                "localization",
+                "localizations",
+                "dialogue",
+                "dialogues",
+                "subtitle",
+                "subtitles",
+            ),
         ),
         (
             "gameplay",
-            [
-                "gameplay adjustments",
-                "fight",
+            (
                 "gameplay",
-                "difficulty changes",
+                "fight",
+                "fights",
+                "difficulty",
+                "difficulties",
                 "multiplayer",
                 "cyop",
                 "afom",
+                "tower",
                 "towers",
+                "level",
                 "levels",
                 "extension",
-                "full game edit",
+                "extensions",
+                "full game",
+                "lap",
                 "laps",
-                "level edits",
+                "moveset",
+                "movesets",
+                "move set",
+                "game file",
+                "editor",
+                "editors",
                 "rework",
+                "reworks",
+                "rank",
                 "ranks",
-            ],
+                "change",
+                "changes",
+                "edit",
+                "edits",
+            ),
         ),
         (
             "customization",
-            [
-                "spamton",
-                "kris",
-                "jevil",
-                "ralsei",
-                "music replacement",
+            (
+                "skin",
                 "skins",
-                "music",
-                "settings",
-                "resprites",
-                "effects",
-                "custom sprites",
-                "tilesets",
+                "reskin",
+                "reskins",
+                "sprite",
+                "sprites",
+                "character",
                 "characters",
-                "re-sprites",
+                "animatronic",
+                "animatronics",
+                "guard",
+                "guards",
+                "office",
+                "offices",
+                "clothes",
+                "palette",
+                "palettes",
+                "music",
+                "sound",
+                "sounds",
+                "audio",
+                "settings",
+                "effects",
                 "ui",
+                "taunt",
                 "taunts",
                 "titlecard",
-            ],
+                "titlecards",
+            ),
         ),
     ]
 
@@ -565,15 +603,21 @@ class GameBananaAPI:
     def category_to_tag(category) -> str:
         if not category:
             return "other"
-        cl = category.lower().strip()
-        if cl == "cyop/afom":
+        normalized = " ".join(re.findall(r"[a-z0-9]+", str(category).casefold()))
+        if normalized == "cyop afom":
             return "CYOP/AFOM"
-        cn = re.sub(r"[\\/]+", " ", cl)
-        for tag, cats in GameBananaAPI._TAG_MAP:
-            for part in cn.split():
-                if any(c in part or part in c for c in cats):
-                    return tag
-            if any(c in cl for c in cats):
+        words = set(normalized.split())
+        for tag, markers in GameBananaAPI._TAG_MAP:
+            if any(
+                (
+                    any(
+                        word == marker for word in words
+                    )
+                    if " " not in marker
+                    else marker in normalized
+                )
+                for marker in markers
+            ):
                 return tag
         return "other"
 

@@ -62,12 +62,12 @@ class SearchGameBananaModsThread(ManagedQThread):
                 return
             for page in range(self.start_page, self.start_page + self.num_pages):
                 if self._cancelled or self.isInterruptionRequested():
-                    break
+                    return
                 if time.time() - self._start_time > SEARCH_TIMEOUT_SECONDS:
                     logger.warning(
                         f"SearchGameBananaModsThread: Search timeout after {SEARCH_TIMEOUT_SECONDS} seconds"
                     )
-                    break
+                    raise TimeoutError("Search timed out")
                 search_result = self.api.search_mods(
                     self.game_id,
                     search_string=self.search_string,
@@ -75,16 +75,16 @@ class SearchGameBananaModsThread(ManagedQThread):
                     per_page=GAMEBANANA_PER_PAGE,
                     sort=self.sort,
                 )
-                if not search_result:
-                    break
+                if search_result is None:
+                    raise ConnectionError("GameBanana did not return a search response")
                 records = search_result.get("_aRecords", [])
                 if not records:
                     break
                 for record in records:
                     if self._cancelled or self.isInterruptionRequested():
-                        break
+                        return
                     if time.time() - self._start_time > SEARCH_TIMEOUT_SECONDS:
-                        break
+                        raise TimeoutError("Search timed out")
                     model_name = record.get("_sModelName")
                     if model_name not in ("Mod", "Wip", "WIP"):
                         continue
@@ -104,4 +104,3 @@ class SearchGameBananaModsThread(ManagedQThread):
                 tr("errors.gamebanana_fetch_failed", error=str(e)),
                 UI_COLORS["status_error"],
             )
-            _safe_emit(self.__class__.__name__, self.result, [])

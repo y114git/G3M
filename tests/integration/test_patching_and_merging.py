@@ -75,7 +75,9 @@ def test_patching_logger_reuses_the_active_file_handler(tmp_path, monkeypatch):
             handler.close()
 
 
-def test_patching_logger_reopens_after_rotation_for_a_new_service(tmp_path, monkeypatch):
+def test_patching_logger_reopens_after_rotation_for_a_new_service(
+    tmp_path, monkeypatch
+):
     monkeypatch.setattr(
         "services.g3mtool_patching_service.get_user_data_root",
         lambda: str(tmp_path),
@@ -513,6 +515,22 @@ class TestG3MToolAdapter:
         ):
             expected_cmd.extend(["--cache", str(tmp_path / "cache" / "G3MTool")])
         assert actual_cmd == expected_cmd
+
+    def test_diff_full_report_forwards_full_flag(self, monkeypatch):
+        """Checks that the full diff option reaches G3MTool."""
+        g3mtool = G3MToolManager()
+        run = Mock(return_value=(0, "", ""))
+        monkeypatch.setattr(g3mtool, "_run_command", run)
+
+        progress_callback = Mock()
+
+        assert g3mtool.diff(
+            "left.win", "right.win", "diff-out", progress_callback, full_report=True
+        ) == (0, "", "")
+        run.assert_called_once_with(
+            ["diff", "left.win", "right.win", "diff-out", "--full"],
+            progress_callback=progress_callback,
+        )
 
     def test_patch_create_with_xdelta_fallback_uses_flag(self, monkeypatch, tmp_path):
         """Checks that patch creation forwards the fallback flag exactly."""
@@ -1519,6 +1537,33 @@ class TestFileOverrideProgress:
 class TestG3MPatchProgressText:
     """Tests for patching and merging."""
 
+    @staticmethod
+    def _configured_frickbears3_patcher(
+        source, tmp_path, monkeypatch
+    ) -> tuple[object, object, Path, Path]:
+        app_state = Mock()
+        app_state.local_config = {}
+        mod_service = Mock()
+        target = tmp_path / "game"
+        target.mkdir()
+        localappdata = tmp_path / "localappdata"
+        monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+
+        mod = Mock()
+        mod_service.get_mod_folder_path.return_value = str(source)
+        patcher = G3MToolPatchingService(app_state, mod_service)
+        patcher.backup_service = Mock()
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.has_mod_configured_chapter_entry",
+            lambda *_args: True,
+        )
+        monkeypatch.setattr(
+            "services.g3mtool_patching_service.get_mod_configured_extra_files",
+            lambda *_args: ["addons/"],
+        )
+        monkeypatch.setattr(patcher, "_resolve_mod_game", lambda _mod: "frickbears3")
+        return patcher, mod, target, localappdata
+
     def test_multi_patch_progress_uses_generic_patching_text(
         self, monkeypatch, tmp_path
     ):
@@ -1719,9 +1764,6 @@ class TestG3MPatchProgressText:
         assert not (target / "unconfigured.png").exists()
 
     def test_configured_frickbears3_addon_keeps_game_icon(self, tmp_path, monkeypatch):
-        app_state = Mock()
-        app_state.local_config = {}
-        mod_service = Mock()
         source = tmp_path / "mod"
         guard = source / "addons" / "Wario"
         guard.mkdir(parents=True)
@@ -1730,24 +1772,9 @@ class TestG3MPatchProgressText:
         )
         (guard / "icon.png").write_bytes(b"guard icon")
         (source / "_icon.png").write_bytes(b"manager icon")
-        target = tmp_path / "game"
-        target.mkdir()
-        localappdata = tmp_path / "localappdata"
-        monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
-
-        mod = Mock()
-        mod_service.get_mod_folder_path.return_value = str(source)
-        patcher = G3MToolPatchingService(app_state, mod_service)
-        patcher.backup_service = Mock()
-        monkeypatch.setattr(
-            "services.g3mtool_patching_service.has_mod_configured_chapter_entry",
-            lambda *_args: True,
+        patcher, mod, target, localappdata = self._configured_frickbears3_patcher(
+            source, tmp_path, monkeypatch
         )
-        monkeypatch.setattr(
-            "services.g3mtool_patching_service.get_mod_configured_extra_files",
-            lambda *_args: ["addons/"],
-        )
-        monkeypatch.setattr(patcher, "_resolve_mod_game", lambda _mod: "frickbears3")
 
         assert patcher._apply_ordered_file_overrides(
             [(mod, str(source))], str(target), "frickbears3", False, 0, 100
@@ -1756,10 +1783,9 @@ class TestG3MPatchProgressText:
         assert (installed / "icon.png").read_bytes() == b"guard icon"
         assert not (target / "_icon.png").exists()
 
-    def test_configured_frickbears3_addon_follows_linked_files(self, tmp_path, monkeypatch):
-        app_state = Mock()
-        app_state.local_config = {}
-        mod_service = Mock()
+    def test_configured_frickbears3_addon_follows_linked_files(
+        self, tmp_path, monkeypatch
+    ):
         source = tmp_path / "mod"
         shared_guard = tmp_path / "shared" / "Wario"
         shared_guard.mkdir(parents=True)
@@ -1771,24 +1797,9 @@ class TestG3MPatchProgressText:
             )
         except OSError as error:
             pytest.skip(f"symlinks unavailable: {error}")
-        target = tmp_path / "game"
-        target.mkdir()
-        localappdata = tmp_path / "localappdata"
-        monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
-
-        mod = Mock()
-        mod_service.get_mod_folder_path.return_value = str(source)
-        patcher = G3MToolPatchingService(app_state, mod_service)
-        patcher.backup_service = Mock()
-        monkeypatch.setattr(
-            "services.g3mtool_patching_service.has_mod_configured_chapter_entry",
-            lambda *_args: True,
+        patcher, mod, target, localappdata = self._configured_frickbears3_patcher(
+            source, tmp_path, monkeypatch
         )
-        monkeypatch.setattr(
-            "services.g3mtool_patching_service.get_mod_configured_extra_files",
-            lambda *_args: ["addons/"],
-        )
-        monkeypatch.setattr(patcher, "_resolve_mod_game", lambda _mod: "frickbears3")
 
         assert patcher._apply_ordered_file_overrides(
             [(mod, str(source))], str(target), "frickbears3", False, 0, 100

@@ -11,6 +11,46 @@ import pytest
 
 from utils.file_utils import save_json
 
+_THEME_TEST_DEFAULT = {
+    "background": "images/background.png",
+    "colors": {
+        "main_text": "#FFFFFF",
+        "background": "#000000",
+        "elements": "#333333",
+        "border": "#444444",
+        "hover": "#555555",
+        "select": "#666666",
+    },
+    "font_family": "Arial",
+    "font_size_main": 12,
+    "font_size_small": 10,
+}
+
+
+def _build_theme_test_window():
+    app_window = Mock()
+    app_window.custom_font_family = None
+    app_window.palette.return_value = Mock()
+    app_window.status_label = Mock()
+    app_window.color_widgets = {
+        "hover": Mock(text=lambda: ""),
+        "select": Mock(text=lambda: ""),
+    }
+    app_window.installed_mods_label = None
+    app_window.title_bar = None
+    app_window.top_panel_widget = Mock()
+    app_window.logo_placeholder = Mock()
+    app_window.launcher_icon_label = Mock()
+    app_window.findChildren.return_value = []
+    app_window.library_tag_widgets = []
+    app_window.search_display = None
+    app_window.library_tab_builder = Mock()
+    app_window.library_tab_builder.update_priority_button_style = Mock()
+    app_window._apply_window_corner_mask = Mock()
+    app_window.update = Mock()
+    app_window.size.return_value = Mock()
+    return app_window
+
 
 class TestModOperationsController:
     """Tests for controllers."""
@@ -924,9 +964,7 @@ class TestModManagerErrorFormatting:
             },
             indent=2,
         )
-        with open(
-            os.path.join(content_path, "patch.g3mpatch"), "wb"
-        ) as patch_file:
+        with open(os.path.join(content_path, "patch.g3mpatch"), "wb") as patch_file:
             patch_file.write(b"patch")
         controller._materialize_local_import = Mock(return_value=content_path)
         controller._refresh_mod_list = Mock()
@@ -1146,9 +1184,10 @@ class TestSearchDisplayController:
         app_window.prev_page_btn = Mock()
         app_window.next_page_btn = Mock()
 
+        feedback = Mock()
         controller = SearchDisplayController(
             app_state=app_state,
-            feedback_service=feedback_service,
+            feedback_service=feedback,
             mod_service=mod_service,
             mod_ops=mod_ops,
             app_window=app_window,
@@ -1182,6 +1221,33 @@ class TestSearchDisplayController:
         controller.eventFilter(viewport, Mock(type=Mock(return_value=QEvent.Type.Show)))
 
         controller._queue_layout_refresh.assert_called_once_with(force=True)
+
+    def test_event_filter_ignores_layout_requests_from_the_mod_grid(
+        self, app_state, feedback_service
+    ):
+        """Prevents grid updates from repeatedly rebuilding every card."""
+        from PyQt6.QtCore import QEvent
+
+        from controllers.search_display_controller import SearchDisplayController
+
+        viewport = Mock()
+        scroll = Mock()
+        scroll.viewport.return_value = viewport
+        app_window = Mock(mods_browser_scroll=scroll)
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback_service,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        controller._queue_layout_refresh = Mock()
+
+        controller.eventFilter(
+            viewport, Mock(type=Mock(return_value=QEvent.Type.LayoutRequest))
+        )
+
+        controller._queue_layout_refresh.assert_not_called()
 
     def test_search_display_refresh_visible_layout_skips_relayout_when_grid_metrics_do_not_change(
         self, app_state, feedback_service
@@ -1330,7 +1396,7 @@ class TestSearchDisplayController:
         controller._virtual_scroll_debounce.call = Mock()
         controller._load_more_gamebanana_mods_if_needed = Mock()
 
-        controller.on_scroll_value_changed(1450)
+        controller.on_scroll_value_changed(1870)
 
         controller._load_more_gamebanana_mods_if_needed.assert_called_once_with()
 
@@ -1354,7 +1420,71 @@ class TestSearchDisplayController:
         controller._first_visible_card_height = Mock(return_value=260)
         controller._mod_list_spacing = Mock(return_value=18)
 
-        assert controller._load_more_prefetch_threshold() >= 2250
+        assert controller._load_more_prefetch_threshold() == 135
+
+    def test_load_more_failure_does_not_exhaust_gamebanana_pages(
+        self, app_state, feedback_service, monkeypatch
+    ):
+        """Checks that a transient load-more failure leaves the next page retryable."""
+        from controllers.search_display_controller import SearchDisplayController
+        from models.game_modes import get_gamebanana_game_ids
+
+        class _Signal:
+            def __init__(self) -> None:
+                self._handlers = []
+
+            def connect(self, handler):
+                self._handlers.append(handler)
+
+            def emit(self, *args):
+                for handler in self._handlers:
+                    handler(*args)
+
+        class _LoadMoreThread:
+            def __init__(self, *_args, **_kwargs) -> None:
+                self.result = _Signal()
+                self.status = _Signal()
+                self.finished = _Signal()
+
+            def isRunning(self):  # noqa: N802
+                return True
+
+            def isFinished(self):  # noqa: N802
+                return False
+
+            def start(self):
+                return None
+
+        app_window = Mock()
+        app_window.modgame_combo.currentData.return_value = "deltarune"
+        app_window.sort_combo.currentData.return_value = "relevant"
+        game_id = get_gamebanana_game_ids()["deltarune"]
+        app_state.mods_loaded = True
+        app_state.gamebanana_loading = False
+        app_state.gamebanana_loaded_pages[game_id] = 1
+        feedback = Mock()
+        controller = SearchDisplayController(
+            app_state=app_state,
+            feedback_service=feedback,
+            mod_service=Mock(),
+            mod_ops=Mock(),
+            app_window=app_window,
+        )
+        controller._show_bottom_loading_indicator = Mock()
+        controller.update_filtered_mods = Mock()
+        monkeypatch.setattr(
+            "controllers.search_display_controller.LoadMoreGameBananaModsThread",
+            _LoadMoreThread,
+        )
+
+        controller._load_more_gamebanana_mods_if_needed()
+        load_thread = controller._load_more_threads[0]
+        load_thread.status.emit("network failure", "#ff0000")
+        load_thread.result.emit([])
+
+        assert app_state.gamebanana_loaded_pages[game_id] == 1
+        assert app_state.gamebanana_loading is False
+        feedback.update_status.assert_called_once_with("network failure", "#ff0000")
 
     def test_search_filters_include_cyop_afom_only_for_pizzatower(
         self, app_state, feedback_service
@@ -1665,44 +1795,11 @@ class TestThemeController:
         settings_service = Mock()
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
-        app_window = Mock()
-        app_window.custom_font_family = None
-        app_window.palette.return_value = Mock()
-        app_window.status_label = Mock()
-        app_window.color_widgets = {
-            "hover": Mock(text=lambda: ""),
-            "select": Mock(text=lambda: ""),
-        }
-        app_window.installed_mods_label = None
-        app_window.title_bar = None
-        app_window.top_panel_widget = Mock()
-        app_window.logo_placeholder = Mock()
-        app_window.launcher_icon_label = Mock()
-        app_window.findChildren.return_value = []
-        app_window.library_tag_widgets = []
-        app_window.search_display = None
-        app_window.library_tab_builder = Mock()
-        app_window.library_tab_builder.update_priority_button_style = Mock()
-        app_window._apply_window_corner_mask = Mock()
-        app_window.update = Mock()
-        app_window.size.return_value = Mock()
+        app_window = _build_theme_test_window()
         with (
             patch(
                 "controllers.theme_controller.DEFAULT_THEME",
-                {
-                    "background": "images/background.png",
-                    "colors": {
-                        "main_text": "#FFFFFF",
-                        "background": "#000000",
-                        "elements": "#333333",
-                        "border": "#444444",
-                        "hover": "#555555",
-                        "select": "#666666",
-                    },
-                    "font_family": "Arial",
-                    "font_size_main": 12,
-                    "font_size_small": 10,
-                },
+                _THEME_TEST_DEFAULT,
             ),
             patch("controllers.theme_controller.BgLoader"),
             patch(
@@ -1740,45 +1837,12 @@ class TestThemeController:
         settings_service = Mock()
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
-        app_window = Mock()
-        app_window.custom_font_family = None
-        app_window.palette.return_value = Mock()
-        app_window.status_label = Mock()
-        app_window.color_widgets = {
-            "hover": Mock(text=lambda: ""),
-            "select": Mock(text=lambda: ""),
-        }
-        app_window.installed_mods_label = None
-        app_window.title_bar = None
-        app_window.top_panel_widget = Mock()
-        app_window.logo_placeholder = Mock()
-        app_window.launcher_icon_label = Mock()
-        app_window.findChildren.return_value = []
-        app_window.library_tag_widgets = []
-        app_window.search_display = None
-        app_window.library_tab_builder = Mock()
-        app_window.library_tab_builder.update_priority_button_style = Mock()
-        app_window._apply_window_corner_mask = Mock()
-        app_window.update = Mock()
-        app_window.size.return_value = Mock()
+        app_window = _build_theme_test_window()
         app_window._last_tooltip_size_key = "tooltip-text"
         with (
             patch(
                 "controllers.theme_controller.DEFAULT_THEME",
-                {
-                    "background": "images/background.png",
-                    "colors": {
-                        "main_text": "#FFFFFF",
-                        "background": "#000000",
-                        "elements": "#333333",
-                        "border": "#444444",
-                        "hover": "#555555",
-                        "select": "#666666",
-                    },
-                    "font_family": "Arial",
-                    "font_size_main": 12,
-                    "font_size_small": 10,
-                },
+                _THEME_TEST_DEFAULT,
             ),
             patch("controllers.theme_controller.BgLoader"),
             patch("controllers.theme_controller.build_stylesheet", return_value=""),
@@ -1806,27 +1870,7 @@ class TestThemeController:
         settings_service = Mock()
         settings_service.is_valid_hex_color = lambda x: bool(x and x.startswith("#"))
         customization_service = Mock()
-        app_window = Mock()
-        app_window.custom_font_family = None
-        app_window.palette.return_value = Mock()
-        app_window.status_label = Mock()
-        app_window.color_widgets = {
-            "hover": Mock(text=lambda: ""),
-            "select": Mock(text=lambda: ""),
-        }
-        app_window.installed_mods_label = None
-        app_window.title_bar = None
-        app_window.top_panel_widget = Mock()
-        app_window.logo_placeholder = Mock()
-        app_window.launcher_icon_label = Mock()
-        app_window.findChildren.return_value = []
-        app_window.library_tag_widgets = []
-        app_window.search_display = None
-        app_window.library_tab_builder = Mock()
-        app_window.library_tab_builder.update_priority_button_style = Mock()
-        app_window._apply_window_corner_mask = Mock()
-        app_window.update = Mock()
-        app_window.size.return_value = Mock()
+        app_window = _build_theme_test_window()
         app_window._game_versions_dialog = Mock()
         app_window._game_versions_dialog.refresh_theme = Mock()
         app_window._mod_versions_dialog = Mock()
@@ -1838,20 +1882,7 @@ class TestThemeController:
         with (
             patch(
                 "controllers.theme_controller.DEFAULT_THEME",
-                {
-                    "background": "images/background.png",
-                    "colors": {
-                        "main_text": "#FFFFFF",
-                        "background": "#000000",
-                        "elements": "#333333",
-                        "border": "#444444",
-                        "hover": "#555555",
-                        "select": "#666666",
-                    },
-                    "font_family": "Arial",
-                    "font_size_main": 12,
-                    "font_size_small": 10,
-                },
+                _THEME_TEST_DEFAULT,
             ),
             patch("controllers.theme_controller.BgLoader"),
             patch("controllers.theme_controller.build_stylesheet", return_value=""),
@@ -2027,9 +2058,7 @@ class TestThemeController:
         )
 
         with (
-            patch(
-                "PyQt6.QtGui.QFontDatabase.removeApplicationFont"
-            ) as remove_mock,
+            patch("PyQt6.QtGui.QFontDatabase.removeApplicationFont") as remove_mock,
             patch(
                 "controllers.theme_controller.localization_service.load_font",
                 return_value="Default Font",
@@ -2366,11 +2395,15 @@ class TestGameLaunchController:
         assert controller is not None
         assert controller.app_state == app_state
 
-    def test_external_game_process_blocks_launch_button(self, qapp):
+    def test_external_game_process_blocks_launch_button(self, qapp, monkeypatch):
         from config.config import UI_COLORS
         from controllers.game_launch_controller import GameLaunchController
         from services.localization_service import tr
 
+        monkeypatch.setattr(
+            "controllers.game_launch_controller.get_running_game_process_name",
+            lambda _names: "DELTARUNE.exe",
+        )
         app_state = SimpleNamespace(
             game_mode=SimpleNamespace(supports_full_install=False),
             game_is_running=False,
@@ -2618,7 +2651,9 @@ def test_modpack_step_plans_do_not_add_unrelated_chapters(
     }
     app = Mock()
     app.create_modpack_button = object()
-    controller = LibraryDisplayController(app_state, feedback_service, Mock(), used, app)
+    controller = LibraryDisplayController(
+        app_state, feedback_service, Mock(), used, app
+    )
     monkeypatch.setattr(controller, "_get_current_chapter_id", lambda: "deltarune_1")
     monkeypatch.setattr(
         controller,

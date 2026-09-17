@@ -4,6 +4,7 @@ This module provides a worker for monitoring game processes and detecting when t
 """
 
 import logging
+import platform
 import time
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
@@ -59,6 +60,13 @@ class GameMonitorWorker(QObject):
     def _refresh_tracked_processes(self) -> bool:
         return self._tracker.refresh()
 
+    def _launched_process_exited(self) -> bool:
+        return bool(
+            self.process
+            and platform.system() != "Linux"
+            and self.process.poll() is not None
+        )
+
     def _is_interruption_requested(self) -> bool:
         try:
             current_thread = QThread.currentThread()
@@ -70,7 +78,9 @@ class GameMonitorWorker(QObject):
         try:
             self.finished.emit(self.vanilla_mode)
         except Exception as e:
-            logger.warning("GameMonitorWorker: failed to emit finished: %s", e, exc_info=True)
+            logger.warning(
+                "GameMonitorWorker: failed to emit finished: %s", e, exc_info=True
+            )
 
     @pyqtSlot()
     def run(self):
@@ -81,6 +91,7 @@ class GameMonitorWorker(QObject):
                 logger.info("[GAME_MONITOR] Monitoring launched process: %s", pid)
 
             game_appeared = False
+            launcher_exit_logged = False
             for _ in range(self._STARTUP_CHECKS):
                 if self._is_interruption_requested():
                     logger.debug(
@@ -93,6 +104,11 @@ class GameMonitorWorker(QObject):
                         "[GAME_MONITOR] Game process detected, continuing to monitor"
                     )
                     break
+                if self._launched_process_exited() and not launcher_exit_logged:
+                    logger.info(
+                        "[GAME_MONITOR] Launched process exited before detection"
+                    )
+                    launcher_exit_logged = True
                 time.sleep(self._POLL_INTERVAL_SECONDS)
 
             if not game_appeared:

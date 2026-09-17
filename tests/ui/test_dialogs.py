@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock, patch
 
-from PyQt6.QtCore import QMimeData, Qt, QUrl
+from PyQt6.QtCore import QMimeData, QModelIndex, Qt, QUrl
 from PyQt6.QtGui import QDropEvent, QTextCursor, QTextDocument
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
@@ -225,6 +225,23 @@ class TestPluginDetailsDialog:
 
 class TestModPriorityStepsDialog:
     """Tests for dialogs."""
+
+    def test_reordering_rows_persists_and_cancel_restores_initial_order(self, qapp, app_state):
+        from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog
+
+        changes = Mock()
+        dialog = ModPriorityStepsDialog([["first", "second"]], app_state, on_change=changes)
+        model = dialog._step_lists[0].model()
+        changes.assert_not_called()
+
+        assert model.moveRows(QModelIndex(), 0, 1, QModelIndex(), 2)
+
+        changes.assert_called_once_with([["second", "first"]])
+        assert dialog.get_result() == [["second", "first"]]
+        dialog.reject()
+        assert changes.call_args.args == ([["first", "second"]],)
+        _close_dialog(qapp, dialog)
+
     def test_mod_priority_steps_dialog_groups_mods(self, qapp, app_state):
         from models.mod_models import ModInfo
         from ui.dialogs.mod.priority_steps_dialog import ModPriorityStepsDialog

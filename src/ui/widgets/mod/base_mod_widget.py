@@ -27,6 +27,8 @@ class BaseModWidget(QFrame):
     def __init__(self, mod_data, parent=None) -> None:
         super().__init__(parent)
         self.mod_data = mod_data
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName(getattr(mod_data, "name", ""))
         self.is_selected = False
         self.parent_app = parent
         self.frame_selector = ""
@@ -293,6 +295,20 @@ class BaseModWidget(QFrame):
         if hasattr(self, "_update_actions_visibility"):
             self._update_actions_visibility()
         self._update_style()
+
+    def keyPressEvent(self, event):
+        if event.modifiers() in (
+            Qt.KeyboardModifier.NoModifier,
+            Qt.KeyboardModifier.KeypadModifier,
+        ) and event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if not event.isAutoRepeat():
+                signal = self.clicked
+                if event.key() != Qt.Key.Key_Space:
+                    signal = getattr(self, "details_requested", self.clicked)
+                signal.emit(self.mod_data)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

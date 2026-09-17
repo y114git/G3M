@@ -25,9 +25,11 @@ class ConfirmExternalDownloadDialog(QDialog):
         layout.setSpacing(10)
         combined_text = f"{tr('downloads.confirm_external_message')}\n{tr('downloads.confirm_link', link=self._url)}"
         self.message_label = QLabel(combined_text)
+        self.message_label.setTextFormat(Qt.TextFormat.PlainText)
         self.message_label.setWordWrap(True)
         self.message_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         layout.addWidget(self.message_label)
         btns = QHBoxLayout()

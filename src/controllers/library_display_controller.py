@@ -981,6 +981,9 @@ class LibraryDisplayController:
                 self.used_mods_service.get_mod_steps(chapter_id),
                 self.app_state,
                 parent=self.app,
+                on_change=lambda steps: self.used_mods_service.set_mod_steps(
+                    chapter_id, steps
+                ),
             )
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 new_steps = dialog.get_result()

@@ -24,13 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 class _WidgetUpdateFilter(QObject):
+    _events = (QEvent.Type.Resize, QEvent.Type.Show)
+
     def __init__(self, widget, callback) -> None:
         super().__init__(widget)
         self._widget_ref = weakref.ref(widget)
         self._callback = callback
 
     def eventFilter(self, obj, event):
-        if event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
+        if event.type() in self._events:
             widget = self._widget_ref()
             if not widget:
                 return False
@@ -63,23 +65,7 @@ def install_widget_update_handler(widget, callback, attr_name="_widget_update_fi
 
 
 class _ScrollAreaUpdateFilter(_WidgetUpdateFilter):
-    def eventFilter(self, obj, event):
-        if event.type() in (
-            QEvent.Type.Resize,
-            QEvent.Type.Show,
-            QEvent.Type.LayoutRequest,
-        ):
-            widget = self._widget_ref()
-            if not widget:
-                return False
-            try:
-                if sip.isdeleted(widget):
-                    return False
-            except (RuntimeError, AttributeError):
-                return False
-            with contextlib.suppress(RuntimeError):
-                self._callback()
-        return False
+    _events = (*_WidgetUpdateFilter._events, QEvent.Type.LayoutRequest)
 
 
 def install_scroll_area_component_handler(widget, callback, attr_name: str):

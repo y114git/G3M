@@ -73,6 +73,7 @@ class BlocklistDialog(QDialog):
         self.game_label.setFont(game_font)
         game_selector_layout.addWidget(self.game_label)
         self.game_combo = QComboBox()
+        self.game_label.setBuddy(self.game_combo)
         self.game_combo.currentIndexChanged.connect(self.on_game_changed)
         game_selector_layout.addWidget(self.game_combo)
         main_layout.addLayout(game_selector_layout)
@@ -87,6 +88,7 @@ class BlocklistDialog(QDialog):
         self.prefix_label = QLabel(tr("blocklist.prefix"))
         prefix_layout.addWidget(self.prefix_label)
         self.prefix_combo = QComboBox()
+        self.prefix_label.setBuddy(self.prefix_combo)
         self._populate_prefix_combo()
         prefix_layout.addWidget(self.prefix_combo)
         add_layout.addLayout(prefix_layout)
@@ -95,6 +97,7 @@ class BlocklistDialog(QDialog):
         self.value_label = QLabel(tr("blocklist.value"))
         value_layout.addWidget(self.value_label)
         self.value_edit = QLineEdit()
+        self.value_label.setBuddy(self.value_edit)
         self.value_edit.setPlaceholderText(tr("blocklist.value_placeholder"))
         self.value_edit.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
@@ -106,6 +109,11 @@ class BlocklistDialog(QDialog):
         button_layout.addStretch()
         self.add_button = QPushButton(tr("blocklist.add"))
         self.add_button.clicked.connect(self.add_entry)
+        self.add_button.setDefault(True)
+        self.add_button.setEnabled(False)
+        self.value_edit.textChanged.connect(
+            lambda text: self.add_button.setEnabled(bool(text.strip()))
+        )
         button_layout.addWidget(self.add_button)
         button_layout.addStretch()
         add_layout.addLayout(button_layout)
@@ -133,6 +141,7 @@ class BlocklistDialog(QDialog):
         main_layout.addWidget(splitter)
         self.close_button = QPushButton(tr("common.close"))
         self.close_button.clicked.connect(self.accept)
+        self.close_button.setAutoDefault(False)
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         button_layout.addWidget(self.close_button)
@@ -286,6 +295,7 @@ class BlocklistDialog(QDialog):
             self.value_label.setText(tr("blocklist.value"))
         if hasattr(self, "game_label"):
             self.game_label.setText(tr("blocklist.select_game"))
+            self.game_combo.setAccessibleName(self.game_label.text().replace("&", ""))
         if hasattr(self, "add_group"):
             self.add_group.setTitle(tr("blocklist.add_entry"))
         if hasattr(self, "list_group"):
@@ -293,6 +303,11 @@ class BlocklistDialog(QDialog):
         if hasattr(self, "prefix_combo"):
             current_data = self.prefix_combo.currentData()
             self._populate_prefix_combo(current_data)
+            self.prefix_combo.setAccessibleName(
+                self.prefix_label.text().replace("&", "")
+            )
+        if hasattr(self, "value_edit"):
+            self.value_edit.setAccessibleName(self.value_label.text().replace("&", ""))
         if hasattr(self, "close_button"):
             self.close_button.setText(tr("common.close"))
 

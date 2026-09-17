@@ -99,10 +99,7 @@ class DownloadsManager(QObject):
         if canonical_key:
             existing = self._store.find_by_canonical_key(canonical_key)
             if existing:
-                if (
-                    target_kind == TargetKind.PLUGIN
-                    and not existing.is_active
-                ):
+                if target_kind == TargetKind.PLUGIN and not existing.is_active:
                     self._replace_existing_plugin_record(existing.id)
                 else:
                     return existing.id, True
@@ -172,8 +169,10 @@ class DownloadsManager(QObject):
                 record.id, record.source_file_path, target_path, parent=self
             )
             worker.download_finished.connect(
-                lambda record_id, success, error, saved_path, gen=generation: self._on_download_finished(
-                    record_id, success, error, saved_path, gen
+                lambda record_id, success, error, saved_path, gen=generation: (
+                    self._on_download_finished(
+                        record_id, success, error, saved_path, gen
+                    )
                 )
             )
             self._workers[record.id] = worker
@@ -191,8 +190,8 @@ class DownloadsManager(QObject):
         worker = DownloadWorker(record.id, record.source_url, target_path, parent=self)
         worker.progress_updated.connect(self._on_download_progress)
         worker.download_finished.connect(
-            lambda record_id, success, error, saved_path, gen=generation: self._on_download_finished(
-                record_id, success, error, saved_path, gen
+            lambda record_id, success, error, saved_path, gen=generation: (
+                self._on_download_finished(record_id, success, error, saved_path, gen)
             )
         )
         self._workers[record.id] = worker
@@ -416,18 +415,29 @@ class DownloadsManager(QObject):
 
     def action_retry(self, record_id: str):
         record = self._store.find(record_id)
-        if not record or record.download_status not in (
+        if not record:
+            return
+        retry_install = (
+            record.download_status == DownloadStatus.DOWNLOADED
+            and record.use_status == UseStatus.FAILED
+        )
+        if not retry_install and record.download_status not in (
             DownloadStatus.FAILED,
             DownloadStatus.CANCELLED,
         ):
+            return
+        record.error_code = None
+        record.error_message = None
+        record.finished_at = None
+        if retry_install and record.file_path and os.path.isfile(record.file_path):
+            record.file_exists = True
+            self._start_use(record_id)
+            self._emit_badge()
             return
         record.download_status = DownloadStatus.QUEUED
         record.use_status = UseStatus.NOT_STARTED
         record.progress = 0
         record.bytes_received = 0
-        record.error_code = None
-        record.error_message = None
-        record.finished_at = None
         self._store.update(record)
         self.record_updated.emit(record)
         self._start_download(record)
@@ -548,7 +558,9 @@ class DownloadsManager(QObject):
                 with contextlib.suppress(Exception):
                     shutil.rmtree(temp_dir, ignore_errors=True)
             record.use_status = UseStatus.NEEDS_MANUAL
-            record.error_message = format_filesystem_error(e, path=record.file_path or "")
+            record.error_message = format_filesystem_error(
+                e, path=record.file_path or ""
+            )
             self._store.update(record)
             self.record_updated.emit(record)
 
@@ -580,7 +592,8 @@ class DownloadsManager(QObject):
         if is_dup:
             _safe_update_status(
                 feedback_service,
-                tr("downloads.already_downloading"), UI_COLORS["status_warning"]
+                tr("downloads.already_downloading"),
+                UI_COLORS["status_warning"],
             )
         else:
             _safe_update_status(

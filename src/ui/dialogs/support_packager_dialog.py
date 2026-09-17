@@ -22,12 +22,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.config import QSS_ARROW_LABEL, QSS_BOLD_TRANSPARENT
+from config.config import QSS_BOLD_TRANSPARENT
 from services.localization_service import tr
 from services.support_package_service import SupportPackageService
 from ui.common.dialog_theme import apply_dialog_theme
-from ui.common.styling import get_section_line_color
-from ui.utils.ui_utils import UIAnimator
+from ui.widgets.shared.custom_controls import SectionToggle
 from workers.support_package_worker import SupportPackageWorker
 
 
@@ -41,14 +40,13 @@ class SupportPackagerDialog(QDialog):
         self._worker = None
         self._items: dict[str, QCheckBox] = {}
         self._labels: dict[str, tuple[str, bool]] = {}
-        self._section_titles: dict[str, tuple[QLabel, str, bool]] = {}
-        self._section_arrows: dict[str, QLabel] = {}
+        self._section_titles: dict[str, tuple[SectionToggle, str, bool]] = {}
+        self._section_arrows: dict[str, SectionToggle] = {}
         self._section_contents: dict[str, QWidget] = {}
-        self._section_lines: list[QFrame] = []
         self._ui_intervals: list[float] = []
         self._last_ui_tick = time.perf_counter()
         self.setObjectName("support_packager_dialog")
-        self.setMinimumSize(700, 620)
+        self.setMinimumSize(700, 480)
         self.resize(820, 760)
         self._build_ui()
         self.relocalize_ui()
@@ -245,24 +243,9 @@ class SupportPackagerDialog(QDialog):
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(0, 8, 0, 4)
         section_layout.setSpacing(6)
-        header = QWidget(section)
-        header.setCursor(Qt.CursorShape.PointingHandCursor)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        line_color = get_section_line_color(self._app_state.local_config)
-        label = QLabel(header)
-        label.setStyleSheet(QSS_BOLD_TRANSPARENT)
-        header_layout.addWidget(label)
-        arrow = QLabel("▶", header)
-        arrow.setStyleSheet(QSS_ARROW_LABEL)
-        header_layout.addWidget(arrow)
-        line = QFrame(header)
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet(f"color: {line_color};")
-        self._section_lines.append(line)
-        header_layout.addWidget(line, 1)
-        self._section_titles[section_id] = (label, title, title_is_key)
-        self._section_arrows[section_id] = arrow
+        header = SectionToggle(parent=section)
+        self._section_titles[section_id] = (header, title, title_is_key)
+        self._section_arrows[section_id] = header
         body = QWidget(section)
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(22, 8, 22, 8)
@@ -278,8 +261,8 @@ class SupportPackagerDialog(QDialog):
             self._labels[option_id] = (label, is_key)
             body_layout.addWidget(checkbox)
         self._section_contents[section_id] = body
-        header.mousePressEvent = lambda _event, key=section_id: self._toggle_section(
-            key
+        header.clicked.connect(
+            lambda _checked, key=section_id: self._toggle_section(key)
         )
         section_layout.addWidget(header)
         section_layout.addWidget(body)
@@ -290,8 +273,8 @@ class SupportPackagerDialog(QDialog):
             return
         content = self._section_contents[section_id]
         expand = content.isHidden()
-        self._section_arrows[section_id].setText("▼" if expand else "▶")
-        UIAnimator.collapse_expand(content, expand, 200, self._app_state)
+        self._section_arrows[section_id].setChecked(expand)
+        content.setVisible(expand)
 
     def _apply_custom_state(self) -> None:
         custom = self._custom.isChecked()
@@ -302,9 +285,8 @@ class SupportPackagerDialog(QDialog):
         for section_id, content in self._section_contents.items():
             if not custom:
                 content.setVisible(True)
-            self._section_arrows[section_id].setText(
-                "▼" if not content.isHidden() else "▶"
-            )
+            self._section_arrows[section_id].setChecked(not content.isHidden())
+            self._section_arrows[section_id].setEnabled(custom)
         self._range.setEnabled(True)
 
     def relocalize_ui(self) -> None:
@@ -333,9 +315,6 @@ class SupportPackagerDialog(QDialog):
 
     def refresh_theme(self) -> None:
         apply_dialog_theme(self, self._app_state)
-        line_style = f"color: {get_section_line_color(self._app_state.local_config)};"
-        for line in self._section_lines:
-            line.setStyleSheet(line_style)
 
     def _record_ui_tick(self) -> None:
         now = time.perf_counter()

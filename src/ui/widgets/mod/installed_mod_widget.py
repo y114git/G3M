@@ -53,9 +53,7 @@ class InstalledModWidget(BaseModWidget):
         except Exception:
             return True
 
-    def __init__(
-        self, mod_data, parent=None, parent_app=None
-    ) -> None:
+    def __init__(self, mod_data, parent=None, parent_app=None) -> None:
         super().__init__(mod_data, parent)
         if parent_app:
             self.parent_app = parent_app
@@ -187,7 +185,8 @@ class InstalledModWidget(BaseModWidget):
                 checkmark_color = get_theme_color(config, "main_text")
                 self.checkmark_button.setIcon(
                     self._checkmark_icons.setdefault(
-                        (icon_size, checkmark_color), colored_icon("checkmark", checkmark_color)
+                        (icon_size, checkmark_color),
+                        colored_icon("checkmark", checkmark_color),
                     )
                 )
                 self.checkmark_button.setIconSize(QSize(icon_size, icon_size))
@@ -199,12 +198,15 @@ class InstalledModWidget(BaseModWidget):
         style = f"font-size: {font_size}px; font-weight: bold; margin-left: {margin_left}px;"
 
         if self._is_mod_broken():
+            self.status_indicator.setPixmap(QPixmap())
+            self.status_indicator.setText("●")
             apply_stylesheet_if_changed(
                 self.status_indicator,
                 f"color: #F44336; {style}",
                 cache_attr="_status_indicator_stylesheet_cache",
             )
             self.status_indicator.setToolTip(tr("tooltips.mod_broken"))
+            return
 
         if self._is_gamebanana_linked():
             gb_icon_path = resource_path("assets/icons/gbicon.png")
@@ -222,6 +224,8 @@ class InstalledModWidget(BaseModWidget):
                 self.status_indicator.setPixmap(pixmap)
                 self.status_indicator.setText("")
             else:
+                self.status_indicator.setPixmap(QPixmap())
+                self.status_indicator.setText("●")
                 apply_stylesheet_if_changed(
                     self.status_indicator,
                     f"color: #FFD700; {style}",
@@ -230,6 +234,8 @@ class InstalledModWidget(BaseModWidget):
             self.status_indicator.setToolTip(tr("tooltips.gamebanana_linked"))
             return
 
+        self.status_indicator.setPixmap(QPixmap())
+        self.status_indicator.setText("●")
         apply_stylesheet_if_changed(
             self.status_indicator,
             f"color: #4CAF50; {style}",
@@ -294,7 +300,9 @@ class InstalledModWidget(BaseModWidget):
         config = self._resolve_theme_config()
         border = get_theme_color(config, "border") if config else "#039d5b"
         br = get_border_radius(config) if config else 4
-        button_width, button_height, button_font_size = get_card_button_metrics(config) if config else (80, 28, 12)
+        button_width, button_height, button_font_size = (
+            get_card_button_metrics(config) if config else (80, 28, 12)
+        )
         if self.status == "active":
             self.use_button.setText(tr("ui.remove_button"))
             apply_stylesheet_if_changed(

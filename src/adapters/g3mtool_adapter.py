@@ -156,7 +156,10 @@ class G3MToolManager:
             full_args.extend(["--cache", cache_dir])
         xdelta_path = self._get_configured_xdelta_path()
         if xdelta_path:
-            full_args.extend(["--xdelta-path", xdelta_path])
+            option_index = (
+                full_args.index("--") if "--" in full_args else len(full_args)
+            )
+            full_args[option_index:option_index] = ["--xdelta-path", xdelta_path]
         return self._run(
             [g3mtool_path, *full_args],
             progress_callback=progress_callback,
@@ -379,11 +382,15 @@ class G3MToolManager:
         file2: str,
         output_dir: str | None = None,
         progress_callback: Callable[[int, str], None] | None = None,
+        *,
+        full_report: bool = False,
     ) -> tuple[int, str, str]:
-        """Call g3mtool diff <file1> <file2> [output-dir]."""
+        """Call g3mtool diff <file1> <file2> [output-dir] [--full]."""
         cmd = ["diff", file1, file2]
         if output_dir:
             cmd.append(output_dir)
+        if full_report:
+            cmd.append("--full")
         return self._run_command(cmd, progress_callback=progress_callback)
 
     def execute(
@@ -397,14 +404,14 @@ class G3MToolManager:
     ) -> tuple[int, str, str]:
         """Call g3mtool execute <target> [args] [--data <file>] [--output <file>] [--input <dir>]."""
         cmd = ["execute", target]
-        if args:
-            cmd.extend(str(arg) for arg in args)
         if data_file:
             cmd.extend(["--data", data_file])
         if output_path:
             cmd.extend(["--output", output_path])
         if input_path:
             cmd.extend(["--input", input_path])
+        if args:
+            cmd.extend(["--", *(str(arg) for arg in args)])
         return self._run_command(
             cmd,
             progress_callback=progress_callback,
@@ -438,24 +445,19 @@ class G3MToolManager:
         chunks: list[str],
         progress_callback: Callable[[int, str], None] | None = None,
     ) -> None:
-        progress_buffer = ""
-        while True:
-            char = stream.read(1)
-            if not char:
-                break
-            chunks.append(char)
+        for line in stream:
+            chunks.append(line)
             if not progress_callback:
                 continue
-            if char in "\r\n":
-                progress = self._parse_progress(progress_buffer)
+            for text in line.splitlines():
+                progress = self._parse_progress(text)
                 if progress:
-                    progress_callback(*progress)
-                progress_buffer = ""
-            else:
-                progress_buffer += char
-        progress = self._parse_progress(progress_buffer)
-        if progress and progress_callback:
-            progress_callback(*progress)
+                    try:
+                        progress_callback(*progress)
+                    except Exception:
+                        logger.exception("G3MTool progress callback failed")
+                        progress_callback = None
+                        break
 
     def _run(
         self,

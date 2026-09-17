@@ -209,6 +209,7 @@ class ManualModInstallDialog(QDialog):
         self.game_combo = QComboBox()
         self.game_combo.setMinimumWidth(240)
         self.game_combo.setToolTip(tr("tooltips.manual_install_game"))
+        self.game_label.setBuddy(self.game_combo)
         for entry in get_all_game_entries():
             self.game_combo.addItem(entry.display_name, entry.id)
         game_value = self.initial_game_type
@@ -332,6 +333,7 @@ class ManualModInstallDialog(QDialog):
         """Refresh persistent G3M-owned text without changing user selections."""
         self.setWindowTitle(tr("dialogs.manual_install_title"))
         self.game_label.setText(tr("ui.mod_type_label"))
+        self.game_combo.setAccessibleName(self.game_label.text().replace("&", ""))
         self.game_combo.setToolTip(tr("tooltips.manual_install_game"))
         self.files_summary_label.setToolTip(tr("tooltips.manual_install_summary"))
         self._refresh_summary_text()

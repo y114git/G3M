@@ -74,7 +74,8 @@ class ProfileManagerDialog(QDialog):
         self._selected_row = -1
         self._chk_icon = None
         self.setWindowTitle(tr("profiles.manager_title"))
-        self.setMinimumSize(750, 600)
+        self.setMinimumSize(750, 480)
+        self.resize(750, 600)
         self._init_ui()
         self._apply_theme()
         self._refresh_list()
@@ -100,6 +101,7 @@ class ProfileManagerDialog(QDialog):
             btn = QPushButton()
             btn.setObjectName(f"profile_{attr}")
             btn.setToolTip(tr(tip_key))
+            btn.setAccessibleName(tr(tip_key))
             btn.setFixedSize(38, 38)
             btn.setIconSize(QSize(20, 20))
             btn.clicked.connect(slot)
@@ -135,6 +137,7 @@ class ProfileManagerDialog(QDialog):
             ("import_btn", "buttons.import"),
         ):
             getattr(self, attr).setToolTip(tr(key))
+            getattr(self, attr).setAccessibleName(tr(key))
         self.list_widget.setToolTip(tr("tooltips.profile_reorder"))
         self.close_btn.setText(tr("ui.close_button"))
         self.close_btn.setToolTip(tr("tooltips.close_dialog"))
@@ -412,6 +415,9 @@ class ProfileManagerDialog(QDialog):
             QPushButton:hover {{
                 background-color: {theme["hover"]};
             }}
+            QPushButton:focus {{
+                border-color: {theme["select"]};
+            }}
         """
         for attr, icon_name in (
             ("add_btn", "add"),
@@ -426,9 +432,9 @@ class ProfileManagerDialog(QDialog):
             btn.setStyleSheet(sq_btn_qss)
         use_qss = build_button_style(
             "profileUseBtn",
-            "#4CAF50",
-            "#5cb85c",
-            "#e8e9eb",
+            theme["border"],
+            theme["hover"],
+            theme["main_text"],
             theme["border"],
             width=90,
             height=32,

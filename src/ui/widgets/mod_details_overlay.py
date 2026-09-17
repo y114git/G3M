@@ -11,8 +11,16 @@ import time
 from typing import Any, cast, override
 
 from PyQt6 import sip as _sip
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPixmap
+from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QColor,
+    QGuiApplication,
+    QIcon,
+    QPainter,
+    QPen,
+    QPixmap,
+    QPolygon,
+)
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -24,11 +32,13 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QStyleFactory,
     QTextBrowser,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from adapters.gamebanana_adapter import GameBananaAPI
+from config.config import UI_COLORS
 from services.background_operations import background_operations
 from services.localization_service import tr
 from ui.common.styling import (
@@ -50,6 +60,80 @@ from utils.native_integration import open_url_native
 from workers import WorkerSignals
 
 logger = logging.getLogger(__name__)
+
+
+def _arrow_icon(color: str, *, points_left: bool) -> QIcon:
+    pixmap = QPixmap(16, 16)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(color))
+    points = ((10, 3), (5, 8), (10, 13)) if points_left else ((6, 3), (11, 8), (6, 13))
+    painter.drawPolygon(QPolygon([QPoint(x, y) for x, y in points]))
+    painter.end()
+    icon = QIcon(pixmap)
+    icon.addPixmap(pixmap, QIcon.Mode.Disabled)
+    return icon
+
+
+def _dot_pixmap(color: str, *, filled: bool) -> QPixmap:
+    pixmap = QPixmap(12, 12)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(QColor(color), 2))
+    painter.setBrush(QColor(color) if filled else Qt.BrushStyle.NoBrush)
+    painter.drawEllipse(2, 2, 8, 8)
+    painter.end()
+    return pixmap
+
+
+class _ScreenshotContextMenu(QMenu):
+    @override
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.close()
+            return
+        super().mousePressEvent(event)
+
+    @override
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.close()
+            return
+        super().mouseReleaseEvent(event)
+
+    @override
+    def contextMenuEvent(self, event):
+        event.ignore()
+
+
+def _show_screenshot_context_menu(label, url: str, pos, colors, radius: int) -> None:
+    menu = _ScreenshotContextMenu(label)
+    fusion_style = QStyleFactory.create("Fusion")
+    if fusion_style is not None:
+        menu.setStyle(fusion_style)
+    menu.setObjectName("screenshotContextMenu")
+    menu.addAction(tr("ui.open_image_in_browser"), lambda: open_url_native(url))
+    menu.addAction(
+        tr("ui.copy_image"),
+        lambda: cast(Any, QGuiApplication.clipboard()).setPixmap(
+            label.pixmap() or QPixmap()
+        ),
+    )
+    menu.addAction(
+        tr("ui.copy_image_url"),
+        lambda: cast(Any, QGuiApplication.clipboard()).setText(url),
+    )
+    menu.setStyleSheet(
+        f"""
+        QMenu {{ background-color: {colors["elements"]}; color: {colors["main_text"]}; border: 2px solid {colors["border"]}; padding: 8px; }}
+        QMenu::item {{ padding: 10px 24px; margin: 3px; border-radius: {radius}px; }}
+        QMenu::item:selected {{ background-color: {colors["hover"]}; }}
+        """
+    )
+    menu.exec(label.mapToGlobal(pos))
+
 
 _MOD_DETAILS_CACHE: collections.OrderedDict[tuple[int, str], tuple[float, dict]] = (
     collections.OrderedDict()
@@ -237,45 +321,53 @@ class LoadModDetailsThread(ManagedQThread):
 
 
 class ScreenshotViewerDialog(QDialog):
-    class _ScreenshotContextMenu(QMenu):
-        def mousePressEvent(self, a0):
-            event = cast(Any, a0)
-            if event.button() == Qt.MouseButton.RightButton:
-                self.close()
-                return
-            super().mousePressEvent(event)
-
-        def mouseReleaseEvent(self, a0):  # noqa: N802
-            event = cast(Any, a0)
-            if event.button() == Qt.MouseButton.RightButton:
-                self.close()
-                return
-            super().mouseReleaseEvent(event)
-
-        def contextMenuEvent(self, a0):  # noqa: N802
-            event = cast(Any, a0)
-            event.ignore()
-
     def __init__(self, urls, index=0, parent=None) -> None:
         super().__init__(parent)
         self._urls = urls
         self._index = index
         self._loader = get_image_loader_pool()
+        self._load_signals = []
+        self._source_pixmap = QPixmap()
         self._label = QLabel()
         self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._prev = QPushButton("←")
-        self._next = QPushButton("→")
+        self._label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._label.setMinimumSize(320, 180)
+        self._label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self._prev = QToolButton()
+        self._prev.setArrowType(Qt.ArrowType.LeftArrow)
+        self._next = QToolButton()
+        self._next.setArrowType(Qt.ArrowType.RightArrow)
+        colors = getattr(parent, "_colors", None) or get_theme_colors({})
+        for button in (self._prev, self._next):
+            button.setMinimumSize(36, 36)
+            button.setVisible(len(urls) > 1)
+            button.setStyleSheet(
+                f"QToolButton {{ background: {colors['elements']}; border: 2px solid {colors['border']}; border-radius: 6px; padding: 4px; }} QToolButton:hover {{ background: {colors['hover']}; }}"
+            )
         self._label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._label.customContextMenuRequested.connect(self._show_context_menu)
         self._prev.clicked.connect(lambda: self._shift(-1))
         self._next.clicked.connect(lambda: self._shift(1))
         nav = QHBoxLayout()
+        nav.addStretch()
         nav.addWidget(self._prev)
         nav.addWidget(self._next)
+        nav.addStretch()
+        self._dots_layout = QHBoxLayout()
+        self._dots_layout.setSpacing(4)
+        dots = QHBoxLayout()
+        dots.addStretch()
+        dots.addLayout(self._dots_layout)
+        dots.addStretch()
         layout = QVBoxLayout(self)
-        self._label.setMinimumSize(960, 540)
         layout.addWidget(self._label)
+        layout.addLayout(dots)
         layout.addLayout(nav)
+        self.resize(900, 560)
+        self._update_dots()
+        self.relocalize_ui()
         self._load()
 
     def _load(self):
@@ -283,89 +375,90 @@ class ScreenshotViewerDialog(QDialog):
             self._label.setText(tr("ui.no_screenshots"))
             return
         signals = WorkerSignals()
-        signals.result.connect(self._set_image)
+        self._load_signals.append(signals)
+        index = self._index
+        signals.result.connect(
+            lambda image, i=index, s=signals: self._on_image_loaded(s, i, image)
+        )
+        signals.error.connect(
+            lambda _url, _message, i=index, s=signals: self._on_image_error(s, i)
+        )
         background_operations.start_runnable(
             self._loader,
             ImageLoaderRunnable(self._urls[self._index], signals),
         )
 
     def relocalize_ui(self) -> None:
+        screenshot = tr("ui.screenshot")
+        self.setWindowTitle(screenshot)
+        self._label.setAccessibleName(screenshot)
+        previous = tr("onboarding.back_button")
+        following = tr("onboarding.next_button")
+        self._prev.setAccessibleName(previous)
+        self._prev.setToolTip(previous)
+        self._next.setAccessibleName(following)
+        self._next.setToolTip(following)
         if not self._urls:
             self._label.setText(tr("ui.no_screenshots"))
 
-    def _set_image(self, qimg):
-        pm = QPixmap.fromImage(qimg)
+    def _on_image_loaded(self, signals, index, qimg):
+        with contextlib.suppress(ValueError):
+            self._load_signals.remove(signals)
+        if index != self._index:
+            return
+        self._source_pixmap = QPixmap.fromImage(qimg)
+        self._render_image()
+
+    def _on_image_error(self, signals, index) -> None:
+        with contextlib.suppress(ValueError):
+            self._load_signals.remove(signals)
+        if index == self._index:
+            self._label.clear()
+            self._label.setText(tr("errors.file_not_available"))
+
+    def _render_image(self) -> None:
+        if self._source_pixmap.isNull():
+            return
         self._label.setPixmap(
-            pm.scaled(
+            self._source_pixmap.scaled(
                 self._label.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._render_image()
+
     def _show_context_menu(self, pos):
         if not self._urls:
             return
-        menu = self._ScreenshotContextMenu()
-        self._context_menu = menu
-        fusion_style = QStyleFactory.create("Fusion")
-        if fusion_style is not None:
-            menu.setStyle(fusion_style)
-        menu.setObjectName("screenshotContextMenu")
         url = self._urls[self._index]
-        menu.addAction(tr("ui.open_image_in_browser"), lambda: open_url_native(url))
-        menu.addAction(
-            tr("ui.copy_image"),
-            lambda: cast(Any, QGuiApplication.clipboard()).setPixmap(
-                self._label.pixmap() or QPixmap()
-            ),
-        )
-        menu.addAction(
-            tr("ui.copy_image_url"),
-            lambda: cast(Any, QGuiApplication.clipboard()).setText(url),
-        )
-        parent_colors = getattr(self.parent(), "_colors", None) or {}
-        elements_bg = parent_colors.get("elements", "#2b2b2b")
-        main_text = parent_colors.get("main_text", "#f0f0f0")
-        border = parent_colors.get("border", "#19c37d")
-        hover = parent_colors.get("hover", "#3d3d3d")
-        menu.setStyleSheet(
-            f"""
-            QMenu {{
-                background-color: {elements_bg};
-                color: {main_text};
-                border: 2px solid {border};
-                padding: 8px;
-            }}
-            QMenu::item {{
-                padding: 10px 24px;
-                margin: 3px 3px;
-                border-radius: 4px;
-            }}
-            QMenu::item:selected {{
-                background-color: {hover};
-            }}
-            QMenu::separator {{
-                height: 1px;
-                background: {border};
-                margin: 4px 8px;
-            }}
-            """
-        )
-        menu.aboutToHide.connect(self._clear_context_menu)
-        try:
-            menu.exec(self._label.mapToGlobal(pos))
-        finally:
-            self._clear_context_menu()
-
-    def _clear_context_menu(self):
-        self._context_menu = None
+        parent_colors = getattr(self.parent(), "_colors", None) or get_theme_colors({})
+        radius = getattr(self.parent(), "_border_radius", get_border_radius(None))
+        _show_screenshot_context_menu(self._label, url, pos, parent_colors, radius)
 
     def _shift(self, step):
         if not self._urls:
             return
         self._index = (self._index + step) % len(self._urls)
+        self._source_pixmap = QPixmap()
+        self._label.clear()
+        self._update_dots()
         self._load()
+
+    def _update_dots(self) -> None:
+        color = self.palette().color(self.foregroundRole()).name()
+        while self._dots_layout.count() < len(self._urls):
+            self._dots_layout.addWidget(QLabel())
+        while self._dots_layout.count() > len(self._urls):
+            item = self._dots_layout.takeAt(self._dots_layout.count() - 1)
+            item.widget().deleteLater()
+        for index in range(self._dots_layout.count()):
+            self._dots_layout.itemAt(index).widget().setPixmap(
+                _dot_pixmap(color, filled=index == self._index)
+            )
 
 
 class ModDetailsOverlay(QWidget):
@@ -732,14 +825,21 @@ class ModDetailsOverlay(QWidget):
         cast(Any, self._img_label).mousePressEvent = self._on_screenshot_click
         self._install_image_container_style(img_container)
         carousel.addWidget(img_container, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._dots_layout = self._layout(QHBoxLayout, spacing=4)
+        self._dot_labels = []
+        dots_wrap = self._layout(QHBoxLayout)
+        dots_wrap.addStretch()
+        dots_wrap.addLayout(self._dots_layout)
+        dots_wrap.addStretch()
+        carousel.addLayout(dots_wrap)
         nav = self._layout(QHBoxLayout, margins=(0, 0, 0, 0), spacing=4)
         nav.addStretch()
-        for attr, text, slot in (
-            ("_prev_btn", "←", self._ss_prev),
-            ("_next_btn", "→", self._ss_next),
+        for attr, points_left, slot in (
+            ("_prev_btn", True, self._ss_prev),
+            ("_next_btn", False, self._ss_next),
         ):
             button = self._create_button(
-                text,
+                "",
                 obj_name="overlayNavButton",
                 style=self._button_style(
                     "overlayNavButton",
@@ -751,17 +851,13 @@ class ModDetailsOverlay(QWidget):
                 clicked=slot,
                 fixed_size=self.NAV_BUTTON_SIZE,
             )
+            button.setIcon(
+                _arrow_icon(self._colors["main_text"], points_left=points_left)
+            )
             setattr(self, attr, button)
             nav.addWidget(button)
         nav.addStretch()
         carousel.addLayout(nav)
-        self._dots_layout = self._layout(QHBoxLayout, spacing=4)
-        self._dot_labels = []
-        dots_wrap = self._layout(QHBoxLayout)
-        dots_wrap.addStretch()
-        dots_wrap.addLayout(self._dots_layout)
-        dots_wrap.addStretch()
-        carousel.addLayout(dots_wrap)
         return carousel
 
     def _build_metadata_layout(self):
@@ -791,7 +887,7 @@ class ModDetailsOverlay(QWidget):
             if value:
                 label = QLabel(self._meta_row_html(key, value))
                 label.setProperty("metaValue", str(value))
-                label.setWordWrap(key == "ui.tags_label")
+                label.setWordWrap(True)
                 label.setTextInteractionFlags(
                     Qt.TextInteractionFlag.TextSelectableByMouse
                     | Qt.TextInteractionFlag.TextSelectableByKeyboard
@@ -818,7 +914,7 @@ class ModDetailsOverlay(QWidget):
                 obj_name="cardButtonExternal",
                 style=self._button_style(
                     "cardButtonExternal",
-                    text_color="#FFD700",
+                    text_color=self._colors["secondary_text"],
                     width=self.EXTERNAL_BUTTON_WIDTH,
                     font_size=15,
                 ),
@@ -922,7 +1018,6 @@ class ModDetailsOverlay(QWidget):
         )
         self._desc_default_color = self._colors["main_text"]
         right.addWidget(self.desc_text)
-        right.addLayout(self._build_action_buttons())
         container = QWidget()
         container.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
@@ -934,6 +1029,10 @@ class ModDetailsOverlay(QWidget):
         """Refresh G3M-owned labels while preserving remote mod content."""
         if hasattr(self, "homepage_button"):
             self.homepage_button.setText(tr("ui.view_homepage"))
+        self._prev_btn.setAccessibleName(tr("onboarding.back_button"))
+        self._prev_btn.setToolTip(tr("onboarding.back_button"))
+        self._next_btn.setAccessibleName(tr("onboarding.next_button"))
+        self._next_btn.setToolTip(tr("onboarding.next_button"))
         self.close_button.setText(tr("buttons.close"))
         self.full_description_label.setText(
             f"<b style='color:{self._colors['main_text']};'>{tr('ui.full_description_label')}</b>"
@@ -975,7 +1074,11 @@ class ModDetailsOverlay(QWidget):
 
     def _sync_action_button_style(self, src_btn, border: str):
         style_args = {
-            "cardButtonUninstall": ("cardButtonUninstall", "#F44336", "#d32f2f"),
+            "cardButtonUninstall": (
+                "cardButtonUninstall",
+                UI_COLORS["status_error"],
+                self._colors["hover"],
+            ),
         }.get(src_btn.objectName())
         if style_args:
             self._set_action_button_style(border, *style_args)
@@ -1008,6 +1111,7 @@ class ModDetailsOverlay(QWidget):
 
     def _setup_ui(self):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._setup_theme()
         self.setStyleSheet(
             f"QWidget {{ background-color: {self._colors['background']}; }}"
@@ -1045,20 +1149,23 @@ class ModDetailsOverlay(QWidget):
         )
         wrap.addWidget(scroll)
         root.addLayout(wrap)
+        actions = self._build_action_buttons()
+        actions.setContentsMargins(12, 6, 12, 6)
+        root.addLayout(actions)
 
         self._update_ss_nav()
         self._load_description()
 
     def _set_action_button_style(
-        self, border, obj_name="cardButtonDownload", bg="#4CAF50", hover="#5cb85c"
+        self, border, obj_name="cardButtonDownload", bg=None, hover=None
     ):
         """Set action button stylesheet."""
         self.action_button.setStyleSheet(
             build_button_style(
                 obj_name,
-                bg,
-                hover,
-                "#e8e9eb",
+                bg or border,
+                hover or self._colors["hover"],
+                self._colors["main_text"],
                 border,
                 border_radius=self._border_radius,
             )
@@ -1238,6 +1345,7 @@ class ModDetailsOverlay(QWidget):
                 self._ss_images[i] = None
 
     def _update_ss_nav(self):
+        self._img_label.parentWidget().setVisible(bool(self._ss_urls))
         show = len(self._ss_urls) > 1
         self._prev_btn.setVisible(show)
         self._next_btn.setVisible(show)
@@ -1249,14 +1357,14 @@ class ModDetailsOverlay(QWidget):
             label = self._dot_labels.pop()
             self._dots_layout.removeWidget(label)
             label.deleteLater()
-        tc = self.palette().color(self.foregroundRole()).name()
-        dot_style = f"color:{tc};font-size:14px;background-color:transparent;border:none;padding:2px;"
+        color = self.palette().color(self.foregroundRole()).name()
+        dot_style = "background-color:transparent;border:none;padding:2px;"
         while len(self._dot_labels) < len(self._ss_urls):
             lbl = QLabel()
             self._dot_labels.append(lbl)
             self._dots_layout.addWidget(lbl)
         for i, lbl in enumerate(self._dot_labels):
-            lbl.setText("●" if i == self._ss_index else "○")
+            lbl.setPixmap(_dot_pixmap(color, filled=i == self._ss_index))
             if lbl.styleSheet() != dot_style:
                 lbl.setStyleSheet(dot_style)
 
@@ -1268,6 +1376,7 @@ class ModDetailsOverlay(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
+        self.close_button.setFocus(Qt.FocusReason.OtherFocusReason)
         UIAnimator.fade_in(self, duration=300, app_state=self._app_state)
 
     def close_overlay(self):
@@ -1455,6 +1564,19 @@ class ModDetailsOverlay(QWidget):
 
     def _on_screenshot_click(self, event):
         """Handle screenshot click to open in a larger viewer."""
+        if (
+            event.button() == Qt.MouseButton.RightButton
+            and self._ss_urls
+            and 0 <= self._ss_index < len(self._ss_urls)
+        ):
+            _show_screenshot_context_menu(
+                self._img_label,
+                self._ss_urls[self._ss_index],
+                event.pos(),
+                self._colors,
+                self._border_radius,
+            )
+            return
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._ss_urls

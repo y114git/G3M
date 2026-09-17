@@ -107,6 +107,8 @@ class DownloadRecord:
             return "overwrite_pending"
         if self.use_status == UseStatus.NEEDS_MANUAL:
             return "needs_manual"
+        if self.use_status == UseStatus.FAILED:
+            return "failed"
         if self.download_status == DownloadStatus.DOWNLOADED and self.file_exists:
             return "installed" if self.ever_installed else "ready"
         if (

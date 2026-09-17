@@ -3,6 +3,7 @@
 import contextlib
 import logging
 import os
+from collections.abc import Callable
 from typing import Any, cast
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
@@ -81,7 +82,11 @@ class GameLaunchController(QObject):
     def refresh_external_game_process(self) -> None:
         if getattr(self.app_state, "game_is_running", False):
             return
-        current = get_running_game_process_name()
+        get_process_names: Callable[[], tuple[str, ...]] | None = getattr(
+            self.app_state.game_mode, "get_process_names", None
+        )
+        process_names = get_process_names() if callable(get_process_names) else None
+        current = get_running_game_process_name(process_names)
         previous = getattr(self.app_state, "external_game_process_name", "")
         if current != previous:
             if previous and not current:
@@ -205,6 +210,7 @@ class GameLaunchController(QObject):
         self.update_button_state()
 
     def on_action_button_click(self):
+        self.refresh_external_game_process()
         external_process = getattr(self.app_state, "external_game_process_name", "")
         if external_process and not getattr(self.app_state, "game_is_running", False):
             self.update_button_state()

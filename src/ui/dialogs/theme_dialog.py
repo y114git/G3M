@@ -20,12 +20,15 @@ class ThemeManagementDialog(QDialog):
         layout.setSpacing(15)
 
         self.info_label = QLabel()
+        self.info_label.setWordWrap(True)
         self.info_label.setStyleSheet("font-weight: bold;")
         layout.addWidget(self.info_label)
 
         settings_text = self._build_settings_text()
         self.settings_label = QLabel(settings_text)
+        self.settings_label.setWordWrap(True)
         layout.addWidget(self.settings_label)
+        layout.addStretch(1)
 
         button_layout = QHBoxLayout()
         self.import_button = QPushButton()

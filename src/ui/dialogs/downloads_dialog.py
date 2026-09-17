@@ -76,6 +76,7 @@ class _RecordWidget(QFrame):
         self._progress_bar.setRange(0, 100)
         layout.addWidget(self._progress_bar)
         self._error_label = QLabel()
+        self._error_label.setTextFormat(Qt.TextFormat.PlainText)
         self._error_label.setObjectName("downloads_record_error")
         self._error_label.setWordWrap(True)
         self._error_label.setVisible(False)
@@ -132,6 +133,9 @@ class _RecordWidget(QFrame):
             "failed": tr("downloads.status_failed"),
         }
         self._status_label.setText(status_tr_map.get(status_key, status_key))
+        self._status_label.setStyleSheet(
+            "color: #e05555;" if status_key == "failed" else ""
+        )
         self._progress_bar.setVisible(status_key == "downloading")
         if status_key == "downloading" and r.bytes_total <= 0:
             self._progress_bar.setRange(0, 0)

@@ -378,6 +378,7 @@ class SaveEditorDialog(QDialog):
         self.app_state = app_state
         self.file_path = file_path
         self.simple_mode_data = load_simple_mode_data()
+        self._flag_names_by_id: dict[int, str] = {}
         self._simple_ready = False
         self._original_newline = "\n"
         self._had_trailing_newline = False
@@ -386,9 +387,11 @@ class SaveEditorDialog(QDialog):
         self._advanced_lines_cache = []
         self._advanced_labels_cache = {}
         self._simple_tab = QWidget()
+        self._simple_tab.setObjectName("saveEditorModePage")
         self._simple_layout = QVBoxLayout(self._simple_tab)
         self._simple_layout.setContentsMargins(0, 0, 0, 0)
         self._advanced_tab = QWidget()
+        self._advanced_tab.setObjectName("saveEditorModePage")
         self._advanced_layout = QVBoxLayout(self._advanced_tab)
         self._advanced_layout.setContentsMargins(0, 0, 0, 0)
         self.advanced_details_toggle = QCheckBox()
@@ -427,6 +430,9 @@ class SaveEditorDialog(QDialog):
         btn_bar.addStretch()
         self.cancel_btn.clicked.connect(self._on_cancel)
         self.save_btn.clicked.connect(self._on_save)
+        self.save_btn.setDefault(True)
+        for button in (self.undo_btn, self.redo_btn, self.cancel_btn):
+            button.setAutoDefault(False)
         btn_bar.addWidget(self.cancel_btn)
         btn_bar.addWidget(self.save_btn)
         root.addLayout(btn_bar)
@@ -474,10 +480,13 @@ class SaveEditorDialog(QDialog):
         self.setStyleSheet(
             f"""
             QDialog {{ background-color: {background}; color: {text}; }}
-            QTabWidget::pane, QFrame#simpleSectionBody {{ border: 2px solid {border}; border-radius: {radius}px; }}
+            QLabel, QCheckBox {{ color: {text}; }}
+            QTabWidget::pane, QFrame#simpleSectionBody {{ background-color: {background}; border: 2px solid {border}; border-radius: {radius}px; }}
+            QWidget#saveEditorModePage, QScrollArea#saveEditorScroll, QScrollArea#saveEditorScroll > QWidget > QWidget {{ background-color: {background}; }}
             QLabel#simpleSectionTitle {{ font-size: 13px; font-weight: 600; padding: 0 2px; }}
             QPushButton {{ background-color: {button}; border: 2px solid {border}; border-radius: {radius}px; color: {text}; padding: 6px 10px; }}
             QPushButton:hover {{ background-color: {button_hover}; }}
+            QPushButton:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTableWidget:focus {{ border-color: {text}; }}
             QLineEdit, QComboBox, QSpinBox, QTableWidget {{ background-color: rgba(0,0,0,0.16); border: 2px solid {border}; border-radius: {radius}px; color: {text}; padding: 6px 8px; }}
             QComboBox, QLineEdit, QSpinBox {{ min-height: 36px; }}
             QScrollArea {{ border: none; background: transparent; }}
@@ -575,6 +584,9 @@ class SaveEditorDialog(QDialog):
             self._simple_layout.addWidget(label)
             return
         self._simple_ready = True
+        self._flag_names_by_id = {
+            value: name for name, value in self._group_ids("flags").items()
+        }
         self._rebuild_simple_mode()
 
     def _clear_layout(self, layout) -> None:
@@ -589,6 +601,7 @@ class SaveEditorDialog(QDialog):
 
     def _wrap_scroll(self, widget: QWidget) -> QScrollArea:
         scroll = QScrollArea()
+        scroll.setObjectName("saveEditorScroll")
         scroll.setWidgetResizable(True)
         scroll.setWidget(widget)
         return scroll
@@ -738,10 +751,7 @@ class SaveEditorDialog(QDialog):
         return self._group_meta("flags").get(str(flag_id), {})
 
     def _flag_name(self, flag_id: int) -> str:
-        for name, value in self._group_ids("flags").items():
-            if value == flag_id:
-                return name
-        return f"FLAG_{flag_id}"
+        return self._flag_names_by_id.get(flag_id, f"FLAG_{flag_id}")
 
     def _set_flag(self, flag_id: int, value) -> None:
         if 0 <= flag_id < len(self.save_data["flags"]):

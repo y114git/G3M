@@ -2,7 +2,10 @@
 
 import logging
 import os
+import stat
 from unittest.mock import patch
+
+import pytest
 
 from services.backup_service import BackupManager
 from services.g3mtool_patching_service import G3MToolPatchingService
@@ -10,6 +13,46 @@ from services.g3mtool_patching_service import G3MToolPatchingService
 
 class TestBackupRestoration:
     """Tests for backup restoration."""
+
+    def test_partial_restore_can_retry_after_restart(self, tmp_path):
+        manager = BackupManager(str(tmp_path / "backups"))
+        paths = [tmp_path / name for name in ("data.win", "runner", "added.dll")]
+        for path in paths[:2]:
+            path.write_bytes(b"ORIGINAL")
+            assert manager.backup_file("game", str(path))
+        manager.mark_file_added("game", str(paths[2]))
+        for path in paths:
+            path.write_bytes(b"MODDED")
+        manifest = str(tmp_path / "session.lock")
+        assert manager.save_backups_to_manifest(manifest)
+        assert manager.capture_deployed_state()
+        replace = os.replace
+
+        def locked_replace(source, target):
+            if target == str(paths[0]):
+                raise PermissionError("game file still locked")
+            return replace(source, target)
+
+        with patch("services.backup_service.os.replace", side_effect=locked_replace):
+            assert manager.restore_all_backups() is False
+        assert paths[1].read_bytes() == b"ORIGINAL"
+        assert not paths[2].exists()
+        recovered = BackupManager.load_from_manifest(manifest)
+        assert recovered.restore_all_backups() is True
+        assert paths[0].read_bytes() == b"ORIGINAL"
+        assert recovered.external_changes == []
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX executable permissions")
+    def test_restore_preserves_executable_permissions(self, tmp_path):
+        manager = BackupManager(str(tmp_path / "backups"))
+        runner = tmp_path / "runner"
+        runner.write_bytes(b"ORIGINAL")
+        runner.chmod(0o751)
+        assert manager.backup_file("game", str(runner))
+        runner.write_bytes(b"MODDED")
+        runner.chmod(0o600)
+        assert manager.restore_all_backups()
+        assert stat.S_IMODE(runner.stat().st_mode) == 0o751
 
     def test_complete_backup_restoration_flow(
         self, temp_dir, app_state, feedback_service
@@ -146,7 +189,7 @@ class TestBackupRestoration:
             file.write(b"MODDED")
 
         with patch(
-            "services.backup_service.shutil.copyfile",
+            "services.backup_service.shutil.copy2",
             side_effect=PermissionError("locked"),
         ):
             restored = patcher.restore_all_backups()
@@ -167,7 +210,7 @@ class TestBackupRestoration:
             file.write(b"MODDED")
 
         with patch(
-            "services.backup_service.shutil.copyfile",
+            "services.backup_service.shutil.copy2",
             side_effect=OSError("interrupted copy"),
         ):
             assert manager.restore_all_backups() is False
@@ -186,7 +229,7 @@ class TestBackupRestoration:
             file.write(b"MODDED")
 
         with patch(
-            "services.backup_service.shutil.copyfile",
+            "services.backup_service.shutil.copy2",
             side_effect=PermissionError("locked"),
         ):
             assert manager.restore_all_backups() is False

@@ -220,6 +220,8 @@ def _wait_for_game_exit(
         if tracker.refresh():
             logger.info("Game process detected")
             break
+        if process and platform.system() != "Linux" and process.poll() is not None:
+            logger.info("Launched process exited before detection")
         time.sleep(GAME_PROCESS_POLL_SECONDS)
     else:
         logger.warning("Game process did not appear after launch")

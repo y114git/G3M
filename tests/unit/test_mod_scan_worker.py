@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from PyQt6.QtCore import QObject
 
+from utils.mod.scan_utils import scan_mods_directory
 from workers.mod.scan_worker import ModScanThread
 
 
@@ -53,3 +54,32 @@ def test_mod_scan_worker_loads_directory_symlink(tmp_path):
     worker.run()
 
     assert results[-1]["linked-mod"]["folder_path"] == str(link)
+
+
+def test_scan_mods_directory_loads_directory_symlink(tmp_path):
+    external_mod = tmp_path / "shared-profile" / "linked-mod"
+    external_mod.mkdir(parents=True)
+    (external_mod / "mod_config.json").write_text(
+        json.dumps(
+            {
+                "config_version": "1.0.0",
+                "id": "linked-mod",
+                "name": "Linked Mod",
+                "version": "1.0.0",
+                "game": "deltarune",
+            }
+        ),
+        encoding="utf-8",
+    )
+    mods_dir = tmp_path / "mods"
+    mods_dir.mkdir()
+    link = mods_dir / "linked-mod"
+    try:
+        os.symlink(external_mod, link, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Directory symlinks are unavailable: {exc}")
+
+    cache, mods_by_name = scan_mods_directory(str(mods_dir))
+
+    assert cache["linked-mod"].folder_path == str(link)
+    assert mods_by_name["linked mod"] == "linked-mod"

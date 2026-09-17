@@ -32,6 +32,11 @@ class _StepListWidget(QListWidget):
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.model().rowsMoved.connect(self.owner._persist_change)
+
+    @override
+    def wheelEvent(self, event) -> None:
+        event.ignore()
 
     @override
     def focusInEvent(self, event: QFocusEvent | None) -> None:
@@ -61,10 +66,13 @@ class _StepListWidget(QListWidget):
 
 
 class _StepGroupBox(QGroupBox):
+    MIN_HEIGHT = 180
+
     def __init__(self, owner: ModPriorityStepsDialog, step_index: int) -> None:
         super().__init__(tr("ui.step_number", number=step_index + 1))
         self.owner = owner
         self.step_index = step_index
+        self.setMinimumHeight(self.MIN_HEIGHT)
 
     @override
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
@@ -78,16 +86,20 @@ class ModPriorityStepsDialog(QDialog):
         mod_steps: list[list[Any]],
         app_state,
         parent=None,
+        on_change=None,
     ) -> None:
         super().__init__(parent)
         self.app_state = app_state
+        self._on_change = on_change
         self._steps = [list(step) for step in mod_steps if step] or [[]]
+        self._initial_steps = [list(step) for step in self._steps]
         self._step_lists: list[_StepListWidget] = []
         self._step_groups: list[_StepGroupBox] = []
         self._active_step_index = 0
         self.result_steps: list[list[Any]] | None = None
         self.setWindowTitle(tr("ui.priority_steps_title"))
         self.setMinimumSize(550, 560)
+        self.resize(760, 680)
         self._setup_ui()
         self.apply_theme()
 
@@ -103,9 +115,10 @@ class ModPriorityStepsDialog(QDialog):
 
         self.steps_scroll = QScrollArea()
         self.steps_scroll.setWidgetResizable(True)
+        self.steps_scroll.setMinimumHeight(260)
         self.steps_container = QWidget()
         self.steps_layout = QVBoxLayout(self.steps_container)
-        self.steps_layout.setContentsMargins(0, 0, 0, 0)
+        self.steps_layout.setContentsMargins(8, 12, 8, 8)
         self.steps_scroll.setWidget(self.steps_container)
         layout.addWidget(self.steps_scroll)
 
@@ -118,6 +131,7 @@ class ModPriorityStepsDialog(QDialog):
             ("ui.move_step_down", lambda: self._move_step(1)),
         ):
             button = QPushButton()
+            button.setMinimumHeight(32)
             button.clicked.connect(callback)
             step_buttons.addWidget(button)
             self._localized_buttons[text_key] = button
@@ -158,6 +172,10 @@ class ModPriorityStepsDialog(QDialog):
             for widget in self._step_lists
         ]
 
+    def _persist_change(self) -> None:
+        if callable(self._on_change):
+            self._on_change(self._normalized_steps())
+
     def _rebuild_steps(self) -> None:
         while self.steps_layout.count():
             item = self.steps_layout.takeAt(0)
@@ -169,7 +187,9 @@ class ModPriorityStepsDialog(QDialog):
             group = _StepGroupBox(self, index)
             group.setProperty("step_index", index)
             group_layout = QVBoxLayout(group)
+            group_layout.setContentsMargins(8, 22, 8, 8)
             widget = _StepListWidget(self, index)
+            widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             widget.clicked.connect(
                 lambda _index, step_index=index: self._set_active_step(step_index)
             )
@@ -182,6 +202,11 @@ class ModPriorityStepsDialog(QDialog):
                 item = QListWidgetItem(getattr(mod, "name", None) or str(mod))
                 item.setData(Qt.ItemDataRole.UserRole, mod)
                 widget.addItem(item)
+            row_heights = sum(max(widget.sizeHintForRow(row), 76) for row in range(widget.count()))
+            list_height = max(130, row_heights + 8)
+            widget.setFixedHeight(list_height)
+            # Reserve space for the title, layout margins, and both borders.
+            group.setFixedHeight(list_height + 70)
             group_layout.addWidget(widget)
             self.steps_layout.addWidget(group)
             self._step_groups.append(group)
@@ -194,6 +219,7 @@ class ModPriorityStepsDialog(QDialog):
         self._steps.append([])
         self._active_step_index = len(self._steps) - 1
         self._rebuild_steps()
+        self._persist_change()
 
     def _remove_selected_step(self) -> None:
         self._steps = self._capture_steps()
@@ -205,6 +231,7 @@ class ModPriorityStepsDialog(QDialog):
         self._steps[target].extend(removed)
         self._active_step_index = target
         self._rebuild_steps()
+        self._persist_change()
 
     def _move_step(self, offset: int) -> None:
         self._steps = self._capture_steps()
@@ -217,6 +244,7 @@ class ModPriorityStepsDialog(QDialog):
             )
             self._active_step_index = target
             self._rebuild_steps()
+            self._persist_change()
 
     def _set_active_step(self, index: int) -> None:
         if 0 <= index < len(self._step_lists):
@@ -253,6 +281,7 @@ class ModPriorityStepsDialog(QDialog):
             item = widget.takeItem(row)
             widget.insertItem(target, item)
             widget.setCurrentRow(target)
+            self._persist_change()
 
     def _move_mod_to_step(
         self, mod: Any, target_step: int, target_row: int | None = None
@@ -267,6 +296,7 @@ class ModPriorityStepsDialog(QDialog):
         self._steps = steps
         self._active_step_index = target_step
         self._rebuild_steps()
+        self._persist_change()
 
     def _normalized_steps(self) -> list[list[Any]]:
         result = []
@@ -287,6 +317,12 @@ class ModPriorityStepsDialog(QDialog):
         self.result_steps = self._normalized_steps()
         self.accept()
 
+    def reject(self) -> None:
+        self._steps = [list(step) for step in self._initial_steps]
+        if callable(self._on_change):
+            self._on_change([list(step) for step in self._initial_steps])
+        super().reject()
+
     def get_result(self) -> list[list[Any]]:
         return (
             self.result_steps
@@ -300,6 +336,7 @@ class ModPriorityStepsDialog(QDialog):
         self.instructions_label.setText(tr("ui.priority_steps_instructions"))
         for key, button in self._localized_buttons.items():
             button.setText(tr(key))
+            button.setMinimumWidth(110)
         for index, group in enumerate(self._step_groups):
             group.setTitle(tr("ui.step_number", number=index + 1))
 
@@ -308,7 +345,9 @@ class ModPriorityStepsDialog(QDialog):
         theme = get_dialog_theme_values(self.app_state)
         self.setStyleSheet(
             self.styleSheet()
-            + f'\nQGroupBox[activeStep="true"] {{ border: 2px dashed {theme["select"]}; }}'
+            + f'''\nQGroupBox {{ margin-top: 14px; padding-top: 10px; border: 1px solid #d8d8d8; }}
+QGroupBox::title {{ subcontrol-origin: margin; top: 1px; left: 8px; padding: 0 6px; background: {theme["background"]}; }}
+QGroupBox[activeStep="true"] {{ border: 2px dashed {theme["select"]}; }}'''
         )
         self.instructions_label.setStyleSheet(
             f"color: {theme['secondary_text']}; font-size: 11px;"

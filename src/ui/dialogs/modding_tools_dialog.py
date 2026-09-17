@@ -9,19 +9,23 @@ import tempfile
 import threading
 import zipfile
 from contextlib import suppress
+from functools import partial
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -55,9 +59,7 @@ _DATA_FILTER = "Data files (*.win *.ios *.unx *.droid);;All Files (*)"
 _G3M_PATCH_FILTER = "Patch files (*.g3mpatch *.zip);;All Files (*)"
 _CSX_FILTER = "Script files (*.csx);;All Files (*)"
 _PATCH_FILTER = "Patch files (*.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
-_DATA_PATCH_FILTER = (
-    "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
-)
+_DATA_PATCH_FILTER = "Data / Patch files (*.win *.ios *.unx *.droid *.g3mpatch *.zip *.xdelta *.vcdiff *.csx);;All Files (*)"
 _ALL_FILTER = "All Files (*)"
 _READY_DATA_TARGETS = ("data.win", "game.ios", "game.win")
 _CONVERT_TARGET_OPTIONS = ("g3mpatch", "xdelta", *_READY_DATA_TARGETS)
@@ -118,7 +120,28 @@ def _safe_set_status(label, message: str) -> None:
         logger.warning("Modding tools status update failed", exc_info=True)
 
 
-def _set_g3mtool_failure_status(label, operation: str, rc: int, out: str, err: str) -> None:
+def _start_worker(dialog, worker) -> None:
+    dialog._worker = worker
+    worker.progress.connect(dialog._on_progress)
+    worker.result_ready.connect(dialog._on_finished)
+    worker.start()
+
+
+def _finish_worker(dialog, rc, out, err, operation: str) -> None:
+    dialog._run_btn.setEnabled(True)
+    retire_qthread(dialog._worker)
+    dialog._worker = None
+    if rc == 0:
+        _safe_set_status(dialog._status_label, tr("modding_tools.success"))
+        return
+    _show_g3mtool_warning_failure(
+        dialog, dialog._app_state, dialog._status_label, operation, rc, out, err
+    )
+
+
+def _set_g3mtool_failure_status(
+    label, operation: str, rc: int, out: str, err: str
+) -> None:
     details = (err or out or "").strip()
     if details:
         logger.info(
@@ -130,9 +153,13 @@ def _set_g3mtool_failure_status(label, operation: str, rc: int, out: str, err: s
     _safe_set_status(label, tr("modding_tools.failed_details_logged"))
 
 
-def _show_g3mtool_failure(parent, label, operation: str, rc: int, out: str, err: str) -> None:
+def _show_g3mtool_failure(
+    parent, label, operation: str, rc: int, out: str, err: str
+) -> None:
     _set_g3mtool_failure_status(label, operation, rc, out, err)
-    _safe_warning(parent, tr("modding_tools.title"), tr("modding_tools.failed_details_logged"))
+    _safe_warning(
+        parent, tr("modding_tools.title"), tr("modding_tools.failed_details_logged")
+    )
 
 
 def _warning_id_for_g3mtool_failure(operation: str, details: str) -> str:
@@ -327,7 +354,11 @@ def _get_app_font(app_state) -> str:
     ff = (app_state.local_config.get("custom_font_family") or "").strip()
     if not ff:
         parent = getattr(app_state, "_app_window", None)
-        ff = (getattr(parent, "custom_font_family", None) or "").strip() if parent else ""
+        ff = (
+            (getattr(parent, "custom_font_family", None) or "").strip()
+            if parent
+            else ""
+        )
     if not ff:
         ff = (localization_service.load_font() or "").strip()
     return f"'{ff}'" if ff else ""
@@ -418,9 +449,7 @@ class _PathRow(QWidget):
                 self, tr("ui.save_file"), start_path, self._filter
             )
         else:
-            path, _ = get_open_file_name(
-                self, tr("ui.select_file"), "", self._filter
-            )
+            path, _ = get_open_file_name(self, tr("ui.select_file"), "", self._filter)
         if path:
             self._edit.setText(path)
 
@@ -488,7 +517,10 @@ class _ConvertWorkerThread(ManagedQThread):
                         temp_modified,
                         self._output,
                         progress_callback=lambda percent, label: self.progress.emit(
-                            min(100, 50 + max(1 if percent > 0 else 0, round(percent * 0.5))),
+                            min(
+                                100,
+                                50 + max(1 if percent > 0 else 0, round(percent * 0.5)),
+                            ),
                             label,
                         ),
                     )
@@ -500,7 +532,10 @@ class _ConvertWorkerThread(ManagedQThread):
                         self._output,
                         include_xdelta_fallback=self._include_xdelta_fallback,
                         progress_callback=lambda percent, label: self.progress.emit(
-                            min(100, 50 + max(1 if percent > 0 else 0, round(percent * 0.5))),
+                            min(
+                                100,
+                                50 + max(1 if percent > 0 else 0, round(percent * 0.5)),
+                            ),
                             label,
                         ),
                     )
@@ -560,6 +595,20 @@ class _CreatePatchWorkerThread(ManagedQThread):
             self.result_ready.emit(-1, "", str(e))
 
 
+def _scrolling_form_layout(parent: QWidget) -> QVBoxLayout:
+    root = QVBoxLayout(parent)
+    root.setContentsMargins(0, 0, 0, 0)
+    scroll = QScrollArea(parent)
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    content = QWidget()
+    layout = QVBoxLayout(content)
+    layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+    scroll.setWidget(content)
+    root.addWidget(scroll)
+    return layout
+
+
 class _PatchTab(QWidget):
     def __init__(self, g3m, app_state, parent=None) -> None:
         super().__init__(parent)
@@ -570,7 +619,7 @@ class _PatchTab(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        lay = QVBoxLayout(self)
+        lay = _scrolling_form_layout(self)
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
@@ -737,10 +786,12 @@ class _PatchTab(QWidget):
         self._output_row.setVisible(not batch)
 
     def _on_batch_add(self):
-        file_filter = _DATA_FILTER if self._action_combo.currentIndex() == 0 else _G3M_PATCH_FILTER
-        paths, _ = get_open_file_names(
-            self, tr("ui.select_file"), "", file_filter
+        file_filter = (
+            _DATA_FILTER
+            if self._action_combo.currentIndex() == 0
+            else _G3M_PATCH_FILTER
         )
+        paths, _ = get_open_file_names(self, tr("ui.select_file"), "", file_filter)
         for path in paths:
             item = QListWidgetItem(os.path.basename(path))
             item.setData(Qt.ItemDataRole.UserRole, path)
@@ -806,7 +857,13 @@ class _PatchTab(QWidget):
             seed = second or orig
             if not seed:
                 return ""
-            suffix = ".csx" if mode == "csx" else ".xdelta" if mode == "xdelta" else ".g3mpatch"
+            suffix = (
+                ".csx"
+                if mode == "csx"
+                else ".xdelta"
+                if mode == "xdelta"
+                else ".g3mpatch"
+            )
             return self._replace_extension(seed, suffix)
         if action == 1:
             if not orig:
@@ -815,7 +872,9 @@ class _PatchTab(QWidget):
             return f"{base}_patched{ext or '.win'}"
         if not second:
             return ""
-        suffix = ".csx" if mode == "csx" else ".xdelta" if mode == "xdelta" else ".g3mpatch"
+        suffix = (
+            ".csx" if mode == "csx" else ".xdelta" if mode == "xdelta" else ".g3mpatch"
+        )
         return self._replace_extension(second, suffix)
 
     def _maybe_suggest_output_path(self, *_args) -> None:
@@ -828,7 +887,9 @@ class _PatchTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
+            )
             return
         orig, second, out = (
             self._original_row.path(),
@@ -841,7 +902,9 @@ class _PatchTab(QWidget):
             self._on_batch_run(orig)
             return
         if not orig or not second or not out:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
+            )
             return
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
@@ -872,12 +935,12 @@ class _PatchTab(QWidget):
                     self._xdelta_fallback_checkbox.isChecked(),
                 )
             elif mode == "xdelta":
-                self._worker = _WorkerThread(self._g3m.xpatch_apply, (orig, second, out))
+                self._worker = _WorkerThread(
+                    self._g3m.xpatch_apply, (orig, second, out)
+                )
             else:
                 self._worker = _WorkerThread(self._g3m.apply_patch, (orig, second, out))
-        self._worker.progress.connect(self._on_progress)
-        self._worker.result_ready.connect(self._on_finished)
-        self._worker.start()
+        _start_worker(self, self._worker)
 
     def _on_batch_run(self, orig: str) -> None:
         out_dir = self._batch_output_row.path()
@@ -887,7 +950,9 @@ class _PatchTab(QWidget):
             if (item := self._batch_list.item(i)) is not None
         ]
         if not orig or not inputs or not out_dir:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.batch_need_files"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("modding_tools.batch_need_files")
+            )
             return
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
@@ -913,23 +978,13 @@ class _PatchTab(QWidget):
                     self._xdelta_fallback_checkbox.isChecked(),
                 ),
             )
-        self._worker.progress.connect(self._on_progress)
-        self._worker.result_ready.connect(self._on_finished)
-        self._worker.start()
+        _start_worker(self, self._worker)
 
     def _on_progress(self, percent: int, label: str) -> None:
         _safe_set_status(self._status_label, _format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
-        self._run_btn.setEnabled(True)
-        retire_qthread(self._worker)
-        self._worker = None
-        if rc == 0:
-            _safe_set_status(self._status_label, tr("modding_tools.success"))
-        else:
-            _show_g3mtool_warning_failure(
-                self, self._app_state, self._status_label, "patch", rc, out, err
-            )
+        _finish_worker(self, rc, out, err, "patch")
 
     def has_user_interaction(self) -> bool:
         return bool(
@@ -1001,7 +1056,9 @@ class _DataConvertWorkerThread(ManagedQThread):
             for file_key, ch_info in files_data.items():
                 if not isinstance(ch_info, dict):
                     continue
-                data_path = ch_info.get("data_file_path") or ch_info.get("data_file_url", "")
+                data_path = ch_info.get("data_file_path") or ch_info.get(
+                    "data_file_url", ""
+                )
                 if not data_path:
                     continue
                 patch_path = resolve_mod_file_path(self._mod_folder, data_path)
@@ -1013,7 +1070,10 @@ class _DataConvertWorkerThread(ManagedQThread):
                     continue
                 patch_rel_path = _mod_relative_file_path(self._mod_folder, patch_path)
                 if not patch_rel_path:
-                    logger.warning("Skipping DATA conversion source outside mod folder: %s", patch_path)
+                    logger.warning(
+                        "Skipping DATA conversion source outside mod folder: %s",
+                        patch_path,
+                    )
                     continue
                 tab = game_def.get_tab(file_key) if game_def else None
                 chapter_id = tab.tab_id if tab else file_key
@@ -1069,7 +1129,11 @@ class _DataConvertWorkerThread(ManagedQThread):
                 converted = 0
                 source_paths_to_remove = set()
                 source_paths = {
-                    os.path.normcase(os.path.abspath(os.path.join(converted_mod_folder, patch_rel_path)))
+                    os.path.normcase(
+                        os.path.abspath(
+                            os.path.join(converted_mod_folder, patch_rel_path)
+                        )
+                    )
                     for _, _, patch_rel_path, _ in items
                 }
                 output_paths = set()
@@ -1102,7 +1166,9 @@ class _DataConvertWorkerThread(ManagedQThread):
                     output_paths.add(candidate_key)
                     return candidate
 
-                for i, (file_key, ch_info, patch_rel_path, original) in enumerate(items):
+                for i, (file_key, ch_info, patch_rel_path, original) in enumerate(
+                    items
+                ):
                     if self.isInterruptionRequested():
                         return
                     patch_path = os.path.join(converted_mod_folder, patch_rel_path)
@@ -1114,7 +1180,9 @@ class _DataConvertWorkerThread(ManagedQThread):
                             file=os.path.basename(patch_path),
                         )
                     )
-                    with managed_temporary_directory(prefix="g3m_modconv_file_") as work_dir:
+                    with managed_temporary_directory(
+                        prefix="g3m_modconv_file_"
+                    ) as work_dir:
                         temp_modified = os.path.join(
                             work_dir,
                             f"modified{os.path.splitext(original)[1] or '.win'}",
@@ -1157,10 +1225,16 @@ class _DataConvertWorkerThread(ManagedQThread):
                             if rc != 0:
                                 self.result_ready.emit(False, err)
                                 return
-                            source_key = os.path.normcase(os.path.normpath(patch_rel_path))
-                            patch_stem = os.path.splitext(os.path.basename(patch_path))[0]
+                            source_key = os.path.normcase(
+                                os.path.normpath(patch_rel_path)
+                            )
+                            patch_stem = os.path.splitext(os.path.basename(patch_path))[
+                                0
+                            ]
                             if source_counts[source_key] > 1:
-                                patch_stem = f"{patch_stem}_{sanitize_filename(file_key) or i}"
+                                patch_stem = (
+                                    f"{patch_stem}_{sanitize_filename(file_key) or i}"
+                                )
                             new_name = f"{patch_stem}{'.xdelta' if self._target_mode == 'xdelta' else '.g3mpatch'}"
                             new_path = reserve_output_path(
                                 os.path.dirname(patch_path), new_name, file_key, i
@@ -1241,11 +1315,16 @@ class _BatchDataConvertWorkerThread(ManagedQThread):
         self._warning_event.set()
 
     def _request_warning_confirmation(
-        self, message: str, details: str = "", warning_id: str = "legacy_patching_warning"
+        self,
+        message: str,
+        details: str = "",
+        warning_id: str = "legacy_patching_warning",
     ) -> bool:
         self._warning_result = True
         self._warning_event.clear()
-        event = create_warning_event(warning_id, details=details, fallback_message=message)
+        event = create_warning_event(
+            warning_id, details=details, fallback_message=message
+        )
         self.warning_confirmation_needed.emit(event, details, None)
         while not self._warning_event.wait(0.1):
             if self.isInterruptionRequested():
@@ -1297,7 +1376,11 @@ class _BatchDataConvertWorkerThread(ManagedQThread):
             result = []
             worker.progress.connect(
                 lambda message, mod=mod_name: self.progress.emit(
-                    tr("modding_tools.convert_batch_item_progress", mod=mod, message=message)
+                    tr(
+                        "modding_tools.convert_batch_item_progress",
+                        mod=mod,
+                        message=message,
+                    )
                 )
             )
             worker.result_ready.connect(
@@ -1562,7 +1645,7 @@ class _DataConvertTab(QWidget):
                         tr(
                             "modding_tools.convert_game_path_missing",
                             game=game_def.display_name,
-                        )
+                        ),
                     )
                     return
                 game_path_cache[game] = (game_def, game_path)
@@ -1579,7 +1662,9 @@ class _DataConvertTab(QWidget):
         self._set_busy(True)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
         self._worker = _BatchDataConvertWorkerThread(self._g3m, jobs, target_mode)
-        self._worker.progress.connect(lambda message: _safe_set_status(self._status_label, message))
+        self._worker.progress.connect(
+            lambda message: _safe_set_status(self._status_label, message)
+        )
         self._worker.warning_confirmation_needed.connect(
             self._on_warning_confirmation_needed
         )
@@ -1601,7 +1686,9 @@ class _DataConvertTab(QWidget):
             _safe_set_status(self._status_label, message)
         else:
             logger.info("Modding tools DATA conversion failed: %s", message)
-            _safe_set_status(self._status_label, tr("modding_tools.failed_details_logged"))
+            _safe_set_status(
+                self._status_label, tr("modding_tools.failed_details_logged")
+            )
             _safe_warning(
                 self,
                 tr("modding_tools.title"),
@@ -1628,7 +1715,7 @@ class _MergeTab(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        lay = QVBoxLayout(self)
+        lay = _scrolling_form_layout(self)
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
@@ -1752,7 +1839,11 @@ class _MergeTab(QWidget):
     def _on_add_set(self):
         patches = self._current_patches()
         if len(patches) < 2:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_set_need_files"))
+            _safe_warning(
+                self,
+                tr("modding_tools.title"),
+                tr("modding_tools.merge_set_need_files"),
+            )
             return
         label = " + ".join(os.path.basename(path) for path in patches)
         item = QListWidgetItem(label)
@@ -1818,7 +1909,9 @@ class _MergeTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
+            )
             return
         orig = self._original_row.path()
         if self._batch_cb.isChecked():
@@ -1828,7 +1921,9 @@ class _MergeTab(QWidget):
         patch_out = self._patch_output_row.path()
         patches = self._current_patches()
         if not orig or len(patches) < 2 or not out:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_need_files"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("modding_tools.merge_need_files")
+            )
             return
         report_path = None
         if self._report_cb.isChecked():
@@ -1849,9 +1944,7 @@ class _MergeTab(QWidget):
                 self._props_cb.isChecked(),
             ),
         )
-        self._worker.progress.connect(self._on_progress)
-        self._worker.result_ready.connect(self._on_finished)
-        self._worker.start()
+        _start_worker(self, self._worker)
 
     def _on_batch_run(self, orig: str) -> None:
         out_dir = self._batch_output_row.path()
@@ -1862,7 +1955,11 @@ class _MergeTab(QWidget):
             if (item := self._set_list.item(i)) is not None
         ]
         if not orig or not out_dir or not patch_sets:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.merge_batch_need_files"))
+            _safe_warning(
+                self,
+                tr("modding_tools.title"),
+                tr("modding_tools.merge_batch_need_files"),
+            )
             return
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
@@ -1879,23 +1976,13 @@ class _MergeTab(QWidget):
                 self._report_cb.isChecked(),
             ),
         )
-        self._worker.progress.connect(self._on_progress)
-        self._worker.result_ready.connect(self._on_finished)
-        self._worker.start()
+        _start_worker(self, self._worker)
 
     def _on_progress(self, percent: int, label: str) -> None:
         _safe_set_status(self._status_label, _format_progress_status(percent, label))
 
     def _on_finished(self, rc, out, err):
-        self._run_btn.setEnabled(True)
-        retire_qthread(self._worker)
-        self._worker = None
-        if rc == 0:
-            _safe_set_status(self._status_label, tr("modding_tools.success"))
-        else:
-            _show_g3mtool_warning_failure(
-                self, self._app_state, self._status_label, "merge", rc, out, err
-            )
+        _finish_worker(self, rc, out, err, "merge")
 
     def has_user_interaction(self) -> bool:
         return bool(
@@ -1968,20 +2055,22 @@ class _InfoTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
+            )
             return
         target = self._file_row.path()
         if not target:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
+            )
             return
         self._run_btn.setEnabled(False)
         self._set_output_text(tr("modding_tools.running"))
         self._worker = _WorkerThread(
             self._g3m.info, (target, self._verbose_cb.isChecked())
         )
-        self._worker.progress.connect(self._on_progress)
-        self._worker.result_ready.connect(self._on_finished)
-        self._worker.start()
+        _start_worker(self, self._worker)
 
     def _on_progress(self, percent: int, label: str) -> None:
         self._set_output_text(_format_progress_status(percent, label))
@@ -2042,6 +2131,9 @@ class _DiffTab(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
+        self._full_report_cb = QCheckBox(tr("modding_tools.diff_full_report"))
+        lay.addWidget(self._full_report_cb)
+
         self._file1_row = _PathRow("modding_tools.diff_file1", _DATA_PATCH_FILTER)
         lay.addWidget(self._file1_row)
         self._file2_row = _PathRow("modding_tools.diff_file2", _DATA_PATCH_FILTER)
@@ -2065,20 +2157,27 @@ class _DiffTab(QWidget):
 
     def _on_run(self):
         if not self._g3m or not self._g3m.is_available():
-            _safe_warning(self, tr("modding_tools.title"), tr("errors.g3mtool_not_available"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("errors.g3mtool_not_available")
+            )
             return
         f1, f2 = self._file1_row.path(), self._file2_row.path()
         if not f1 or not f2:
-            _safe_warning(self, tr("modding_tools.title"), tr("modding_tools.select_all_paths"))
+            _safe_warning(
+                self, tr("modding_tools.title"), tr("modding_tools.select_all_paths")
+            )
             return
         self._run_btn.setEnabled(False)
         _safe_set_status(self._status_label, tr("modding_tools.running"))
         out_dir = tempfile.mkdtemp(prefix="modding_tools_diff_")
         self._out_dir = out_dir
-        self._worker = _WorkerThread(self._g3m.diff, (f1, f2, out_dir))
-        self._worker.progress.connect(self._on_progress)
-        self._worker.result_ready.connect(self._on_finished)
-        self._worker.start()
+        self._worker = _WorkerThread(
+            partial(
+                self._g3m.diff, full_report=self._full_report_cb.isChecked()
+            ),
+            (f1, f2, out_dir),
+        )
+        _start_worker(self, self._worker)
 
     def _on_progress(self, percent: int, label: str) -> None:
         _safe_set_status(self._status_label, _format_progress_status(percent, label))
@@ -2125,6 +2224,7 @@ class _DiffTab(QWidget):
     def relocalize(self):
         self._file1_row.relocalize()
         self._file2_row.relocalize()
+        self._full_report_cb.setText(tr("modding_tools.diff_full_report"))
         self._run_btn.setText(tr("modding_tools.diff_run"))
 
 
@@ -2362,7 +2462,10 @@ class ModdingToolsDialog(QDialog):
         event = a0
         if event is None:
             return
-        if not getattr(self, "_closing_when_workers_finish", False) and self._has_any_interaction():
+        if (
+            not getattr(self, "_closing_when_workers_finish", False)
+            and self._has_any_interaction()
+        ):
             reply = _safe_question(
                 self,
                 tr("modding_tools.title"),

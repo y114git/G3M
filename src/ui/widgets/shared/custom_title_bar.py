@@ -141,7 +141,7 @@ class CustomTitleBar(QWidget):
             return
         try:
             button.setDown(False)
-            button.clearFocus()
+            button.setFocus(Qt.FocusReason.PopupFocusReason)
             button.update()
         except RuntimeError:
             return

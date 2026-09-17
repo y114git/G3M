@@ -197,7 +197,10 @@ def scan_mods_directory(
     try:
         with os.scandir(mods_dir) as entries:
             for entry in entries:
-                if not entry.is_dir(follow_symlinks=False):
+                try:
+                    if not entry.is_dir(follow_symlinks=True):
+                        continue
+                except OSError:
                     continue
                 folder_name = entry.name
                 folder_path = entry.path

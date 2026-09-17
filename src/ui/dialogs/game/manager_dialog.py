@@ -48,7 +48,8 @@ class GameManagerDialog(QDialog):
         self.settings_service = settings_service
         self.app_state = app_state
         self.setWindowTitle(tr("games.manager_title"))
-        self.setMinimumSize(760, 620)
+        self.setMinimumSize(760, 480)
+        self.resize(760, 620)
         self._selected_row = -1
         self._build_ui()
         self._apply_theme()
@@ -72,6 +73,7 @@ class GameManagerDialog(QDialog):
             btn.setFixedSize(38, 38)
             btn.setIconSize(QSize(20, 20))
             btn.setToolTip(tr(tip_key))
+            btn.setAccessibleName(tr(tip_key))
             btn.clicked.connect(slot)
             buttons.addWidget(btn)
             setattr(self, attr, btn)
@@ -94,8 +96,11 @@ class GameManagerDialog(QDialog):
     def relocalize_ui(self) -> None:
         self.setWindowTitle(tr("games.manager_title"))
         self.add_btn.setToolTip(tr("games.add_custom_title"))
+        self.add_btn.setAccessibleName(tr("games.add_custom_title"))
         self.edit_btn.setToolTip(tr("games.edit_custom_title"))
+        self.edit_btn.setAccessibleName(tr("games.edit_custom_title"))
         self.del_btn.setToolTip(tr("games.delete_title"))
+        self.del_btn.setAccessibleName(tr("games.delete_title"))
         self.close_btn.setText(tr("ui.close_button"))
         self._refresh_list()
 
@@ -296,6 +301,7 @@ class GameManagerDialog(QDialog):
                 padding: 0px;
             }}
             QPushButton#gameManagerActionButton:hover:enabled {{ background-color: {theme["hover"]}; }}
+            QPushButton#gameManagerActionButton:focus {{ border-color: {theme["select"]}; }}
             QPushButton#gameManagerActionButton:disabled {{
                 background-color: {theme["background"]};
                 border-color: #6f6f6f;

@@ -25,7 +25,9 @@ from ui.common.dialog_theme import (
 )
 from ui.common.dialog_utils import safe_question
 from ui.common.styling import get_theme_color, rgba_from_color
+from ui.widgets.shared.custom_controls import SectionToggle
 from utils.native_integration import get_save_file_name
+from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
 
@@ -226,10 +228,10 @@ class _CollapsibleSection(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        self._header = QPushButton(f"\u25b6 {title}")
+        self._header = SectionToggle(title, expanded=False)
         self._header.setObjectName("modding_tools_section_header")
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._header.clicked.connect(self._toggle)
+        self._header.toggled.connect(self._toggle)
         self._title = title
         lay.addWidget(self._header)
 
@@ -246,11 +248,9 @@ class _CollapsibleSection(QWidget):
         self._body.document().setDocumentMargin(8)
         lay.addWidget(self._body)
 
-    def _toggle(self):
-        self._expanded = not self._expanded
+    def _toggle(self, expanded):
+        self._expanded = expanded
         self._body.setVisible(self._expanded)
-        arrow = "\u25bc" if self._expanded else "\u25b6"
-        self._header.setText(f"{arrow} {self._title}")
         if self._expanded:
             doc_h = int(self._body.document().size().height()) + 16
             self._body.setMinimumHeight(min(doc_h, 500))
@@ -303,8 +303,9 @@ class DiffViewerDialog(QDialog):
         self._export_btn = QPushButton()
         self._export_btn.setObjectName("modding_tools_export_btn")
         self._export_btn.setToolTip(tr("modding_tools.export_report"))
+        self._export_btn.setAccessibleName(tr("modding_tools.export_report"))
         self._export_btn.clicked.connect(self._on_export)
-        self._export_btn.setFixedSize(30, 30)
+        self._export_btn.setFixedSize(38, 38)
         try:
             from utils.path_utils import colored_icon
 
@@ -383,6 +384,14 @@ class DiffViewerDialog(QDialog):
                 shutil.copy2(self._md_path, path)
             except Exception as exc:
                 logger.error("Failed to export diff report: %s", exc)
+                QMessageBox.warning(
+                    self,
+                    tr("modding_tools.export_report"),
+                    tr(
+                        "diagnostics.actual_export_failed",
+                        error=format_filesystem_error(exc, path=path),
+                    ),
+                )
 
     def _apply_theme(self):
         base = build_dialog_theme_stylesheet(self._app_state)
@@ -392,7 +401,7 @@ class DiffViewerDialog(QDialog):
             QLabel#modding_tools_title {{
                 font-size: 16px;
             }}
-            QPushButton#modding_tools_section_header {{
+            QToolButton#modding_tools_section_header {{
                 background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
@@ -403,7 +412,7 @@ class DiffViewerDialog(QDialog):
                 padding: 8px 12px;
                 text-align: left;
             }}
-            QPushButton#modding_tools_section_header:hover {{
+            QToolButton#modding_tools_section_header:hover {{
                 background-color: {theme["hover"]};
             }}
             QTextEdit#modding_tools_section_body {{
@@ -425,9 +434,18 @@ class DiffViewerDialog(QDialog):
                 background-color: {theme["elements"]};
                 border: 2px solid {theme["border"]};
                 border-radius: {theme["button_radius"]}px;
+                min-width: 38px;
+                max-width: 38px;
+                min-height: 38px;
+                max-height: 38px;
+                padding: 0;
             }}
             QPushButton#modding_tools_export_btn:hover {{
                 background-color: {theme["hover"]};
+            }}
+            QPushButton#modding_tools_export_btn:focus,
+            QToolButton#modding_tools_section_header:focus {{
+                border-color: {theme["select"]};
             }}
         """
         self.setStyleSheet(base + extra)
@@ -452,6 +470,7 @@ class DiffViewerDialog(QDialog):
         self._title_label.setText(tr("modding_tools.diff_viewer_title"))
         self._close_btn.setText(tr("common.close"))
         self._export_btn.setToolTip(tr("modding_tools.export_report"))
+        self._export_btn.setAccessibleName(tr("modding_tools.export_report"))
 
     def refresh_theme(self):
         self._apply_theme()

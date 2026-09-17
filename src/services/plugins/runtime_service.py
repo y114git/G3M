@@ -322,9 +322,9 @@ class PluginRuntimeService:
                         **kwargs,
                     )
                 )
-            except InterruptedError:
-                raise
             except Exception as e:
+                if isinstance(e, InterruptedError) and task_runtime is not None:
+                    raise
                 logger.error("PluginRuntimeService: hook %s failed for %s: %s", hook_name, plugin_id, e, exc_info=True)
                 if record:
                     record.error = format_plugin_error(e, plugin_id=plugin_id, details=record.path)

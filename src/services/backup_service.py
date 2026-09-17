@@ -52,7 +52,7 @@ class BackupManager:
                     self.backup_dir, f"chapter_{chapter_id}_{name}_{counter}{ext}"
                 )
                 counter += 1
-            shutil.copyfile(file_path, backup_path)
+            shutil.copy2(file_path, backup_path)
             self.original_files[chapter_id][file_path] = backup_path
             self._modification_order[chapter_id].append(file_path)
             self.patching_logger.info(
@@ -201,10 +201,31 @@ class BackupManager:
         self.external_changes.clear()
         if self._deployed_state is None:
             return True
+        originals = {
+            path: backup
+            for files in self.original_files.values()
+            for path, backup in files.items()
+        }
+        added = {path for files in self.added_files.values() for path in files}
         for path, expected in self._deployed_state.items():
             try:
-                if self._fingerprint_path(path) != expected:
-                    self.external_changes.append(path)
+                current = self._fingerprint_path(path)
+                if current == expected:
+                    continue
+                # A previous recovery may have restored only part of the session.
+                if path in originals:
+                    backup = originals[path]
+                    if backup is None and current == {"type": "missing"}:
+                        continue
+                    if (
+                        backup
+                        and os.path.isfile(backup)
+                        and current == self._fingerprint_path(backup)
+                    ):
+                        continue
+                elif path in added and current == {"type": "missing"}:
+                    continue
+                self.external_changes.append(path)
             except (OSError, ValueError):
                 self.external_changes.append(path)
         if self.external_changes:
@@ -305,7 +326,7 @@ class BackupManager:
                     )
                     os.close(descriptor)
                     try:
-                        shutil.copyfile(backup_path, temporary_path)
+                        shutil.copy2(backup_path, temporary_path)
                         os.replace(temporary_path, file_path)
                         temporary_path = ""
                     finally:

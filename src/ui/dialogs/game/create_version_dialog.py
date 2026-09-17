@@ -40,23 +40,33 @@ class CreateVersionDialog(QDialog):
         self._info_label.setWordWrap(True)
         layout.addWidget(self._info_label)
 
+        self._name_label = QLabel()
+        layout.addWidget(self._name_label)
         self._name_input = QLineEdit()
         self._name_input.setPlaceholderText(tr("game_versions.name_placeholder"))
+        self._name_label.setBuddy(self._name_input)
         layout.addWidget(self._name_input)
 
         profile_row = QHBoxLayout()
         self._profile_label = QLabel()
         profile_row.addWidget(self._profile_label)
         self._profile_combo = QComboBox()
+        self._profile_label.setBuddy(self._profile_combo)
         self._profile_combo.addItem(tr("game_versions.without_profile"), None)
         for pname in profiles:
             self._profile_combo.addItem(pname, pname)
         profile_row.addWidget(self._profile_combo, 1)
         layout.addLayout(profile_row)
+        layout.addStretch()
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self._ok_button = QPushButton()
+        self._ok_button.setEnabled(False)
+        self._ok_button.setDefault(True)
+        self._name_input.textChanged.connect(
+            lambda text: self._ok_button.setEnabled(bool(text.strip()))
+        )
         self._ok_button.clicked.connect(self._on_accept)
         self._cancel_button = QPushButton()
         self._cancel_button.clicked.connect(self.reject)
@@ -70,7 +80,9 @@ class CreateVersionDialog(QDialog):
     def relocalize_ui(self) -> None:
         self.setWindowTitle(tr("game_versions.create_title"))
         self._info_label.setText(tr("game_versions.create_info", game=self._game_name))
+        self._name_label.setText(tr("blocklist.prefix_type_name"))
         self._name_input.setPlaceholderText(tr("game_versions.name_placeholder"))
+        self._name_input.setAccessibleName(tr("game_versions.name_placeholder"))
         current_profile = self._profile_combo.currentData()
         self._profile_combo.setItemText(0, tr("game_versions.without_profile"))
         index = self._profile_combo.findData(current_profile)
@@ -88,7 +100,6 @@ class CreateVersionDialog(QDialog):
             self.accept()
         else:
             self._name_input.setFocus()
-            self._name_input.setStyleSheet("border: 2px solid red;")
 
     @property
     def version_name(self) -> str:

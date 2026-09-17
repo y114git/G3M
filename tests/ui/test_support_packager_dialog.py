@@ -1,4 +1,4 @@
-from PyQt6.QtCore import qInstallMessageHandler
+from PyQt6.QtCore import Qt, qInstallMessageHandler
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QCheckBox
 
@@ -65,7 +65,7 @@ def test_support_packager_uses_localized_collapsible_standard_checkboxes(
         )
         arrow = dialog._section_arrows["system"]
         dialog._toggle_section("system")
-        assert arrow.text() == "▶"
+        assert arrow.arrowType() == Qt.ArrowType.RightArrow
         dialog._items["app.version"].setChecked(False)
         dialog._custom.setChecked(False)
         assert not dialog._sections_scroll.isHidden()

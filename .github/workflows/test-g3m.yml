@@ -13,7 +13,6 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.14"
-  G3MTOOL_REPO: https://github.com/y114git/G3MTool.git
   G3MTOOL_BRANCH: main
 
 jobs:
@@ -25,7 +24,7 @@ jobs:
       matrix:
         include:
           - label: Linux
-            runs_on: ubuntu-22.04
+            runs_on: ubuntu-24.04
             g3mtool_runtime: linux-x64
             g3mtool_dir: src/assets/bin/g3mtool_linux
           - label: macOS x64
@@ -41,19 +40,14 @@ jobs:
             g3mtool_runtime: win-x64
             g3mtool_dir: src/assets/bin/g3mtool_windows
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: pyproject.toml
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -74,33 +68,25 @@ jobs:
           python -m pip install --upgrade pip wheel
           pip install -e ".[test]"
 
-      - name: Build G3MTool from latest source
-        if: runner.os != 'Windows'
-        run: |
-          rm -rf g3mtool-src
-          git init g3mtool-src
-          git -C g3mtool-src remote add origin "${{ env.G3MTOOL_REPO }}"
-          git -C g3mtool-src fetch --depth 1 origin "${{ env.G3MTOOL_BRANCH }}"
-          git -C g3mtool-src checkout FETCH_HEAD
-          mkdir -p "${{ matrix.g3mtool_dir }}"
-          dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
-          rm -rf g3mtool-src
+      - name: Build bundled G3MTool
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
 
-      - name: Build G3MTool from latest source (Windows)
+      - name: Checkout G3MTool source
+        uses: actions/checkout@v7
+        with:
+          repository: y114git/G3MTool
+          ref: ${{ env.G3MTOOL_BRANCH }}
+          path: g3mtool-src
+          persist-credentials: false
+
+      - name: Publish bundled G3MTool
         shell: pwsh
-        run: |
-          if (Test-Path g3mtool-src) { Remove-Item g3mtool-src -Recurse -Force }
-          git init g3mtool-src
-          git -C g3mtool-src remote add origin "${{ env.G3MTOOL_REPO }}"
-          git -C g3mtool-src fetch --depth 1 origin "${{ env.G3MTOOL_BRANCH }}"
-          git -C g3mtool-src checkout FETCH_HEAD
-          New-Item -ItemType Directory -Force -Path "${{ matrix.g3mtool_dir }}" | Out-Null
-          dotnet publish g3mtool-src/G3MToolCLI -c Release -r "${{ matrix.g3mtool_runtime }}" -o "${{ matrix.g3mtool_dir }}"
-          Remove-Item g3mtool-src -Recurse -Force
-
-      - name: Ensure G3MTool is executable
-        if: runner.os != 'Windows'
-        run: chmod +x "${{ matrix.g3mtool_dir }}"/* 2>/dev/null || true
+        env:
+          G3MTOOL_RUNTIME: ${{ matrix.g3mtool_runtime }}
+          G3MTOOL_OUTPUT: ${{ matrix.g3mtool_dir }}
+        run: dotnet publish g3mtool-src/G3MToolCLI -c Release -r $env:G3MTOOL_RUNTIME -o $env:G3MTOOL_OUTPUT
 
       - name: Build UnRAR from source
         if: runner.os != 'Windows'
@@ -161,7 +147,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.g3mtool_runtime }}
           path: |

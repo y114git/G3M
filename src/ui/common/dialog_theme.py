@@ -140,11 +140,30 @@ def build_dialog_theme_stylesheet(app_state):
     """
 
 
+def build_progress_bar_stylesheet(theme: dict[str, object]) -> str:
+    return f"""
+        QProgressBar {{
+            background-color: {theme["background"]};
+            border: 2px solid {theme["border"]};
+            border-radius: 4px;
+            text-align: center;
+            font-size: 10px;
+            color: {theme["main_text"]};
+        }}
+        QProgressBar::chunk {{
+            background-color: {theme["secondary_text"]};
+            border-radius: 3px;
+        }}
+    """
+
+
 def get_dialog_text_color(app_state) -> str:
     """Return themed text color for dialogs."""
     from ui.common.styling import get_theme_color
 
-    return get_theme_color(app_state.local_config, "main_text") if app_state else "#e8e9eb"
+    return (
+        get_theme_color(app_state.local_config, "main_text") if app_state else "#e8e9eb"
+    )
 
 
 def apply_dialog_theme(dialog, app_state):

@@ -26,7 +26,13 @@ class DownloadWorker(ManagedQThread):
     progress_updated = pyqtSignal(str, int, int, int)
     download_finished = pyqtSignal(str, bool, str, str)
 
-    def __init__(self, record_id: str, url: str, target_path: str, parent=None) -> None:
+    def __init__(
+        self,
+        record_id: str,
+        url: str,
+        target_path: str,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._record_id = record_id
         self._url = url

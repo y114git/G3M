@@ -10,6 +10,30 @@ from services.mod.service import ModManager
 from utils.file_utils import load_json, save_json
 
 
+@pytest.mark.parametrize("metadata", [None, [], ["invalid"], {"mod": None}, {"mod": ["invalid"]}])
+def test_record_playtime_preserves_invalid_metadata(app_state, metadata):
+    manager = ModManager.__new__(ModManager)
+    manager.app_state = app_state
+    save_json(app_state.mods_metadata_path, metadata)
+
+    manager.add_playtime_hours(["mod"], 1.0)
+
+    assert load_json(app_state.mods_metadata_path) == metadata
+
+
+def test_record_playtime_quarantines_corrupt_json(app_state):
+    manager = ModManager.__new__(ModManager)
+    manager.app_state = app_state
+    with open(app_state.mods_metadata_path, "w", encoding="utf-8") as file:
+        file.write('{"mod":')
+
+    manager.add_playtime_hours(["mod"], 1.0)
+
+    with open(f"{app_state.mods_metadata_path}.invalid.bak", encoding="utf-8") as file:
+        assert file.read() == '{"mod":'
+    assert load_json(app_state.mods_metadata_path) == {"mod": {"playtime_hours": 1.0}}
+
+
 def test_create_mod_object_from_info_refreshes_existing_local_mod_fields_and_playtime():
     """Checks that creating mod object from info refreshes existing local mod fields and playtime."""
     manager = ModManager.__new__(ModManager)

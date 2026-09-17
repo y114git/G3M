@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.config import QSS_ARROW_LABEL, QSS_BOLD_TRANSPARENT
 from services.localization_service import tr
 from services.warning_service import (
     WarningSeverity,
@@ -24,8 +23,7 @@ from services.warning_service import (
     normalize_warning_preferences,
 )
 from ui.common.dialog_theme import apply_dialog_theme
-from ui.common.styling import get_section_line_color
-from ui.utils.ui_utils import UIAnimator
+from ui.widgets.shared.custom_controls import SectionToggle
 
 
 class WarningPreferencesDialog(QDialog):
@@ -36,8 +34,7 @@ class WarningPreferencesDialog(QDialog):
         self.preferences = normalize_warning_preferences(self.local_config)
         self.warning_checkboxes: dict[str, QCheckBox] = {}
         self.warning_help_buttons: dict[str, QToolButton] = {}
-        self.section_title_labels: dict[WarningSeverity, QLabel] = {}
-        self.section_arrows: dict[WarningSeverity, QLabel] = {}
+        self.section_title_labels: dict[WarningSeverity, SectionToggle] = {}
         self.section_content_widgets: dict[WarningSeverity, QWidget] = {}
         self._warning_definitions = iter_warning_definitions()
         self.warning_definitions_by_id = {
@@ -108,8 +105,7 @@ class WarningPreferencesDialog(QDialog):
                 section_layout.addWidget(row)
 
         self.button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
@@ -123,36 +119,8 @@ class WarningPreferencesDialog(QDialog):
         section_layout.setContentsMargins(0, 8, 0, 4)
         section_layout.setSpacing(6)
 
-        header = QWidget(section)
-        header.setCursor(Qt.CursorShape.PointingHandCursor)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(4)
-
-        line_color = get_section_line_color(self.local_config)
-        line_style = f"color: {line_color};"
-        line_left = QFrame(header)
-        line_left.setFrameShape(QFrame.Shape.HLine)
-        line_left.setFrameShadow(QFrame.Shadow.Sunken)
-        line_left.setStyleSheet(line_style)
-        header_layout.addWidget(line_left, stretch=1)
-
-        title_label = QLabel(header)
-        title_label.setObjectName(f"warning_section_{severity.value}")
-        title_label.setStyleSheet(QSS_BOLD_TRANSPARENT)
-        self.section_title_labels[severity] = title_label
-        header_layout.addWidget(title_label)
-
-        arrow = QLabel("▼", header)
-        arrow.setStyleSheet(QSS_ARROW_LABEL)
-        self.section_arrows[severity] = arrow
-        header_layout.addWidget(arrow)
-
-        line_right = QFrame(header)
-        line_right.setFrameShape(QFrame.Shape.HLine)
-        line_right.setFrameShadow(QFrame.Shadow.Sunken)
-        line_right.setStyleSheet(line_style)
-        header_layout.addWidget(line_right, stretch=1)
+        header = SectionToggle(parent=section)
+        self.section_title_labels[severity] = header
 
         content = QWidget(section)
         content_layout = QVBoxLayout(content)
@@ -160,8 +128,8 @@ class WarningPreferencesDialog(QDialog):
         content_layout.setSpacing(8)
         self.section_content_widgets[severity] = content
 
-        header.mousePressEvent = lambda _event, value=severity: self._toggle_section(
-            value
+        header.clicked.connect(
+            lambda _checked, value=severity: self._toggle_section(value)
         )
 
         section_layout.addWidget(header)
@@ -171,8 +139,8 @@ class WarningPreferencesDialog(QDialog):
     def _toggle_section(self, severity: WarningSeverity) -> None:
         content = self.section_content_widgets[severity]
         is_expanded = content.isHidden()
-        self.section_arrows[severity].setText("▼" if is_expanded else "▶")
-        UIAnimator.collapse_expand(content, is_expanded, 200, self.app_state)
+        self.section_title_labels[severity].setChecked(is_expanded)
+        content.setVisible(is_expanded)
 
     def relocalize_ui(self) -> None:
         self.setWindowTitle(tr("warnings.manage_title"))
@@ -187,9 +155,7 @@ class WarningPreferencesDialog(QDialog):
             tooltip = tr(definition.tooltip_key)
             checkbox.setToolTip(tooltip)
             self.warning_help_buttons[warning_id].setToolTip(tooltip)
-        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setText(
-            tr("ui.ok")
-        )
+        self.button_box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("ui.ok"))
         self.button_box.button(QDialogButtonBox.StandardButton.Cancel).setText(
             tr("ui.cancel_button")
         )

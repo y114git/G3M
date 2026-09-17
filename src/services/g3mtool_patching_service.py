@@ -255,6 +255,8 @@ class G3MToolPatchingService(QObject):
         warning_id: str = "legacy_patching_warning",
         context: dict[str, Any] | None = None,
     ) -> bool:
+        if self._cancelled:
+            return False
         self.patching_logger.warning(message)
         if details:
             self.patching_logger.warning(details)
@@ -266,12 +268,18 @@ class G3MToolPatchingService(QObject):
             fallback_message=message,
         )
         if self.strict_warning_handler:
-            return bool(self.strict_warning_handler(event, details, report_path))
+            return (
+                bool(self.strict_warning_handler(event, details, report_path))
+                and not self._cancelled
+            )
         local_config = getattr(self.app_state, "local_config", {}) or {}
         if not is_warning_enabled(warning_id, local_config):
             return True
         if self.warning_handler:
-            return bool(self.warning_handler(event, details, report_path))
+            return (
+                bool(self.warning_handler(event, details, report_path))
+                and not self._cancelled
+            )
         return True
 
     def _continue_without_data_patch(
@@ -455,6 +463,7 @@ class G3MToolPatchingService(QObject):
     ) -> bool:
         self._cancelled = False
         self._last_report_path = None
+        self._saved_report_path = None
         self._file_hashes.clear()
 
         if not self.g3mtool.is_available():
@@ -523,7 +532,7 @@ class G3MToolPatchingService(QObject):
                     total_sections,
                     mod_steps,
                 )
-                if not success:
+                if not success or self._cancelled:
                     if not is_modpack:
                         self._restore_all(section_mods)
                     return False
@@ -890,6 +899,8 @@ class G3MToolPatchingService(QObject):
         display_name: str,
     ) -> bool:
         active_steps = [step for step in data_steps if step]
+        if self._cancelled:
+            return False
         if not active_steps:
             shutil.copy2(data_win_path, output_path)
             return True
@@ -946,7 +957,7 @@ class G3MToolPatchingService(QObject):
                     step_end,
                     display_name,
                 )
-            if not success or not os.path.exists(step_output):
+            if self._cancelled or not success or not os.path.exists(step_output):
                 return False
             current_input = step_output
         return True
@@ -1426,7 +1437,9 @@ class G3MToolPatchingService(QObject):
                     "CRITICAL: Failed to backup %s - aborting to protect game files",
                     target_file,
                 )
-                self.status_update.emit(tr("errors.backup_failed", path=target_file), "error")
+                self.status_update.emit(
+                    tr("errors.backup_failed", path=target_file), "error"
+                )
                 return False
         else:
             self.backup_service.mark_file_added(chapter_id, target_file)

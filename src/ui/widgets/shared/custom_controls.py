@@ -3,12 +3,42 @@
 from typing import Any, cast
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QComboBox, QLabel
+from PyQt6.QtWidgets import QComboBox, QLabel, QSizePolicy, QToolButton
 
 
 class NoScrollComboBox(QComboBox):
     def wheelEvent(self, e):
         cast(Any, e).ignore()
+
+
+class SectionToggle(QToolButton):
+    """Keyboard-operable section header with a native disclosure arrow."""
+
+    def __init__(
+        self,
+        text: str = "",
+        parent=None,
+        *,
+        expanded: bool = True,
+        centered: bool = False,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("sectionToggle")
+        self.setText(text)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setCheckable(True)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Minimum if centered else QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.toggled.connect(self._update_arrow)
+        self.setChecked(expanded)
+        self._update_arrow(expanded)
+
+    def _update_arrow(self, expanded: bool) -> None:
+        self.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
 
 
 class AnimatedToolTip(QLabel):

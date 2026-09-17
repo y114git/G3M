@@ -213,7 +213,7 @@ class TestAppWindow:
                 _drain_events(qapp, cycles=12, delay_ms=50)
 
                 assert window.app_state.filtered_mods == []
-                assert window.mod_list_layout.count() == 0
+                assert window.mod_list_layout.count() == 1
             finally:
                 _close_app_window(qapp, window)
 
@@ -564,7 +564,7 @@ class TestAppWindow:
                     window.change_font_button.text()
                     == window.customization_service.get_font_button_text()
                 )
-                assert window.status_label.text() == "Launcher settings"
+                assert window.status_label.text() == "G3M settings"
 
                 localization_service.load_language("ru")
                 window.app_state.local_config["language"] = "ru"
@@ -594,7 +594,7 @@ class TestAppWindow:
                     window.change_font_button.text()
                     == window.customization_service.get_font_button_text()
                 )
-                assert window.status_label.text() == "Настройки лаунчера"
+                assert window.status_label.text() == "Настройки G3M"
             finally:
                 localization_service.load_language(original_language)
                 _close_app_window(qapp, window)
@@ -1272,21 +1272,36 @@ class TestTabBuilders:
         """Checks that settings view builder creation."""
         from services.localization_service import tr
         from ui.builders.settings_view_builder import SettingsViewBuilder
+        from ui.widgets.shared.custom_controls import SectionToggle
 
         builder = SettingsViewBuilder(app_state, None)
         assert builder is not None
-        builder.build()
-        assert "games_manager_button" in builder.get_widgets()
-        assert "plugins_layout" in builder.get_widgets()
-        assert "plugins_widget" in builder.get_widgets()
-        assert "pause_background_music_unfocused_checkbox" in builder.get_widgets()
-        assert "disable_discord_rich_presence_checkbox" in builder.get_widgets()
-        assert builder.get_widgets()["language_combo"].toolTip() == tr(
-            "tooltips.language"
-        )
-        assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr(
-            "tooltips.ui_scale"
-        )
+        widget = builder.build()
+        try:
+            widget.resize(1000, 800)
+            widget.show()
+            qapp.processEvents()
+            assert "games_manager_button" in builder.get_widgets()
+            assert "plugins_layout" in builder.get_widgets()
+            assert "plugins_widget" in builder.get_widgets()
+            assert "pause_background_music_unfocused_checkbox" in builder.get_widgets()
+            assert "disable_discord_rich_presence_checkbox" in builder.get_widgets()
+            assert builder.get_widgets()["language_combo"].toolTip() == tr(
+                "tooltips.language"
+            )
+            assert builder.get_widgets()["ui_scale_spinbox"].toolTip() == tr(
+                "tooltips.ui_scale"
+            )
+            assert all(
+                isinstance(header, SectionToggle)
+                for header, _key in builder.get_widgets()["_section_headers"]
+            )
+            title_toggle, _key = builder.get_widgets()["_section_headers"][0]
+            header = title_toggle.parentWidget()
+            assert title_toggle.geometry().center().x() == header.rect().center().x()
+        finally:
+            widget.close()
+            widget.deleteLater()
 
     def test_settings_view_builder_places_discord_presence_toggle_in_appearance_advanced(
         self, qapp, app_state, feedback_service

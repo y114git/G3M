@@ -1,6 +1,6 @@
 """Dialog for viewing changelog entries."""
 
-from PyQt6.QtWidgets import QDialog, QPushButton, QTextBrowser, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QHBoxLayout, QPushButton, QTextBrowser, QVBoxLayout
 
 from config.config import NETWORK_TIMEOUT_MEDIUM
 from services.localization_service import tr
@@ -29,7 +29,11 @@ class ChangelogDialog(QDialog):
         layout.addWidget(self.text_browser)
         self.close_button = QPushButton(tr("buttons.close"), self)
         self.close_button.clicked.connect(self.accept)
-        layout.addWidget(self.close_button)
+        self.close_button.setDefault(True)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(self.close_button)
+        layout.addLayout(buttons)
 
     def _load_changelog(self):
         if not self._source:
