@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from services.migration_service import build_extra_file_entry
 from utils.file_utils import (
     get_unique_mod_dir,
     remove_archive_extension,
@@ -156,7 +157,13 @@ class Frickbears3AddonsService:
             "game": "frickbears3",
             "author": str(metadata.get("author") or "Unknown"),
             "version": str(metadata.get("version") or "1.0.0"),
-            "files": {"frickbears3": {"extra_files": ["addons/"]}},
+            "files": {
+                "frickbears3": {
+                    "extra_files": [
+                        build_extra_file_entry("addons/", "game_data_folder")
+                    ]
+                }
+            },
         }
         for field_name in ("description", "icon", "homepage"):
             value = metadata.get(field_name)

@@ -89,6 +89,7 @@ def update_path_input_localizations(w) -> None:
     placeholder_text = tr("ui.path_field_placeholder")
     for attr_name in (
         "settings_game_path_edit",
+        "settings_game_data_path_edit",
         "settings_custom_executable_edit",
         "settings_custom_g3mtool_edit",
         "settings_custom_xdelta_edit",
@@ -476,6 +477,24 @@ def commit_game_path_text(w, path: str):
     _clear_active_path_focus(w)
 
 
+def commit_game_data_path_text(w, path: str):
+    cleaned_path = normalize_user_input_path(path)
+    w.app_state.game_mode.set_data_path(w.app_state.local_config, cleaned_path)
+    w.settings_service.write_local_config()
+    w.settings_service.settings_changed.emit()
+    update_path_inputs_ui(w)
+    _clear_active_path_focus(w)
+
+
+def select_game_data_path(w):
+    game = w.app_state.game_mode
+    path = w.settings_service.pick_directory(
+        tr("ui.select"), game.get_data_path(w.app_state.local_config)
+    )
+    if path:
+        commit_game_data_path_text(w, path)
+
+
 def select_custom_g3mtool_file(w):
     filepath = w.settings_service.select_executable_path(
         tr("buttons.select_g3mtool_binary")
@@ -606,6 +625,26 @@ def update_path_inputs_ui(w):
     reset_button = getattr(w, "settings_game_path_reset_button", None)
     if reset_button:
         reset_button.setVisible(bool(game_path))
+    game_data_path_label = getattr(w, "settings_game_data_path_label", None)
+    if game_data_path_label:
+        game_data_path_label.setText(
+            tr("ui.settings_game_data_path_label").replace(
+                "{GAME}", str(getattr(w.app_state.game_mode, "display_label", "Game"))
+            )
+        )
+    game_data_path = w.app_state.game_mode.get_data_path(w.app_state.local_config)
+    game_data_path_edit = getattr(w, "settings_game_data_path_edit", None)
+    if game_data_path_edit:
+        if hasattr(game_data_path_edit, "set_full_text"):
+            game_data_path_edit.set_full_text(game_data_path)
+        else:
+            game_data_path_edit.setText(game_data_path)
+        game_data_path_edit.setToolTip(game_data_path)
+    game_data_reset_button = getattr(
+        w, "settings_game_data_path_reset_button", None
+    )
+    if game_data_reset_button:
+        game_data_reset_button.setVisible(bool(game_data_path))
     update_custom_executable_ui(w)
 
 

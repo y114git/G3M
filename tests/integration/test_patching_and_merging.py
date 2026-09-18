@@ -783,7 +783,7 @@ class TestModClassification:
 
         assert mod_infos == [(str(data_file), MOD_TYPE_DATAFILE, str(mod_dir))]
 
-    def test_collect_mod_infos_does_not_treat_configured_extra_xdelta_as_data_patch(
+    def test_collect_mod_infos_does_not_treat_configured_extra_patch_as_data_patch(
         self, tmp_path
     ):
         mod_dir = tmp_path / "teto_cover"
@@ -1442,6 +1442,81 @@ class TestFileOverrideProgress:
             encoding="utf-8"
         ) == "patched data"
 
+    def test_apply_file_overrides_uses_configured_game_data_folder(self, tmp_path):
+        from utils.patching.file_override_utils import apply_file_overrides
+
+        mod_dir = tmp_path / "mod"
+        target_dir = tmp_path / "game"
+        data_dir = tmp_path / "game_data"
+        (mod_dir / "saves").mkdir(parents=True)
+        (mod_dir / "saves" / "extra.json").write_text("{}", encoding="utf-8")
+        patcher = Mock()
+        patcher.xdelta_modpack = False
+        patcher._backup_or_mark_file = Mock()
+        patcher._request_warning = Mock(return_value=True)
+        patcher.patching_logger = Mock()
+
+        result = apply_file_overrides(
+            patcher,
+            str(mod_dir),
+            str(target_dir),
+            set(),
+            False,
+            chapter_id="deltarune_1",
+            mod_name="Test Mod",
+            game_id="deltarune",
+            configured_paths=[
+                {"file_path": "saves/extra.json", "target": "game_data_folder"}
+            ],
+            mod_root_dir=str(mod_dir),
+            data_dir=str(data_dir),
+        )
+
+        assert result is True
+        assert (data_dir / "saves" / "extra.json").read_text(encoding="utf-8") == "{}"
+        assert not (target_dir / "saves" / "extra.json").exists()
+
+    def test_data_override_with_whitespace_status_requires_data_folder(self, tmp_path):
+        from utils.patching.file_override_utils import (
+            apply_file_overrides,
+            iter_configured_override_entries,
+        )
+
+        mod_dir = tmp_path / "mod"
+        target_dir = tmp_path / "game"
+        (mod_dir / "saves").mkdir(parents=True)
+        (mod_dir / "saves" / "extra.json").write_text("{}", encoding="utf-8")
+        target_dir.mkdir()
+        configured_paths = [{"file_path": "saves/extra.json", "status": " data "}]
+        entries = list(
+            iter_configured_override_entries(
+                str(mod_dir), configured_paths, "deltarune_1", "deltarune"
+            )
+        )
+        patcher = Mock()
+        patcher.xdelta_modpack = False
+        patcher._backup_or_mark_file = Mock()
+        patcher._request_warning = Mock(return_value=True)
+        patcher.patching_logger = Mock()
+
+        assert entries[0]["target_root"] == ""
+        assert (
+            apply_file_overrides(
+                patcher,
+                str(mod_dir),
+                str(target_dir),
+                set(),
+                False,
+                chapter_id="deltarune_1",
+                mod_name="Test Mod",
+                game_id="deltarune",
+                configured_paths=configured_paths,
+                mod_root_dir=str(mod_dir),
+            )
+            is False
+        )
+        assert not (target_dir / "saves" / "extra.json").exists()
+
     def test_apply_file_overrides_skips_legacy_walk_when_config_has_no_extra_files(
         self, tmp_path
     ):
@@ -1509,8 +1584,8 @@ class TestFileOverrideProgress:
         assert len(progress_updates) >= 2
         assert progress_updates[-1][0] == 1
 
-    def test_xdelta_without_matching_target_warns_and_continues(self, tmp_path):
-        """Checks that unmatched extra xdelta patches warn but can be skipped."""
+    def test_patch_without_matching_target_warns_and_continues(self, tmp_path):
+        """Checks that unmatched additional patches warn but can be skipped."""
         from utils.patching.file_override_utils import apply_file_overrides
 
         mod_dir = tmp_path / "mod"
@@ -1530,7 +1605,7 @@ class TestFileOverrideProgress:
         assert result is True
         patcher._request_warning.assert_called_once()
         assert patcher._request_warning.call_args.kwargs["warning_id"] == (
-            "extra_xdelta_no_target"
+            "extra_additional_patch_no_target"
         )
 
 
@@ -1542,11 +1617,13 @@ class TestG3MPatchProgressText:
         source, tmp_path, monkeypatch
     ) -> tuple[object, object, Path, Path]:
         app_state = Mock()
-        app_state.local_config = {}
         mod_service = Mock()
         target = tmp_path / "game"
         target.mkdir()
         localappdata = tmp_path / "localappdata"
+        app_state.local_config = {
+            "frickbears3_game_data_path": str(localappdata / "Frickbears3")
+        }
         monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
 
         mod = Mock()
@@ -1558,8 +1635,10 @@ class TestG3MPatchProgressText:
             lambda *_args: True,
         )
         monkeypatch.setattr(
-            "services.g3mtool_patching_service.get_mod_configured_extra_files",
-            lambda *_args: ["addons/"],
+            "services.g3mtool_patching_service.get_mod_configured_extra_file_entries",
+            lambda *_args: [
+                {"file_path": "addons/", "target": "game_data_folder"}
+            ],
         )
         monkeypatch.setattr(patcher, "_resolve_mod_game", lambda _mod: "frickbears3")
         return patcher, mod, target, localappdata
@@ -1754,7 +1833,7 @@ class TestG3MPatchProgressText:
             lambda *_args: True,
         )
         monkeypatch.setattr(
-            "services.g3mtool_patching_service.get_mod_configured_extra_files",
+            "services.g3mtool_patching_service.get_mod_configured_extra_file_entries",
             lambda *_args: [],
         )
 
@@ -1783,7 +1862,7 @@ class TestG3MPatchProgressText:
         assert (installed / "icon.png").read_bytes() == b"guard icon"
         assert not (target / "_icon.png").exists()
 
-    def test_configured_frickbears3_addon_follows_linked_files(
+    def test_configured_frickbears3_addon_skips_linked_files(
         self, tmp_path, monkeypatch
     ):
         source = tmp_path / "mod"
@@ -1805,7 +1884,7 @@ class TestG3MPatchProgressText:
             [(mod, str(source))], str(target), "frickbears3", False, 0, 100
         )
         installed = localappdata / "Frickbears3" / "addons" / "Wario"
-        assert (installed / "icon.png").read_bytes() == b"guard icon"
+        assert not installed.exists()
 
     def test_multi_patch_merge_reports_progress_after_normalization(self, tmp_path):
         """Checks that merge progress follows the input-normalization window."""

@@ -4,9 +4,15 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import PureWindowsPath
 from typing import Any
 
 from config.config import MOD_CONFIG_FILENAME
+from services.migration_service import (
+    EXTRA_FILE_TARGET_CUSTOM,
+    EXTRA_FILE_TARGETS,
+    normalize_extra_file_target,
+)
 from utils.file_utils import load_json
 from utils.mod.config_parser import (
     MOD_ALLOWED_TAGS,
@@ -156,19 +162,40 @@ def validate_mod_config(config_data: dict, config_path: str, folder_name: str) -
         for extra_file in extra_files:
             if isinstance(extra_file, str):
                 file_path = extra_file
-                status = "install"
+                target = "game_folder"
+                target_path = ""
             elif isinstance(extra_file, dict):
                 file_path = extra_file.get("file_path")
-                status = extra_file.get("status")
+                target = (
+                    extra_file.get("target")
+                    or extra_file.get("status")
+                    or "game_folder"
+                )
+                target_path = extra_file.get("target_path") or ""
             else:
                 return False
+            normalized_target = normalize_extra_file_target(target)
             if (
                 not isinstance(file_path, str)
                 or not file_path
                 or len(file_path) > MOD_FIELD_LIMITS["file_value"]
-                or not isinstance(status, str)
-                or not status
-                or len(status) > MOD_FIELD_LIMITS["file_value"]
+                or not isinstance(target, str)
+                or target.strip().lower()
+                not in {*EXTRA_FILE_TARGETS, "install", "data", "dependency"}
+                or (
+                    normalized_target == EXTRA_FILE_TARGET_CUSTOM
+                    and (
+                        not isinstance(target_path, str)
+                        or len(target_path) > MOD_FIELD_LIMITS["file_value"]
+                    )
+                )
+                or (
+                    normalized_target == EXTRA_FILE_TARGET_CUSTOM
+                    and not (
+                        os.path.isabs(target_path)
+                        or PureWindowsPath(target_path).is_absolute()
+                    )
+                )
             ):
                 return False
     return True

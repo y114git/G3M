@@ -81,7 +81,10 @@ class TestModInfo:
         }
         mod = ModInfo.from_dict(data)
         assert len(mod.files['0'].extra_files) == 1
-        assert mod.files['0'].extra_files[0] == 'http://example.com/music.zip'
+        assert mod.files['0'].extra_files[0] == {
+            'file_path': 'http://example.com/music.zip',
+            'target': 'game_folder',
+        }
 
     def test_get_file_data_direct(self):
         """Checks that getting file data direct."""
@@ -190,7 +193,18 @@ class TestModFileData:
         """Checks that withing with extra files."""
         fd = ModFileData(extra_files=['f1.zip', 'f2.zip'])
         assert len(fd.extra_files) == 2
-        assert fd.extra_files[0] == 'f1.zip'
+        assert fd.extra_files[0] == {'file_path': 'f1.zip', 'target': 'game_folder'}
+
+    def test_preserves_special_extra_file_type(self):
+        fd = ModFileData(
+            extra_files=[
+                {"file_path": "saves/config.json", "target": "game_data_folder"}
+            ]
+        )
+
+        assert fd.extra_files == [
+            {"file_path": "saves/config.json", "target": "game_data_folder"}
+        ]
 
     def test_is_valid_with_url(self):
         """Checks that validates with url."""

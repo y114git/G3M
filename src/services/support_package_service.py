@@ -20,10 +20,9 @@ from typing import Any
 import psutil
 
 from config.config import APP_VERSION, MOD_CONFIG_FILENAME
+from models.game_modes import get_game
 from services.background_operations import background_operations
-from utils.frickbears3_addons_utils import get_frickbears3_addons_dir
 from utils.path_utils import get_user_data_root
-from utils.pizzatower_afom_utils import get_pizzatower_towers_dir
 
 SECRET_KEY = re.compile(
     r"(?:token|secret|password|passwd|authorization|api[_-]?key|cookie|session)", re.I
@@ -108,15 +107,17 @@ class SupportPackageService:
                 result.append((name, path))
         return result
 
-    @staticmethod
-    def special_appdata_roots() -> list[tuple[str, Path]]:
+    def special_appdata_roots(self) -> list[tuple[str, Path]]:
         result = []
-        for name, value in (
-            ("Frickbears3 addons", get_frickbears3_addons_dir()),
-            ("Pizza Tower towers", get_pizzatower_towers_dir()),
+        config = getattr(self.app_state, "local_config", {})
+        for name, game_id, directory in (
+            ("Frickbears3 addons", "frickbears3", "addons"),
+            ("Pizza Tower towers", "pizzatower", "towers"),
         ):
-            path = Path(value).resolve()
-            if path.is_dir():
+            game = get_game(game_id)
+            data_dir = game.get_data_path(config) if game else ""
+            path = Path(data_dir, directory).resolve() if data_dir else None
+            if path and path.is_dir():
                 result.append((name, path))
         return result
 

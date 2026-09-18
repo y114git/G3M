@@ -33,15 +33,69 @@ LEGACY_THEME_COLOR_KEYS = {
 }
 
 
+EXTRA_FILE_TARGET_GAME_FOLDER = "game_folder"
+EXTRA_FILE_TARGET_GAME_DATA_FOLDER = "game_data_folder"
+EXTRA_FILE_TARGET_NONE = "none"
+EXTRA_FILE_TARGET_CUSTOM = "custom"
+EXTRA_FILE_TARGETS = frozenset(
+    {
+        EXTRA_FILE_TARGET_GAME_FOLDER,
+        EXTRA_FILE_TARGET_GAME_DATA_FOLDER,
+        EXTRA_FILE_TARGET_NONE,
+        EXTRA_FILE_TARGET_CUSTOM,
+    }
+)
+_LEGACY_EXTRA_FILE_TARGETS = {
+    "install": EXTRA_FILE_TARGET_GAME_FOLDER,
+    "data": EXTRA_FILE_TARGET_GAME_DATA_FOLDER,
+    "dependency": EXTRA_FILE_TARGET_NONE,
+}
+
+
+def normalize_extra_file_target(value: object) -> str:
+    target = str(value or "").strip().lower()
+    target = _LEGACY_EXTRA_FILE_TARGETS.get(target, target)
+    return target if target in EXTRA_FILE_TARGETS else EXTRA_FILE_TARGET_NONE
+
+
 def build_extra_file_entry(
-    path: str, status: str = "install"
-) -> str | dict[str, str]:
-    normalized_status = str(status or "install").strip().lower()
-    return (
-        path
-        if normalized_status == "install"
-        else {"file_path": path, "status": normalized_status}
+    path: str,
+    target: str = EXTRA_FILE_TARGET_GAME_FOLDER,
+    target_path: str = "",
+) -> dict[str, str]:
+    entry = {
+        "file_path": path,
+        "target": normalize_extra_file_target(target),
+    }
+    if entry["target"] == EXTRA_FILE_TARGET_CUSTOM and target_path.strip():
+        entry["target_path"] = target_path.strip()
+    return entry
+
+
+def infer_legacy_extra_file_target(game: str, path: str, target: str) -> str:
+    if target != EXTRA_FILE_TARGET_GAME_FOLDER:
+        return target
+    normalized_path = str(path or "").replace("\\", "/").strip("/").lower()
+    special_name = {
+        "pizzatower": "towers",
+        "frickbears3": "addons",
+    }.get(str(game or "").lower())
+    if not special_name:
+        return target
+    if normalized_path == special_name or normalized_path.startswith(
+        f"{special_name}/"
+    ):
+        return EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+    archive_stem = (
+        normalized_path[:-7]
+        if normalized_path.endswith(".tar.gz")
+        else normalized_path[:-9]
+        if normalized_path.endswith(".tar.lzma")
+        else Path(normalized_path).stem
     )
+    if "/" not in normalized_path and archive_stem == special_name:
+        return EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+    return target
 
 
 LEGACY_CHAPTER_IDS = {
@@ -177,15 +231,20 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
                                 continue
                             if not file_path:
                                 continue
-                            status = (
-                                str(extra_file.get("status") or "install")
-                                .strip()
-                                .lower()
-                                if isinstance(extra_file, dict)
-                                else "install"
-                            )
+                            if isinstance(extra_file, dict):
+                                target = (
+                                    extra_file.get("target")
+                                    or extra_file.get("status")
+                                    or EXTRA_FILE_TARGET_GAME_FOLDER
+                                )
+                                target_path = str(
+                                    extra_file.get("target_path") or ""
+                                )
+                            else:
+                                target = EXTRA_FILE_TARGET_GAME_FOLDER
+                                target_path = ""
                             normalized_extra_files.append(
-                                build_extra_file_entry(file_path, status)
+                                build_extra_file_entry(file_path, target, target_path)
                             )
                     elif isinstance(extra_files, dict):
                         for filenames in extra_files.values():
@@ -193,7 +252,9 @@ def migrate_mod_config_legacy_fields(config_data: dict[str, Any]) -> bool:
                                 continue
                             for file_path in filenames:
                                 if file_path:
-                                    normalized_extra_files.append(file_path)
+                                    normalized_extra_files.append(
+                                        build_extra_file_entry(file_path)
+                                    )
                     if normalized_extra_files:
                         migrated_info["extra_files"] = normalized_extra_files
                     elif extra_files not in (None, [], {}):

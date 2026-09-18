@@ -157,22 +157,22 @@ WARNING_DEFINITIONS: dict[str, WarningDefinition] = {
         "warnings.messages.extra_archive_extract_failed.body",
         "warnings.tooltips.extra_archive_extract_failed",
     ),
-    "extra_xdelta_no_target": WarningDefinition(
-        "extra_xdelta_no_target",
+    "extra_additional_patch_no_target": WarningDefinition(
+        "extra_additional_patch_no_target",
         WarningSeverity.MINOR,
-        "warnings.items.extra_xdelta_no_target",
-        "warnings.messages.extra_xdelta_no_target.title",
-        "warnings.messages.extra_xdelta_no_target.body",
-        "warnings.tooltips.extra_xdelta_no_target",
+        "warnings.items.extra_additional_patch_no_target",
+        "warnings.messages.extra_additional_patch_no_target.title",
+        "warnings.messages.extra_additional_patch_no_target.body",
+        "warnings.tooltips.extra_additional_patch_no_target",
         enabled_by_default=False,
     ),
-    "extra_xdelta_apply_failed": WarningDefinition(
-        "extra_xdelta_apply_failed",
+    "extra_additional_patch_apply_failed": WarningDefinition(
+        "extra_additional_patch_apply_failed",
         WarningSeverity.MAJOR,
-        "warnings.items.extra_xdelta_apply_failed",
-        "warnings.messages.extra_xdelta_apply_failed.title",
-        "warnings.messages.extra_xdelta_apply_failed.body",
-        "warnings.tooltips.extra_xdelta_apply_failed",
+        "warnings.items.extra_additional_patch_apply_failed",
+        "warnings.messages.extra_additional_patch_apply_failed.title",
+        "warnings.messages.extra_additional_patch_apply_failed.body",
+        "warnings.tooltips.extra_additional_patch_apply_failed",
     ),
     "minor_file_overrides_only": WarningDefinition(
         "minor_file_overrides_only",
@@ -200,6 +200,11 @@ WARNING_DEFINITIONS: dict[str, WarningDefinition] = {
         "warnings.messages.legacy_patching_warning.body",
         "warnings.tooltips.legacy_patching_warning",
     ),
+}
+
+_LEGACY_WARNING_IDS = {
+    "extra_xdelta_no_target": "extra_additional_patch_no_target",
+    "extra_xdelta_apply_failed": "extra_additional_patch_apply_failed",
 }
 
 
@@ -249,6 +254,11 @@ def normalize_warning_preferences(config: dict[str, Any] | None) -> dict[str, An
     if not isinstance(prefs.get("warning_overrides"), dict):
         prefs["warning_overrides"] = {}
     prefs.pop("section_overrides", None)
+    warning_overrides = prefs["warning_overrides"]
+    for legacy_id, warning_id in _LEGACY_WARNING_IDS.items():
+        if legacy_id in warning_overrides:
+            warning_overrides.setdefault(warning_id, warning_overrides[legacy_id])
+            warning_overrides.pop(legacy_id)
     return prefs
 
 

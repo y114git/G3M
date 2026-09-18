@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from config.config import CYOP_AFOM_TAG
+from services.migration_service import build_extra_file_entry
 from utils.file_utils import get_unique_mod_dir, remove_archive_extension, save_json
 from utils.mod.config_parser import build_mod_config_data
 
@@ -157,7 +158,9 @@ class PizzaTowerAFOMService:
             "tags": [CYOP_AFOM_TAG],
             "files": {
                 "pizzatower": {
-                    "extra_files": ["towers/"],
+                    "extra_files": [
+                        build_extra_file_entry("towers/", "game_data_folder")
+                    ],
                 }
             },
         }

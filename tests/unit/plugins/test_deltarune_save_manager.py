@@ -112,6 +112,28 @@ def test_find_and_validate_save_path_resets_deleted_explicit_path(tmp_path):
     assert manager.save_path == ""
 
 
+def test_find_and_validate_save_path_uses_deltarune_data_folder(
+    tmp_path, monkeypatch
+):
+    module = _module()
+    manager = _manager(module, tmp_path)
+    configured_path = tmp_path / "configured_saves"
+    _write_save(configured_path)
+    manager.app_state.game_mode = SimpleNamespace(game_id="pizzatower")
+    monkeypatch.setattr(
+        module,
+        "get_game",
+        lambda game_id: (
+            SimpleNamespace(get_data_path=lambda _config: str(configured_path))
+            if game_id == "deltarune"
+            else None
+        ),
+    )
+
+    assert manager.find_and_validate_save_path() is True
+    assert Path(manager.save_path) == configured_path
+
+
 def test_launch_collection_prompt_skips_when_path_missing(tmp_path):
     module = _module()
     manager = _manager(module, tmp_path)

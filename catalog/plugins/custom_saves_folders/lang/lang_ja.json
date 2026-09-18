@@ -58,6 +58,8 @@
     "rule_exists": "同じMODルールがすでにあります。",
     "rule_selection_missing": "プロファイル、ゲーム、MOD、フォルダーを選択してください。",
     "game_path_missing": "選択したゲームのフォルダーが設定されていません。",
+    "game_data_folder_missing": "選択したゲームのデータフォルダーが設定されていません。",
+    "custom_data_folder_unsafe": "選択したカスタムセーブフォルダーは安全に使用できません。",
     "data_file_missing": "{game} の対応DATAファイルが見つかりません。",
     "script_missing": "カスタムセーブフォルダー用スクリプトが見つかりません。",
     "g3mtool_missing": "G3MToolを使用できません。",

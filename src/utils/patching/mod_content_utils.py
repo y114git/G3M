@@ -156,7 +156,7 @@ def extract_chapter_id_from_path(path: str) -> str | None:
     return None
 
 
-def find_target_files_for_xdelta(target_dir: str, patch_filename: str) -> list[str]:
+def find_target_files_for_patch(target_dir: str, patch_filename: str) -> list[str]:
     target_files = []
     if not os.path.isdir(target_dir):
         return target_files

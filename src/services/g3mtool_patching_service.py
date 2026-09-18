@@ -56,10 +56,13 @@ from utils.patching.file_override_plan import (
     destination_is_case_sensitive,
     discover_directory_candidates,
 )
-from utils.patching.file_override_utils import iter_configured_override_entries
+from utils.patching.file_override_utils import (
+    PATCH_FILE_EXTENSIONS,
+    iter_configured_override_entries,
+)
 from utils.patching.mod_resolve_utils import (
     get_mod_configured_data_file,
-    get_mod_configured_extra_files,
+    get_mod_configured_extra_file_entries,
     get_mod_source_dir,
     get_target_dir,
     has_mod_configured_chapter_entry,
@@ -977,7 +980,7 @@ class G3MToolPatchingService(QObject):
         )
         configured_entries: dict[int, list[dict[str, Any]]] = {}
         configured_mods: set[int] = set()
-        transform_extensions = (".xdelta", ".vcdiff", *ARCHIVE_EXTENSIONS)
+        transform_extensions = (*PATCH_FILE_EXTENSIONS, *ARCHIVE_EXTENSIONS)
         if can_plan:
             for mod_data, source in override_mods:
                 has_config = has_mod_configured_chapter_entry(
@@ -988,7 +991,7 @@ class G3MToolPatchingService(QObject):
                     self.patching_logger,
                 )
                 paths = (
-                    get_mod_configured_extra_files(
+                    get_mod_configured_extra_file_entries(
                         mod_data,
                         chapter_id,
                         self.mod_service,
@@ -1000,6 +1003,11 @@ class G3MToolPatchingService(QObject):
                 )
                 if has_config:
                     configured_mods.add(id(mod_data))
+                if any(
+                    entry["target"] == "game_data_folder" for entry in paths or []
+                ):
+                    can_plan = False
+                    break
                 entries = (
                     list(
                         iter_configured_override_entries(
@@ -1007,6 +1015,9 @@ class G3MToolPatchingService(QObject):
                             paths,
                             chapter_id,
                             self._resolve_mod_game(mod_data),
+                            target_dir
+                            if is_modpack
+                            else self._get_mod_data_dir(mod_data),
                         )
                     )
                     if paths
@@ -1394,7 +1405,7 @@ class G3MToolPatchingService(QObject):
             else False
         )
         configured_paths = (
-            get_mod_configured_extra_files(
+            get_mod_configured_extra_file_entries(
                 mod_data,
                 chapter_id,
                 self.mod_service,
@@ -1426,6 +1437,7 @@ class G3MToolPatchingService(QObject):
             game_id=self._resolve_mod_game(mod_data),
             configured_paths=configured_paths,
             mod_root_dir=mod_root_dir,
+            data_dir=target_dir if is_modpack else self._get_mod_data_dir(mod_data),
         )
 
     def _backup_or_mark_file(self, chapter_id, target_file: str) -> bool:
@@ -1450,8 +1462,8 @@ class G3MToolPatchingService(QObject):
         )
         return False
 
-    def _apply_xdelta_to_file(self, target_file: str, patch_path: str) -> bool:
-        """Apply xdelta patch to a non-data.win file (used by file_override_utils)."""
+    def _apply_patch_to_file(self, target_file: str, patch_path: str) -> bool:
+        """Apply an additional patch to a non-primary DATA file."""
         if not self.g3mtool.is_available():
             return False
         try:
@@ -1462,19 +1474,24 @@ class G3MToolPatchingService(QObject):
             )
         except OSError as error:
             self.patching_logger.debug(
-                "_apply_xdelta_to_file: failed to create temporary output: %s", error
+                "_apply_patch_to_file: failed to create temporary output: %s", error
             )
             return False
         os.close(descriptor)
         safe_remove(temp_output)
-        returncode = self.g3mtool.xpatch_apply(target_file, patch_path, temp_output)[0]
+        apply = (
+            self.g3mtool.xpatch_apply
+            if patch_path.lower().endswith((".xdelta", ".vcdiff"))
+            else self.g3mtool.apply_patch
+        )
+        returncode = apply(target_file, patch_path, temp_output)[0]
         if returncode == 0 and os.path.isfile(temp_output):
             try:
                 os.replace(temp_output, target_file)
                 return True
             except Exception as e:
                 self.patching_logger.debug(
-                    f"_apply_xdelta_to_file: failed to move patched output into place: {e}",
+                    f"_apply_patch_to_file: failed to move patched output into place: {e}",
                     exc_info=True,
                 )
         safe_remove(temp_output)
@@ -1490,6 +1507,13 @@ class G3MToolPatchingService(QObject):
         from utils.patching.mod_resolve_utils import resolve_mod_game
 
         return resolve_mod_game(mod_data)
+
+    def _get_mod_data_dir(self, mod_data: Any | None) -> str:
+        from models.game_modes import get_game
+
+        game = get_game(self._resolve_mod_game(mod_data) or "") if mod_data else None
+        game = game or self.app_state.game_mode
+        return game.get_data_path(self.app_state.local_config) if game else ""
 
     def get_report_path(self) -> str | None:
         """Return the saved (permanent) report path if available, else the temp one."""

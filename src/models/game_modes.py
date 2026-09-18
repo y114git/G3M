@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import platform
 from dataclasses import dataclass
+from pathlib import Path
 
 from config.config import (
     STEAM_APP_ID_DEMO,
@@ -102,6 +105,11 @@ class GameDefinition:
     display_name_key: str = ""
     steam_app_id: str = ""
     path_config_key: str = ""
+    data_path_config_key: str = ""
+    data_folder_names: tuple[str, ...] = ()
+    macos_data_folder_names: tuple[str, ...] = ()
+    windows_data_env: str = "LOCALAPPDATA"
+    windows_data_subdir: str = "Local"
     custom_exec_config_key: str = ""
     gamebanana_id: int = 0
     tabs: list[GameTab] = []
@@ -151,6 +159,67 @@ class GameDefinition:
 
     def set_game_path(self, config: dict, path: str) -> None:
         config[self.path_config_key] = path
+        if (
+            path
+            and not config.get(self.data_path_config_key)
+            and (detected_path := self.detect_data_path(path))
+        ):
+            config[self.data_path_config_key] = detected_path
+
+    def get_data_path(self, config: dict) -> str:
+        configured_path = str(config.get(self.data_path_config_key, "") or "")
+        if configured_path:
+            return configured_path
+        return self.detect_data_path(self.get_game_path(config))
+
+    def set_data_path(self, config: dict, path: str) -> None:
+        config[self.data_path_config_key] = path
+
+    def detect_data_path(self, game_path: str = "") -> str:
+        names = self.data_folder_names or (self.display_name, self.game_id)
+        if platform.system() == "Windows":
+            base_paths = [os.getenv(self.windows_data_env, "")]
+        elif platform.system() == "Darwin":
+            base_paths = [os.path.expanduser("~/Library/Application Support")]
+            names = self.macos_data_folder_names or names
+        else:
+            base_paths = [
+                os.getenv("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+            ]
+        candidates = [
+            os.path.join(base_path, name)
+            for base_path in base_paths
+            if base_path
+            for name in names
+        ]
+        if self.steam_app_id and game_path:
+            game_path_obj = Path(game_path)
+            steamapps = next(
+                (
+                    parent
+                    for parent in (game_path_obj, *game_path_obj.parents)
+                    if parent.name.casefold() == "steamapps"
+                ),
+                None,
+            )
+            if steamapps:
+                prefix = (
+                    steamapps
+                    / "compatdata"
+                    / self.steam_app_id
+                    / "pfx"
+                    / "drive_c"
+                    / "users"
+                    / "steamuser"
+                    / "AppData"
+                    / self.windows_data_subdir
+                )
+                proton_candidates = [str(prefix / name) for name in names]
+                if platform.system() == "Linux":
+                    candidates[0:0] = proton_candidates
+                else:
+                    candidates.extend(proton_candidates)
+        return next((path for path in candidates if os.path.isdir(path)), "")
 
     def get_custom_exec_config_key(self) -> str:
         return self.custom_exec_config_key
@@ -220,6 +289,9 @@ class DeltaruneGame(GameDefinition):
     display_name_key = "ui.deltarune"
     steam_app_id = STEAM_APP_ID_FULL
     path_config_key = "game_path"
+    data_path_config_key = "game_data_path"
+    data_folder_names = ("DELTARUNE",)
+    macos_data_folder_names = ("com.tobyfox.deltarune",)
     custom_exec_config_key = "custom_executable_path"
     gamebanana_id = 6755
     block_steam_with_direct_launch = True
@@ -251,6 +323,9 @@ class DeltaruneDemoGame(GameDefinition):
     display_name_key = "ui.deltarunedemo"
     steam_app_id = STEAM_APP_ID_DEMO
     path_config_key = "demo_game_path"
+    data_path_config_key = "demo_game_data_path"
+    data_folder_names = ("DELTARUNE",)
+    macos_data_folder_names = ("com.tobyfox.deltarune",)
     custom_exec_config_key = "demo_custom_executable_path"
     gamebanana_id = 0
     supports_full_install = True
@@ -275,6 +350,9 @@ class UndertaleGame(GameDefinition):
     display_name_key = "ui.undertale"
     steam_app_id = STEAM_APP_ID_UNDERTALE
     path_config_key = "undertale_game_path"
+    data_path_config_key = "undertale_game_data_path"
+    data_folder_names = ("UNDERTALE",)
+    macos_data_folder_names = ("com.tobyfox.undertale",)
     custom_exec_config_key = "undertale_custom_executable_path"
     gamebanana_id = 5506
     tabs = [GameTab("undertale", "undertale", "tabs.undertale", "undertale")]
@@ -295,6 +373,8 @@ class UndertaleYellowGame(GameDefinition):
     display_name = "UNDERTALE Yellow"
     display_name_key = "ui.undertaleyellow"
     path_config_key = "undertaleyellow_game_path"
+    data_path_config_key = "undertaleyellow_game_data_path"
+    data_folder_names = ("Undertale_Yellow",)
     custom_exec_config_key = "undertaleyellow_custom_executable_path"
     gamebanana_id = 19606
     supports_full_install = True
@@ -340,6 +420,10 @@ class PizzaTowerGame(GameDefinition):
     display_name_key = "ui.pizzatower"
     steam_app_id = STEAM_APP_ID_PIZZA_TOWER
     path_config_key = "pizzatower_game_path"
+    data_path_config_key = "pizzatower_game_data_path"
+    data_folder_names = ("PizzaTower_GM2",)
+    windows_data_env = "APPDATA"
+    windows_data_subdir = "Roaming"
     custom_exec_config_key = "pizzatower_custom_executable_path"
     gamebanana_id = 7692
     tabs = [GameTab("pizzatower", "pizzatower", "tabs.pizzatower", "pizzatower")]
@@ -365,6 +449,8 @@ class SugarySpireGame(GameDefinition):
     display_name = "Sugary Spire"
     display_name_key = "ui.sugaryspire"
     path_config_key = "sugaryspire_game_path"
+    data_path_config_key = "sugaryspire_game_data_path"
+    data_folder_names = ("SugarySpire_ExhibitionNight", "Sugary Spire")
     custom_exec_config_key = "sugaryspire_custom_executable_path"
     gamebanana_id = 18218
     supports_full_install = True
@@ -390,6 +476,8 @@ class Frickbears3Game(GameDefinition):
     display_name = "FRICKBEARS3"
     display_name_key = "ui.frickbears3"
     path_config_key = "frickbears3_game_path"
+    data_path_config_key = "frickbears3_game_data_path"
+    data_folder_names = ("Frickbears3",)
     custom_exec_config_key = "frickbears3_custom_executable_path"
     gamebanana_id = 24426
     supports_full_install = True
@@ -423,6 +511,7 @@ class CustomSingleTabGame(GameDefinition):
         self.data_file_name = record.data_file_name.strip()
         self.steam_app_id = record.steam_app_id or ""
         self.path_config_key = f"custom_game_path_{record.id}"
+        self.data_path_config_key = f"custom_game_data_{record.id}"
         self.custom_exec_config_key = f"custom_game_exec_{record.id}"
         self.gamebanana_id = int(record.gamebanana_id or 0)
         self.tabs = [GameTab(record.id, record.id, "", record.id, False)]

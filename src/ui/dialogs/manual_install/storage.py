@@ -18,7 +18,15 @@ def copy_file_to_relative_path(
     normalized_relative = relative_path.replace("\\", "/").strip().strip("/")
     if not normalized_relative:
         normalized_relative = os.path.basename(source_path)
-    target_path = os.path.join(target_mod_dir, normalized_relative.replace("/", os.sep))
+    target_root = os.path.abspath(target_mod_dir)
+    target_path = os.path.abspath(
+        os.path.join(target_root, normalized_relative.replace("/", os.sep))
+    )
+    try:
+        if os.path.commonpath((target_root, target_path)) != target_root:
+            raise ValueError("Target path must remain inside the mod folder")
+    except ValueError:
+        raise ValueError("Target path must remain inside the mod folder") from None
     target_dir = os.path.dirname(target_path)
     if target_dir:
         os.makedirs(target_dir, exist_ok=True)

@@ -4,7 +4,14 @@ import os
 
 from PyQt6.QtWidgets import QCheckBox, QLabel, QLineEdit
 
-from services.migration_service import build_extra_file_entry
+from services.migration_service import (
+    EXTRA_FILE_TARGET_CUSTOM,
+    EXTRA_FILE_TARGET_GAME_DATA_FOLDER,
+    EXTRA_FILE_TARGET_GAME_FOLDER,
+    EXTRA_FILE_TARGET_NONE,
+    build_extra_file_entry,
+    normalize_extra_file_target,
+)
 
 
 def extract_frame_data(layout, *, format_config_path):
@@ -27,7 +34,8 @@ def extract_frame_data(layout, *, format_config_path):
             }
     elif ftype == "extra":
         paths = []
-        status = "install"
+        target = EXTRA_FILE_TARGET_GAME_FOLDER
+        target_path = ""
         for i in range(layout.count()):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
             if (
@@ -36,13 +44,21 @@ def extract_frame_data(layout, *, format_config_path):
                 and w.text()
             ):
                 paths.append(format_config_path(w.text()))
-            elif isinstance(w, QCheckBox) and w.property("is_dependency_file"):
-                preserved_status = (
-                    str(w.property("extra_file_status") or "dependency").strip().lower()
-                )
-                status = preserved_status if w.isChecked() else "install"
+            elif isinstance(w, QCheckBox) and w.property("is_none_target_file"):
+                target = EXTRA_FILE_TARGET_NONE if w.isChecked() else target
+            elif isinstance(w, QCheckBox) and w.property("is_data_folder_file"):
+                target = EXTRA_FILE_TARGET_GAME_DATA_FOLDER if w.isChecked() else target
+            elif isinstance(w, QCheckBox) and w.property("is_custom_target_file"):
+                target = EXTRA_FILE_TARGET_CUSTOM if w.isChecked() else target
+            elif isinstance(w, QLineEdit) and w.property("is_custom_target_path"):
+                target_path = w.text().strip()
         if paths:
-            return {"type": "extra", "paths": paths, "status": status}
+            return {
+                "type": "extra",
+                "paths": paths,
+                "target": target,
+                "target_path": target_path,
+            }
     return None
 
 
@@ -122,19 +138,40 @@ def collect_files(
                 tab_files["data_file_path"] = data["path"]
             elif data["type"] == "extra" and data.get("paths"):
                 extra_files = tab_files.setdefault("extra_files", [])
+                target = normalize_extra_file_target(
+                    data.get("target", EXTRA_FILE_TARGET_GAME_FOLDER)
+                )
+                target_path = data.get("target_path", "").strip()
                 existing_paths = {
-                    extra_file.get("file_path")
+                    (
+                        extra_file.get("file_path"),
+                        normalize_extra_file_target(
+                            extra_file.get("target")
+                            or extra_file.get("status")
+                            or EXTRA_FILE_TARGET_GAME_FOLDER
+                        ),
+                        extra_file.get("target_path", "").strip(),
+                    )
                     if isinstance(extra_file, dict)
-                    else extra_file
+                    else (extra_file, EXTRA_FILE_TARGET_GAME_FOLDER, "")
                     for extra_file in extra_files
                     if isinstance(extra_file, (str, dict))
                 }
                 for path in data["paths"]:
-                    if path not in existing_paths:
+                    entry_key = (
+                        path,
+                        target,
+                        target_path if target == EXTRA_FILE_TARGET_CUSTOM else "",
+                    )
+                    if entry_key not in existing_paths:
                         extra_files.append(
-                            build_extra_file_entry(path, data.get("status", "install"))
+                            build_extra_file_entry(
+                                path,
+                                target,
+                                target_path,
+                            )
                         )
-                        existing_paths.add(path)
+                        existing_paths.add(entry_key)
         if tab_files:
             files[tab_keys[idx]] = tab_files
     return files

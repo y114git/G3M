@@ -402,7 +402,9 @@ packageID = "example.revision.author"
     assert metadata["author"] == "First Author, Second Author"
     assert metadata["game_version"] == "1.05"
     assert config["files"]["deltarune_3"]["data_file_path"] == "chapter3.g3mpatch"
-    assert config["files"]["deltarune_3"]["extra_files"] == ["mus/theme.ogg"]
+    assert config["files"]["deltarune_3"]["extra_files"] == [
+        {"file_path": "mus/theme.ogg", "target": "game_folder"}
+    ]
     assert (result_dir / "chapter_3" / "chapter3.g3mpatch").read_bytes() == b"patch"
     assert (result_dir / "chapter_3" / "mus" / "theme.ogg").read_bytes() == b"music"
 
@@ -448,11 +450,11 @@ packageID = "example.revision.five"
     assert chapter["extra_files"] == [
         {
             "file_path": "resources/",
-            "status": "dependency",
+            "target": "none",
         },
         {
             "file_path": "scripts/",
-            "status": "dependency",
+            "target": "none",
         },
     ]
     assert (result_dir / "scripts" / "build.csx").is_file()

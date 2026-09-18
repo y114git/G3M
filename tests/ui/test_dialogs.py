@@ -1428,7 +1428,9 @@ class TestModEditorDialog:
         assert dialog.icon_edit.text() == 'icon.png'
         assert dialog.findChild(QWidget, 'modEditorIntroCard') is None
         assert collected['deltarune_4']['data_file_path'] == 'BOSSRUSH.win'
-        assert collected['deltarune_4']['extra_files'] == ['bonus.zip']
+        assert collected['deltarune_4']['extra_files'] == [
+            {'file_path': 'bonus.zip', 'target': 'game_folder'}
+        ]
         assert dialog._resolve_file_path('BOSSRUSH.win') == str(
             chapter_folder / 'BOSSRUSH.win'
         )
@@ -1541,7 +1543,10 @@ class TestModEditorDialog:
 
         first_tab_key = "deltarune_0"
         assert files[first_tab_key]["extra_files"] == [
-            str(folder_source).replace("\\", "/") + "/"
+            {
+                "file_path": str(folder_source).replace("\\", "/") + "/",
+                "target": "game_folder",
+            }
         ]
         dialog.close()
         parent.deleteLater()
@@ -1573,7 +1578,9 @@ class TestModEditorDialog:
 
         files = dialog._collect_files()
 
-        assert files["deltarune_0"]["extra_files"] == ["nested/path/"]
+        assert files["deltarune_0"]["extra_files"] == [
+            {"file_path": "nested/path/", "target": "game_folder"}
+        ]
         dialog.close()
         parent.deleteLater()
 
@@ -1650,10 +1657,7 @@ class TestModEditorDialog:
         assert frame.property("specialRuntimeTarget") is True
         hint_label = frame.findChild(QLabel, "special_runtime_hint")
         assert hint_label is not None
-        assert hint_label.text() == tr(
-            "tooltips.mod_editor_special_extra_target_towers",
-            target_path="%APPDATA%/PizzaTower_GM2/towers/",
-        )
+        assert hint_label.text() == tr("tooltips.mod_editor_data_folder_target")
         alignment = hint_label.alignment()
         assert alignment & Qt.AlignmentFlag.AlignLeft
         assert alignment & Qt.AlignmentFlag.AlignVCenter
@@ -1692,10 +1696,7 @@ class TestModEditorDialog:
         assert frame.property("specialRuntimeTarget") is True
         hint_label = frame.findChild(QLabel, "special_runtime_hint")
         assert hint_label is not None
-        assert hint_label.text() == tr(
-            "tooltips.mod_editor_special_extra_target_addons",
-            target_path="%LOCALAPPDATA%/Frickbears3/addons/",
-        )
+        assert hint_label.text() == tr("tooltips.mod_editor_data_folder_target")
         alignment = hint_label.alignment()
         assert alignment & Qt.AlignmentFlag.AlignLeft
         assert alignment & Qt.AlignmentFlag.AlignVCenter
@@ -2922,7 +2923,9 @@ class TestModEditorDialog:
         )
 
         assert processed["deltarune_3"]["data_file_path"] == "chapter3/data.g3mpatch"
-        assert processed["deltarune_3"]["extra_files"] == ["chapter3/lang/lang_en.json"]
+        assert processed["deltarune_3"]["extra_files"] == [
+            {"file_path": "chapter3/lang/lang_en.json", "target": "game_folder"}
+        ]
         dialog.close()
         parent.deleteLater()
 
@@ -3156,12 +3159,12 @@ class TestManualInstallDialog:
             Mock(side_effect=RuntimeError("dialog already deleted")),
         )
 
-        dialog._add_xdelta_patch("deltarune_1")
+        dialog._add_additional_patch("deltarune_1")
 
         assert dialog.result() == QDialog.DialogCode.Rejected
         dialog.close()
 
-    def test_manual_install_xdelta_outside_path_warning_failure_is_ignored(
+    def test_manual_install_additional_patch_outside_path_warning_failure_is_ignored(
         self, qapp, tmp_path, monkeypatch
     ):
         from ui.dialogs.manual_install.dialog import ManualModInstallDialog
@@ -3176,6 +3179,11 @@ class TestManualInstallDialog:
         outside_file.write_text("data", encoding="utf-8")
         dialog = ManualModInstallDialog(None, str(prepared))
         dialog._get_target_root_for_chapter = Mock(return_value=str(target_root))
+        dialog.additional_patches_mappings = {
+            "deltarune_1": {
+                str(patch_file): {"path": "", "target": "game_folder"}
+            }
+        }
         monkeypatch.setattr(
             "ui.dialogs.manual_install.dialog.get_open_file_name",
             lambda *_args, **_kwargs: (str(outside_file), ""),
@@ -3185,7 +3193,7 @@ class TestManualInstallDialog:
             Mock(side_effect=RuntimeError("dialog already deleted")),
         )
 
-        dialog._browse_xdelta_target_file(str(patch_file), "deltarune_1")
+        dialog._browse_additional_patch_target_file(str(patch_file), "deltarune_1")
 
         assert dialog.result() == QDialog.DialogCode.Rejected
         dialog.close()
@@ -3217,6 +3225,111 @@ class TestManualInstallDialog:
         dialog._browse_target_folder(str(extra_file))
 
         assert dialog.result() == QDialog.DialogCode.Rejected
+        dialog.close()
+
+    def test_manual_install_data_target_uses_configured_data_folder(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        extra_file = prepared / "guard.txt"
+        extra_file.write_text("guard", encoding="utf-8")
+        data_root = tmp_path / "Frickbears3"
+        target_folder = data_root / "addons"
+        target_folder.mkdir(parents=True)
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog.game_combo.setCurrentIndex(
+            next(
+                index
+                for index in range(dialog.game_combo.count())
+                if dialog.game_combo.itemData(index) == "frickbears3"
+            )
+        )
+        dialog.app_state = SimpleNamespace(
+            local_config={"frickbears3_game_data_path": str(data_root)}
+        )
+        dialog.extra_file_targets[str(extra_file)] = {"target": "game_data_folder"}
+        dialog._get_or_prompt_game_folder = Mock(
+            side_effect=AssertionError("game folder should not be requested")
+        )
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.get_existing_directory",
+            lambda *_args, **_kwargs: str(target_folder),
+        )
+
+        dialog._browse_target_folder(str(extra_file))
+
+        assert dialog.extra_files_mappings[str(extra_file)] == "addons/"
+        dialog.close()
+
+    def test_manual_install_data_target_rejects_path_outside_configured_data_folder(
+        self, qapp, tmp_path, monkeypatch
+    ):
+        from services.localization_service import tr
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        extra_file = prepared / "guard.txt"
+        extra_file.write_text("guard", encoding="utf-8")
+        data_root = tmp_path / "Frickbears3"
+        data_root.mkdir()
+        outside_folder = tmp_path / "outside"
+        outside_folder.mkdir()
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog.game_combo.setCurrentIndex(
+            next(
+                index
+                for index in range(dialog.game_combo.count())
+                if dialog.game_combo.itemData(index) == "frickbears3"
+            )
+        )
+        dialog.app_state = SimpleNamespace(
+            local_config={"frickbears3_game_data_path": str(data_root)}
+        )
+        dialog.extra_file_targets[str(extra_file)] = {"target": "game_data_folder"}
+        warnings = Mock()
+        dialog._safe_warning = warnings
+        monkeypatch.setattr(
+            "ui.dialogs.manual_install.dialog.get_existing_directory",
+            lambda *_args, **_kwargs: str(outside_folder),
+        )
+
+        dialog._browse_target_folder(str(extra_file))
+
+        assert dialog.extra_file_targets[str(extra_file)] == {
+            "target": "custom",
+            "target_path": str(outside_folder),
+        }
+        warnings.assert_called_once_with(
+            tr("dialogs.custom_target_warning_title"),
+            tr("dialogs.custom_target_warning"),
+        )
+        dialog.close()
+
+    def test_manual_install_rejects_typed_path_outside_target(self, qapp, tmp_path):
+        from services.localization_service import tr
+        from ui.dialogs.manual_install.dialog import ManualModInstallDialog
+
+        prepared = tmp_path / "prepared"
+        prepared.mkdir()
+        extra_file = prepared / "guard.txt"
+        extra_file.write_text("guard", encoding="utf-8")
+        dialog = ManualModInstallDialog(None, str(prepared))
+        dialog.all_files = [(str(extra_file), "guard.txt")]
+        dialog.extra_files_mappings[str(extra_file)] = "../outside/"
+        warnings = Mock()
+        dialog._safe_warning = warnings
+        dialog._create_mod_from_files = Mock()
+
+        dialog._on_finish()
+
+        dialog._create_mod_from_files.assert_not_called()
+        warnings.assert_called_once_with(
+            tr("errors.error"), tr("dialogs.path_outside_game_folder")
+        )
         dialog.close()
 
     def test_profile_manager_import_failure_uses_localized_filesystem_error(

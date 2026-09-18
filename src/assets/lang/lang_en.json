@@ -244,6 +244,7 @@
     "settings_section_filters": "Filters",
     "settings_section_paths": "Paths",
     "settings_game_path_label": "{GAME} Path:",
+    "settings_game_data_path_label": "{GAME} data folder:",
     "settings_custom_executable_path_label": "Custom EXE:",
     "settings_custom_g3mtool_path_label": "Custom G3MTool:",
     "settings_custom_xdelta_path_label": "Custom XDELTA:",
@@ -298,12 +299,18 @@
     "visible": "Visible",
     "hidden": "Hidden",
     "changed_data_files_label": "Changed DATA files:",
-    "extra_files_label": "Extra files:"
+    "extra_files_label": "Extra files:",
+    "dependency_files_label": "Not installed files:",
+    "data_folder_files_label": "Game data files:"
   },
   "files": {
     "data_file": "DATA - File",
     "extra_files_title": "Extra files #{number}",
-    "dependency_only": "Dependency only (do not install)",
+    "dependency_only": "Do not install",
+    "game_folder_target": "Game folder",
+    "data_folder_target": "Game data folder",
+    "custom_target": "Custom folder",
+    "custom_target_folder": "Custom folder:",
     "icon_label": "Icon",
     "version_label": "Version {file_type}:"
   },
@@ -431,7 +438,9 @@
     "mod_editor_game_version": "Optional target game version this mod was built for.",
     "mod_editor_add_data": "Add the main DATA patch file for this tab. Only one DATA file is allowed per tab.",
     "mod_editor_add_extra": "Add archives or folders with extra files for this tab.",
-    "mod_editor_dependency_only": "Keep this file beside the mod for scripts to use, but never copy it into the game.",
+    "mod_editor_dependency_only": "Keep this file in the mod but do not install it.",
+    "mod_editor_data_folder_target": "Install this extra file in the selected game data folder.",
+    "mod_editor_custom_target": "Install in an absolute custom folder. This path may not work on another device or operating system.",
     "mod_editor_selected_file": "The selected file or folder that will be included in the mod.",
     "mod_editor_data_version": "Version label for this DATA file entry.",
     "mod_editor_special_extra_target_towers": "Special extra files: these will be restored into {target_path} while the game is running.",
@@ -449,8 +458,8 @@
     "manual_install_data_tab": "Assign main DATA files to each content section or game tab.",
     "manual_install_extra_tab": "Map extra files into the correct in-game folders.",
     "manual_install_data_file": "The DATA file currently assigned to this content section or tab.",
-    "manual_install_add_xdelta": "Add an extra xdelta patch for another game file in this content section.",
-    "manual_install_xdelta_target": "Relative path inside the game folder where this patch should be applied.",
+    "manual_install_additional_patch": "Add a patch for another game file or the data folder in this content section.",
+    "manual_install_additional_patch_target": "Relative path inside the selected game or data folder where this patch should be applied.",
     "apply_game_version": "Restore this saved game version to the selected game installation.",
     "export_game_version": "Export this saved game version as an archive.",
     "delete_game_version": "Delete this saved game version from G3M.",
@@ -515,16 +524,16 @@
     "data_file": "DATA File",
     "no_data_files": "No Data Files",
     "no_data_files_in_directory": "No DATA files found in the prepared directory.",
-    "xdelta_patches_section": "Additional XDelta Patches",
-    "xdelta_patches_info": "Configure additional xdelta patches for other game files. Select an xdelta file and specify the target file path (e.g., Exes/Main.exe).",
-    "xdelta_patch_target_path": "Target file path (e.g., Exes/Main.exe)",
-    "xdelta_patch_no_target_path": "Please specify a target file path for the patch",
-    "add_additional_xdelta": "Add Additional XDelta Patch",
-    "select_xdelta_patch": "Select XDelta Patch File",
-    "select_xdelta_patch_info": "Select an xdelta file to use as an additional patch",
-    "no_xdelta_files_available": "No xdelta files available to add as patches",
+    "additional_patches_section": "Additional Patches",
+    "additional_patches_info": "Configure additional patches for game files or the data folder. Select a patch file and set its target path (for example, Exes/Main.exe).",
+    "additional_patch_target_path": "Target file path (for example, Exes/Main.exe)",
+    "additional_patch_no_target_path": "Please specify a target file path for the patch",
+    "add_additional_patch": "Add Additional Patch",
+    "select_additional_patch": "Select Patch File",
+    "select_additional_patch_info": "Select a patch file to use as an additional patch",
+    "no_patch_files_available": "No patch files available to add",
     "enter_relative_path": "e.g., sprites/bgs",
-    "path_outside_game_folder": "Selected folder must be within the game folder.",
+    "path_outside_game_folder": "Selected location must be within the game folder or game data folder for the selected target type.",
     "conflicts": {
       "title": "Mod Patching Conflicts Detected",
       "total_conflicts": "Total conflicts detected: {count}",
@@ -540,7 +549,7 @@
       "xdelta_patch_failed": "Failed to apply the XDelta patch.\n\nPatch: {patch_name}\n\nPatch path: {patch_path}\n\nTarget file: {data_win_path}\n\nError: {error}\n\nExtra files can still be added, but this patch will be skipped.\n\nContinue?",
       "data_patch_failed": "Failed to create the patched DATA file.\n\nPatch: {patch_name}\n\nPatch path: {patch_path}\n\nTarget file: {data_win_path}\n\nError: {error}\n\nThis DATA patch will be skipped, but extra files can still be applied.\n\nContinue?",
       "conflicts_detected": "Conflicts were detected while merging {chapter}.\n\nTotal conflicts: {count}\n\nYou can review the report before continuing.\n\nContinue?",
-      "xdelta_override_skipped": "The xdelta override \"{patch}\" could not be applied to matching target files in:\n{target}\n\nThat patch step will be skipped.\n\nContinue?",
+      "additional_patch_override_skipped": "The additional patch \"{patch}\" could not be applied to matching target files in:\\n{target}\\n\\nThat patch step will be skipped.\\n\\nContinue?",
       "archive_extract_failed": "Failed to extract archive \"{archive}\" into:\n{target}\n\nSome files may be skipped.\n\nContinue?",
       "g3mpatch_validate_title": "Warning: G3MPatch Data File Mismatch",
       "g3mpatch_validate_body": "This G3MPatch was built for a different DATA file.\n\nPatch: {patch_name}\n\nExpected file: {expected_file}\nExpected MD5: {expected_md5}\n\nCurrent file: {actual_file}\nCurrent MD5: {actual_md5}\n\nIf the difference is minor, for example because of a game version or platform difference, the patch may still work.\n\nContinue anyway?",
@@ -549,7 +558,7 @@
       "extra_file_missing": "The extra file referenced by this mod was not found:\n{path}\n\nThat file will be skipped. The game may still launch, but this mod may be incomplete.\n\nContinue?",
       "extra_directory_missing": "The extra folder referenced by this mod was not found:\n{path}\n\nFiles from that folder will be skipped. The game may still launch, but this mod may be incomplete.\n\nContinue?",
       "extra_file_copy_failed": "Failed to copy extra file \"{file}\" into:\n{target}\n\nCheck permissions, antivirus blocks, or disk space.\n\nContinue?",
-      "xdelta_override_no_target": "The extra XDELTA patch \"{patch}\" did not find a matching target file in:\n{target}\n\nThat extra patch will be skipped.\n\nContinue?"
+      "additional_patch_override_no_target": "The additional patch \"{patch}\" did not find a matching target file in:\\n{target}\\n\\nThat patch will be skipped.\\n\\nContinue?"
     },
     "app_will_restart": "The application will be restarted.",
     "are_you_sure": "Are you sure?",
@@ -639,7 +648,13 @@
     "theme_delete_title": "Delete Theme",
     "theme_delete_prompt": "Are you sure you want to delete this theme: {theme}?",
     "theme_invalid_archive": "Invalid theme archive. Required files might be missing.",
-    "mod_needs_at_least_one_file": "A mod must contain at least one DATA file or extra file."
+    "mod_needs_at_least_one_file": "A mod must contain at least one DATA file or extra file.",
+    "game_data_folder_not_set": "Set the game data folder in Settings before selecting it as a target.",
+    "custom_target_folder_path": "Absolute custom target folder",
+    "select_custom_target_folder": "Select custom target folder",
+    "custom_target_warning_title": "Custom target folder",
+    "custom_target_warning": "This folder is outside the game folder and game data folder. It is stored as a device-specific path and may not work for other users or operating systems. Prefer the game folder, game data folder, or Do not install.",
+    "custom_target_folder_not_set": "Choose an existing absolute custom target folder."
   },
   "errors": {
     "app_not_found_after_unpack": "G3M.app not found after unpacking.",
@@ -1404,8 +1419,8 @@
       "extra_directory_missing": "Extra folder is missing",
       "extra_file_copy_failed": "Extra file could not be copied",
       "extra_archive_extract_failed": "Extra archive could not be extracted",
-      "extra_xdelta_no_target": "Extra XDELTA target was not found",
-      "extra_xdelta_apply_failed": "Extra XDELTA patch failed"
+      "extra_additional_patch_no_target": "Additional patch target was not found",
+      "extra_additional_patch_apply_failed": "Additional patch failed"
     },
     "messages": {
       "g3mtool_unavailable": {
@@ -1480,13 +1495,13 @@
         "title": "Extra archive could not be extracted",
         "body": "An archive from the mod extra files could not be extracted. Some loose files from the mod may be missing in-game."
       },
-      "extra_xdelta_no_target": {
-        "title": "Extra XDELTA target was not found",
-        "body": "An extra-file XDELTA patch did not find a matching target file. This is often harmless when the mod supports multiple game layouts, but that extra patch will be skipped."
+      "extra_additional_patch_no_target": {
+        "title": "Additional patch target was not found",
+        "body": "An additional patch from the mod extra files did not find a matching target file. This patch will be skipped."
       },
-      "extra_xdelta_apply_failed": {
-        "title": "Extra XDELTA patch failed",
-        "body": "An XDELTA patch from the mod extra files could not be applied to its target. The main DATA patch may still work, but this extra file change will be skipped."
+      "extra_additional_patch_apply_failed": {
+        "title": "Additional patch failed",
+        "body": "An additional patch from the mod extra files could not be applied to its target. The main DATA patch may still work, but this patch will be skipped."
       }
     },
     "tooltips": {
@@ -1505,8 +1520,8 @@
       "extra_directory_missing": "Shown when a mod references an extra folder that no longer exists in the mod folder.",
       "extra_file_copy_failed": "Shown when G3M cannot copy an extra file into the game folder.",
       "extra_archive_extract_failed": "Shown when an archive listed as an extra file cannot be extracted into the game folder.",
-      "extra_xdelta_no_target": "Shown when an extra-file XDELTA patch cannot find a matching target file.",
-      "extra_xdelta_apply_failed": "Shown when an extra-file XDELTA patch finds a target but cannot apply to it.",
+      "extra_additional_patch_no_target": "Shown when an additional patch cannot find a matching target file.",
+      "extra_additional_patch_apply_failed": "Shown when an additional patch finds a target but cannot apply to it.",
       "minor_file_overrides_only": "Shown for file-only mods where no DATA patch is applied.",
       "cache_rebuild_needed": "Shown when G3MTool needs to rebuild reusable cache data for an input file.",
       "legacy_patching_warning": "Shown for older or uncategorized patching and merging risks."

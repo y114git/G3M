@@ -129,9 +129,10 @@ def _create_fake_pizzaoven_mod(mod_dir: Path) -> None:
     _write_bytes(mod_dir / "music" / "custom.bank", b"CUSTOM_BANK")
 
 
-def _extra_files_to_map(extra_files: list[str]) -> dict[str, list[str]]:
+def _extra_files_to_map(extra_files: list[dict[str, str]]) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
-    for file_path in extra_files:
+    for entry in extra_files:
+        file_path = entry["file_path"]
         group = os.path.dirname(file_path).replace("\\", "/") or "root"
         result.setdefault(group, []).append(file_path)
     return result
@@ -491,7 +492,9 @@ def test_convert_preserves_executable_xdelta_by_detected_target(tmp_path):
     config = json.loads((target_mod_dir / "mod_config.json").read_text("utf-8"))
     extra_files = config["files"]["pizzatower"]["extra_files"]
 
-    assert extra_files == ["CustomTower.exe.xdelta"]
+    assert extra_files == [
+        {"file_path": "CustomTower.exe.xdelta", "target": "game_folder"}
+    ]
     assert (target_mod_dir / "CustomTower.exe.xdelta").read_bytes() == b"EXE_PATCH"
     assert not (target_mod_dir / "CustomTower.exe").exists()
 

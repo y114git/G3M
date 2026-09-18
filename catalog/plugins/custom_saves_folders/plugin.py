@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 from adapters.g3mtool_adapter import G3MToolManager
-from config.config import MOD_CONFIG_FILENAME
+from config.config import ARCHIVE_EXTENSIONS, MOD_CONFIG_FILENAME
 from models.game_modes import get_all_games, get_game
 from services.backup_service import BackupManager
 from ui.common.dialog_theme import apply_dialog_theme, get_dialog_theme_values
@@ -45,9 +45,15 @@ from ui.common.styling import (
     get_theme_colors,
     get_widget_border_radius,
 )
+from utils.archive_utils import extract_any_archive
 from utils.mod.config_parser import normalize_mod_config_data
 from utils.mod.utils import get_mod_id, get_mod_name
 from utils.native_integration import open_path_native
+from utils.patching import mod_content_utils as mod_content
+from utils.patching.file_override_utils import (
+    PATCH_FILE_EXTENSIONS,
+    iter_configured_override_entries,
+)
 from utils.path_utils import (
     colored_icon,
     find_chapter_resource_dir,
@@ -715,7 +721,9 @@ class _StateStore:
         for value in values:
             mods = value if isinstance(value, list) else [value]
             for mod in mods:
-                mod_id = _canonical_mod_id(get_mod_id(mod))
+                mod_id = _canonical_mod_id(
+                    mod if isinstance(mod, str) else get_mod_id(mod)
+                )
                 if mod_id:
                     selected.add(mod_id)
         return selected
@@ -1442,14 +1450,17 @@ class CustomSavesFoldersPlugin:
         folder = self._state.resolve_launch_folder(game_mode.game_id)
         if not folder:
             return []
-        shortcut_context.set_plugin_state(
-            "custom_saves_folders",
-            {
-                "game_id": game_mode.game_id,
-                "folder_id": folder["id"],
-                "folder_name": folder["name"],
-            },
+        payload: dict[str, object] = {
+            "game_id": game_mode.game_id,
+            "folder_id": folder["id"],
+            "folder_name": folder["name"],
+        }
+        selected_mod_ids = sorted(
+            self._state._collect_config_mod_ids(game_mode.game_id)
         )
+        if selected_mod_ids:
+            payload["mod_ids"] = selected_mod_ids
+        shortcut_context.set_plugin_state("custom_saves_folders", payload)
         shortcut_context.add_summary_line(
             self._tr()("ui.shortcut_summary_label"),
             folder["name"],
@@ -1495,8 +1506,189 @@ class CustomSavesFoldersPlugin:
                 targets.append(data_path)
         return game, game_path, targets
 
+    def _selected_mod_configs(self, game_id: str, selections) -> list[tuple[str, dict]]:
+        if self._state is None:
+            return []
+        selected_ids = self._state._collect_selected_mod_ids(selections)
+        if not selected_ids:
+            selected_ids = self._state._collect_config_mod_ids(game_id)
+        if not selected_ids:
+            return []
+        mods_root = get_profile_mods_root(self._state.active_profile())
+        if not os.path.isdir(mods_root):
+            return []
+        configs = []
+        for folder_name in sorted(os.listdir(mods_root), key=str.casefold):
+            folder_path = os.path.join(mods_root, folder_name)
+            config_path = os.path.join(folder_path, MOD_CONFIG_FILENAME)
+            if not os.path.isfile(config_path):
+                continue
+            try:
+                with open(config_path, encoding="utf-8") as handle:
+                    config = json.load(handle)
+                normalize_mod_config_data(config, mod_root_path=folder_path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                logger.debug("Skipping unreadable mod config: %s", config_path)
+                continue
+            if str(config.get("game", "") or "").strip() != game_id:
+                continue
+            if _canonical_mod_id(get_mod_id(config) or folder_name) in selected_ids:
+                configs.append((folder_path, config))
+        return configs
+
+    @staticmethod
+    def _safe_child_path(root: str, *parts: str) -> str:
+        root_path = os.path.abspath(root)
+        candidate = os.path.abspath(os.path.join(root_path, *parts))
+        try:
+            if os.path.commonpath((root_path, candidate)) != root_path:
+                return ""
+        except ValueError:
+            return ""
+        return candidate
+
+    @staticmethod
+    def _is_real_child(root: str, path: str) -> bool:
+        root_path = os.path.normcase(os.path.realpath(root))
+        candidate = os.path.normcase(os.path.realpath(path))
+        try:
+            return os.path.commonpath((root_path, candidate)) == root_path
+        except ValueError:
+            return False
+
+    def _iter_deployed_data_files(self, entry: dict, source_root: str, work_dir: str):
+        source = str(entry["source"])
+        target_relative = str(entry["target_relative"] or "").rstrip("/\\")
+        if not os.path.exists(source):
+            return
+        if source.lower().endswith(PATCH_FILE_EXTENSIONS):
+            candidates = mod_content.find_target_files_for_patch(
+                source_root, os.path.basename(source)
+            )
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    yield candidate
+            return
+        source_dir = source
+        target_base = target_relative
+        if os.path.isfile(source) and source.lower().endswith(ARCHIVE_EXTENSIONS):
+            source_dir = tempfile.mkdtemp(prefix="custom_saves_data_", dir=work_dir)
+            extract_any_archive(source, source_dir)
+            target_base = os.path.dirname(target_relative)
+        if os.path.isdir(source_dir):
+            for root, dirs, files in os.walk(source_dir, followlinks=False):
+                dirs[:] = [
+                    name
+                    for name in dirs
+                    if not os.path.islink(os.path.join(root, name))
+                ]
+                for name in files:
+                    source_file = os.path.join(root, name)
+                    if os.path.islink(source_file):
+                        continue
+                    relative = os.path.relpath(source_file, source_dir)
+                    deployed = self._safe_child_path(
+                        source_root, target_base, relative
+                    )
+                    if deployed and os.path.isfile(deployed):
+                        yield deployed
+            return
+        deployed = self._safe_child_path(source_root, target_relative)
+        if deployed and os.path.isfile(deployed):
+            yield deployed
+
+    def _migrate_selected_data_files(
+        self,
+        game,
+        game_id: str,
+        folder_name: str,
+        selections,
+        backup_manager: BackupManager,
+        work_dir: str,
+    ) -> tuple[bool, str]:
+        configs = self._selected_mod_configs(game_id, selections)
+        if not configs:
+            return True, ""
+        has_data_files = any(
+            entry["target"] == "game_data_folder"
+            for mod_root, config in configs
+            for chapter_id, file_config in config.get("files", {}).items()
+            if isinstance(file_config, dict)
+            for entry in iter_configured_override_entries(
+                mod_root,
+                file_config.get("extra_files", []),
+                chapter_id,
+                game_id,
+            )
+        )
+        if not has_data_files:
+            return True, ""
+        data_dir = game.get_data_path(self._context.app_state.local_config)
+        if not data_dir or not os.path.isdir(data_dir):
+            return False, self._tr()("errors.game_data_folder_missing")
+        name_error = _StateStore.validate_name(folder_name)
+        if name_error:
+            return False, self._tr()(name_error)
+        custom_data_dir = self._safe_child_path(
+            os.path.dirname(os.path.abspath(data_dir)), folder_name
+        )
+        if not custom_data_dir or not self._is_real_child(
+            os.path.dirname(os.path.abspath(data_dir)), custom_data_dir
+        ):
+            return False, self._tr()("errors.custom_data_folder_unsafe")
+        copied_paths = set()
+        for mod_root, config in configs:
+            for chapter_id, file_config in config.get("files", {}).items():
+                if not isinstance(file_config, dict):
+                    continue
+                entries = iter_configured_override_entries(
+                    mod_root,
+                    file_config.get("extra_files", []),
+                    chapter_id,
+                    game_id,
+                    data_dir,
+                )
+                for entry in entries:
+                    if entry["target"] != "game_data_folder":
+                        continue
+                    if not self._is_real_child(mod_root, entry["source"]):
+                        logger.warning(
+                            "Skipping data file outside selected mod: %s",
+                            entry["source"],
+                        )
+                        continue
+                    source_root = os.path.abspath(entry["target_root"] or data_dir)
+                    if not self._is_real_child(data_dir, source_root):
+                        continue
+                    root_relative = os.path.relpath(source_root, data_dir)
+                    destination_root = self._safe_child_path(
+                        custom_data_dir, root_relative
+                    )
+                    if not destination_root or not self._is_real_child(
+                        custom_data_dir, destination_root
+                    ):
+                        continue
+                    for source_path in self._iter_deployed_data_files(
+                        entry, source_root, work_dir
+                    ):
+                        relative = os.path.relpath(source_path, source_root)
+                        destination = self._safe_child_path(destination_root, relative)
+                        if not destination or not self._is_real_child(
+                            custom_data_dir, destination
+                        ):
+                            return False, self._tr()("errors.custom_data_folder_unsafe")
+                        destination_key = os.path.normcase(destination)
+                        if destination_key in copied_paths:
+                            continue
+                        if not backup_manager.backup_file(game_id, destination):
+                            return False, destination
+                        os.makedirs(os.path.dirname(destination), exist_ok=True)
+                        shutil.copy2(source_path, destination)
+                        copied_paths.add(destination_key)
+        return True, ""
+
     def _apply_name_to_targets(
-        self, game_id: str, folder_name: str, task_runtime=None
+        self, game_id: str, folder_name: str, task_runtime=None, selections=None
     ) -> tuple[bool, str]:
         script_path = self._script_path()
         if not os.path.isfile(script_path):
@@ -1552,6 +1744,17 @@ class CustomSavesFoldersPlugin:
                     raise RuntimeError(temp_output)
                 shutil.move(temp_output, target)
 
+            migrated, migration_error = self._migrate_selected_data_files(
+                game,
+                game_id,
+                folder_name,
+                selections,
+                backup_manager,
+                work_dir,
+            )
+            if not migrated:
+                raise RuntimeError(migration_error)
+
             self._active_session = _ActiveSession(
                 game_id=game_id,
                 work_dir=work_dir,
@@ -1601,7 +1804,7 @@ class CustomSavesFoldersPlugin:
             return True
         task_runtime = getattr(context, "task_runtime", None)
         ok, error = self._apply_name_to_targets(
-            game_mode.game_id, folder["name"], task_runtime
+            game_mode.game_id, folder["name"], task_runtime, selections
         )
         if ok:
             return True
@@ -1622,7 +1825,15 @@ class CustomSavesFoldersPlugin:
         if not folder_name or not game_id:
             return True
         task_runtime = getattr(context, "task_runtime", None)
-        ok, error = self._apply_name_to_targets(game_id, folder_name, task_runtime)
+        selected_mod_ids = payload.get("mod_ids")
+        selections = (
+            {game_id: selected_mod_ids}
+            if isinstance(selected_mod_ids, list)
+            else None
+        )
+        ok, error = self._apply_name_to_targets(
+            game_id, folder_name, task_runtime, selections
+        )
         if ok:
             return True
         if error == "cancelled":

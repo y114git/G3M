@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 from ui.dialogs.manual_install.storage import (
     build_manual_mod_identity,
     copy_file_to_relative_path,
@@ -33,6 +35,18 @@ def test_copy_file_to_relative_path_deduplicates_existing_target(tmp_path):
 
     assert copied == "docs/readme_1.txt"
     assert (target_dir / "docs" / "readme_1.txt").is_file()
+
+
+def test_copy_file_to_relative_path_rejects_target_outside_mod_folder(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text("hello", encoding="utf-8")
+    target_dir = tmp_path / "mod"
+    target_dir.mkdir()
+
+    with pytest.raises(ValueError, match="inside the mod folder"):
+        copy_file_to_relative_path(str(target_dir), str(source), "../outside.txt")
+
+    assert not (tmp_path / "outside.txt").exists()
 
 
 def test_join_storage_path_prepends_chapter_folder_for_multi_tab():

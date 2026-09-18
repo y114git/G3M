@@ -265,12 +265,39 @@ def test_diagnostics_keeps_extra_file_targets_inside_game_root(tmp_path):
     assert impact.target_relative_path.replace("\\", "/") == "mus/joker.ogg"
 
 
-def test_diagnostics_falls_back_when_extra_target_root_is_unrelated(tmp_path):
+def test_diagnostics_uses_game_data_folder_for_data_target(tmp_path):
     game_dir = tmp_path / "game"
-    other_dir = tmp_path / "other"
+    data_dir = tmp_path / "data"
     game_dir.mkdir()
-    other_dir.mkdir()
+    data_dir.mkdir()
+    mod_root = tmp_path / "mods" / "data_mod"
+    (mod_root / "saves").mkdir(parents=True)
+    (mod_root / "saves" / "settings.json").write_text("{}", encoding="utf-8")
+    mod_data = _make_mod(
+        mod_root,
+        "data-mod",
+        "Data Mod",
+        {
+            "deltarune_1": {
+                "extra_files": [
+                    {
+                        "file_path": "saves/settings.json",
+                        "target": "game_data_folder",
+                    }
+                ]
+            }
+        },
+    )
+    app_state = SimpleNamespace(
+        game_mode=SimpleNamespace(game_id="deltarune"),
+        local_config={"game_data_path": str(data_dir)},
+    )
+    service = ModDiagnosticsService(
+        app_state,
+        _ModService({"data-mod": str(mod_root)}),
+        target_dir_resolver=lambda _chapter_id, *_args, **_kwargs: str(game_dir),
+    )
 
-    assert ModDiagnosticsService._safe_target_root(
-        str(other_dir), str(game_dir)
-    ) == str(game_dir)
+    report = service.build_report({"deltarune_1": [mod_data]})
+
+    assert report.file_impacts[0].target_root == str(data_dir)

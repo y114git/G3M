@@ -25,7 +25,7 @@ from utils.file_utils import (
 from utils.mod.config_parser import (
     build_mod_config_data,
     normalize_mod_config_data,
-    parse_extra_files_raw,
+    parse_extra_file_entries_raw,
     resolve_local_icon_path,
     resolve_mod_file_path,
 )
@@ -507,7 +507,9 @@ class ModManager(QObject):
                 continue
             try:
                 normalized_key = normalize_chapter_id(file_key, game)
-                extra_files_list = parse_extra_files_raw(ch_info.get("extra_files", []))
+                extra_files_list = parse_extra_file_entries_raw(
+                    ch_info.get("extra_files", [])
+                )
                 mod.files[normalized_key] = ModFileData(
                     description=ch_info.get("description"),
                     data_file_path=ch_info.get("data_file_path")
@@ -538,7 +540,7 @@ class ModManager(QObject):
             )
             if stored_data_path:
                 data_file_path = resolve_mod_file_path(mod_folder_path, stored_data_path)
-            extra_files = parse_extra_files_raw(
+            extra_files = parse_extra_file_entries_raw(
                 ch_info.get("extra_files", []),
                 mod_root_path=mod_folder_path if mod_folder_path else None,
             )

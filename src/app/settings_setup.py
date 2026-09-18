@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from app.dialogs import open_game_manager
 from app.game_ui import (
+    commit_game_data_path_text,
     commit_game_path_text,
     on_settings_game_combo_changed,
     refresh_game_lists,
@@ -36,6 +37,7 @@ from app.game_ui import (
     select_custom_portproton_file,
     select_custom_wine_file,
     select_custom_xdelta_file,
+    select_game_data_path,
     update_custom_binary_ui,
     update_portproton_ui,
     update_settings_library_tab,
@@ -324,6 +326,10 @@ def setup_settings_tab(w):
             "settings_game_path_edit",
             "settings_game_path_browse_button",
             "settings_game_path_reset_button",
+            "settings_game_data_path_label",
+            "settings_game_data_path_edit",
+            "settings_game_data_path_browse_button",
+            "settings_game_data_path_reset_button",
             "settings_custom_executable_label",
             "settings_custom_executable_edit",
             "settings_custom_executable_button",
@@ -587,6 +593,26 @@ def setup_settings_tab(w):
             w.settings_game_path_edit.full_text()
             if hasattr(w.settings_game_path_edit, "full_text")
             else w.settings_game_path_edit.text(),
+        )
+    )
+    w.settings_game_data_path_browse_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_game_data_path_browse_button,
+            lambda: select_game_data_path(w),
+        )
+    )
+    w.settings_game_data_path_reset_button.clicked.connect(
+        lambda: _guarded_trigger(
+            w.settings_game_data_path_reset_button,
+            lambda: commit_game_data_path_text(w, ""),
+        )
+    )
+    w.settings_game_data_path_edit.editingFinished.connect(
+        lambda: commit_game_data_path_text(
+            w,
+            w.settings_game_data_path_edit.full_text()
+            if hasattr(w.settings_game_data_path_edit, "full_text")
+            else w.settings_game_data_path_edit.text(),
         )
     )
     w.settings_custom_executable_edit.editingFinished.connect(

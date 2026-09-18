@@ -216,8 +216,9 @@ class TestManualInstall:
             dialog.game_combo = SimpleNamespace(currentData=lambda: "deltarune")
             dialog.data_file_selections = {"deltarune_4": str(data_file)}
             dialog.extra_files_mappings = {}
+            dialog.extra_file_targets = {}
             dialog.unused_files = set()
-            dialog.xdelta_patches_mappings = {}
+            dialog.additional_patches_mappings = {}
             dialog.all_files = [(str(data_file), "BOSSRUSH.win")]
             os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
 
@@ -250,8 +251,9 @@ class TestManualInstall:
             dialog.game_combo = SimpleNamespace(currentData=lambda: "deltarune")
             dialog.data_file_selections = {"deltarune_4": str(data_file)}
             dialog.extra_files_mappings = {}
+            dialog.extra_file_targets = {}
             dialog.unused_files = set()
-            dialog.xdelta_patches_mappings = {}
+            dialog.additional_patches_mappings = {}
             dialog.all_files = [(str(data_file), "BOSSRUSH.csx")]
             os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
 
@@ -291,9 +293,10 @@ class TestManualInstall:
             dialog.game_combo = SimpleNamespace(currentData=lambda: "pizzatower")
             dialog.data_file_selections = {"pizzatower": str(data_file)}
             dialog.extra_files_mappings = {}
+            dialog.extra_file_targets = {}
             dialog.extra_files_chapters = {}
             dialog.unused_files = set()
-            dialog.xdelta_patches_mappings = {}
+            dialog.additional_patches_mappings = {}
             dialog.all_files = [(str(data_file), "laphell.xdelta")]
             dialog._copy_root_docs_to_mod = lambda target_mod_dir: None
             os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
@@ -331,9 +334,10 @@ class TestManualInstall:
             dialog.extra_files_mappings = {
                 str(extra_file): "chapter_1/lang_es/",
             }
+            dialog.extra_file_targets = {}
             dialog.extra_files_chapters = {}
             dialog.unused_files = set()
-            dialog.xdelta_patches_mappings = {}
+            dialog.additional_patches_mappings = {}
             dialog.all_files = [(str(extra_file), "lang.json")]
             dialog._copy_root_docs_to_mod = lambda target_mod_dir: None
             os.makedirs(dialog.app_state.mods_dir, exist_ok=True)
@@ -344,7 +348,7 @@ class TestManualInstall:
         config = json.loads((mod_folder / "mod_config.json").read_text("utf-8"))
 
         assert config["files"]["deltarune_1"]["extra_files"] == [
-            "chapter_1/lang_es/lang.json"
+            {"file_path": "chapter_1/lang_es/lang.json", "target": "game_folder"}
         ]
 
     def test_modpack_config_keeps_game_folder_and_extra_files(self, tmp_path):
@@ -361,7 +365,14 @@ class TestManualInstall:
                     "files": {
                         "undertale": {
                             "data_file_path": "undertale/data.win",
-                            "extra_files": ["sprites/talk.png"],
+                            "extra_files": [
+                                "sprites/talk.png",
+                                "saves/settings.json",
+                                {
+                                    "file_path": "saves/settings.json",
+                                    "target": "game_data_folder",
+                                },
+                            ],
                         }
                     },
                 }
@@ -373,6 +384,10 @@ class TestManualInstall:
         (modpack_dir / "undertale" / "data.win").write_text("data", encoding="utf-8")
         (modpack_dir / "undertale" / "sprites" / "talk.png").write_text(
             "sprite", encoding="utf-8"
+        )
+        (modpack_dir / "undertale" / "saves").mkdir()
+        (modpack_dir / "undertale" / "saves" / "settings.json").write_text(
+            "{}", encoding="utf-8"
         )
 
         mod = SimpleNamespace(id="source_mod", game="undertale")
@@ -394,5 +409,10 @@ class TestManualInstall:
         assert config["metadata"]["game"] == "undertale"
         assert config["files"]["undertale"]["data_file_path"] == "undertale/data.win"
         assert config["files"]["undertale"]["extra_files"] == [
-            "undertale/sprites/talk.png"
+            {"file_path": "undertale/sprites/talk.png", "target": "game_folder"},
+            {"file_path": "undertale/saves/settings.json", "target": "game_folder"},
+            {
+                "file_path": "undertale/saves/settings.json",
+                "target": "game_data_folder",
+            },
         ]

@@ -58,6 +58,8 @@
     "rule_exists": "This exact mod rule already exists.",
     "rule_selection_missing": "Select a profile, game, mod, and folder.",
     "game_path_missing": "The selected game's folder is not configured.",
+    "game_data_folder_missing": "The selected game's data folder is not configured.",
+    "custom_data_folder_unsafe": "The selected custom save folder cannot be used safely.",
     "data_file_missing": "Could not find a supported DATA file for {game}.",
     "script_missing": "The custom save folder script is missing.",
     "g3mtool_missing": "G3MTool is not available.",

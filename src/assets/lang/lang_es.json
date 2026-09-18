@@ -244,6 +244,7 @@
     "settings_section_filters": "Filtros",
     "settings_section_paths": "Rutas",
     "settings_game_path_label": "Ruta de {GAME}:",
+    "settings_game_data_path_label": "Carpeta de datos de {GAME}:",
     "settings_custom_executable_path_label": "EXE personalizado:",
     "settings_custom_g3mtool_path_label": "G3MTool personalizado:",
     "settings_custom_xdelta_path_label": "XDELTA personalizado:",
@@ -298,12 +299,18 @@
     "visible": "Se muestra",
     "hidden": "Oculto",
     "changed_data_files_label": "Archivos DATA modificados:",
-    "extra_files_label": "Archivos extra:"
+    "extra_files_label": "Archivos extra:",
+    "dependency_files_label": "Archivos no instalados:",
+    "data_folder_files_label": "Archivos de datos del juego:"
   },
   "files": {
     "data_file": "DATA - Archivo",
     "extra_files_title": "Archivos adicionales #{number}",
-    "dependency_only": "Solo dependencia (no instalar)",
+    "dependency_only": "No instalar",
+    "game_folder_target": "Carpeta del juego",
+    "data_folder_target": "Carpeta de datos del juego",
+    "custom_target": "Carpeta personalizada",
+    "custom_target_folder": "Carpeta personalizada:",
     "icon_label": "Icono",
     "version_label": "Versión {file_type}:"
   },
@@ -431,7 +438,9 @@
     "mod_editor_game_version": "Versión objetivo del juego para la que fue creado el mod.",
     "mod_editor_add_data": "Agrega el archivo DATA principal para esta pestaña. Solo se permite un archivo DATA por pestaña.",
     "mod_editor_add_extra": "Agrega archivos o carpetas extra para esta pestaña.",
-    "mod_editor_dependency_only": "Conserva este archivo junto al mod para los scripts, pero nunca lo copia al juego.",
+    "mod_editor_dependency_only": "Conserva este archivo en el mod, pero no lo instales.",
+    "mod_editor_data_folder_target": "Instala este archivo extra en la carpeta de datos del juego seleccionada.",
+    "mod_editor_custom_target": "Instala en una carpeta personalizada absoluta. Esta ruta puede no funcionar en otro dispositivo o sistema operativo.",
     "mod_editor_selected_file": "Archivo o carpeta seleccionados que se incluirán en el mod.",
     "mod_editor_data_version": "Etiqueta de versión para esta entrada de archivo DATA.",
     "mod_editor_special_extra_target_towers": "Archivos extra especiales: se colocarán en {target_path} mientras el juego esté abierto.",
@@ -449,8 +458,8 @@
     "manual_install_data_tab": "Asigna los archivos DATA principales a cada sección de contenido o pestaña del juego.",
     "manual_install_extra_tab": "Coloca los archivos extra en las carpetas correctas del juego.",
     "manual_install_data_file": "Archivo DATA asignado actualmente a esta sección de contenido o pestaña.",
-    "manual_install_add_xdelta": "Agrega un parche xdelta extra para otro archivo del juego en esta sección de contenido.",
-    "manual_install_xdelta_target": "Ruta relativa dentro de la carpeta del juego donde debe aplicarse este parche.",
+    "manual_install_additional_patch": "Agrega un parche para otro archivo del juego o la carpeta de datos en esta sección.",
+    "manual_install_additional_patch_target": "Ruta relativa dentro de la carpeta de juego o datos seleccionada donde se aplicará este parche.",
     "apply_game_version": "Restaura esta versión guardada del juego en la instalación seleccionada.",
     "export_game_version": "Exporta esta versión guardada del juego como archivo.",
     "delete_game_version": "Elimina esta versión guardada del juego de G3M.",
@@ -515,16 +524,16 @@
     "data_file": "DATA Archivo",
     "no_data_files": "Sin Archivos de Datos",
     "no_data_files_in_directory": "No se encontraron archivos DATA en el directorio preparado.",
-    "xdelta_patches_section": "Parches XDelta Adicionales",
-    "xdelta_patches_info": "Configure parches xdelta adicionales para otros archivos del juego. Seleccione un archivo xdelta y especifique la ruta del archivo de destino (por ejemplo, Exes/Main.exe).",
-    "xdelta_patch_target_path": "Ruta del archivo de destino (por ejemplo, Exes/Main.exe)",
-    "xdelta_patch_no_target_path": "Por favor, especifique una ruta de archivo de destino para el parche",
-    "add_additional_xdelta": "Agregar Parche XDelta Adicional",
-    "select_xdelta_patch": "Seleccionar Archivo de Parche XDelta",
-    "select_xdelta_patch_info": "Seleccione un archivo xdelta para usar como parche adicional",
-    "no_xdelta_files_available": "No hay archivos xdelta disponibles para agregar como parches",
+    "additional_patches_section": "Parches adicionales",
+    "additional_patches_info": "Configura parches adicionales para archivos del juego o la carpeta de datos. Selecciona un archivo de parche e indica su ruta de destino (por ejemplo, Exes/Main.exe).",
+    "additional_patch_target_path": "Ruta del archivo de destino (por ejemplo, Exes/Main.exe)",
+    "additional_patch_no_target_path": "Especifica una ruta de archivo de destino para el parche",
+    "add_additional_patch": "Agregar parche adicional",
+    "select_additional_patch": "Seleccionar archivo de parche",
+    "select_additional_patch_info": "Selecciona un archivo para usarlo como parche adicional",
+    "no_patch_files_available": "No hay archivos de parche disponibles para agregar",
     "enter_relative_path": "ej., sprites/bgs",
-    "path_outside_game_folder": "La carpeta seleccionada debe estar dentro de la carpeta del juego.",
+    "path_outside_game_folder": "La ubicación seleccionada debe estar dentro de la carpeta del juego o de la carpeta de datos del juego, según el tipo de destino.",
     "conflicts": {
       "title": "Conflictos de Fusión de Mods Detectados",
       "total_conflicts": "Total de conflictos detectados: {count}",
@@ -540,7 +549,7 @@
       "xdelta_patch_failed": "No se pudo aplicar el parche XDelta.\n\nParche: {patch_name}\n\nRuta del parche: {patch_path}\n\nArchivo de destino: {data_win_path}\n\nError: {error}\n\nAún se pueden agregar archivos extra, pero este parche se omitirá.\n\n¿Continuar?",
       "data_patch_failed": "No se pudo crear el archivo data parcheado.\n\nParche: {patch_name}\n\nRuta del parche: {patch_path}\n\nArchivo de destino: {data_win_path}\n\nError: {error}\n\nEste parche de data se omitirá, pero los archivos extra aún pueden aplicarse.\n\n¿Continuar?",
       "conflicts_detected": "Se detectaron conflictos al combinar {chapter}.\n\nConflictos totales: {count}\n\nPuede revisar el reporte antes de continuar.\n\n¿Continuar?",
-      "xdelta_override_skipped": "No se pudo aplicar el xdelta override \"{patch}\" a los archivos de destino coincidentes en:\n{target}\n\nEse paso del parche se omitirá.\n\n¿Continuar?",
+      "additional_patch_override_skipped": "No se pudo aplicar el parche adicional \"{patch}\" a archivos de destino coincidentes en:\\n{target}\\n\\nEste paso se omitirá.\\n\\n¿Continuar?",
       "archive_extract_failed": "No se pudo extraer el archivo \"{archive}\" en:\n{target}\n\nEs posible que se omitan algunos archivos.\n\n¿Continuar?",
       "g3mpatch_validate_title": "Advertencia: el archivo DATA no coincide con G3MPatch",
       "g3mpatch_validate_body": "Este G3MPatch fue creado para otro archivo DATA.\n\nParche: {patch_name}\n\nArchivo esperado: {expected_file}\nMD5 esperado: {expected_md5}\n\nArchivo actual: {actual_file}\nMD5 actual: {actual_md5}\n\nSi la diferencia es pequeña, por ejemplo por una versión distinta del juego o de la plataforma, el parche aún podría funcionar.\n\n¿Continuar de todos modos?",
@@ -549,7 +558,7 @@
       "extra_file_missing": "No se encontró el archivo extra referenciado por este mod:\n{path}\n\nEse archivo se omitirá. El juego puede iniciar, pero el mod puede quedar incompleto.\n\n¿Continuar?",
       "extra_directory_missing": "No se encontró la carpeta extra referenciada por este mod:\n{path}\n\nLos archivos de esa carpeta se omitirán. El juego puede iniciar, pero el mod puede quedar incompleto.\n\n¿Continuar?",
       "extra_file_copy_failed": "No se pudo copiar el archivo extra \"{file}\" en:\n{target}\n\nRevisa permisos, bloqueo del antivirus o espacio libre.\n\n¿Continuar?",
-      "xdelta_override_no_target": "El parche XDELTA extra \"{patch}\" no encontró un destino compatible en:\n{target}\n\nEse parche extra se omitirá.\n\n¿Continuar?"
+      "additional_patch_override_no_target": "El parche adicional \"{patch}\" no encontró un destino compatible en:\\n{target}\\n\\nEste parche se omitirá.\\n\\n¿Continuar?"
     },
     "app_will_restart": "La aplicación se reiniciará.",
     "are_you_sure": "¿Estás seguro?",
@@ -639,7 +648,13 @@
     "theme_delete_title": "Eliminar Tema",
     "theme_delete_prompt": "¿Estás seguro de que quieres eliminar este tema: {theme}?",
     "theme_invalid_archive": "Archivo de tema no válido. Es posible que falten archivos requeridos.",
-    "mod_needs_at_least_one_file": "Un mod debe contener al menos un archivo DATA o un archivo extra."
+    "mod_needs_at_least_one_file": "Un mod debe contener al menos un archivo DATA o un archivo extra.",
+    "game_data_folder_not_set": "Configura la carpeta de datos del juego en Ajustes antes de usarla como destino.",
+    "custom_target_folder_path": "Carpeta de destino personalizada absoluta",
+    "select_custom_target_folder": "Seleccionar carpeta de destino personalizada",
+    "custom_target_warning_title": "Carpeta de destino personalizada",
+    "custom_target_warning": "Esta carpeta está fuera de la carpeta del juego y de la carpeta de datos del juego. Se guarda como una ruta específica del dispositivo y puede no funcionar para otros usuarios o sistemas operativos. Prefiere la carpeta del juego, la carpeta de datos del juego o No instalar.",
+    "custom_target_folder_not_set": "Elige una carpeta de destino personalizada absoluta existente."
   },
   "errors": {
     "app_not_found_after_unpack": "G3M.app no encontrado después de descomprimir.",
@@ -1391,8 +1406,8 @@
       "extra_directory_missing": "Falta una carpeta extra",
       "extra_file_copy_failed": "No se pudo copiar un archivo extra",
       "extra_archive_extract_failed": "No se pudo extraer un archivo extra",
-      "extra_xdelta_no_target": "No se encontró el destino XDELTA extra",
-      "extra_xdelta_apply_failed": "Falló el parche XDELTA extra"
+      "extra_additional_patch_no_target": "No se encontró el destino del parche adicional",
+      "extra_additional_patch_apply_failed": "Falló el parche adicional"
     },
     "messages": {
       "g3mtool_unavailable": {
@@ -1467,13 +1482,13 @@
         "title": "No se pudo extraer un archivo extra",
         "body": "No se pudo extraer un archivo de los extras del mod. Es posible que falten algunos archivos del mod dentro del juego."
       },
-      "extra_xdelta_no_target": {
-        "title": "No se encontró el destino XDELTA extra",
-        "body": "Un parche XDELTA extra no encontró un archivo de destino compatible. Suele ser normal si el mod admite varias estructuras del juego, pero ese parche extra se omitirá."
+      "extra_additional_patch_no_target": {
+        "title": "No se encontró el destino del parche adicional",
+        "body": "Un parche adicional de los archivos del mod no encontró un archivo de destino compatible. Este parche se omitirá."
       },
-      "extra_xdelta_apply_failed": {
-        "title": "Falló el parche XDELTA extra",
-        "body": "No se pudo aplicar un parche XDELTA de los archivos extra del mod. El parche DATA principal puede funcionar, pero este cambio extra se omitirá."
+      "extra_additional_patch_apply_failed": {
+        "title": "Falló el parche adicional",
+        "body": "No se pudo aplicar un parche adicional de los archivos del mod a su destino. El parche DATA principal aún puede funcionar, pero este parche se omitirá."
       }
     },
     "tooltips": {
@@ -1492,8 +1507,8 @@
       "extra_directory_missing": "Se muestra cuando un mod referencia una carpeta extra que ya no existe en la carpeta del mod.",
       "extra_file_copy_failed": "Se muestra cuando G3M no puede copiar un archivo extra en la carpeta del juego.",
       "extra_archive_extract_failed": "Se muestra cuando no se puede extraer un archivo extra en la carpeta del juego.",
-      "extra_xdelta_no_target": "Se muestra cuando un parche XDELTA extra no encuentra un archivo de destino compatible.",
-      "extra_xdelta_apply_failed": "Se muestra cuando un parche XDELTA extra encuentra destino, pero no puede aplicarse.",
+      "extra_additional_patch_no_target": "Se muestra cuando un parche adicional no encuentra un archivo de destino compatible.",
+      "extra_additional_patch_apply_failed": "Se muestra cuando un parche adicional encuentra un destino pero no puede aplicarse.",
       "minor_file_overrides_only": "Se muestra para mods solo de archivos donde no se aplica parche DATA.",
       "cache_rebuild_needed": "Se muestra cuando G3MTool necesita reconstruir datos de caché para un archivo de entrada.",
       "legacy_patching_warning": "Se muestra para riesgos antiguos o aún no clasificados de parcheo y fusión."

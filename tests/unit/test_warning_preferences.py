@@ -47,6 +47,25 @@ def test_individual_warning_override_uses_registry_defaults():
     assert is_warning_enabled("g3mpatch_newer_tool", config) is False
 
 
+def test_legacy_extra_xdelta_warning_overrides_are_migrated():
+    config = {
+        "warning_preferences": {
+            "warning_overrides": {
+                "extra_xdelta_no_target": True,
+                "extra_xdelta_apply_failed": False,
+                "extra_additional_patch_apply_failed": True,
+            }
+        }
+    }
+
+    overrides = normalize_warning_preferences(config)["warning_overrides"]
+
+    assert overrides["extra_additional_patch_no_target"] is True
+    assert overrides["extra_additional_patch_apply_failed"] is True
+    assert "extra_xdelta_no_target" not in overrides
+    assert "extra_xdelta_apply_failed" not in overrides
+
+
 def test_warning_event_keeps_severity_and_context():
     definition = get_warning_definition("xdelta_apply_failed")
 
@@ -80,7 +99,10 @@ def test_extra_file_warning_definitions_are_registered():
         "extra_file_missing",
         {"warning_preferences": {"warning_overrides": {"extra_file_missing": False}}},
     ) is False
-    assert get_warning_definition("extra_xdelta_no_target").severity is WarningSeverity.MINOR
+    assert (
+        get_warning_definition("extra_additional_patch_no_target").severity
+        is WarningSeverity.MINOR
+    )
 
 
 def test_missing_data_file_is_critical():

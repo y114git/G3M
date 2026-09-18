@@ -231,11 +231,13 @@ class SearchModCardWidget(ModCardWidget):
         self.actions_layout = actions_layout
         self.details_button = QPushButton(tr("ui.details_button"), self.actions_widget)
         self.details_button.setObjectName("cardButton")
+        self.details_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.details_button.clicked.connect(
             lambda: self.details_requested.emit(self.mod_data)
         )
         self.action_button = QPushButton(tr("buttons.download"), self.actions_widget)
         self.action_button.setObjectName("cardButtonDownload")
+        self.action_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.action_button.clicked.connect(self._on_action_button_clicked)
         actions_layout.addWidget(self.details_button)
         actions_layout.addWidget(self.action_button)
@@ -535,6 +537,18 @@ class SearchModCardWidget(ModCardWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.setFocus(Qt.FocusReason.MouseFocusReason)
         super().mousePressEvent(event)
+
+    def keyPressEvent(self, event):
+        if (
+            event.key() == Qt.Key.Key_Tab
+            and event.modifiers() == Qt.KeyboardModifier.NoModifier
+            and self.is_selected
+            and self.details_button.isVisible()
+        ):
+            self.details_button.setFocus(Qt.FocusReason.TabFocusReason)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def focusOutEvent(self, event):
         super().focusOutEvent(event)

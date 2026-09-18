@@ -405,8 +405,12 @@ class ModSummaryPanel(QFrame):
             key=lambda k: (0 if k == "0" else 1, int(k) if k.isdigit() else 999, k),
         )
         data_lines = []
-        extra_total = 0
-        extra_chapters = []
+        extra_chapters: dict[str, list[tuple[str, int, list[str]]]] = {
+            "game_folder": [],
+            "game_data_folder": [],
+            "custom": [],
+            "none": [],
+        }
         for chapter_key in sorted_keys:
             ch_info = files[chapter_key]
             if ch_info is None:
@@ -439,14 +443,17 @@ class ModSummaryPanel(QFrame):
                 data_lines.append(
                     f"<span style='color:{tc}'>{html.escape(chapter_label)}:</span> <span style='color:{sc}'>{self._wrap_display_text(display_name)}{html.escape(size_str)}</span>"
                 )
-            extra_paths = self._collect_extra_paths(extra_files)
-            if extra_paths:
-                extra_total += len(extra_paths)
+            for target, extra_paths in self._collect_extra_paths(extra_files).items():
+                display_target = target if target in extra_chapters else "none"
+                if not extra_paths:
+                    continue
                 file_lines = [
                     f"&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{sc}'>{self._wrap_display_text(self._format_display_path(file_path))}</span>"
                     for file_path in extra_paths
                 ]
-                extra_chapters.append((chapter_label, len(extra_paths), file_lines))
+                extra_chapters[display_target].append(
+                    (chapter_label, len(extra_paths), file_lines)
+                )
         data_text = (
             "<br>".join(data_lines)
             if data_lines
@@ -455,15 +462,26 @@ class ModSummaryPanel(QFrame):
         self._data_label.setText(
             f"<span style='color:{tc}; font-weight:600;'>{tr('ui.changed_data_files_label')}</span><br><br>{data_text}"
         )
-        if extra_total > 0:
-            lines = [
-                f"<span style='color:{tc}; font-weight:600;'>{tr('ui.extra_files_label')}</span> <span style='color:{sc}'>{extra_total}</span>"
-            ]
-            for ch_label, ch_count, file_lines in extra_chapters:
+        if any(extra_chapters.values()):
+            lines = []
+            for target, label_key in (
+                ("game_folder", "ui.extra_files_label"),
+                ("game_data_folder", "ui.data_folder_files_label"),
+                ("custom", "ui.custom_target_files_label"),
+                ("none", "ui.dependency_files_label"),
+            ):
+                chapters = extra_chapters[target]
+                if not chapters:
+                    continue
+                total = sum(count for _chapter, count, _files in chapters)
                 lines.append(
-                    f"<br><span style='color:{tc}'>&nbsp;&nbsp;{html.escape(ch_label)}:</span> <span style='color:{sc}'>{ch_count}</span>"
+                    f"<span style='color:{tc}; font-weight:600;'>{tr(label_key)}</span> <span style='color:{sc}'>{total}</span>"
                 )
-                lines.extend(file_lines)
+                for ch_label, ch_count, file_lines in chapters:
+                    lines.append(
+                        f"<br><span style='color:{tc}'>&nbsp;&nbsp;{html.escape(ch_label)}:</span> <span style='color:{sc}'>{ch_count}</span>"
+                    )
+                    lines.extend(file_lines)
             extra_text = "<br>".join(lines)
             self._extra_label.setText(extra_text)
             self._extra_label.show()
@@ -508,20 +526,30 @@ class ModSummaryPanel(QFrame):
         self._playtime_widget.show()
 
     @staticmethod
-    def _collect_extra_paths(extra_files) -> list[str]:
-        """Return a flat list of extra file paths."""
+    def _collect_extra_paths(extra_files) -> dict[str, list[str]]:
+        """Return extra file paths grouped by deployment target."""
+        result: dict[str, list[str]] = {}
         if isinstance(extra_files, dict):
-            result: list[str] = []
             for values in extra_files.values():
                 if isinstance(values, list):
-                    result.extend(str(value) for value in values if value)
+                    result.setdefault("game_folder", []).extend(
+                        str(value) for value in values if value
+                    )
             return result
         if not isinstance(extra_files, list) or not extra_files:
-            return []
-        result = []
+            return result
         for ef in extra_files:
-            if ef:
-                result.append(str(ef))
+            if isinstance(ef, str) and ef:
+                result.setdefault("game_folder", []).append(ef)
+            elif isinstance(ef, dict):
+                file_path = ef.get("file_path") or ef.get("url")
+                if file_path:
+                    target = str(
+                        ef.get("target")
+                        or ef.get("status")
+                        or "game_folder"
+                    ).lower()
+                    result.setdefault(target, []).append(str(file_path))
         return result
 
     @staticmethod

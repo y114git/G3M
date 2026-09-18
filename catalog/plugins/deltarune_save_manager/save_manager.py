@@ -1,10 +1,8 @@
 import logging
 import os
-import platform
 import re
 import shutil
 import tempfile
-import time
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -16,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config.config import UI_COLORS
+from models.game_modes import get_game
 from utils.native_integration import get_open_file_name, open_path_native
 
 logger = logging.getLogger(__name__)
@@ -159,30 +158,12 @@ class SaveManager(QObject):
         if self.save_path and not os.path.isdir(self.save_path):
             self._clear_save_path()
 
-        candidates = []
-        system = platform.system()
-        home = os.path.expanduser('~')
-
-        if system == 'Windows':
-            local_appdata = os.getenv('LOCALAPPDATA', '')
-            appdata = os.getenv('APPDATA', '')
-            if local_appdata:
-                candidates.append(os.path.join(local_appdata, 'DELTARUNE'))
-            if appdata:
-                candidates.append(os.path.join(appdata, 'DELTARUNE'))
-        elif system == 'Darwin':
-            candidates.append(os.path.join(home, 'Library', 'Application Support', 'DELTARUNE'))
-        else:
-            proton_full = os.path.join(home, '.steam', 'steam', 'steamapps', 'compatdata', '1671210', 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Local', 'DELTARUNE')
-            proton_demo = os.path.join(home, '.steam', 'steam', 'steamapps', 'compatdata', '1690940', 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Local', 'DELTARUNE')
-            native_cfg = os.path.join(home, '.config', 'DELTARUNE')
-            candidates.extend([proton_full, proton_demo, native_cfg])
-
-        for path in candidates:
-            if self._is_usable_save_path(path):
-                self.save_path = path
-                self.migrate_old_collections()
-                return True
+        game = get_game('deltarune')
+        data_path = game.get_data_path(self.app_state.local_config) if game else ''
+        if self._is_usable_save_path(data_path):
+            self.save_path = data_path
+            self.migrate_old_collections()
+            return True
 
         return False
 
@@ -245,34 +226,6 @@ class SaveManager(QObject):
                 logger.warning('SaveManager._migrate_old_collections: migration failed for %s: %s', name, e)
         if migrated_count > 0:
             self._reindex_collections()
-
-    def manage_steam_deck_saves(self) -> None:
-        if platform.system() != 'Linux':
-            return
-        try:
-            home_dir = os.path.expanduser('~')
-            if self.app_state.game_mode.game_id == 'undertale':
-                game_name = 'UNDERTALE'
-            else:
-                game_name = 'DELTARUNE'
-            steam_app_id = self.app_state.game_mode.steam_app_id
-            native_save_path = os.path.join(home_dir, '.config', game_name)
-            proton_save_path = os.path.join(home_dir, '.steam', 'steam', 'steamapps', 'compatdata', steam_app_id, 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Local', game_name)
-            if not os.path.isdir(proton_save_path):
-                return
-            if os.path.lexists(native_save_path):
-                if os.path.islink(native_save_path) and os.readlink(native_save_path) == proton_save_path:
-                    return
-                if os.path.isdir(native_save_path) and (not os.listdir(native_save_path)):
-                    os.rmdir(native_save_path)
-                else:
-                    backup_path = f'{native_save_path}_backup_{int(time.time())}'
-                    os.rename(native_save_path, backup_path)
-                    self.feedback_manager.show_message('info', 'dialogs.backup', tr('dialogs.backup_created_for_steam_deck', backup_path=backup_path))
-            os.symlink(proton_save_path, native_save_path)
-            self.feedback_manager.show_message('info', 'dialogs.steam_deck_setup', tr('dialogs.steam_deck_compatibility_configured'))
-        except Exception as e:
-            logger.error(f'Steam Deck setup error: {e}')
 
     def _reindex_collections(self):
         cols = []

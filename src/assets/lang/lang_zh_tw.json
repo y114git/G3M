@@ -244,6 +244,7 @@
     "settings_section_filters": "篩選",
     "settings_section_paths": "路徑",
     "settings_game_path_label": "{GAME} 路徑：",
+    "settings_game_data_path_label": "{GAME} 遊戲資料目錄：",
     "settings_custom_executable_path_label": "自訂 EXE：",
     "settings_custom_g3mtool_path_label": "自訂 G3MTool：",
     "settings_custom_xdelta_path_label": "自訂 XDELTA：",
@@ -298,12 +299,18 @@
     "visible": "可見",
     "hidden": "隱藏",
     "changed_data_files_label": "已更改的DATA檔案：",
-    "extra_files_label": "額外檔案："
+    "extra_files_label": "額外檔案：",
+    "dependency_files_label": "不安裝的檔案：",
+    "data_folder_files_label": "遊戲資料檔案："
   },
   "files": {
     "data_file": "DATA - 檔案",
     "extra_files_title": "額外檔案 #{number}",
-    "dependency_only": "僅作為相依檔案（不安裝）",
+    "dependency_only": "不安裝",
+    "game_folder_target": "遊戲資料夾",
+    "data_folder_target": "遊戲資料資料夾",
+    "custom_target": "自訂資料夾",
+    "custom_target_folder": "自訂資料夾：",
     "icon_label": "圖標",
     "version_label": "版本 {file_type}："
   },
@@ -431,7 +438,9 @@
     "mod_editor_game_version": "此模組對應的遊戲版本，可選填。",
     "mod_editor_add_data": "為這個分頁新增主要 DATA 檔案。每個分頁只允許一個 DATA 檔案。",
     "mod_editor_add_extra": "為這個分頁新增額外檔案壓縮包或資料夾。",
-    "mod_editor_dependency_only": "將此檔案保留在模組中供指令碼使用，但絕不複製到遊戲中。",
+    "mod_editor_dependency_only": "將此檔案保留在模組中，但不安裝它。",
+    "mod_editor_data_folder_target": "將這個額外檔案安裝到選定的遊戲資料夾。",
+    "mod_editor_custom_target": "安裝到絕對路徑的自訂資料夾。此路徑可能無法在其他裝置或作業系統上使用。",
     "mod_editor_selected_file": "將被包含進模組中的已選檔案或資料夾。",
     "mod_editor_data_version": "此 DATA 檔案項目的版本標籤。",
     "mod_editor_special_extra_target_towers": "特殊 extra 檔案：遊戲執行期間會放入 {target_path}。",
@@ -449,8 +458,8 @@
     "manual_install_data_tab": "為每個內容區段或遊戲分頁指派主要 DATA 檔案。",
     "manual_install_extra_tab": "把額外檔案對應到正確的遊戲資料夾中。",
     "manual_install_data_file": "目前指派給此內容區段或分頁的 DATA 檔案。",
-    "manual_install_add_xdelta": "為此內容區段中的其他遊戲檔案新增額外 xdelta 補丁。",
-    "manual_install_xdelta_target": "這個補丁應套用到遊戲資料夾中的相對路徑。",
+    "manual_install_additional_patch": "為此內容區段中的其他遊戲檔案或資料夾新增補丁。",
+    "manual_install_additional_patch_target": "這個補丁應套用到所選遊戲或資料夾中的相對路徑。",
     "apply_game_version": "將這個已儲存的遊戲版本還原到目前選取的安裝位置。",
     "export_game_version": "把這個已儲存的遊戲版本匯出成壓縮檔。",
     "delete_game_version": "從 G3M 刪除這個已儲存的遊戲版本。",
@@ -515,16 +524,16 @@
     "data_file": "DATA 檔案",
     "no_data_files": "無 DATA 檔案",
     "no_data_files_in_directory": "在準備的目錄中未找到 DATA 檔案。",
-    "xdelta_patches_section": "其他 XDelta 補丁",
-    "xdelta_patches_info": "為其他遊戲檔案設定額外的 xdelta 補丁。選擇一個 xdelta 檔案並指定目標檔案路徑（例如，Exes/Main.exe）。",
-    "xdelta_patch_target_path": "目標檔案路徑（例如，Exes/Main.exe）",
-    "xdelta_patch_no_target_path": "請為補丁指定目標檔案路徑",
-    "add_additional_xdelta": "新增其他 XDelta 補丁",
-    "select_xdelta_patch": "選擇 XDelta 補丁檔案",
-    "select_xdelta_patch_info": "選擇一個 xdelta 檔案作為額外補丁使用",
-    "no_xdelta_files_available": "沒有可用的 xdelta 檔案作為補丁新增",
+    "additional_patches_section": "附加補丁",
+    "additional_patches_info": "為遊戲檔案或資料夾設定附加補丁。選擇補丁檔案並設定目標路徑（例如 Exes/Main.exe）。",
+    "additional_patch_target_path": "目標檔案路徑（例如 Exes/Main.exe）",
+    "additional_patch_no_target_path": "請為補丁指定目標檔案路徑",
+    "add_additional_patch": "新增附加補丁",
+    "select_additional_patch": "選擇補丁檔案",
+    "select_additional_patch_info": "選擇一個檔案作為附加補丁",
+    "no_patch_files_available": "沒有可新增的補丁檔案",
     "enter_relative_path": "例如：sprites/bgs",
-    "path_outside_game_folder": "所選資料夾必須在遊戲資料夾內。",
+    "path_outside_game_folder": "所選位置必須位於遊戲安裝資料夾或遊戲資料資料夾內，視目標類型而定。",
     "conflicts": {
       "title": "偵測到模組合併衝突",
       "total_conflicts": "偵測到的衝突總數：{count}",
@@ -540,7 +549,7 @@
       "xdelta_patch_failed": "無法套用 XDelta 補丁。\n\n補丁：{patch_name}\n\n補丁路徑：{patch_path}\n\n目標檔案：{data_win_path}\n\n錯誤：{error}\n\n仍然可以新增額外檔案，但這個補丁會被跳過。\n\n是否繼續？",
       "data_patch_failed": "無法建立已套用補丁的 data 檔案。\n\n補丁：{patch_name}\n\n補丁路徑：{patch_path}\n\n目標檔案：{data_win_path}\n\n錯誤：{error}\n\n這個 data 補丁會被略過，但額外檔案仍可繼續套用。\n\n是否繼續？",
       "conflicts_detected": "合併 {chapter} 時偵測到衝突。\n\n衝突總數：{count}\n\n您可以先查看報告，再決定是否繼續。\n\n是否繼續？",
-      "xdelta_override_skipped": "無法將 xdelta 覆蓋補丁「{patch}」套用到以下位置中的相符目標檔案：\n{target}\n\n此補丁步驟將被略過。\n\n是否繼續？",
+      "additional_patch_override_skipped": "無法將附加補丁「{patch}」套用到以下位置中的相符目標檔案：\\n{target}\\n\\n此步驟將被略過。\\n\\n是否繼續？",
       "archive_extract_failed": "無法將壓縮檔「{archive}」解壓到：\n{target}\n\n部分檔案可能會被略過。\n\n是否繼續？",
       "g3mpatch_validate_title": "警告：G3MPatch 資料檔不相符",
       "g3mpatch_validate_body": "這個 G3MPatch 是為另一個資料檔建立的。\n\n補丁：{patch_name}\n\n預期檔案：{expected_file}\n預期 MD5：{expected_md5}\n\n目前檔案：{actual_file}\n目前 MD5：{actual_md5}\n\n如果差異很小，例如只是遊戲版本或平台不同，補丁仍然可能可用。\n\n是否仍要繼續？",
@@ -549,7 +558,7 @@
       "extra_file_missing": "找不到此模組引用的附加檔案：\n{path}\n\n該檔案會被跳過。遊戲可能仍可啟動，但模組可能不完整。\n\n繼續？",
       "extra_directory_missing": "找不到此模組引用的附加資料夾：\n{path}\n\n其中的檔案會被跳過。遊戲可能仍可啟動，但模組可能不完整。\n\n繼續？",
       "extra_file_copy_failed": "無法將附加檔案「{file}」複製到：\n{target}\n\n請檢查權限、防毒軟體攔截或磁碟空間。\n\n繼續？",
-      "xdelta_override_no_target": "附加 XDELTA 補丁「{patch}」在以下位置找不到相符目標：\n{target}\n\n該附加補丁會被跳過。\n\n繼續？"
+      "additional_patch_override_no_target": "附加補丁「{patch}」在以下位置找不到相符目標：\\n{target}\\n\\n該補丁將被略過。\\n\\n繼續？"
     },
     "app_will_restart": "應用程式將重新啟動。",
     "are_you_sure": "您確定嗎？",
@@ -639,7 +648,13 @@
     "theme_delete_title": "刪除主題",
     "theme_delete_prompt": "您確定要刪除此主題嗎：{theme}？",
     "theme_invalid_archive": "無效的主題壓縮包。可能缺少必需的文件。",
-    "mod_needs_at_least_one_file": "模組必須包含至少一個 DATA 檔案或額外檔案。"
+    "mod_needs_at_least_one_file": "模組必須包含至少一個 DATA 檔案或額外檔案。",
+    "game_data_folder_not_set": "請先在設定中指定遊戲資料夾，再將其作為目標。",
+    "custom_target_folder_path": "絕對自訂目標資料夾",
+    "select_custom_target_folder": "選取自訂目標資料夾",
+    "custom_target_warning_title": "自訂目標資料夾",
+    "custom_target_warning": "此資料夾位於遊戲資料夾和遊戲資料資料夾之外。它會儲存為裝置特定路徑，可能無法在其他使用者或作業系統上運作。請優先選擇遊戲資料夾、遊戲資料資料夾或不安裝。",
+    "custom_target_folder_not_set": "請選擇一個已存在的絕對自訂目標資料夾。"
   },
   "errors": {
     "app_not_found_after_unpack": "提取壓縮檔後未找到G3M.app。",
@@ -1377,8 +1392,8 @@
       "extra_directory_missing": "缺少附加資料夾",
       "extra_file_copy_failed": "無法複製附加檔案",
       "extra_archive_extract_failed": "無法解壓縮附加壓縮檔",
-      "extra_xdelta_no_target": "找不到附加 XDELTA 目標",
-      "extra_xdelta_apply_failed": "附加 XDELTA 補丁失敗"
+      "extra_additional_patch_no_target": "找不到附加補丁目標",
+      "extra_additional_patch_apply_failed": "附加補丁失敗"
     },
     "messages": {
       "g3mtool_unavailable": {
@@ -1453,13 +1468,13 @@
         "title": "無法解壓縮附加壓縮檔",
         "body": "無法解壓縮模組附加檔案中的壓縮檔。遊戲內可能會缺少部分模組檔案。"
       },
-      "extra_xdelta_no_target": {
-        "title": "找不到附加 XDELTA 目標",
-        "body": "附加檔案中的 XDELTA 補丁找不到相符的目標檔案。對於支援多種遊戲結構的模組，這通常可以忽略，但該附加補丁會被跳過。"
+      "extra_additional_patch_no_target": {
+        "title": "找不到附加補丁目標",
+        "body": "模組附加檔案中的補丁沒有找到相符目標檔案。該補丁將被略過。"
       },
-      "extra_xdelta_apply_failed": {
-        "title": "附加 XDELTA 補丁失敗",
-        "body": "無法將模組附加檔案中的 XDELTA 補丁套用到目標檔案。主要 DATA 補丁可能仍可運作，但這個附加檔案變更會被跳過。"
+      "extra_additional_patch_apply_failed": {
+        "title": "附加補丁失敗",
+        "body": "無法將模組附加檔案中的補丁套用到目標。主要 DATA 補丁仍可能正常運作，但該補丁將被略過。"
       }
     },
     "tooltips": {
@@ -1478,8 +1493,8 @@
       "extra_directory_missing": "當模組引用的附加資料夾已不在模組資料夾中時顯示。",
       "extra_file_copy_failed": "當 G3M 無法將附加檔案複製到遊戲資料夾時顯示。",
       "extra_archive_extract_failed": "當附加檔案中的壓縮檔無法解壓縮到遊戲資料夾時顯示。",
-      "extra_xdelta_no_target": "當附加 XDELTA 補丁找不到相符的目標檔案時顯示。",
-      "extra_xdelta_apply_failed": "當附加 XDELTA 補丁找到目標但無法套用時顯示。",
+      "extra_additional_patch_no_target": "當附加補丁找不到相符目標檔案時顯示。",
+      "extra_additional_patch_apply_failed": "當附加補丁找到目標但無法套用時顯示。",
       "minor_file_overrides_only": "當模組只複製檔案而不套用 DATA 補丁時顯示。",
       "cache_rebuild_needed": "當 G3MTool 需要為輸入檔案重建可重用快取資料時顯示。",
       "legacy_patching_warning": "用於舊版或尚未分類的修補/合併風險。"

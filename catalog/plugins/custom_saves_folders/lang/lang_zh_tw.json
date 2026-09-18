@@ -58,6 +58,8 @@
     "rule_exists": "完全相同的模組規則已存在。",
     "rule_selection_missing": "請選取設定檔、遊戲、模組與資料夾。",
     "game_path_missing": "尚未設定所選遊戲的資料夾。",
+    "game_data_folder_missing": "尚未設定所選遊戲的資料目錄。",
+    "custom_data_folder_unsafe": "無法安全使用所選的自訂存檔資料夾。",
     "data_file_missing": "找不到 {game} 的支援 DATA 檔案。",
     "script_missing": "缺少自訂存檔資料夾腳本。",
     "g3mtool_missing": "G3MTool 無法使用。",

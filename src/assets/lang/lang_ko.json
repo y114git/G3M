@@ -244,6 +244,7 @@
     "settings_section_filters": "필터",
     "settings_section_paths": "경로",
     "settings_game_path_label": "{GAME} 경로:",
+    "settings_game_data_path_label": "{GAME} 데이터 폴더:",
     "settings_custom_executable_path_label": "사용자 지정 EXE:",
     "settings_custom_g3mtool_path_label": "사용자 지정 G3MTool:",
     "settings_custom_xdelta_path_label": "사용자 지정 XDELTA:",
@@ -298,12 +299,18 @@
     "visible": "표시됨",
     "hidden": "숨김",
     "changed_data_files_label": "수정된 DATA 파일:",
-    "extra_files_label": "추가 파일:"
+    "extra_files_label": "추가 파일:",
+    "dependency_files_label": "설치하지 않는 파일:",
+    "data_folder_files_label": "게임 데이터 파일:"
   },
   "files": {
     "data_file": "DATA 파일",
     "extra_files_title": "추가 파일 #{number}",
-    "dependency_only": "종속성 전용(설치 안 함)",
+    "dependency_only": "설치하지 않음",
+    "game_folder_target": "게임 폴더",
+    "data_folder_target": "게임 데이터 폴더",
+    "custom_target": "사용자 지정 폴더",
+    "custom_target_folder": "사용자 지정 폴더:",
     "icon_label": "아이콘",
     "version_label": "버전 {file_type}:"
   },
@@ -431,7 +438,9 @@
     "mod_editor_game_version": "이 모드가 제작된 대상 게임 버전입니다. 선택 사항입니다.",
     "mod_editor_add_data": "이 탭의 메인 DATA 패치 파일을 추가합니다. 탭당 하나의 DATA 파일만 허용됩니다.",
     "mod_editor_add_extra": "추가 파일이 포함된 압축 파일이나 폴더를 추가합니다.",
-    "mod_editor_dependency_only": "스크립트가 사용하도록 모드에 보관하지만 게임에는 복사하지 않습니다.",
+    "mod_editor_dependency_only": "파일을 모드에 보관하지만 설치하지 않습니다.",
+    "mod_editor_data_folder_target": "이 추가 파일을 선택한 게임 데이터 폴더에 설치합니다.",
+    "mod_editor_custom_target": "절대 경로의 사용자 지정 폴더에 설치합니다. 이 경로는 다른 장치나 운영 체제에서 작동하지 않을 수 있습니다.",
     "mod_editor_selected_file": "모드에 포함될 선택된 파일 또는 폴더입니다.",
     "mod_editor_data_version": "이 DATA 파일 항목의 버전 라벨입니다.",
     "mod_editor_special_extra_target_towers": "특수 extra 파일: 게임 실행 중에는 {target_path} 로 들어갑니다.",
@@ -449,8 +458,8 @@
     "manual_install_data_tab": "각 콘텐츠 섹션 또는 게임 탭에 기본 DATA 파일을 지정합니다.",
     "manual_install_extra_tab": "추가 파일을 올바른 게임 폴더에 배치합니다.",
     "manual_install_data_file": "현재 이 콘텐츠 섹션 또는 탭에 지정된 DATA 파일입니다.",
-    "manual_install_add_xdelta": "이 콘텐츠 섹션의 다른 게임 파일용 xdelta 패치를 추가합니다.",
-    "manual_install_xdelta_target": "패치가 적용될 게임 폴더 내부의 상대 경로입니다.",
+    "manual_install_additional_patch": "이 섹션의 다른 게임 파일 또는 데이터 폴더용 패치를 추가합니다.",
+    "manual_install_additional_patch_target": "이 패치가 적용될 선택한 게임 또는 데이터 폴더 내부의 상대 경로입니다.",
     "apply_game_version": "저장된 게임 버전을 현재 선택된 게임 설치본에 복원합니다.",
     "export_game_version": "저장된 게임 버전을 압축 파일로 내보냅니다.",
     "delete_game_version": "G3M에서 이 저장된 게임 버전을 삭제합니다.",
@@ -515,16 +524,16 @@
     "data_file": "DATA 파일",
     "no_data_files": "DATA 파일 없음",
     "no_data_files_in_directory": "준비된 디렉터리에서 DATA 파일을 찾을 수 없습니다.",
-    "xdelta_patches_section": "추가 XDelta 패치",
-    "xdelta_patches_info": "다른 게임 파일에 대한 추가 xdelta 패치를 설정합니다. xdelta 파일을 선택하고 대상 파일 경로(예: Exes/Main.exe)를 지정하세요.",
-    "xdelta_patch_target_path": "대상 파일 경로 (예: Exes/Main.exe)",
-    "xdelta_patch_no_target_path": "패치 대상 파일 경로를 지정하세요",
-    "add_additional_xdelta": "추가 XDelta 패치 추가",
-    "select_xdelta_patch": "XDelta 패치 파일 선택",
-    "select_xdelta_patch_info": "추가 패치로 사용할 xdelta 파일을 선택하세요",
-    "no_xdelta_files_available": "추가 패치로 사용할 수 있는 xdelta 파일이 없습니다",
+    "additional_patches_section": "추가 패치",
+    "additional_patches_info": "게임 파일 또는 데이터 폴더용 추가 패치를 설정합니다. 패치 파일을 선택하고 대상 경로(예: Exes/Main.exe)를 지정하세요.",
+    "additional_patch_target_path": "대상 파일 경로(예: Exes/Main.exe)",
+    "additional_patch_no_target_path": "패치 대상 파일 경로를 지정하세요",
+    "add_additional_patch": "추가 패치 추가",
+    "select_additional_patch": "패치 파일 선택",
+    "select_additional_patch_info": "추가 패치로 사용할 파일을 선택하세요",
+    "no_patch_files_available": "추가할 수 있는 패치 파일이 없습니다",
     "enter_relative_path": "예: sprites/bgs",
-    "path_outside_game_folder": "선택한 폴더는 게임 폴더 내부에 있어야 합니다.",
+    "path_outside_game_folder": "선택한 위치는 대상 유형에 따라 게임 폴더 또는 게임 데이터 폴더 안에 있어야 합니다.",
     "conflicts": {
       "title": "모드 패치 충돌 감지됨",
       "total_conflicts": "감지된 총 충돌 수: {count}",
@@ -540,7 +549,7 @@
       "xdelta_patch_failed": "XDelta 패치를 적용하지 못했습니다.\n\n패치: {patch_name}\n\n패치 경로: {patch_path}\n\n대상 파일: {data_win_path}\n\n오류: {error}\n\n추가 파일은 계속 적용할 수 있지만 이 패치는 건너뜁니다.\n\n계속하시겠습니까?",
       "data_patch_failed": "패치된 DATA 파일을 만들지 못했습니다.\n\n패치: {patch_name}\n\n패치 경로: {patch_path}\n\n대상 파일: {data_win_path}\n\n오류: {error}\n\n이 DATA 패치는 건너뛰지만 추가 파일은 계속 적용할 수 있습니다.\n\n계속하시겠습니까?",
       "conflicts_detected": "{chapter} 병합 중 충돌이 감지되었습니다.\n\n총 충돌 수: {count}\n\n계속하기 전에 보고서를 확인할 수 있습니다.\n\n계속하시겠습니까?",
-      "xdelta_override_skipped": "xdelta 오버라이드 \"{patch}\"를 다음 위치의 대상 파일에 적용할 수 없습니다:\n{target}\n\n이 패치 단계는 건너뜁니다.\n\n계속하시겠습니까?",
+      "additional_patch_override_skipped": "추가 패치 \"{patch}\"를 다음 위치의 일치하는 대상 파일에 적용할 수 없습니다:\\n{target}\\n\\n이 단계는 건너뜁니다.\\n\\n계속하시겠습니까?",
       "archive_extract_failed": "아카이브 \"{archive}\"를 다음 위치에 압축 해제하지 못했습니다:\n{target}\n\n일부 파일이 건너뛰어질 수 있습니다.\n\n계속하시겠습니까?",
       "g3mpatch_validate_title": "경고: G3MPatch DATA 파일 불일치",
       "g3mpatch_validate_body": "이 G3MPatch는 다른 DATA 파일용으로 만들어졌습니다.\n\n패치: {patch_name}\n\n예상 파일: {expected_file}\n예상 MD5: {expected_md5}\n\n현재 파일: {actual_file}\n현재 MD5: {actual_md5}\n\n차이가 작다면, 예를 들어 게임 버전이나 플랫폼만 다른 경우에는 패치가 정상 작동할 수도 있습니다.\n\n그래도 계속하시겠습니까?",
@@ -549,7 +558,7 @@
       "extra_file_missing": "이 모드가 참조하는 추가 파일을 찾지 못했습니다:\n{path}\n\n이 파일은 건너뜁니다. 게임은 실행될 수 있지만 모드가 불완전할 수 있습니다.\n\n계속할까요?",
       "extra_directory_missing": "이 모드가 참조하는 추가 폴더를 찾지 못했습니다:\n{path}\n\n해당 폴더의 파일은 건너뜁니다. 게임은 실행될 수 있지만 모드가 불완전할 수 있습니다.\n\n계속할까요?",
       "extra_file_copy_failed": "추가 파일 \"{file}\"을(를) 다음 위치로 복사하지 못했습니다:\n{target}\n\n권한, 백신 차단, 디스크 공간을 확인하세요.\n\n계속할까요?",
-      "xdelta_override_no_target": "추가 XDELTA 패치 \"{patch}\"이(가) 다음 위치에서 일치하는 대상 파일을 찾지 못했습니다:\n{target}\n\n이 추가 패치는 건너뜁니다.\n\n계속할까요?"
+      "additional_patch_override_no_target": "추가 패치 \"{patch}\"이(가) 다음 위치에서 일치하는 대상 파일을 찾지 못했습니다:\\n{target}\\n\\n이 패치는 건너뜁니다.\\n\\n계속할까요?"
     },
     "app_will_restart": "애플리케이션이 재시작됩니다.",
     "are_you_sure": "정말 진행하시겠습니까?",
@@ -639,7 +648,13 @@
     "theme_delete_title": "테마 삭제",
     "theme_delete_prompt": "이 테마를 삭제하시겠습니까: {theme}?",
     "theme_invalid_archive": "잘못된 테마 아카이브입니다. 필요한 파일이 누락되었을 수 있습니다.",
-    "mod_needs_at_least_one_file": "모드에는 최소 하나 이상의 DATA 파일 또는 추가 파일이 포함되어야 합니다."
+    "mod_needs_at_least_one_file": "모드에는 최소 하나 이상의 DATA 파일 또는 추가 파일이 포함되어야 합니다.",
+    "game_data_folder_not_set": "대상으로 사용하기 전에 설정에서 게임 데이터 폴더를 지정하세요.",
+    "custom_target_folder_path": "절대 사용자 지정 대상 폴더",
+    "select_custom_target_folder": "사용자 지정 대상 폴더 선택",
+    "custom_target_warning_title": "사용자 지정 대상 폴더",
+    "custom_target_warning": "이 폴더는 게임 폴더와 게임 데이터 폴더 밖에 있습니다. 장치별 경로로 저장되므로 다른 사용자나 운영 체제에서 작동하지 않을 수 있습니다. 게임 폴더, 게임 데이터 폴더 또는 설치하지 않음을 선택하세요.",
+    "custom_target_folder_not_set": "존재하는 절대 사용자 지정 대상 폴더를 선택하세요."
   },
   "errors": {
     "app_not_found_after_unpack": "압축 해제 후 G3M.app을 찾을 수 없습니다.",
@@ -1382,8 +1397,8 @@
       "extra_directory_missing": "추가 폴더가 없습니다",
       "extra_file_copy_failed": "추가 파일을 복사하지 못했습니다",
       "extra_archive_extract_failed": "추가 압축 파일을 풀지 못했습니다",
-      "extra_xdelta_no_target": "추가 XDELTA 대상 파일을 찾지 못했습니다",
-      "extra_xdelta_apply_failed": "추가 XDELTA 패치 실패"
+      "extra_additional_patch_no_target": "추가 패치 대상 파일을 찾지 못했습니다",
+      "extra_additional_patch_apply_failed": "추가 패치 실패"
     },
     "messages": {
       "g3mtool_unavailable": {
@@ -1458,13 +1473,13 @@
         "title": "추가 압축 파일을 풀지 못했습니다",
         "body": "모드의 추가 파일 압축을 풀지 못했습니다. 게임 안에서 일부 모드 파일이 누락될 수 있습니다."
       },
-      "extra_xdelta_no_target": {
-        "title": "추가 XDELTA 대상 파일을 찾지 못했습니다",
-        "body": "추가 파일용 XDELTA 패치가 일치하는 대상 파일을 찾지 못했습니다. 여러 게임 구조를 지원하는 모드에서는 괜찮을 수 있지만, 이 추가 패치는 건너뜁니다."
+      "extra_additional_patch_no_target": {
+        "title": "추가 패치 대상 파일을 찾지 못했습니다",
+        "body": "모드 추가 파일의 패치가 일치하는 대상 파일을 찾지 못했습니다. 이 패치는 건너뜁니다."
       },
-      "extra_xdelta_apply_failed": {
-        "title": "추가 XDELTA 패치 실패",
-        "body": "모드 추가 파일의 XDELTA 패치를 대상 파일에 적용하지 못했습니다. 기본 DATA 패치는 작동할 수 있지만 이 추가 파일 변경은 건너뜁니다."
+      "extra_additional_patch_apply_failed": {
+        "title": "추가 패치 실패",
+        "body": "모드 추가 파일의 패치를 대상에 적용하지 못했습니다. 기본 DATA 패치는 계속 작동할 수 있지만 이 패치는 건너뜁니다."
       }
     },
     "tooltips": {
@@ -1483,8 +1498,8 @@
       "extra_directory_missing": "모드가 참조하는 추가 폴더가 모드 폴더에 없을 때 표시됩니다.",
       "extra_file_copy_failed": "G3M이 추가 파일을 게임 폴더로 복사할 수 없을 때 표시됩니다.",
       "extra_archive_extract_failed": "추가 파일로 지정된 압축 파일을 게임 폴더에 풀 수 없을 때 표시됩니다.",
-      "extra_xdelta_no_target": "추가 XDELTA 패치가 일치하는 대상 파일을 찾지 못했을 때 표시됩니다.",
-      "extra_xdelta_apply_failed": "추가 XDELTA 패치가 대상을 찾았지만 적용하지 못했을 때 표시됩니다.",
+      "extra_additional_patch_no_target": "추가 패치가 일치하는 대상 파일을 찾지 못했을 때 표시됩니다.",
+      "extra_additional_patch_apply_failed": "추가 패치가 대상을 찾았지만 적용하지 못했을 때 표시됩니다.",
       "minor_file_overrides_only": "DATA 패치 없이 파일만 적용하는 모드에서 표시됩니다.",
       "cache_rebuild_needed": "G3MTool이 입력 파일의 재사용 캐시 데이터를 다시 만들어야 할 때 표시됩니다.",
       "legacy_patching_warning": "오래되었거나 아직 분류되지 않은 패치/병합 위험에 표시됩니다."

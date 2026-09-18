@@ -188,7 +188,11 @@ def copy_files_to_mod_dir(
             destination = resolve_mod_file_path(mod_dir, stored_path)
             copy_path_into_mod_dir(resolved, destination)
             new_file_data.setdefault("extra_files", []).append(
-                build_extra_file_entry(stored_path, entry["status"])
+                build_extra_file_entry(
+                    stored_path,
+                    entry["target"],
+                    entry.get("target_path", ""),
+                )
             )
         if new_file_data:
             processed[file_key] = new_file_data

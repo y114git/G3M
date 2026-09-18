@@ -147,7 +147,9 @@ def test_normalize_mod_config_data_filters_invalid_tags_and_trims_fields():
     assert config["tags"] == ["other", "CYOP/AFOM"]
     file_info = config["files"]["deltarune_1"]
     assert len(file_info["data_file_path"]) == 1000
-    assert file_info["extra_files"] == ["u" * 1000]
+    assert file_info["extra_files"] == [
+        {"file_path": "u" * 1000, "target": "game_folder"}
+    ]
 
 
 def test_normalize_mod_config_data_preserves_trailing_slash_for_directory_extra_files():
@@ -162,7 +164,10 @@ def test_normalize_mod_config_data_preserves_trailing_slash_for_directory_extra_
     }
 
     assert normalize_mod_config_data(config) is True
-    assert config["files"]["pizzatower"]["extra_files"] == ["towers/", "nested/path/"]
+    assert config["files"]["pizzatower"]["extra_files"] == [
+        {"file_path": "towers/", "target": "game_data_folder"},
+        {"file_path": "nested/path/", "target": "game_folder"},
+    ]
 
 
 def test_build_mod_config_data_preserves_directory_extra_file_targets():
@@ -178,7 +183,9 @@ def test_build_mod_config_data_preserves_directory_extra_file_targets():
         }
     )
 
-    assert config["files"]["pizzatower"]["extra_files"] == ["towers/"]
+    assert config["files"]["pizzatower"]["extra_files"] == [
+        {"file_path": "towers/", "target": "game_data_folder"}
+    ]
 
 
 def test_normalize_mod_config_data_flattens_metadata_block():

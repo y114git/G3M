@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from services.migration_service import LEGACY_DESCRIPTION_KEY, LEGACY_ICON_KEY
+from services.migration_service import (
+    LEGACY_DESCRIPTION_KEY,
+    LEGACY_ICON_KEY,
+    build_extra_file_entry,
+)
 
 
 @dataclass(init=False)
@@ -14,19 +19,36 @@ class ModFileData:
 
     description: str | None
     data_file_path: str | None
-    extra_files: list[str]
+    extra_files: list[dict[str, str]]
 
     def __init__(
         self,
         description: str | None = None,
         data_file_path: str | None = None,
-        extra_files: list[str] | None = None,
+        extra_files: Sequence[str | dict[str, str]] | None = None,
         *,
         data_file_url: str | None = None,
     ) -> None:
         self.description = description
         self.data_file_path = data_file_path or data_file_url
-        self.extra_files = [str(value) for value in (extra_files or []) if value]
+        self.extra_files = []
+        for value in extra_files or []:
+            if isinstance(value, str) and value:
+                self.extra_files.append(build_extra_file_entry(value))
+            elif isinstance(value, dict):
+                file_path = str(value.get("file_path") or value.get("url") or "")
+                if file_path:
+                    self.extra_files.append(
+                        build_extra_file_entry(
+                            file_path,
+                            str(
+                                value.get("target")
+                                or value.get("status")
+                                or "game_folder"
+                            ),
+                            str(value.get("target_path") or ""),
+                        )
+                    )
 
     @property
     def data_file_url(self) -> str | None:
@@ -56,13 +78,7 @@ def _parse_files_dict(data_dict: dict[str, Any]) -> dict[str, ModFileData]:
                 extra_iterable = extra_files
             else:
                 extra_iterable = []
-            value["extra_files"] = [
-                str(ef.get("file_path", "") or ef.get("url", ""))
-                if isinstance(ef, dict)
-                else str(ef)
-                for ef in extra_iterable
-                if ef
-            ]
+            value["extra_files"] = list(extra_iterable)
             files_dict[key] = ModFileData(
                 description=value.get("description"),
                 data_file_path=value.get("data_file_path")

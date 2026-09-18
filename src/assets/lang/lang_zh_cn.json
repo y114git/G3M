@@ -244,6 +244,7 @@
     "settings_section_filters": "筛选",
     "settings_section_paths": "路径",
     "settings_game_path_label": "{GAME} 路径：",
+    "settings_game_data_path_label": "{GAME} 数据文件夹：",
     "settings_custom_executable_path_label": "自定义 EXE：",
     "settings_custom_g3mtool_path_label": "自定义 G3MTool：",
     "settings_custom_xdelta_path_label": "自定义 XDELTA：",
@@ -298,12 +299,18 @@
     "visible": "可见",
     "hidden": "隐藏",
     "changed_data_files_label": "已更改的DATA文件：",
-    "extra_files_label": "额外文件："
+    "extra_files_label": "额外文件：",
+    "dependency_files_label": "不安装的文件：",
+    "data_folder_files_label": "游戏数据文件："
   },
   "files": {
     "data_file": "DATA - 文件",
     "extra_files_title": "额外文件 #{number}",
-    "dependency_only": "仅作为依赖（不安装）",
+    "dependency_only": "不安装",
+    "game_folder_target": "游戏文件夹",
+    "data_folder_target": "游戏数据文件夹",
+    "custom_target": "自定义文件夹",
+    "custom_target_folder": "自定义文件夹：",
     "icon_label": "图标",
     "version_label": "版本 {file_type}："
   },
@@ -431,7 +438,9 @@
     "mod_editor_game_version": "这个模组面向的游戏版本，可选填写。",
     "mod_editor_add_data": "为这个标签页添加主要 DATA 文件。每个标签页只允许一个 DATA 文件。",
     "mod_editor_add_extra": "为这个标签页添加额外文件归档或文件夹。",
-    "mod_editor_dependency_only": "将此文件保留在模组中供脚本使用，但绝不复制到游戏中。",
+    "mod_editor_dependency_only": "将此文件保留在模组中，但不安装它。",
+    "mod_editor_data_folder_target": "将这个额外文件安装到选定的游戏数据文件夹。",
+    "mod_editor_custom_target": "安装到绝对路径的自定义文件夹。此路径可能无法在其他设备或操作系统上使用。",
     "mod_editor_selected_file": "将被包含进模组的已选文件或文件夹。",
     "mod_editor_data_version": "这个 DATA 文件条目的版本标签。",
     "mod_editor_special_extra_target_towers": "特殊 extra 文件：游戏运行期间会放入 {target_path}。",
@@ -449,8 +458,8 @@
     "manual_install_data_tab": "为每个内容区段或游戏标签页分配主要 DATA 文件。",
     "manual_install_extra_tab": "把额外文件映射到正确的游戏文件夹中。",
     "manual_install_data_file": "当前分配给此内容区段或标签页的 DATA 文件。",
-    "manual_install_add_xdelta": "为此内容区段中的其他游戏文件添加额外的 xdelta 补丁。",
-    "manual_install_xdelta_target": "这个补丁应应用到游戏文件夹中的相对路径。",
+    "manual_install_additional_patch": "为本内容区段中的其他游戏文件或数据文件夹添加补丁。",
+    "manual_install_additional_patch_target": "此补丁应应用到所选游戏或数据文件夹中的相对路径。",
     "apply_game_version": "将这个已保存的游戏版本还原到当前所选安装目录。",
     "export_game_version": "把这个已保存的游戏版本导出为压缩包。",
     "delete_game_version": "从 G3M 中删除这个已保存的游戏版本。",
@@ -515,16 +524,16 @@
     "data_file": "DATA 文件",
     "no_data_files": "无 DATA 文件",
     "no_data_files_in_directory": "在准备的目录中未找到 DATA 文件。",
-    "xdelta_patches_section": "其他 XDelta 补丁",
-    "xdelta_patches_info": "为其他游戏文件配置额外的 xdelta 补丁。选择一个 xdelta 文件并指定目标文件路径（例如，Exes/Main.exe）。",
-    "xdelta_patch_target_path": "目标文件路径（例如，Exes/Main.exe）",
-    "xdelta_patch_no_target_path": "请为补丁指定目标文件路径",
-    "add_additional_xdelta": "添加其他 XDelta 补丁",
-    "select_xdelta_patch": "选择 XDelta 补丁文件",
-    "select_xdelta_patch_info": "选择一个 xdelta 文件作为额外补丁使用",
-    "no_xdelta_files_available": "没有可用的 xdelta 文件作为补丁添加",
+    "additional_patches_section": "附加补丁",
+    "additional_patches_info": "为游戏文件或数据文件夹配置附加补丁。选择补丁文件并设置目标路径（例如 Exes/Main.exe）。",
+    "additional_patch_target_path": "目标文件路径（例如 Exes/Main.exe）",
+    "additional_patch_no_target_path": "请为补丁指定目标文件路径",
+    "add_additional_patch": "添加附加补丁",
+    "select_additional_patch": "选择补丁文件",
+    "select_additional_patch_info": "选择一个文件作为附加补丁",
+    "no_patch_files_available": "没有可添加的补丁文件",
     "enter_relative_path": "例如：sprites/bgs",
-    "path_outside_game_folder": "所选文件夹必须在游戏文件夹内。",
+    "path_outside_game_folder": "所选位置必须位于游戏文件夹或游戏数据文件夹内，具体取决于目标类型。",
     "conflicts": {
       "title": "检测到模组合并冲突",
       "total_conflicts": "检测到的冲突总数：{count}",
@@ -540,7 +549,7 @@
       "xdelta_patch_failed": "无法应用 XDelta 补丁。\n\n补丁：{patch_name}\n\n补丁路径：{patch_path}\n\n目标文件：{data_win_path}\n\n错误：{error}\n\n仍然可以添加额外文件，但这个补丁会被跳过。\n\n是否继续？",
       "data_patch_failed": "无法创建已补丁的 data 文件。\n\n补丁：{patch_name}\n\n补丁路径：{patch_path}\n\n目标文件：{data_win_path}\n\n错误：{error}\n\n这个 data 补丁会被跳过，但额外文件仍可继续应用。\n\n是否继续？",
       "conflicts_detected": "合并 {chapter} 时检测到冲突。\n\n冲突总数：{count}\n\n您可以先查看报告，再决定是否继续。\n\n是否继续？",
-      "xdelta_override_skipped": "无法将 xdelta 覆盖补丁“{patch}”应用到以下目录中的匹配目标文件：\n{target}\n\n该补丁步骤将被跳过。\n\n是否继续？",
+      "additional_patch_override_skipped": "无法将附加补丁“{patch}”应用到以下位置中的匹配目标文件：\\n{target}\\n\\n该步骤将被跳过。\\n\\n是否继续？",
       "archive_extract_failed": "无法将压缩包“{archive}”解压到：\n{target}\n\n部分文件可能会被跳过。\n\n是否继续？",
       "g3mpatch_validate_title": "警告：G3MPatch 的 DATA 文件不匹配",
       "g3mpatch_validate_body": "这个 G3MPatch 是为另一个 DATA 文件构建的。\n\n补丁：{patch_name}\n\n预期文件：{expected_file}\n预期 MD5：{expected_md5}\n\n当前文件：{actual_file}\n当前 MD5：{actual_md5}\n\n如果差异很小，例如只是游戏版本或平台不同，补丁仍然可能可用。\n\n是否仍要继续？",
@@ -549,7 +558,7 @@
       "extra_file_missing": "找不到此模组引用的附加文件：\n{path}\n\n该文件会被跳过。游戏可能仍可启动，但模组可能不完整。\n\n继续？",
       "extra_directory_missing": "找不到此模组引用的附加文件夹：\n{path}\n\n其中的文件会被跳过。游戏可能仍可启动，但模组可能不完整。\n\n继续？",
       "extra_file_copy_failed": "无法将附加文件“{file}”复制到：\n{target}\n\n请检查权限、杀毒软件拦截或磁盘空间。\n\n继续？",
-      "xdelta_override_no_target": "附加 XDELTA 补丁“{patch}”在以下位置没有找到匹配目标：\n{target}\n\n该附加补丁会被跳过。\n\n继续？"
+      "additional_patch_override_no_target": "附加补丁“{patch}”在以下位置没有找到匹配目标：\\n{target}\\n\\n该补丁将被跳过。\\n\\n继续？"
     },
     "app_will_restart": "应用程序将重新启动。",
     "are_you_sure": "您确定吗？",
@@ -639,7 +648,13 @@
     "theme_delete_title": "删除主题",
     "theme_delete_prompt": "您确定要删除此主题吗：{theme}？",
     "theme_invalid_archive": "无效的主题压缩包。可能缺少必需的文件。",
-    "mod_needs_at_least_one_file": "模组必须包含至少一个 DATA 文件或额外文件。"
+    "mod_needs_at_least_one_file": "模组必须包含至少一个 DATA 文件或额外文件。",
+    "game_data_folder_not_set": "请先在设置中指定游戏数据文件夹，再将其作为目标。",
+    "custom_target_folder_path": "绝对自定义目标文件夹",
+    "select_custom_target_folder": "选择自定义目标文件夹",
+    "custom_target_warning_title": "自定义目标文件夹",
+    "custom_target_warning": "此文件夹位于游戏文件夹和游戏数据文件夹之外。它会保存为设备特定路径，可能无法供其他用户或操作系统使用。请优先选择游戏文件夹、游戏数据文件夹或不安装。",
+    "custom_target_folder_not_set": "请选择一个已存在的绝对自定义目标文件夹。"
   },
   "errors": {
     "app_not_found_after_unpack": "解压后未找到G3M.app。",
@@ -1377,8 +1392,8 @@
       "extra_directory_missing": "缺少附加文件夹",
       "extra_file_copy_failed": "无法复制附加文件",
       "extra_archive_extract_failed": "无法解压附加压缩文件",
-      "extra_xdelta_no_target": "找不到附加 XDELTA 目标",
-      "extra_xdelta_apply_failed": "附加 XDELTA 补丁失败"
+      "extra_additional_patch_no_target": "找不到附加补丁目标",
+      "extra_additional_patch_apply_failed": "附加补丁失败"
     },
     "messages": {
       "g3mtool_unavailable": {
@@ -1453,13 +1468,13 @@
         "title": "无法解压附加压缩文件",
         "body": "无法解压模组附加文件中的压缩文件。游戏内可能会缺少部分模组文件。"
       },
-      "extra_xdelta_no_target": {
-        "title": "找不到附加 XDELTA 目标",
-        "body": "附加文件中的 XDELTA 补丁没有找到匹配的目标文件。对于支持多种游戏结构的模组，这通常可以忽略，但该附加补丁会被跳过。"
+      "extra_additional_patch_no_target": {
+        "title": "找不到附加补丁目标",
+        "body": "模组附加文件中的补丁没有找到匹配的目标文件。该补丁将被跳过。"
       },
-      "extra_xdelta_apply_failed": {
-        "title": "附加 XDELTA 补丁失败",
-        "body": "无法将模组附加文件中的 XDELTA 补丁应用到目标文件。主 DATA 补丁可能仍然有效，但这个附加文件改动会被跳过。"
+      "extra_additional_patch_apply_failed": {
+        "title": "附加补丁失败",
+        "body": "无法将模组附加文件中的补丁应用到目标。主 DATA 补丁仍可能正常工作，但该补丁将被跳过。"
       }
     },
     "tooltips": {
@@ -1478,8 +1493,8 @@
       "extra_directory_missing": "当模组引用的附加文件夹已不在模组文件夹中时显示。",
       "extra_file_copy_failed": "当 G3M 无法将附加文件复制到游戏文件夹时显示。",
       "extra_archive_extract_failed": "当附加文件中的压缩文件无法解压到游戏文件夹时显示。",
-      "extra_xdelta_no_target": "当附加 XDELTA 补丁找不到匹配的目标文件时显示。",
-      "extra_xdelta_apply_failed": "当附加 XDELTA 补丁找到目标但无法应用时显示。",
+      "extra_additional_patch_no_target": "当附加补丁找不到匹配的目标文件时显示。",
+      "extra_additional_patch_apply_failed": "当附加补丁找到目标但无法应用时显示。",
       "minor_file_overrides_only": "当模组只复制文件而不应用 DATA 补丁时显示。",
       "cache_rebuild_needed": "当 G3MTool 需要为输入文件重建可复用缓存数据时显示。",
       "legacy_patching_warning": "用于旧版或尚未分类的修补/合并风险。"

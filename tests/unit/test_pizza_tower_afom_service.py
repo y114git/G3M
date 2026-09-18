@@ -71,26 +71,27 @@ def test_afom_service_converts_multi_root_archive_to_towers_mod(tmp_path):
     assert config["metadata"]["name"] == "Converted AFOM"
     assert config["metadata"]["id"] == "gb_mod_42"
     assert config["metadata"]["tags"] == ["CYOP/AFOM"]
-    assert config["files"]["pizzatower"]["extra_files"] == ["towers/"]
+    assert config["files"]["pizzatower"]["extra_files"] == [
+        {"file_path": "towers/", "target": "game_data_folder"}
+    ]
     assert (result_path / "towers" / "TowerOne" / "TowerOne.tower.ini").exists()
     assert (result_path / "towers" / "TowerTwo" / "TowerTwo.tower.ini").exists()
 
 
-def test_apply_afom_towers_copies_into_towers_and_restores(tmp_path, monkeypatch):
+def test_apply_afom_towers_copies_into_configured_data_folder_and_restores(tmp_path):
     mod_source_dir = tmp_path / "mod"
     _write_text(mod_source_dir / "towers" / "TowerOne" / "tower.ini", "new tower")
     _write_text(mod_source_dir / "towers" / "TowerTwo" / "tower.ini", "second tower")
 
-    appdata_dir = tmp_path / "appdata"
-    towers_dir = appdata_dir / "PizzaTower_GM2" / "towers"
+    data_dir = tmp_path / "game_data"
+    towers_dir = data_dir / "towers"
     existing_file = towers_dir / "TowerOne" / "tower.ini"
     _write_text(existing_file, "original tower")
 
     backup_mgr = BackupManager(str(tmp_path / "backups"))
-    monkeypatch.setenv("APPDATA", str(appdata_dir))
-
     ok = apply_afom_towers_from_mod_source(
         str(mod_source_dir),
+        data_dir=str(data_dir),
         backup_or_mark=lambda target_file: (
             backup_mgr.backup_file("pizzatower", target_file)
             if os.path.exists(target_file)
@@ -108,3 +109,16 @@ def test_apply_afom_towers_copies_into_towers_and_restores(tmp_path, monkeypatch
 
     assert existing_file.read_text("utf-8") == "original tower"
     assert not (towers_dir / "TowerTwo" / "tower.ini").exists()
+
+
+def test_apply_afom_towers_ignores_mod_without_tower_files(tmp_path):
+    mod_source_dir = tmp_path / "mod"
+    _write_text(mod_source_dir / "readme.txt", "normal mod")
+
+    assert apply_afom_towers_from_mod_source(
+        str(mod_source_dir),
+        data_dir="",
+        backup_or_mark=lambda _target_file: None,
+        logger=SimpleNamespace(error=lambda *args, **kwargs: None),
+        extract_archive=lambda archive_path, target_dir: None,
+    )
