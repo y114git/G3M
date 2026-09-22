@@ -9,6 +9,16 @@ from utils.path_utils import find_chapter_resource_dir
 logger = logging.getLogger(__name__)
 
 
+def is_path_within_target_root(target_root: str, selected_path: str) -> bool:
+    """Return whether a selected existing path remains inside its target root."""
+    try:
+        root = os.path.normcase(os.path.realpath(target_root))
+        candidate = os.path.normcase(os.path.realpath(selected_path))
+        return os.path.commonpath((root, candidate)) == root
+    except (TypeError, ValueError):
+        return False
+
+
 def resolve_target_root_for_chapter(
     game_root: str,
     chapter_id: str,

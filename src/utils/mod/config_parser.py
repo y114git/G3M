@@ -8,8 +8,12 @@ from urllib.parse import urlparse
 from config.config import CYOP_AFOM_TAG
 from models.game_modes import get_all_games
 from services.migration_service import (
+    EXTRA_FILE_TARGET_CUSTOM,
+    EXTRA_FILE_TARGET_GAME_FOLDER,
     build_extra_file_entry,
+    infer_legacy_extra_file_target,
     migrate_mod_config_legacy_fields,
+    normalize_extra_file_target,
 )
 from utils.file_utils import normalize_chapter_id
 from utils.mod.utils import resolve_mod_icon
@@ -93,8 +97,8 @@ def _sanitize_tags(tags_raw) -> list[str]:
     return result
 
 
-def _sanitize_extra_files(extra_files_raw) -> list[str | dict[str, str]]:
-    result: list[str | dict[str, str]] = []
+def _sanitize_extra_files(extra_files_raw, game: str) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
     for entry in parse_extra_file_entries_raw(extra_files_raw):
         extra_file = entry["file_path"]
         file_path = _normalize_extra_file_path(
@@ -102,7 +106,12 @@ def _sanitize_extra_files(extra_files_raw) -> list[str | dict[str, str]]:
         )
         if not file_path:
             continue
-        value = build_extra_file_entry(file_path, entry["status"])
+        target = infer_legacy_extra_file_target(game, file_path, entry["target"])
+        value = build_extra_file_entry(
+            file_path,
+            target,
+            _trim_string(entry.get("target_path"), MOD_FIELD_LIMITS["file_value"]),
+        )
         if value not in result:
             result.append(value)
     return result
@@ -207,7 +216,7 @@ def _sanitize_files(
             entry["data_file_path"] = _migrate_legacy_layout_path(
                 data_file_path, mod_root_path
             )
-        extra_files = _sanitize_extra_files(ch_info.get("extra_files", []))
+        extra_files = _sanitize_extra_files(ch_info.get("extra_files", []), game)
         if extra_files:
             entry["extra_files"] = []
             for extra_file in extra_files:
@@ -219,10 +228,6 @@ def _sanitize_files(
                                 extra_file["file_path"], mod_root_path
                             ),
                         }
-                    )
-                else:
-                    entry["extra_files"].append(
-                        _migrate_legacy_layout_path(extra_file, mod_root_path)
                     )
             if not entry["extra_files"]:
                 entry.pop("extra_files", None)
@@ -319,14 +324,18 @@ def parse_extra_files_raw(
 ) -> list[str]:
     """Parse extra_files data from a chapter config into a list."""
     entries = parse_extra_file_entries_raw(extra_files_raw, mod_root_path)
-    return [entry["file_path"] for entry in entries if entry["status"] == "install"]
+    return [
+        entry["file_path"]
+        for entry in entries
+        if entry["target"] == EXTRA_FILE_TARGET_GAME_FOLDER
+    ]
 
 
 def parse_extra_file_entries_raw(
     extra_files_raw,
     mod_root_path: str | None = None,
 ) -> list[dict[str, str]]:
-    """Parse extra files while preserving their extensible deployment status."""
+    """Parse extra files while preserving their deployment target."""
     result: list[dict[str, str]] = []
     if not extra_files_raw:
         return result
@@ -340,18 +349,35 @@ def parse_extra_file_entries_raw(
         resolved = os.path.normpath(os.path.join(mod_root_path, join_path))
         return resolved + os.sep if preserve_trailing_slash else resolved
 
-    def _append_entry(file_path: str, status: object = "install") -> None:
+    def _append_entry(
+        file_path: str,
+        target: object = EXTRA_FILE_TARGET_GAME_FOLDER,
+        target_path: object = "",
+    ) -> None:
         resolved_path = _resolve_runtime_path(file_path)
         if resolved_path:
-            normalized_status = str(status or "install").strip().lower()
-            result.append({"file_path": resolved_path, "status": normalized_status})
+            entry = {
+                "file_path": resolved_path,
+                "target": normalize_extra_file_target(target),
+            }
+            if entry["target"] == EXTRA_FILE_TARGET_CUSTOM:
+                entry["target_path"] = _trim_string(
+                    target_path, MOD_FIELD_LIMITS["file_value"]
+                )
+            result.append(entry)
 
     if isinstance(extra_files_raw, list):
         for ef_data in extra_files_raw:
             if isinstance(ef_data, dict):
                 file_path = ef_data.get("file_path") or ef_data.get("url", "")
                 if isinstance(file_path, str) and file_path:
-                    _append_entry(file_path, ef_data.get("status"))
+                    _append_entry(
+                        file_path,
+                        ef_data.get("target")
+                        or ef_data.get("status")
+                        or EXTRA_FILE_TARGET_GAME_FOLDER,
+                        ef_data.get("target_path"),
+                    )
             elif isinstance(ef_data, str):
                 _append_entry(ef_data)
     elif isinstance(extra_files_raw, dict):

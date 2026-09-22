@@ -1299,6 +1299,7 @@ class TestTabBuilders:
             title_toggle, _key = builder.get_widgets()["_section_headers"][0]
             header = title_toggle.parentWidget()
             assert title_toggle.geometry().center().x() == header.rect().center().x()
+            assert header.reset_button.parentWidget() is header
         finally:
             widget.close()
             widget.deleteLater()

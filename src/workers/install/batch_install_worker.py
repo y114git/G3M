@@ -17,6 +17,7 @@ from config.config import (
     UI_COLORS,
 )
 from services.localization_service import tr
+from services.migration_service import build_extra_file_entry
 from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import format_size_mb
 from utils.file_utils import get_unique_mod_dir, normalize_chapter_id
@@ -266,25 +267,43 @@ class InstallModsThread(ManagedQThread):
                         )
                     extra_files_list = []
                     for extra_file in chapter_data.extra_files:
-                        if is_valid_url(extra_file):
+                        if isinstance(extra_file, dict):
+                            extra_url = extra_file.get("file_path") or extra_file.get(
+                                "url", ""
+                            )
+                            target = str(
+                                extra_file.get("target")
+                                or extra_file.get("status")
+                                or "game_folder"
+                            )
+                            target_path = str(extra_file.get("target_path") or "")
+                        else:
+                            extra_url = extra_file
+                            target = "game_folder"
+                            target_path = ""
+                        if is_valid_url(extra_url):
                             stored_relative_path = reserve_relative_path(
                                 key,
-                                os.path.basename(urlparse(extra_file).path),
+                                os.path.basename(urlparse(extra_url).path),
                                 chapter_id,
                             )
                             tasks.append(
                                 {
                                     "mod": mod,
-                                    "url": extra_file,
+                                    "url": extra_url,
                                     "chapter_id": chapter_id,
                                     "component": "extra",
                                     "stored_relative_path": stored_relative_path,
                                 }
                             )
-                            extra_files_list.append(stored_relative_path)
+                            extra_files_list.append(
+                                build_extra_file_entry(
+                                    stored_relative_path, target, target_path
+                                )
+                            )
                         else:
                             logger.warning(
-                                f"InstallModsThread: Invalid URL for extra file: {extra_file}"
+                                f"InstallModsThread: Invalid URL for extra file: {extra_url}"
                             )
                     if file_info or extra_files_list:
                         if extra_files_list:

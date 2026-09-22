@@ -58,6 +58,8 @@
     "rule_exists": "Ya existe exactamente esta regla de mod.",
     "rule_selection_missing": "Selecciona un perfil, juego, mod y carpeta.",
     "game_path_missing": "La carpeta del juego seleccionado no está configurada.",
+    "game_data_folder_missing": "La carpeta de datos del juego seleccionado no está configurada.",
+    "custom_data_folder_unsafe": "La carpeta de guardado personalizada seleccionada no se puede usar de forma segura.",
     "data_file_missing": "No se pudo encontrar un archivo DATA compatible para {game}.",
     "script_missing": "Falta el script de carpetas de guardado personalizadas.",
     "g3mtool_missing": "G3MTool no está disponible.",

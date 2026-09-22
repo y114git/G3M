@@ -6,6 +6,7 @@ from models.game_modes import (
     DeltaruneGame,
     GameDefinition,
     GameTab,
+    PizzaTowerGame,
 )
 
 
@@ -89,6 +90,7 @@ class TestCustomSingleTabGame:
         game = CustomSingleTabGame(record)
         assert game.game_id == "custom_test"
         assert game.path_config_key == "custom_game_path_custom_test"
+        assert game.data_path_config_key == "custom_game_data_custom_test"
         assert game.custom_exec_config_key == "custom_game_exec_custom_test"
         assert game.used_mods_config_key == "used_mods_custom_test"
         assert game.data_file_name == "game.ios"
@@ -96,3 +98,76 @@ class TestCustomSingleTabGame:
         assert game.tabs[0].files_key == "custom_test"
         assert game.get_folder_name("custom_test") == "custom_test"
         assert not game.direct_launch_allowed
+
+
+class TestGameDataPaths:
+    def test_deltarune_data_folder_is_detected_and_saved(self, tmp_path, monkeypatch):
+        local_data = tmp_path / "local" / "DELTARUNE"
+        local_data.mkdir(parents=True)
+        monkeypatch.setattr("models.game_modes.platform.system", lambda: "Windows")
+        monkeypatch.setenv("LOCALAPPDATA", str(local_data.parent))
+        config = {}
+
+        DeltaruneGame().set_game_path(config, str(tmp_path / "game"))
+
+        assert config["game_data_path"] == str(local_data)
+
+    def test_pizza_tower_proton_data_folder_uses_roaming_path(
+        self, tmp_path, monkeypatch
+    ):
+        game_path = tmp_path / "steamapps" / "common" / "Pizza Tower"
+        game_path.mkdir(parents=True)
+        data_path = (
+            tmp_path
+            / "steamapps"
+            / "compatdata"
+            / PizzaTowerGame.steam_app_id
+            / "pfx"
+            / "drive_c"
+            / "users"
+            / "steamuser"
+            / "AppData"
+            / "Roaming"
+            / "PizzaTower_GM2"
+        )
+        data_path.mkdir(parents=True)
+        monkeypatch.setattr("models.game_modes.platform.system", lambda: "Linux")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+        assert PizzaTowerGame().detect_data_path(str(game_path)) == str(data_path)
+
+    def test_linux_steam_data_path_prefers_proton_over_native_data_folder(
+        self, tmp_path, monkeypatch
+    ):
+        game_path = tmp_path / "steamapps" / "common" / "Pizza Tower"
+        game_path.mkdir(parents=True)
+        native_data = tmp_path / "config" / "PizzaTower_GM2"
+        native_data.mkdir(parents=True)
+        proton_data = (
+            tmp_path
+            / "steamapps"
+            / "compatdata"
+            / PizzaTowerGame.steam_app_id
+            / "pfx"
+            / "drive_c"
+            / "users"
+            / "steamuser"
+            / "AppData"
+            / "Roaming"
+            / "PizzaTower_GM2"
+        )
+        proton_data.mkdir(parents=True)
+        monkeypatch.setattr("models.game_modes.platform.system", lambda: "Linux")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+        assert PizzaTowerGame().detect_data_path(str(game_path)) == str(proton_data)
+
+    def test_get_data_path_does_not_persist_detected_path(self, tmp_path, monkeypatch):
+        local_data = tmp_path / "local" / "DELTARUNE"
+        local_data.mkdir(parents=True)
+        monkeypatch.setattr("models.game_modes.platform.system", lambda: "Windows")
+        monkeypatch.setenv("LOCALAPPDATA", str(local_data.parent))
+        config = {"game_path": str(tmp_path / "game")}
+
+        assert DeltaruneGame().get_data_path(config) == str(local_data)
+        assert "game_data_path" not in config

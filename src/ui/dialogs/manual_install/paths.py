@@ -3,6 +3,21 @@
 from __future__ import annotations
 
 import os
+from pathlib import PureWindowsPath
+
+
+def is_safe_relative_path(path: str) -> bool:
+    """Return whether a target path cannot escape its selected target root."""
+    normalized = str(path or "").replace("\\", "/").strip()
+    if not normalized:
+        return True
+    windows_path = PureWindowsPath(normalized)
+    return (
+        not os.path.isabs(normalized)
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and ".." not in normalized.split("/")
+    )
 
 
 def normalize_path(path: str, *, trailing_slash: bool = False) -> str:

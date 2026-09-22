@@ -5,7 +5,11 @@ import os
 from typing import Any
 
 from utils.file_utils import get_chapter_folder_name, load_json, normalize_chapter_id
-from utils.mod.config_parser import normalize_mod_config_data, resolve_mod_file_path
+from utils.mod.config_parser import (
+    normalize_mod_config_data,
+    parse_extra_file_entries_raw,
+    resolve_mod_file_path,
+)
 from utils.mod.utils import get_mod_id, get_mod_name
 from utils.patching import mod_content_utils as mod_content
 from utils.path_utils import find_chapter_resource_dir
@@ -102,10 +106,10 @@ def _get_configured_chapter_dir(source_dir: str, mod_data: Any, chapter_id: str)
     if isinstance(data_file_path, str) and data_file_path.strip():
         configured_paths.append(data_file_path)
     extra_files = chapter_info.get("extra_files")
-    if isinstance(extra_files, list):
-        configured_paths.extend(
-            path for path in extra_files if isinstance(path, str) and path.strip()
-        )
+    configured_paths.extend(
+        entry["file_path"]
+        for entry in parse_extra_file_entries_raw(extra_files or [])
+    )
 
     for rel_path in configured_paths:
         resolved_path = resolve_mod_file_path(source_dir, rel_path)
@@ -160,41 +164,37 @@ def get_mod_configured_data_file(
     return resolved_path or None
 
 
-def get_mod_configured_extra_files(
+def get_mod_configured_extra_file_entries(
     mod_data: Any, chapter_id: str, mod_service, app_state, caller_logger
-) -> list[str]:
+) -> list[dict[str, str]]:
     source_dir = _resolve_mod_root_dir(
         mod_data, mod_service, app_state, caller_logger
     )[1]
     if not source_dir:
         return []
 
-    configured_paths: list[str] = []
-    if hasattr(mod_data, "get_chapter_data"):
+    chapter_info = _load_chapter_config_entry(source_dir, mod_data, chapter_id)
+    configured_entries = parse_extra_file_entries_raw(
+        chapter_info.get("extra_files", []) or []
+    )
+    if not configured_entries and hasattr(mod_data, "get_chapter_data"):
         try:
             chapter_data = mod_data.get_chapter_data(chapter_id)
         except Exception as e:
             caller_logger.debug(
-                "get_mod_configured_extra_files: get_chapter_data failed for %s: %s",
+                "get_mod_configured_extra_file_entries: get_chapter_data failed for %s: %s",
                 chapter_id,
                 e,
                 exc_info=True,
             )
             chapter_data = None
         if chapter_data:
-            configured_paths.extend(
-                str(path)
-                for path in getattr(chapter_data, "extra_files", []) or []
-                if isinstance(path, str) and path.strip()
+            configured_entries.extend(
+                parse_extra_file_entries_raw(
+                    getattr(chapter_data, "extra_files", []) or []
+                )
             )
-    if not configured_paths:
-        chapter_info = _load_chapter_config_entry(source_dir, mod_data, chapter_id)
-        configured_paths.extend(
-            str(path)
-            for path in chapter_info.get("extra_files", []) or []
-            if isinstance(path, str) and path.strip()
-        )
-    return configured_paths
+    return configured_entries
 
 
 def has_mod_configured_chapter_entry(

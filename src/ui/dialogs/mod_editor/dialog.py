@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import uuid
+from pathlib import PureWindowsPath
 from typing import override
 
 from PyQt6 import sip
@@ -32,6 +33,12 @@ from PyQt6.QtWidgets import (
 
 from models.game_modes import get_game, get_visible_game_entries
 from services.localization_service import tr
+from services.migration_service import (
+    EXTRA_FILE_TARGET_CUSTOM,
+    EXTRA_FILE_TARGET_GAME_DATA_FOLDER,
+    EXTRA_FILE_TARGET_GAME_FOLDER,
+    EXTRA_FILE_TARGET_NONE,
+)
 from ui.common.styling import (
     clamp_border_radius,
     get_border_radius,
@@ -904,11 +911,70 @@ class ModEditorDialog(QDialog):
             )
         fl.addWidget(path_edit)
         if file_type == "extra":
-            dependency_check = QCheckBox(tr("files.dependency_only"))
-            dependency_check.setToolTip(tr("tooltips.mod_editor_dependency_only"))
-            dependency_check.setProperty("is_dependency_file", True)
-            dependency_check.setProperty("extra_file_status", "install")
-            fl.addWidget(dependency_check)
+            target_row = QWidget(frame)
+            target_layout = QHBoxLayout(target_row)
+            target_layout.setContentsMargins(0, 0, 0, 0)
+            target_layout.setSpacing(10)
+            none_check = QCheckBox(tr("files.dependency_only"))
+            none_check.setToolTip(tr("tooltips.mod_editor_dependency_only"))
+            none_check.setProperty("is_none_target_file", True)
+            target_layout.addWidget(none_check)
+            data_folder_check = QCheckBox(tr("files.data_folder_target"))
+            data_folder_check.setToolTip(tr("tooltips.mod_editor_data_folder_target"))
+            data_folder_check.setProperty("is_data_folder_file", True)
+            target_layout.addWidget(data_folder_check)
+            custom_target_check = QCheckBox(tr("files.custom_target"))
+            custom_target_check.setToolTip(tr("tooltips.mod_editor_custom_target"))
+            custom_target_check.setProperty("is_custom_target_file", True)
+            target_layout.addWidget(custom_target_check)
+            target_layout.addStretch()
+            fl.addWidget(target_row)
+            custom_target_row = QWidget(frame)
+            custom_target_layout = QHBoxLayout(custom_target_row)
+            custom_target_layout.setContentsMargins(0, 0, 0, 0)
+            custom_target_layout.setSpacing(8)
+            custom_target_label = QLabel(tr("files.custom_target_folder"))
+            custom_target_label.setProperty("is_custom_target_label", True)
+            custom_target_layout.addWidget(custom_target_label)
+            custom_target_path = QLineEdit()
+            custom_target_path.setProperty("is_custom_target_path", True)
+            custom_target_path.setPlaceholderText(tr("dialogs.custom_target_folder_path"))
+            custom_target_path.setToolTip(tr("tooltips.mod_editor_custom_target"))
+            custom_target_path.textChanged.connect(
+                lambda _text, edit=custom_target_path: self._clear_field_validation_error(
+                    edit
+                )
+            )
+            custom_target_layout.addWidget(custom_target_path, 1)
+            custom_target_browse = self._make_icon_text_button(
+                "folder_icon.svg", tr("ui.browse_button"), tr("ui.browse_button")
+            )
+            custom_target_browse.clicked.connect(
+                lambda: self._browse_custom_target_folder(custom_target_path)
+            )
+            custom_target_layout.addWidget(custom_target_browse)
+            custom_target_row.setProperty("custom_target_row", True)
+            custom_target_row.hide()
+            fl.addWidget(custom_target_row)
+            none_check.toggled.connect(
+                lambda checked, card=frame: self._set_extra_target_controls(
+                    card,
+                    EXTRA_FILE_TARGET_NONE if checked else EXTRA_FILE_TARGET_GAME_FOLDER,
+                )
+            )
+            data_folder_check.toggled.connect(
+                lambda checked, card=frame: self._set_extra_target_controls(
+                    card,
+                    EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+                    if checked
+                    else EXTRA_FILE_TARGET_GAME_FOLDER,
+                )
+            )
+            custom_target_check.toggled.connect(
+                lambda checked, card=frame: self._on_custom_target_toggled(
+                    card, checked
+                )
+            )
         browse_btn = self._make_icon_text_button(
             "folder_icon.svg",
             tr("ui.browse_button"),
@@ -938,6 +1004,57 @@ class ModEditorDialog(QDialog):
                 tab_layout, path_edit, frame, special_hint_lbl
             )
         return path_edit
+
+    def _set_extra_target_controls(self, frame: QWidget, target: str) -> None:
+        checkboxes = (
+            ("is_none_target_file", EXTRA_FILE_TARGET_NONE),
+            ("is_data_folder_file", EXTRA_FILE_TARGET_GAME_DATA_FOLDER),
+            ("is_custom_target_file", EXTRA_FILE_TARGET_CUSTOM),
+        )
+        for property_name, value in checkboxes:
+            checkbox = next(
+                (
+                    child
+                    for child in frame.findChildren(QCheckBox)
+                    if child.property(property_name)
+                ),
+                None,
+            )
+            if checkbox is not None:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(target == value)
+                checkbox.blockSignals(False)
+        custom_row = next(
+            (
+                child
+                for child in frame.findChildren(QWidget)
+                if child.property("custom_target_row")
+            ),
+            None,
+        )
+        if custom_row is not None:
+            custom_row.setVisible(target == EXTRA_FILE_TARGET_CUSTOM)
+
+    def _on_custom_target_toggled(self, frame: QWidget, checked: bool) -> None:
+        self._set_extra_target_controls(
+            frame,
+            EXTRA_FILE_TARGET_CUSTOM if checked else EXTRA_FILE_TARGET_GAME_FOLDER,
+        )
+        if checked:
+            self._safe_warning(
+                tr("dialogs.custom_target_warning_title"),
+                tr("dialogs.custom_target_warning"),
+            )
+
+    def _browse_custom_target_folder(self, path_edit: QLineEdit) -> None:
+        path = get_existing_directory(
+            self,
+            tr("dialogs.select_custom_target_folder"),
+            self._last_browse_dir,
+        )
+        if path:
+            self._last_browse_dir = path
+            path_edit.setText(path)
 
     def _make_icon_text_button(self, icon, text, tooltip=None):
         button = QPushButton(text)
@@ -1059,20 +1176,14 @@ class ModEditorDialog(QDialog):
             or base_name == "towers"
             or is_top_level_towers_archive(base_name)
         ):
-            return tr(
-                "tooltips.mod_editor_special_extra_target_towers",
-                target_path="%APPDATA%/PizzaTower_GM2/towers/",
-            )
+            return tr("tooltips.mod_editor_data_folder_target")
         if game_id == "frickbears3" and (
             lowered == "addons"
             or lowered.startswith("addons/")
             or base_name == "addons"
             or is_top_level_addons_archive(base_name)
         ):
-            return tr(
-                "tooltips.mod_editor_special_extra_target_addons",
-                target_path="%LOCALAPPDATA%/Frickbears3/addons/",
-            )
+            return tr("tooltips.mod_editor_data_folder_target")
         return ""
 
     def _update_extra_file_special_state(
@@ -1424,7 +1535,7 @@ class ModEditorDialog(QDialog):
                 tr("errors.error"), tr("dialogs.mod_needs_at_least_one_file")
             )
             return False
-        return self._validate_local_files()
+        return self._validate_local_files() and self._validate_custom_targets()
 
     def _resolve_file_path(self, path):
         """Resolve a file path, trying the mod folder if it's relative or doesn't exist."""
@@ -1516,6 +1627,27 @@ class ModEditorDialog(QDialog):
                 tr(key, tab_name=tab_name, path=path),
             )
             return False
+        return True
+
+    def _validate_custom_targets(self) -> bool:
+        for file_info in self._collect_files().values():
+            for entry in parse_extra_file_entries_raw(file_info.get("extra_files", [])):
+                if entry["target"] != EXTRA_FILE_TARGET_CUSTOM:
+                    continue
+                target_path = entry.get("target_path", "")
+                if not (
+                    target_path
+                    and (
+                        os.path.isabs(target_path)
+                        or PureWindowsPath(target_path).is_absolute()
+                    )
+                    and os.path.isdir(target_path)
+                ):
+                    self._safe_warning(
+                        tr("dialogs.validation_error"),
+                        tr("dialogs.custom_target_folder_not_set"),
+                    )
+                    return False
         return True
 
     def _collect_mod_data(self):
@@ -1994,7 +2126,12 @@ class ModEditorDialog(QDialog):
                     self._fill_data_in_tab(layout, data_path)
                 for entry in parse_extra_file_entries_raw(fi.get("extra_files", [])):
                     self._create_file_frame(layout, "extra")
-                    self._fill_extra_in_tab(layout, entry["file_path"], entry["status"])
+                    self._fill_extra_in_tab(
+                        layout,
+                        entry["file_path"],
+                        entry["target"],
+                        entry.get("target_path", ""),
+                    )
         self._populate_unconfigured_dependencies(files_data)
 
     def _populate_unconfigured_dependencies(self, files_data):
@@ -2039,7 +2176,7 @@ class ModEditorDialog(QDialog):
             if os.path.isdir(path):
                 relative_path += "/"
             self._create_file_frame(layout, "extra")
-            self._fill_extra_in_tab(layout, relative_path, "dependency")
+            self._fill_extra_in_tab(layout, relative_path, EXTRA_FILE_TARGET_NONE)
 
     def _resolve_path(self, file_path, tab_idx, mod_folder, game=None):
         if not file_path:
@@ -2065,7 +2202,13 @@ class ModEditorDialog(QDialog):
                     sub.setText(path)
             return
 
-    def _fill_extra_in_tab(self, layout, filename, status="install"):
+    def _fill_extra_in_tab(
+        self,
+        layout,
+        filename,
+        target=EXTRA_FILE_TARGET_GAME_FOLDER,
+        target_path="",
+    ):
         for i in range(layout.count() - 1, -1, -1):
             w = layout.itemAt(i).widget() if layout.itemAt(i) else None
             if not w or not hasattr(w, "layout") or not (fl := w.layout()):
@@ -2081,10 +2224,17 @@ class ModEditorDialog(QDialog):
                     and not sub.text()
                 ):
                     sub.setText(filename)
-                    for checkbox in w.findChildren(QCheckBox):
-                        if checkbox.property("is_dependency_file"):
-                            checkbox.setProperty("extra_file_status", status)
-                            checkbox.setChecked(status != "install")
+                    self._set_extra_target_controls(w, target)
+                    custom_path_edit = next(
+                        (
+                            child
+                            for child in w.findChildren(QLineEdit)
+                            if child.property("is_custom_target_path")
+                        ),
+                        None,
+                    )
+                    if custom_path_edit is not None:
+                        custom_path_edit.setText(target_path)
                     return
 
     def relocalize_ui(self):
@@ -2130,9 +2280,24 @@ class ModEditorDialog(QDialog):
             if layout:
                 self._refresh_extra_file_titles(layout)
                 for checkbox in tab.findChildren(QCheckBox):
-                    if checkbox.property("is_dependency_file"):
+                    if checkbox.property("is_none_target_file"):
                         checkbox.setText(tr("files.dependency_only"))
                         checkbox.setToolTip(tr("tooltips.mod_editor_dependency_only"))
+                    elif checkbox.property("is_data_folder_file"):
+                        checkbox.setText(tr("files.data_folder_target"))
+                        checkbox.setToolTip(
+                            tr("tooltips.mod_editor_data_folder_target")
+                        )
+                    elif checkbox.property("is_custom_target_file"):
+                        checkbox.setText(tr("files.custom_target"))
+                        checkbox.setToolTip(tr("tooltips.mod_editor_custom_target"))
+                for path_edit in tab.findChildren(QLineEdit):
+                    if path_edit.property("is_custom_target_path"):
+                        path_edit.setPlaceholderText(tr("dialogs.custom_target_folder_path"))
+                        path_edit.setToolTip(tr("tooltips.mod_editor_custom_target"))
+                for label in tab.findChildren(QLabel):
+                    if label.property("is_custom_target_label"):
+                        label.setText(tr("files.custom_target_folder"))
             data_button = getattr(tab, "_data_button", None)
             if data_button is not None:
                 data_button.setText(tr("ui.add_data_file"))

@@ -244,6 +244,7 @@
     "settings_section_filters": "フィルター",
     "settings_section_paths": "パス",
     "settings_game_path_label": "{GAME} パス:",
+    "settings_game_data_path_label": "{GAME} データフォルダー:",
     "settings_custom_executable_path_label": "カスタムEXE:",
     "settings_custom_g3mtool_path_label": "カスタム G3MTool:",
     "settings_custom_xdelta_path_label": "カスタム xdelta:",
@@ -298,12 +299,18 @@
     "visible": "表示",
     "hidden": "非表示",
     "changed_data_files_label": "変更されたDATAファイル:",
-    "extra_files_label": "追加のファイル:"
+    "extra_files_label": "追加のファイル:",
+    "dependency_files_label": "未インストールのファイル:",
+    "data_folder_files_label": "ゲームデータファイル:"
   },
   "files": {
     "data_file": "DATA - ファイル",
     "extra_files_title": "追加ファイル #{number}",
-    "dependency_only": "依存関係のみ（インストールしない）",
+    "dependency_only": "インストールしない",
+    "game_folder_target": "ゲームフォルダー",
+    "data_folder_target": "ゲームデータフォルダー",
+    "custom_target": "カスタムフォルダー",
+    "custom_target_folder": "カスタムフォルダー:",
     "icon_label": "アイコン",
     "version_label": "バージョン {file_type}:"
   },
@@ -431,7 +438,9 @@
     "mod_editor_game_version": "この MOD が構築されたオプションのターゲット ゲーム バージョン。",
     "mod_editor_add_data": "このタブのメイン DATA パッチ ファイルを追加します。タブごとに 1 つの DATA ファイルのみが許可されます。",
     "mod_editor_add_extra": "このタブに追加ファイルを含むアーカイブまたはフォルダーを追加します。",
-    "mod_editor_dependency_only": "スクリプト用にmod内へ保持しますが、ゲームにはコピーしません。",
+    "mod_editor_dependency_only": "このファイルを MOD 内に保持しますが、インストールしません。",
+    "mod_editor_data_folder_target": "この追加ファイルを選択したゲームデータフォルダーにインストールします。",
+    "mod_editor_custom_target": "絶対パスのカスタムフォルダーにインストールします。このパスは別の端末や OS では動作しない場合があります。",
     "mod_editor_selected_file": "MOD に含まれる選択したファイルまたはフォルダー。",
     "mod_editor_data_version": "この DATA ファイル エントリのバージョン ラベル。",
     "mod_editor_special_extra_target_towers": "特別な追加ファイル: ゲームの実行中は {target_path} に配置されます。",
@@ -449,8 +458,8 @@
     "manual_install_data_tab": "メインの DATA ファイルを各コンテンツセクションまたはゲームタブに割り当てます。",
     "manual_install_extra_tab": "余分なファイルを正しいゲーム内フォルダーにマッピングします。",
     "manual_install_data_file": "現在このコンテンツセクションまたはタブに割り当てられている DATA ファイル。",
-    "manual_install_add_xdelta": "このコンテンツセクションに別のゲームファイル用の xdelta パッチを追加します。",
-    "manual_install_xdelta_target": "このパッチを適用するゲームフォルダー内の相対パス。",
+    "manual_install_additional_patch": "このセクションの別のゲームファイルまたはデータフォルダー用にパッチを追加します。",
+    "manual_install_additional_patch_target": "このパッチを適用する、選択したゲームまたはデータフォルダー内の相対パスです。",
     "apply_game_version": "この保存されたゲーム バージョンを、選択したゲーム インストールに復元します。",
     "export_game_version": "この保存されたゲーム バージョンをアーカイブとしてエクスポートします。",
     "delete_game_version": "この保存されたゲーム バージョンを G3M から削除します。",
@@ -515,16 +524,16 @@
     "data_file": "DATAファイル",
     "no_data_files": "DATAファイルがありません",
     "no_data_files_in_directory": "準備されたディレクトリに DATA ファイルが見つかりません。",
-    "xdelta_patches_section": "追加の XDelta パッチ",
-    "xdelta_patches_info": "他のゲーム ファイル用に追加の xdelta パッチを構成します。 xdelta ファイルを選択し、ターゲット ファイル パス (例: Exes/Main.exe) を指定します。",
-    "xdelta_patch_target_path": "ターゲット ファイル パス (例: Exes/Main.exe)",
-    "xdelta_patch_no_target_path": "パッチのターゲット ファイル パスを指定してください",
-    "add_additional_xdelta": "XDelta パッチを追加する",
-    "select_xdelta_patch": "XDelta パッチ ファイルを選択します",
-    "select_xdelta_patch_info": "追加のパッチとして使用する xdelta ファイルを選択します",
-    "no_xdelta_files_available": "パッチとして追加できる xdelta ファイルがありません",
+    "additional_patches_section": "追加パッチ",
+    "additional_patches_info": "ゲームファイルまたはデータフォルダー用の追加パッチを設定します。パッチファイルを選択し、対象パス（例: Exes/Main.exe）を指定してください。",
+    "additional_patch_target_path": "対象ファイルのパス（例: Exes/Main.exe）",
+    "additional_patch_no_target_path": "パッチの対象ファイルのパスを指定してください",
+    "add_additional_patch": "追加パッチを追加",
+    "select_additional_patch": "パッチファイルを選択",
+    "select_additional_patch_info": "追加パッチに使用するファイルを選択してください",
+    "no_patch_files_available": "追加できるパッチファイルがありません",
     "enter_relative_path": "例: スプライト/BGM",
-    "path_outside_game_folder": "選択したフォルダーはゲームフォルダー内にある必要があります。",
+    "path_outside_game_folder": "選択した場所は、対象の種類に応じてゲームフォルダーまたはゲームのデータフォルダー内にある必要があります。",
     "conflicts": {
       "title": "Mod パッチの競合が検出されました",
       "total_conflicts": "検出された競合の合計: {count}",
@@ -540,7 +549,7 @@
       "xdelta_patch_failed": "XDelta パッチの適用に失敗しました。\n\nパッチ: {patch_name}\n\nパッチ パス: {patch_path}\n\nターゲット ファイル: {data_win_path}\n\nエラー: {error}\n\n追加のファイルは引き続き追加できますが、このパッチはスキップされます。\n\n続行しますか?",
       "data_patch_failed": "パッチ適用された DATA ファイルの作成に失敗しました。\n\nパッチ: {patch_name}\n\nパッチ パス: {patch_path}\n\nターゲット ファイル: {data_win_path}\n\nエラー: {error}\n\nこのDATA パッチはスキップされますが、追加のファイルは引き続き適用できます。\n\n続行しますか?",
       "conflicts_detected": "{chapter}.\n\n競合の合計: {count}\n\n続行する前にレポートを確認できます。\n\n続行しますか?",
-      "xdelta_override_skipped": "xdelta オーバーライド「{patch}」を次の一致するターゲット ファイルに適用できませんでした:\n{target}\n\nそのパッチ ステップはスキップされます。\n\n続行しますか?",
+      "additional_patch_override_skipped": "追加パッチ「{patch}」を次の一致する対象ファイルに適用できませんでした:\\n{target}\\n\\nこの手順はスキップされます。\\n\\n続行しますか?",
       "archive_extract_failed": "アーカイブ「{archive}」を次へ抽出できませんでした:\n{target}\n\n一部のファイルがスキップされる可能性があります。\n\n続行しますか?",
       "g3mpatch_validate_title": "警告: G3MPatch DATA ファイルの不一致",
       "g3mpatch_validate_body": "この G3MPatch は、別の DATA ファイル用にビルドされました。\n\nPatch: {patch_name}\n\n予想されるファイル: {expected_file}\n予想される MD5: {expected_md5}\n\n現在のファイル: {actual_file}\n現在の MD5: {actual_md5}\n\nゲームのバージョンや違いが原因など、違いが軽微な場合プラットフォームが異なる場合でも、パッチはまだ機能する可能性があります。\n\nそれでも続行しますか?",
@@ -549,7 +558,7 @@
       "extra_file_missing": "この MOD によって参照される追加のファイルが見つかりませんでした:\n{path}\n\nそのファイルはスキップされます。ゲームはまだ起動する可能性がありますが、この MOD は不完全である可能性があります。\n\n続けますか?",
       "extra_directory_missing": "この MOD によって参照される追加のフォルダーが見つかりませんでした:\n{path}\n\nそのフォルダーのファイルはスキップされます。ゲームはまだ起動する可能性がありますが、この MOD は不完全である可能性があります。\n\n続けますか?",
       "extra_file_copy_failed": "追加のファイル「{file}」を次の場所にコピーできませんでした:\n{target}\n\nアクセス許可、ウイルス対策ブロック、またはディスク容量を確認してください。\n\n続行しますか?",
-      "xdelta_override_no_target": "追加の xdelta パッチ「{patch}」で一致するターゲット ファイルが見つかりませんでした:\n{target}\n\nその追加のパッチはスキップされます。\n\n続行しますか?"
+      "additional_patch_override_no_target": "追加パッチ「{patch}」で次の一致する対象ファイルが見つかりませんでした:\\n{target}\\n\\nこのパッチはスキップされます。\\n\\n続行しますか?"
     },
     "app_will_restart": "アプリケーションが再起動されます。",
     "are_you_sure": "本気ですか？",
@@ -639,7 +648,13 @@
     "theme_delete_title": "テーマの削除",
     "theme_delete_prompt": "このテーマ {theme} を削除してもよろしいですか?",
     "theme_invalid_archive": "テーマのアーカイブが無効です。必要なファイルが不足している可能性があります。",
-    "mod_needs_at_least_one_file": "MOD には少なくとも 1 つの DATA ファイルまたは追加ファイルが含まれている必要があります。"
+    "mod_needs_at_least_one_file": "MOD には少なくとも 1 つの DATA ファイルまたは追加ファイルが含まれている必要があります。",
+    "game_data_folder_not_set": "対象にする前に、設定でゲームのデータフォルダーを指定してください。",
+    "custom_target_folder_path": "絶対パスのカスタム対象フォルダー",
+    "select_custom_target_folder": "カスタム対象フォルダーを選択",
+    "custom_target_warning_title": "カスタム対象フォルダー",
+    "custom_target_warning": "このフォルダーはゲームフォルダーおよびゲームデータフォルダーの外にあります。端末固有のパスとして保存されるため、他のユーザーや OS では動作しない場合があります。ゲームフォルダー、ゲームデータフォルダー、または「インストールしない」を選んでください。",
+    "custom_target_folder_not_set": "存在する絶対パスのカスタム対象フォルダーを選択してください。"
   },
   "errors": {
     "app_not_found_after_unpack": "解凍してもG3M.appが見つかりません。",
@@ -1383,8 +1398,8 @@
       "extra_directory_missing": "追加フォルダーが見つかりません",
       "extra_file_copy_failed": "余分なファイルをコピーできませんでした",
       "extra_archive_extract_failed": "追加のアーカイブを抽出できませんでした",
-      "extra_xdelta_no_target": "追加XDELTAの対象が見つかりませんでした",
-      "extra_xdelta_apply_failed": "追加XDELTAパッチが失敗しました"
+      "extra_additional_patch_no_target": "追加パッチの対象が見つかりませんでした",
+      "extra_additional_patch_apply_failed": "追加パッチに失敗しました"
     },
     "messages": {
       "g3mtool_unavailable": {
@@ -1459,13 +1474,13 @@
         "title": "追加のアーカイブを抽出できませんでした",
         "body": "MOD の追加ファイルからアーカイブを抽出できませんでした。 MOD の一部のルース ファイルがゲーム内で失われる可能性があります。"
       },
-      "extra_xdelta_no_target": {
-        "title": "追加XDELTAの対象が見つかりませんでした",
-        "body": "追加ファイル xdelta パッチで一致するターゲット ファイルが見つかりませんでした。 MOD が複数のゲーム レイアウトをサポートしている場合、これは多くの場合無害ですが、その追加のパッチはスキップされます。"
+      "extra_additional_patch_no_target": {
+        "title": "追加パッチの対象が見つかりませんでした",
+        "body": "モッドの追加ファイルにあるパッチが一致する対象ファイルを見つけられませんでした。このパッチはスキップされます。"
       },
-      "extra_xdelta_apply_failed": {
-        "title": "追加XDELTAパッチが失敗しました",
-        "body": "MOD 追加ファイルの xdelta パッチをターゲットに適用できませんでした。メインの DATA パッチは引き続き機能する可能性がありますが、この追加のファイル変更はスキップされます。"
+      "extra_additional_patch_apply_failed": {
+        "title": "追加パッチに失敗しました",
+        "body": "モッドの追加ファイルにあるパッチを対象に適用できませんでした。メインのDATAパッチは動作する場合がありますが、このパッチはスキップされます。"
       }
     },
     "tooltips": {
@@ -1484,8 +1499,8 @@
       "extra_directory_missing": "MOD フォルダー内にもう存在しない追加のフォルダーを MOD が参照している場合に表示されます。",
       "extra_file_copy_failed": "G3M がゲーム フォルダーに追加のファイルをコピーできない場合に表示されます。",
       "extra_archive_extract_failed": "追加ファイルとしてリストされているアーカイブをゲームフォルダーに抽出できない場合に表示されます。",
-      "extra_xdelta_no_target": "追加ファイル用のXDELTAパッチが一致する対象ファイルを見つけられない場合に表示されます。",
-      "extra_xdelta_apply_failed": "追加ファイル用のXDELTAパッチが対象を見つけたものの、適用できない場合に表示されます。",
+      "extra_additional_patch_no_target": "追加パッチが一致する対象ファイルを見つけられない場合に表示されます。",
+      "extra_additional_patch_apply_failed": "追加パッチが対象を見つけても適用できない場合に表示されます。",
       "minor_file_overrides_only": "DATA パッチが適用されていないファイルのみの MOD に表示されます。",
       "cache_rebuild_needed": "G3MTool が入力ファイルの再利用可能なキャッシュ DATAを再構築する必要がある場合に表示されます。",
       "legacy_patching_warning": "古いまたは未分類のパッチ適用およびマージのリスクについて表示されます。"

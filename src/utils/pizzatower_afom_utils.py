@@ -13,11 +13,6 @@ from utils.file_utils import remove_archive_extension
 logger = logging.getLogger(__name__)
 
 
-def get_pizzatower_towers_dir() -> str:
-    appdata = os.getenv("APPDATA") or os.path.expanduser("~")
-    return os.path.join(appdata, "PizzaTower_GM2", "towers")
-
-
 def is_top_level_towers_archive(rel_path: str) -> bool:
     normalized = rel_path.replace("\\", "/").strip("/")
     if not normalized or "/" in normalized:
@@ -33,25 +28,32 @@ def is_towers_subpath(rel_path: str) -> bool:
 def apply_afom_towers_from_mod_source(
     mod_source_dir: str,
     *,
+    data_dir: str | None,
     backup_or_mark: Callable[[str], object],
     logger,
     extract_archive,
 ) -> bool:
-    towers_dir = get_pizzatower_towers_dir()
+    source_towers_dir = os.path.join(mod_source_dir, "towers")
+    source_archives = [
+        os.path.join(mod_source_dir, entry)
+        for entry in os.listdir(mod_source_dir)
+        if os.path.isfile(os.path.join(mod_source_dir, entry))
+        and is_top_level_towers_archive(entry)
+    ]
+    if not os.path.isdir(source_towers_dir) and not source_archives:
+        return True
+    if not data_dir:
+        logger.error("Pizza Tower data folder is not configured")
+        return False
+    towers_dir = os.path.join(data_dir, "towers")
     os.makedirs(towers_dir, exist_ok=True)
 
-    source_towers_dir = os.path.join(mod_source_dir, "towers")
     if os.path.isdir(source_towers_dir):
         if not _copy_tree_contents(source_towers_dir, towers_dir, backup_or_mark):
             return False
         logger.debug("Applied AFOM towers directory into %s", towers_dir)
 
-    for entry in os.listdir(mod_source_dir):
-        source_path = os.path.join(mod_source_dir, entry)
-        if not os.path.isfile(source_path):
-            continue
-        if not is_top_level_towers_archive(entry):
-            continue
+    for source_path in source_archives:
         if not _extract_archive_contents(source_path, towers_dir, backup_or_mark, extract_archive):
             return False
         logger.debug("Applied AFOM towers archive %s into %s", source_path, towers_dir)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -18,11 +18,12 @@ from config.config import (
 from utils.mod.utils import get_mod_id, get_mod_name
 from utils.patching import mod_content_utils as mod_content
 from utils.patching.file_override_utils import (
+    PATCH_FILE_EXTENSIONS,
     iter_configured_override_entries,
 )
 from utils.patching.mod_resolve_utils import (
     get_mod_configured_data_file,
-    get_mod_configured_extra_files,
+    get_mod_configured_extra_file_entries,
     get_mod_source_dir,
     get_target_dir,
     has_mod_configured_chapter_entry,
@@ -275,7 +276,7 @@ class ModDiagnosticsService:
             self._logger,
         )
         configured_paths = (
-            get_mod_configured_extra_files(
+            get_mod_configured_extra_file_entries(
                 mod_data,
                 section_id,
                 self.mod_service,
@@ -305,16 +306,59 @@ class ModDiagnosticsService:
         mod_data,
         target_dir: str,
         mod_root_dir: str,
-        configured_paths: list[str],
+        configured_paths: Sequence[str | dict[str, str]],
         issues: list[DiagnosticIssue],
     ) -> list[FileImpact]:
         game_id = self._resolve_mod_game_id(mod_data)
+        from models.game_modes import get_game
+
+        game = get_game(game_id or "") or self.app_state.game_mode
+        data_dir = game.get_data_path(self.app_state.local_config) if game else ""
         impacts: list[FileImpact] = []
         for entry in iter_configured_override_entries(
-            mod_root_dir, configured_paths, section_id, game_id
+            mod_root_dir, configured_paths, section_id, game_id, data_dir
         ):
             source = entry["source"]
-            target_root = self._safe_target_root(entry.get("target_root"), target_dir)
+            target_root = entry.get("target_root")
+            if target_root is None:
+                target_root = target_dir
+            elif not target_root:
+                target_label = (
+                    "game data folder"
+                    if entry["target"] == "game_data_folder"
+                    else "custom target folder"
+                )
+                issues.append(
+                    DiagnosticIssue(
+                        severity="error",
+                        title=f"{target_label.capitalize()} is not configured",
+                        explanation=(
+                            f"{get_mod_name(mod_data)} has an extra file "
+                            f"targeting the {target_label}."
+                        ),
+                        affected_mods=(get_mod_name(mod_data),),
+                        recommendation=(
+                            "Set the game data folder in Settings."
+                            if entry["target"] == "game_data_folder"
+                            else "Choose an existing custom target folder."
+                        ),
+                    )
+                )
+                continue
+            if entry["target"] == "custom" and not os.path.isdir(target_root):
+                issues.append(
+                    DiagnosticIssue(
+                        severity="error",
+                        title="Custom target folder is unavailable",
+                        explanation=(
+                            f"{get_mod_name(mod_data)} targets {target_root}, "
+                            "which does not exist on this computer."
+                        ),
+                        affected_mods=(get_mod_name(mod_data),),
+                        recommendation="Choose an existing local folder or use a portable target.",
+                    )
+                )
+                continue
             target_relative = entry["target_relative"]
             if entry["is_directory"]:
                 if not os.path.isdir(source):
@@ -322,9 +366,11 @@ class ModDiagnosticsService:
                         self._missing_issue(mod_data, source, is_directory=True)
                     )
                     continue
-                for root, _dirs, files in os.walk(source):
+                for root, _dirs, files in os.walk(source, followlinks=False):
                     rel_root = os.path.relpath(root, source)
                     for file_name in files:
+                        if os.path.islink(os.path.join(root, file_name)):
+                            continue
                         if file_name.lower() in SKIP_FILES:
                             continue
                         rel_file = (
@@ -356,21 +402,6 @@ class ModDiagnosticsService:
             )
         return impacts
 
-    @staticmethod
-    def _safe_target_root(target_root: str | None, default_target_dir: str) -> str:
-        if not target_root:
-            return default_target_dir
-        try:
-            target_root_abs = os.path.abspath(target_root)
-            default_abs = os.path.abspath(default_target_dir)
-            if os.path.commonpath([target_root_abs, default_abs]) == default_abs:
-                return target_root
-            if os.path.commonpath([target_root_abs, default_abs]) == target_root_abs:
-                return default_target_dir
-        except ValueError:
-            return default_target_dir
-        return default_target_dir
-
     def _collect_directory_file_impacts(
         self, section_id: str, mod_data, target_dir: str, mod_source_dir: str
     ) -> list[FileImpact]:
@@ -381,7 +412,7 @@ class ModDiagnosticsService:
                     continue
                 source_path = os.path.join(root, file_name)
                 lower = source_path.lower()
-                if lower.endswith((".xdelta", ".vcdiff")) or lower.endswith(
+                if lower.endswith(PATCH_FILE_EXTENSIONS) or lower.endswith(
                     ARCHIVE_EXTENSIONS
                 ):
                     continue

@@ -15,12 +15,13 @@ from adapters.g3mtool_adapter import G3MToolManager
 from models.execution_plan import PatchPlan
 from services.g3mtool_patching_service import G3MToolPatchingService
 from services.localization_service import tr
+from services.migration_service import build_extra_file_entry
 from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.file_utils import get_chapter_folder_name, normalize_chapter_id
 from utils.mod.config_parser import build_mod_config_data
 from utils.patching.mod_content_utils import find_data_win
-from utils.patching.mod_resolve_utils import get_mod_configured_extra_files
+from utils.patching.mod_resolve_utils import get_mod_configured_extra_file_entries
 
 logger = logging.getLogger(__name__)
 
@@ -424,22 +425,34 @@ class CreateModpackThread(ManagedQThread):
 
     def _get_modpack_extra_files(
         self, mods_list: list[Any], chapter_id: str, chapter_modpack_dir: str
-    ) -> list[str]:
-        extra_files: list[str] = []
+    ) -> list[str | dict[str, str]]:
+        extra_files: list[str | dict[str, str]] = []
         seen = set()
         for mod_data in mods_list:
-            for rel_path in get_mod_configured_extra_files(
+            for entry in get_mod_configured_extra_file_entries(
                 mod_data, chapter_id, self.mod_service, self.app_state, logging
             ):
+                rel_path = entry["file_path"]
                 normalized = rel_path.replace("\\", "/").strip()
-                if not normalized or normalized in seen:
+                entry_key = (
+                    normalized,
+                    entry["target"],
+                    entry.get("target_path", ""),
+                )
+                if not normalized or entry_key in seen:
                     continue
                 if os.path.exists(os.path.join(chapter_modpack_dir, normalized.rstrip("/"))):
-                    seen.add(normalized)
+                    seen.add(entry_key)
                     extra_files.append(
-                        os.path.relpath(
-                            os.path.join(chapter_modpack_dir, normalized.rstrip("/")),
-                            self.modpack_dir,
-                        ).replace("\\", "/")
+                        build_extra_file_entry(
+                            os.path.relpath(
+                                os.path.join(
+                                    chapter_modpack_dir, normalized.rstrip("/")
+                                ),
+                                self.modpack_dir,
+                            ).replace("\\", "/"),
+                            entry["target"],
+                            entry.get("target_path", ""),
+                        )
                     )
         return extra_files

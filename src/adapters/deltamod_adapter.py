@@ -518,7 +518,7 @@ class DeltamodConverter:
                 path = name
                 if is_directory:
                     path += "/"
-                extra_files.append(build_extra_file_entry(path, "dependency"))
+                extra_files.append(build_extra_file_entry(path, "none"))
 
     def _resolve_patch_file(self, patch_file_rel: str) -> str | None:
         for variant in (

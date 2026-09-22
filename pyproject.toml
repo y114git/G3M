@@ -19,7 +19,7 @@ dependencies = [
     "python-dotenv==1.2.3",
     "rarfile==4.5",
     "requests==2.34.2",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +30,7 @@ test = [
     "pytest-qt==4.5.0",
     "responses==0.26.3",
 ]
-dev = ["pyright==1.1.414", "ruff==0.16.7"]
+dev = ["pyright==1.1.414", "ruff==0.16.8"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

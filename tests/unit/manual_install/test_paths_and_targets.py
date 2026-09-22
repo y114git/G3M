@@ -2,12 +2,16 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from ui.dialogs.manual_install.paths import (
     default_extra_target_path,
+    is_safe_relative_path,
     normalize_relative_target_path,
 )
 from ui.dialogs.manual_install.targets import (
     get_or_prompt_game_folder,
+    is_path_within_target_root,
     read_configured_game_root,
     resolve_target_root_for_chapter,
 )
@@ -33,6 +37,26 @@ def test_manual_install_normalize_relative_target_path_strips_alias_prefixes():
         )
         == "lang_es/file.txt"
     )
+
+
+def test_manual_install_target_paths_reject_traversal_and_absolute_paths():
+    assert is_safe_relative_path("addons/Guard/")
+    assert not is_safe_relative_path("../outside/")
+    assert not is_safe_relative_path("C:/outside/")
+
+
+def test_path_within_target_root_rejects_symlink_to_outside(tmp_path):
+    target_root = tmp_path / "target"
+    target_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = target_root / "linked"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Directory symlinks are unavailable: {exc}")
+
+    assert not is_path_within_target_root(str(target_root), str(link))
 
 
 def test_resolve_target_root_for_chapter_uses_chapter_root_for_multi_tab():

@@ -4,12 +4,20 @@ import logging
 import os
 import shutil
 import tempfile
+from collections.abc import Sequence
+from pathlib import PureWindowsPath
 
 from config.config import ARCHIVE_EXTENSIONS, DATA_FILE_EXTENSIONS, SKIP_FILES
 from services.localization_service import tr
+from services.migration_service import (
+    EXTRA_FILE_TARGET_CUSTOM,
+    EXTRA_FILE_TARGET_GAME_DATA_FOLDER,
+    EXTRA_FILE_TARGET_GAME_FOLDER,
+    EXTRA_FILE_TARGET_NONE,
+    normalize_extra_file_target,
+)
 from utils.frickbears3_addons_utils import (
     apply_frickbears3_addons_from_mod_source,
-    get_frickbears3_addons_dir,
     is_addons_subpath,
     is_top_level_addons_archive,
 )
@@ -21,6 +29,7 @@ from utils.pizzatower_afom_utils import (
 )
 
 logger = logging.getLogger(__name__)
+PATCH_FILE_EXTENSIONS = (".xdelta", ".vcdiff", ".g3mpatch", ".csx")
 
 
 def _normalize_override_path(path: str) -> str:
@@ -76,38 +85,88 @@ def _target_relative_override_path(
 
 def iter_configured_override_entries(
     mod_root_dir: str,
-    configured_paths: list[str] | None,
+    configured_paths: Sequence[str | dict[str, str]] | None,
     chapter_id: str | None,
     game_id: str | None = None,
+    data_dir: str | None = None,
 ):
-    for stored_path in configured_paths or []:
-        normalized = _normalize_override_path(stored_path)
-        if not normalized:
+    for configured_path in configured_paths or []:
+        if isinstance(configured_path, dict):
+            stored_path = configured_path.get("file_path", "")
+            target = normalize_extra_file_target(
+                configured_path.get("target")
+                or configured_path.get("status")
+                or EXTRA_FILE_TARGET_GAME_FOLDER
+            )
+            custom_target_path = str(configured_path.get("target_path") or "").strip()
+        else:
+            stored_path = configured_path
+            target = EXTRA_FILE_TARGET_GAME_FOLDER
+            custom_target_path = ""
+        if target == EXTRA_FILE_TARGET_NONE:
             continue
-        source_path = os.path.normpath(
-            os.path.join(mod_root_dir, normalized.rstrip("/"))
-        )
+        normalized = _normalize_override_path(stored_path)
+        if not normalized or ".." in normalized.split("/"):
+            continue
+        source_path = os.path.normpath(os.path.join(mod_root_dir, normalized.rstrip("/")))
+        try:
+            mod_root_normalized = os.path.normcase(os.path.realpath(mod_root_dir))
+            source_normalized = os.path.normcase(os.path.realpath(source_path))
+            if os.path.commonpath((mod_root_normalized, source_normalized)) != mod_root_normalized:
+                logger.warning("Skipping configured path outside mod root: %s", stored_path)
+                continue
+        except ValueError:
+            continue
         target_relative = _target_relative_override_path(
             normalized, chapter_id, game_id
         )
-        if not target_relative:
+        if not target_relative or os.path.isabs(target_relative) or ".." in target_relative.split("/"):
             continue
-        target_root = None
-        if (game_id or "").strip().lower() == "frickbears3" and (
-            is_addons_subpath(normalized) or is_top_level_addons_archive(normalized)
+        target_root = (
+            (data_dir or "")
+            if target == EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+            else custom_target_path
+            if target == EXTRA_FILE_TARGET_CUSTOM
+            else None
+        )
+        if target == EXTRA_FILE_TARGET_CUSTOM and (
+            not custom_target_path
+            or not (
+                os.path.isabs(custom_target_path)
+                or PureWindowsPath(custom_target_path).is_absolute()
+            )
         ):
-            target_root = get_frickbears3_addons_dir()
-            if is_addons_subpath(normalized):
-                target_relative = "" if normalized == "addons/" else normalized[len("addons/") :]
-            else:
-                target_relative = ""
+            target_root = ""
+        game_id = (game_id or "").strip().lower()
+        special_name = (
+            "addons"
+            if game_id == "frickbears3"
+            and (is_addons_subpath(normalized) or is_top_level_addons_archive(normalized))
+            else "towers"
+            if game_id == "pizzatower"
+            and (is_towers_subpath(normalized) or is_top_level_towers_archive(normalized))
+            else ""
+        )
+        if target == EXTRA_FILE_TARGET_GAME_DATA_FOLDER and data_dir and special_name:
+            target_root = os.path.join(data_dir, special_name)
+            target_relative = (
+                "" if normalized == f"{special_name}/" else normalized[len(special_name) + 1 :]
+                if normalized.startswith(f"{special_name}/")
+                else ""
+            )
         yield {
             "source": source_path,
             "target_relative": target_relative,
             "is_directory": normalized.endswith("/"),
             "display_name": normalized,
             "target_root": target_root,
+            "target": target,
         }
+
+
+def _walk_override_files(source_path: str):
+    for root, _dirs, files in os.walk(source_path, followlinks=False):
+        yield root, [file for file in files if not os.path.islink(os.path.join(root, file))]
 
 
 def _count_entry_files(entries) -> int:
@@ -117,7 +176,7 @@ def _count_entry_files(entries) -> int:
         if entry["is_directory"]:
             if not os.path.isdir(source_path):
                 continue
-            for _root, _dirs, files in os.walk(source_path):
+            for _root, files in _walk_override_files(source_path):
                 total += sum(1 for file in files if file.lower() not in SKIP_FILES)
         elif os.path.isfile(source_path):
             total += 1
@@ -151,28 +210,28 @@ def _copy_override_file(
             ),
         )
 
-    if file_lower.endswith((".xdelta", ".vcdiff")):
+    if file_lower.endswith(PATCH_FILE_EXTENSIONS):
         if not is_modpack:
-            xdelta_chapter_id = (
+            patch_chapter_id = (
                 chapter_id
                 if chapter_id is not None
                 else mod_content.extract_chapter_id_from_path(target_dir)
             )
-            patch_result = apply_xdelta_override(
+            patch_result = apply_additional_patch_override(
                 patcher,
                 file,
                 source_path,
                 target_dir,
-                xdelta_chapter_id,
+                patch_chapter_id,
             )
             if (patch_result is False) and (
                 not patcher._request_warning(
                     tr(
-                        "dialogs.patching_warning.xdelta_override_skipped",
+                        "dialogs.patching_warning.additional_patch_override_skipped",
                         patch=file,
                         target=target_dir,
                     ),
-                    warning_id="extra_xdelta_apply_failed",
+                    warning_id="extra_additional_patch_apply_failed",
                     context={
                         "patch": file,
                         "target": target_dir,
@@ -187,7 +246,7 @@ def _copy_override_file(
                 shutil.copy2(source_path, target_path)
             except Exception as e:
                 patcher.patching_logger.warning(
-                    f"Failed to copy xdelta file {source_path}: {e}"
+                    f"Failed to copy patch file {source_path}: {e}"
                 )
                 return False
         return True
@@ -281,7 +340,28 @@ def _apply_configured_override_entries(
     for entry in entries:
         source_path = entry["source"]
         target_relative = entry["target_relative"]
-        entry_target_dir = entry.get("target_root") or target_dir
+        entry_target_dir = entry.get("target_root")
+        if entry_target_dir is None:
+            entry_target_dir = target_dir
+        if not entry_target_dir or (
+            entry["target"] == EXTRA_FILE_TARGET_CUSTOM
+            and not os.path.isdir(entry_target_dir)
+        ):
+            if not patcher._request_warning(
+                tr(
+                    "dialogs.game_data_folder_not_set"
+                    if entry["target"] == EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+                    else "dialogs.custom_target_folder_not_set"
+                ),
+                warning_id=(
+                    "extra_data_folder_not_set"
+                    if entry["target"] == EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+                    else "extra_custom_target_folder_not_set"
+                ),
+                context={"mod_name": mod_name},
+            ):
+                return False
+            continue
         if entry["is_directory"]:
             if not os.path.isdir(source_path):
                 patcher.patching_logger.warning(
@@ -301,7 +381,7 @@ def _apply_configured_override_entries(
                 ):
                     return False
                 continue
-            for root, _dirs, files in os.walk(source_path):
+            for root, files in _walk_override_files(source_path):
                 rel_root = os.path.relpath(root, source_path)
                 for file in files:
                     file_source = os.path.join(root, file)
@@ -364,7 +444,7 @@ def _apply_configured_override_entries(
     return True
 
 
-def apply_xdelta_override(
+def apply_additional_patch_override(
     patcher,
     file_name: str,
     source_path: str,
@@ -373,26 +453,26 @@ def apply_xdelta_override(
     fallback_target: str | None = None,
     label: str = "",
 ) -> bool | None:
-    """Apply xdelta patch to matching target files. On failure, copies to fallback_target if provided."""
-    target_files = mod_content.find_target_files_for_xdelta(target_dir, file_name)
+    """Apply an additional patch to matching target files."""
+    target_files = mod_content.find_target_files_for_patch(target_dir, file_name)
     if not target_files:
         patcher.patching_logger.debug(
-            f"No target files found for xdelta patch {file_name}{label}, skipping (expected filename: {os.path.splitext(file_name)[0]})"
+            f"No target files found for additional patch {file_name}{label}, skipping (expected filename: {os.path.splitext(file_name)[0]})"
         )
         if not fallback_target and not patcher._request_warning(
             tr(
-                "dialogs.patching_warning.xdelta_override_no_target",
+                "dialogs.patching_warning.additional_patch_override_no_target",
                 patch=file_name,
                 target=target_dir,
             ),
-            warning_id="extra_xdelta_no_target",
+            warning_id="extra_additional_patch_no_target",
             context={
                 "patch": file_name,
                 "target": target_dir,
             },
         ):
             return False
-        if fallback_target:
+        if fallback_target and file_name.lower().endswith((".xdelta", ".vcdiff")):
             if patcher._backup_or_mark_file(chapter_id, fallback_target) is False:
                 return False
             shutil.copy2(source_path, fallback_target)
@@ -401,26 +481,26 @@ def apply_xdelta_override(
     for tf in target_files:
         if chapter_id is not None and patcher._backup_or_mark_file(chapter_id, tf) is False:
             return False
-        if patcher._apply_xdelta_to_file(tf, source_path):
+        if patcher._apply_patch_to_file(tf, source_path):
             patcher.patching_logger.info(
-                f"Applied xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}"
+                f"Applied additional patch {file_name}{label} to {os.path.relpath(tf, target_dir)}"
             )
             patch_applied = True
         else:
             patcher.patching_logger.warning(
-                f"Failed to apply xdelta patch {file_name}{label} to {os.path.relpath(tf, target_dir)}, skipping"
+                f"Failed to apply additional patch {file_name}{label} to {os.path.relpath(tf, target_dir)}, skipping"
             )
     if not patch_applied:
-        if fallback_target:
+        if fallback_target and file_name.lower().endswith((".xdelta", ".vcdiff")):
             patcher.patching_logger.warning(
-                f"Xdelta patch {file_name}{label} could not be applied to any target files, copying as regular file"
+                f"Additional patch {file_name}{label} could not be applied to any target files, copying as regular file"
             )
             if patcher._backup_or_mark_file(chapter_id, fallback_target) is False:
                 return False
             shutil.copy2(source_path, fallback_target)
         else:
             patcher.patching_logger.warning(
-                f"Xdelta patch {file_name}{label} could not be applied to any target files, skipping"
+                f"Additional patch {file_name}{label} could not be applied to any target files, skipping"
             )
     return patch_applied
 
@@ -475,8 +555,8 @@ def extract_archive_to_target(
                                 total=total_files,
                             ),
                         )
-                    if file_lower.endswith((".xdelta", ".vcdiff")):
-                        apply_xdelta_override(
+                    if file_lower.endswith(PATCH_FILE_EXTENSIONS):
+                        apply_additional_patch_override(
                             patcher,
                             file,
                             source_file,
@@ -521,8 +601,9 @@ def apply_file_overrides(
     progress_callback=None,
     mod_name: str = "",
     game_id: str | None = None,
-    configured_paths: list[str] | None = None,
+    configured_paths: Sequence[str | dict[str, str]] | None = None,
     mod_root_dir: str | None = None,
+    data_dir: str | None = None,
 ) -> bool:
     if not os.path.isdir(mod_source_dir):
         return True
@@ -530,17 +611,47 @@ def apply_file_overrides(
         used_archive_names = set()
     from config.config import DATA_FILE_EXTENSIONS
 
-    xdelta_extensions = DATA_FILE_EXTENSIONS
+    data_file_extensions = DATA_FILE_EXTENSIONS
     archive_extensions = ARCHIVE_EXTENSIONS
     processed_archives = set()
     skip_files = SKIP_FILES
     if chapter_id is None:
         chapter_id = mod_content.extract_chapter_id_from_path(target_dir)
-    if (not is_modpack) and (game_id or "").strip().lower() == "pizzatower":
+    normalized_game_id = (game_id or "").strip().lower()
+    configured_special_data = any(
+        isinstance(path, dict)
+        and normalize_extra_file_target(
+            path.get("target") or path.get("status")
+        )
+        == EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+        and (
+            (
+                normalized_game_id == "pizzatower"
+                and (
+                    is_towers_subpath(str(path.get("file_path", "")))
+                    or is_top_level_towers_archive(str(path.get("file_path", "")))
+                )
+            )
+            or (
+                normalized_game_id == "frickbears3"
+                and (
+                    is_addons_subpath(str(path.get("file_path", "")))
+                    or is_top_level_addons_archive(str(path.get("file_path", "")))
+                )
+            )
+        )
+        for path in configured_paths or []
+    )
+    if (
+        not is_modpack
+        and not configured_special_data
+        and normalized_game_id == "pizzatower"
+    ):
         from utils.archive_utils import extract_any_archive
 
         if not apply_afom_towers_from_mod_source(
             mod_source_dir,
+            data_dir=data_dir,
             backup_or_mark=lambda target_file: patcher._backup_or_mark_file(
                 chapter_id, target_file
             ),
@@ -550,13 +661,14 @@ def apply_file_overrides(
             return False
     if (
         not is_modpack
-        and configured_paths is None
-        and (game_id or "").strip().lower() == "frickbears3"
+        and not configured_special_data
+        and normalized_game_id == "frickbears3"
     ):
         from utils.archive_utils import extract_any_archive
 
         if not apply_frickbears3_addons_from_mod_source(
             mod_source_dir,
+            data_dir=data_dir,
             backup_or_mark=lambda target_file: patcher._backup_or_mark_file(
                 chapter_id, target_file
             ),
@@ -565,12 +677,23 @@ def apply_file_overrides(
         ):
             return False
     if configured_paths is not None:
+        if any(
+            isinstance(path, dict)
+            and normalize_extra_file_target(
+                path.get("target") or path.get("status")
+            )
+            == EXTRA_FILE_TARGET_GAME_DATA_FOLDER
+            for path in configured_paths
+        ) and not data_dir:
+            patcher.patching_logger.error("Game data folder is not configured")
+            return False
         configured_entries = list(
             iter_configured_override_entries(
                 mod_root_dir or mod_source_dir,
                 configured_paths,
                 str(chapter_id or ""),
                 game_id,
+                data_dir,
             )
         )
         return _apply_configured_override_entries(
@@ -589,7 +712,7 @@ def apply_file_overrides(
                 continue
             source_file = os.path.join(root, file)
             source_rel_path = os.path.relpath(source_file, mod_source_dir)
-            if source_file.lower().endswith(xdelta_extensions):
+            if source_file.lower().endswith(data_file_extensions):
                 continue
             if is_addons_subpath(source_rel_path):
                 continue
@@ -628,24 +751,24 @@ def apply_file_overrides(
                         total=total_files,
                     ),
                 )
-            if file_lower.endswith((".xdelta", ".vcdiff")):
+            if file_lower.endswith(PATCH_FILE_EXTENSIONS):
                 if not is_modpack:
-                    xdelta_chapter_id = (
+                    patch_chapter_id = (
                         chapter_id
                         if chapter_id is not None
                         else mod_content.extract_chapter_id_from_path(target_dir)
                     )
-                    patch_result = apply_xdelta_override(
-                        patcher, file, source_path, target_dir, xdelta_chapter_id
+                    patch_result = apply_additional_patch_override(
+                        patcher, file, source_path, target_dir, patch_chapter_id
                     )
                     if (patch_result is False) and (
                         not patcher._request_warning(
                             tr(
-                                "dialogs.patching_warning.xdelta_override_skipped",
+                                "dialogs.patching_warning.additional_patch_override_skipped",
                                 patch=file,
                                 target=target_dir,
                             ),
-                            warning_id="extra_xdelta_apply_failed",
+                            warning_id="extra_additional_patch_apply_failed",
                             context={
                                 "patch": file,
                                 "target": target_dir,
@@ -661,18 +784,18 @@ def apply_file_overrides(
                     try:
                         shutil.copy2(source_path, target_path)
                         patcher.patching_logger.debug(
-                            f"Copied xdelta file {file} to modpack (xdelta_modpack enabled)"
+                        f"Copied patch file {file} to modpack (xdelta_modpack enabled)"
                         )
                     except Exception as e:
                         patcher.patching_logger.warning(
-                            f"Failed to copy xdelta file {source_path}: {e}"
+                        f"Failed to copy patch file {source_path}: {e}"
                         )
                 else:
                     patcher.patching_logger.debug(
-                        f"Skipping xdelta file {file} (xdelta_modpack disabled)"
+                        f"Skipping patch file {file} (xdelta_modpack disabled)"
                     )
                 continue
-            if file_lower.endswith(xdelta_extensions):
+            if file_lower.endswith(data_file_extensions):
                 continue
             if file_lower.endswith(archive_extensions):
                 normalized_path = os.path.normpath(source_path)

@@ -983,6 +983,23 @@ class TestCommonWidgets:
         host.deleteLater()
         _drain_events(qapp)
 
+    def test_mod_summary_panel_groups_extra_files_by_target(self):
+        from ui.widgets.mod.mod_summary_panel import ModSummaryPanel
+
+        grouped = ModSummaryPanel._collect_extra_paths(
+            [
+                "lang/en.json",
+                {"file_path": "tools/compiler.csx", "target": "none"},
+                {"file_path": "saves/config.json", "target": "game_data_folder"},
+            ]
+        )
+
+        assert grouped == {
+            "game_folder": ["lang/en.json"],
+            "none": ["tools/compiler.csx"],
+            "game_data_folder": ["saves/config.json"],
+        }
+
     def test_mod_summary_panel_keeps_full_description_visible(self, qapp):
         """Checks that mod summary panel keeps the full description text."""
         from unittest.mock import patch

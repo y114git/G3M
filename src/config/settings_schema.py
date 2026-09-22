@@ -19,8 +19,12 @@ THEME_COLOR_NAME_ALIASES = {
 
 DEFAULT_APP_SETTINGS = {
     "game_path": "",
+    "game_data_path": "",
     "last_selected": {},
     "demo_game_path": "",
+    "demo_game_data_path": "",
+    "undertale_game_data_path": "",
+    "undertaleyellow_game_data_path": "",
     "launch_via_steam": False,
     "use_portproton": False,
     "custom_wine_path": "",
@@ -41,8 +45,11 @@ DEFAULT_APP_SETTINGS = {
     "custom_secondary_text_color": "",
     "beta_updates_enabled": False,
     "pizzatower_game_path": "",
+    "pizzatower_game_data_path": "",
+    "sugaryspire_game_data_path": "",
     "pizzatower_custom_executable_path": "",
     "frickbears3_game_path": "",
+    "frickbears3_game_data_path": "",
     "frickbears3_custom_executable_path": "",
     "warning_preferences": {
         "skip_all": False,

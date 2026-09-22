@@ -17,6 +17,27 @@ def _state():
     )
 
 
+def test_special_appdata_roots_use_configured_game_data_folders(tmp_path):
+    frick_data = tmp_path / "frick_data"
+    pizza_data = tmp_path / "pizza_data"
+    (frick_data / "addons").mkdir(parents=True)
+    (pizza_data / "towers").mkdir(parents=True)
+    state = _state()
+    state.local_config.update(
+        {
+            "frickbears3_game_data_path": str(frick_data),
+            "pizzatower_game_data_path": str(pizza_data),
+        }
+    )
+
+    roots = SupportPackageService(state, str(tmp_path / "root")).special_appdata_roots()
+
+    assert roots == [
+        ("Frickbears3 addons", (frick_data / "addons").resolve()),
+        ("Pizza Tower towers", (pizza_data / "towers").resolve()),
+    ]
+
+
 def test_build_redacts_secrets_and_identity(monkeypatch, tmp_path):
     root = tmp_path / "Alice" / "G3M"
     (root / "logs").mkdir(parents=True)

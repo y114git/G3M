@@ -93,13 +93,15 @@ def test_frickbears3_service_converts_addon_archive_to_g3m_mod(tmp_path):
     assert config["metadata"]["name"] == "GOOMBA ~ CUSTOM GUARD"
     assert config["metadata"]["id"] == "gb_mod_42"
     assert config["metadata"]["game"] == "frickbears3"
-    assert config["files"]["frickbears3"]["extra_files"] == ["addons/"]
+    assert config["files"]["frickbears3"]["extra_files"] == [
+        {"file_path": "addons/", "target": "game_data_folder"}
+    ]
     assert (result_path / "addons" / "Goomba" / "extras_info.txt").exists()
     assert (result_path / "addons" / "Goomba" / "icon.png").exists()
 
 
-def test_apply_frickbears3_addons_copies_into_localappdata_and_restores(
-    tmp_path, monkeypatch
+def test_apply_frickbears3_addons_copies_into_configured_data_folder_and_restores(
+    tmp_path,
 ):
     mod_source_dir = tmp_path / "mod"
     _write_text(
@@ -109,16 +111,15 @@ def test_apply_frickbears3_addons_copies_into_localappdata_and_restores(
     _write_bytes(mod_source_dir / "addons" / "Goomba" / "icon.png", b"new")
     _write_text(mod_source_dir / "addons" / "Blox" / "opening_dialogue.txt", "hello")
 
-    localappdata_dir = tmp_path / "localappdata"
-    addons_dir = localappdata_dir / "Frickbears3" / "addons"
+    data_dir = tmp_path / "game_data"
+    addons_dir = data_dir / "addons"
     existing_file = addons_dir / "Goomba" / "icon.png"
     _write_bytes(existing_file, b"old")
 
     backup_mgr = BackupManager(str(tmp_path / "backups"))
-    monkeypatch.setenv("LOCALAPPDATA", str(localappdata_dir))
-
     ok = apply_frickbears3_addons_from_mod_source(
         str(mod_source_dir),
+        data_dir=str(data_dir),
         backup_or_mark=lambda target_file: (
             backup_mgr.backup_file("frickbears3_addons", target_file)
             if os.path.exists(target_file)
@@ -138,7 +139,7 @@ def test_apply_frickbears3_addons_copies_into_localappdata_and_restores(
     assert not (addons_dir / "Blox" / "opening_dialogue.txt").exists()
 
 
-def test_apply_frickbears3_addons_skips_broken_symlink(tmp_path, monkeypatch):
+def test_apply_frickbears3_addons_skips_broken_symlink(tmp_path):
     mod_source_dir = tmp_path / "mod"
     valid_file = mod_source_dir / "addons" / "Guard" / "icon.png"
     _write_bytes(valid_file, b"icon")
@@ -148,17 +149,17 @@ def test_apply_frickbears3_addons_skips_broken_symlink(tmp_path, monkeypatch):
     except OSError as exc:
         pytest.skip(f"File symlinks are unavailable: {exc}")
 
-    localappdata_dir = tmp_path / "localappdata"
-    monkeypatch.setenv("LOCALAPPDATA", str(localappdata_dir))
+    data_dir = tmp_path / "game_data"
 
     ok = apply_frickbears3_addons_from_mod_source(
         str(mod_source_dir),
+        data_dir=str(data_dir),
         backup_or_mark=lambda _target_file: None,
         logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
         extract_archive=lambda archive_path, target_dir: None,
     )
 
-    copied_guard = localappdata_dir / "Frickbears3" / "addons" / "Guard"
+    copied_guard = data_dir / "addons" / "Guard"
     assert ok is True
     assert (copied_guard / "icon.png").read_bytes() == b"icon"
     assert not (copied_guard / "optional.png").exists()

@@ -84,6 +84,54 @@ class _FilesDropWidget(QWidget):
                 self.files_dropped.emit(paths)
 
 
+class _CenteredSectionHeader(QWidget):
+    """Keep a section title centered while its reset button stays at the edge."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.title_toggle = None
+        self.reset_button = None
+
+    def set_controls(self, title_toggle: SectionToggle, reset_button: QPushButton) -> None:
+        title_toggle.setParent(self)
+        reset_button.setParent(self)
+        self.title_toggle = title_toggle
+        self.reset_button = reset_button
+        self._position_controls()
+
+    def sizeHint(self) -> QSize:
+        sizes = [
+            control.sizeHint()
+            for control in (self.title_toggle, self.reset_button)
+            if control is not None
+        ]
+        if not sizes:
+            return super().sizeHint()
+        return QSize(max(size.width() for size in sizes), max(size.height() for size in sizes))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._position_controls()
+
+    def _position_controls(self) -> None:
+        if self.title_toggle is not None:
+            size = self.title_toggle.sizeHint()
+            self.title_toggle.setGeometry(
+                (self.width() - size.width()) // 2,
+                (self.height() - size.height()) // 2,
+                size.width(),
+                size.height(),
+            )
+        if self.reset_button is not None and self.reset_button.isVisible():
+            size = self.reset_button.sizeHint()
+            self.reset_button.setGeometry(
+                self.width() - size.width(),
+                (self.height() - size.height()) // 2,
+                size.width(),
+                size.height(),
+            )
+
+
 class _ElidedPathLineEdit(QLineEdit):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -278,23 +326,17 @@ class SettingsViewBuilder:
         section_layout.setContentsMargins(0, 8, 0, 4)
         section_layout.setSpacing(6)
 
-        header = QWidget(section)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(4)
+        header = _CenteredSectionHeader(section)
 
         title_toggle = SectionToggle(
             title, header, expanded=not is_collapsed, centered=True
         )
-        header_layout.addStretch()
-        header_layout.addWidget(title_toggle)
 
         reset_btn = self._create_icon_btn("⭯", app_state=self.app_state)
         reset_btn.setToolTip(tr("buttons.reset_settings"))
         if not self.app_state.local_config.get("show_reset_buttons", False):
             reset_btn.setVisible(False)
-        header_layout.addWidget(reset_btn)
-        header_layout.addStretch()
+        header.set_controls(title_toggle, reset_btn)
 
         content = QWidget(section)
         content_layout = QVBoxLayout(content)
@@ -931,6 +973,20 @@ class SettingsViewBuilder:
         cl.addWidget(game_path_row, alignment=Qt.AlignmentFlag.AlignCenter)
 
         (
+            game_data_path_row,
+            game_data_path_label,
+            game_data_path_edit,
+            game_data_path_browse_button,
+            game_data_path_reset_button,
+        ) = self._create_path_input_row(
+            object_prefix="settings_game_data_path",
+            label_text=tr("ui.settings_game_data_path_label"),
+            browse_tooltip=tr("tooltips.select_game"),
+            reset_action="game_paths",
+        )
+        cl.addWidget(game_data_path_row, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        (
             custom_executable_row,
             custom_executable_label,
             custom_executable_edit,
@@ -1086,6 +1142,10 @@ class SettingsViewBuilder:
         self.widgets["settings_game_path_edit"] = game_path_edit
         self.widgets["settings_game_path_browse_button"] = game_path_browse_button
         self.widgets["settings_game_path_reset_button"] = game_path_reset_button
+        self.widgets["settings_game_data_path_label"] = game_data_path_label
+        self.widgets["settings_game_data_path_edit"] = game_data_path_edit
+        self.widgets["settings_game_data_path_browse_button"] = game_data_path_browse_button
+        self.widgets["settings_game_data_path_reset_button"] = game_data_path_reset_button
         self.widgets["dont_hide_window_checkbox"] = dont_hide_window_checkbox
         self.widgets["manage_warnings_button"] = manage_warnings_button
         self.widgets["clear_g3mtool_cache_button"] = clear_g3mtool_cache_button
