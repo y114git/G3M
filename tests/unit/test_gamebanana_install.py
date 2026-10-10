@@ -234,7 +234,7 @@ def test_downloads_page_links_resolve_before_enqueuing(qtbot, app_state, url):
     dialog = DownloadsDialog(manager, app_state, parent)
     qtbot.addWidget(dialog)
     dialog._enqueue_url(url)
-    if "gamebanana.com" in url:
+    if parse_gamebanana_mod_url(url) is not None:
         service.install_from_url.assert_called_once_with(url)
         manager.enqueue.assert_not_called()
     else:
