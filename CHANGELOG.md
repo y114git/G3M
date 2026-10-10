@@ -1,3 +1,9 @@
+### Version 3.4.2 — 10.10.26
+
+- Fixed game detection for games launched through Wine and other process wrappers. G3M now confirms process exit before starting session cleanup, and prevents concurrent instances while forwarding activation requests to the running instance.
+- Fixed GameBanana imports from mod and WIP pages. Imports retain the selected file's version and available mod details, including its icon.
+- Fixed DR Save Manager's collection prompt running outside the GUI thread and appearing for games other than DELTARUNE.
+
 ### Version 3.4.1 — 04.10.26
 
 - **Manual installation improvements**

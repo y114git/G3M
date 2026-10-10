@@ -4,7 +4,7 @@
     "language_name": "简体中文",
     "font": "NotoSansSC-Bold.ttf",
     "qt_translation": "qtbase_zh_cn",
-    "version": "3.4.1"
+    "version": "3.4.2"
   },
   "onboarding": {
     "title": "欢迎使用 G3M",
