@@ -69,8 +69,9 @@ class GameLaunchController(QObject):
         self._full_install_checkbox_is_checked = False
         self._window_hidden_for_launch = False
         self._external_process_status_visible = False
+        self._external_process_missing_checks = 0
         self._external_game_timer = QTimer(self)
-        self._external_game_timer.setInterval(2000)
+        self._external_game_timer.setInterval(250)
         self._external_game_timer.timeout.connect(self.refresh_external_game_process)
         self._external_game_timer.start()
         self._mod_update_worker = None
@@ -298,10 +299,16 @@ class GameLaunchController(QObject):
         process_names = get_process_names() if callable(get_process_names) else None
         current = get_running_game_process_name(process_names)
         previous = getattr(self.app_state, "external_game_process_name", "")
-        if current != previous:
-            if previous and not current:
+        if current:
+            self._external_process_missing_checks = 0
+            if current != previous:
+                self.set_external_game_process_name(current)
+        elif previous:
+            self._external_process_missing_checks += 1
+            if self._external_process_missing_checks >= 4:
+                self._external_process_missing_checks = 0
                 self._external_process_status_visible = True
-            self.set_external_game_process_name(current)
+                self.set_external_game_process_name(None)
 
     def _is_full_install_enabled(self) -> bool:
         return (

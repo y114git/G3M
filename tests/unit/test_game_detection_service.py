@@ -14,3 +14,36 @@ def test_running_process_lookup_ignores_unrelated_games():
     process = Mock(info={"name": "DELTARUNE.exe"})
     with patch("services.game_detection_service.psutil.process_iter", return_value=[process]):
         assert get_running_game_process_name(("PizzaTower.exe",)) is None
+
+
+def test_runner_process_matches_only_when_command_line_names_game(monkeypatch):
+    from services.game_detection_service import get_running_game_process_name
+
+    class Process:
+        def __init__(self, name, cmdline) -> None:
+            self.info = {"name": name}
+            self._cmdline = cmdline
+
+        def cmdline(self):
+            return self._cmdline
+
+    game = Process("runner", ["/usr/bin/wine", "Z:\\games\\FRICKBEARS3.exe"])
+    unrelated = Process("runner", ["/usr/bin/wine", "Z:\\games\\Other.exe"])
+    processes = iter([unrelated, game])
+    monkeypatch.setattr("services.game_detection_service.psutil.process_iter", lambda *_args: processes)
+
+    assert get_running_game_process_name(("Frickbears3.exe", "runner")) == "Frickbears3.exe"
+
+
+def test_runner_process_without_game_command_is_ignored(monkeypatch):
+    from services.game_detection_service import get_running_game_process_name
+
+    class Process:
+        info = {"name": "runner"}
+
+        def cmdline(self):
+            return ["/usr/bin/wine", "Z:\\games\\Other.exe"]
+
+    monkeypatch.setattr("services.game_detection_service.psutil.process_iter", lambda *_args: iter([Process()]))
+
+    assert get_running_game_process_name(("Frickbears3.exe", "runner")) is None

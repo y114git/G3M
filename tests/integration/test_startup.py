@@ -229,6 +229,11 @@ def test_run_app_startup_path_imports(monkeypatch):
         def launch(self):
             return None
 
+    monkeypatch.setattr(
+        startup_module,
+        "QLockFile",
+        lambda *_args: Mock(tryLock=Mock(return_value=True), setStaleLockTime=Mock()),
+    )
     monkeypatch.setattr(startup_module, "setup_app", lambda: _App())
     monkeypatch.setattr(startup_module, "QLocalSocket", _Socket)
     monkeypatch.setattr(
@@ -354,6 +359,11 @@ def test_run_app_installs_process_exit_logging(monkeypatch):
     registered = []
     app = Mock()
     app.exec.return_value = 0
+    monkeypatch.setattr(
+        startup_module,
+        "QLockFile",
+        lambda *_args: Mock(tryLock=Mock(return_value=True), setStaleLockTime=Mock()),
+    )
     monkeypatch.setattr(startup_module, "setup_app", lambda: app)
     monkeypatch.setattr(
         startup_module,
@@ -394,6 +404,11 @@ def test_run_app_installs_process_exit_logging(monkeypatch):
 def test_run_app_creates_qapplication_before_user_data_migration(monkeypatch):
     from app import startup as startup_module
 
+    monkeypatch.setattr(
+        startup_module,
+        "QLockFile",
+        lambda *_args: Mock(tryLock=Mock(return_value=True), setStaleLockTime=Mock()),
+    )
     call_order = []
     app = Mock()
     app.exec.return_value = 0
@@ -446,6 +461,11 @@ def test_run_app_legacy_user_data_migration_path_runs_after_qapplication_setup(
 ):
     from app import startup as startup_module
 
+    monkeypatch.setattr(
+        startup_module,
+        "QLockFile",
+        lambda *_args: Mock(tryLock=Mock(return_value=True), setStaleLockTime=Mock()),
+    )
     call_order = []
     app = Mock()
     app.exec.return_value = 0
@@ -557,7 +577,7 @@ def _connected_socket_factory():
             if name in {"waitForConnected", "waitForBytesWritten"}:
                 return lambda *_args, **_kwargs: True
             if name == "writeData":
-                return lambda data: writes.append(data.decode("utf-8"))
+                return lambda data: (writes.append(data.decode("utf-8")), len(data))[1]
             return lambda *_args, **_kwargs: None
 
     return _Socket, writes
@@ -609,6 +629,25 @@ def test_run_app_protocol_handoff_does_not_show_duplicate_instance_error(monkeyp
     warning.assert_not_called()
 
 
+def test_run_app_returns_error_when_instance_handoff_write_fails(monkeypatch):
+    from app import startup as startup_module
+
+    class _FailedWriteSocket:
+        def connectToServer(self, *_args, **_kwargs):  # noqa: N802
+            return None
+
+        def waitForConnected(self, *_args, **_kwargs):  # noqa: N802
+            return True
+
+        def writeData(self, _data):  # noqa: N802
+            return -1
+
+    monkeypatch.setattr(startup_module, "setup_app", lambda: Mock())
+    monkeypatch.setattr(startup_module, "QLocalSocket", _FailedWriteSocket)
+
+    assert startup_module.run_app([]) == 1
+
+
 def test_run_app_game_running_starts_with_external_process_state(monkeypatch):
     from app import startup as startup_module
 
@@ -630,6 +669,11 @@ def test_run_app_game_running_starts_with_external_process_state(monkeypatch):
 
     app = Mock()
     app.exec.return_value = 0
+    monkeypatch.setattr(
+        startup_module,
+        "QLockFile",
+        lambda *_args: Mock(tryLock=Mock(return_value=True), setStaleLockTime=Mock()),
+    )
     monkeypatch.setattr(startup_module, "setup_app", lambda: app)
     monkeypatch.setattr(startup_module, "QLocalSocket", _DisconnectedSocket)
     monkeypatch.setattr(startup_module.QLocalServer, "removeServer", Mock())

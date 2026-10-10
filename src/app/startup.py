@@ -16,7 +16,9 @@ from typing import Any, cast
 
 from PyQt6.QtCore import (
     QLibraryInfo,
+    QLockFile,
     QProcess,
+    QStandardPaths,
     QtMsgType,
     QTranslator,
     qInstallMessageHandler,
@@ -383,12 +385,44 @@ def run_app(argv: list[str] | None = None) -> int:
     socket.connectToServer(SINGLE_INSTANCE_KEY)
     if socket.waitForConnected(500):
         payload = url_arg or SINGLE_INSTANCE_ACTIVATE
-        if payload:
-            socket.writeData(payload.encode("utf-8"))
-            socket.flush()
-            socket.waitForBytesWritten(1000)
+        if not _forward_to_running_instance(socket, payload):
+            return 1
         socket.disconnectFromServer()
         return 0
+    lock_dir = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppLocalDataLocation
+    ) or user_root
+    try:
+        os.makedirs(lock_dir, exist_ok=True)
+    except OSError as error:
+        logger.error("Could not prepare the single-instance lock: %s", error)
+        return 1
+    instance_lock = QLockFile(os.path.join(lock_dir, "g3m.instance.lock"))
+    instance_lock.setStaleLockTime(0)
+    if not instance_lock.tryLock(0):
+        lock_error = instance_lock.error()
+        if lock_error != QLockFile.LockError.LockFailedError:
+            logger.error("Could not acquire the single-instance lock: %s", lock_error)
+            return 1
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            socket = QLocalSocket()
+            socket.connectToServer(SINGLE_INSTANCE_KEY)
+            if socket.waitForConnected(250):
+                payload = url_arg or SINGLE_INSTANCE_ACTIVATE
+                if not _forward_to_running_instance(socket, payload):
+                    socket.disconnectFromServer()
+                    time.sleep(0.1)
+                    continue
+                socket.disconnectFromServer()
+                return 0
+            if instance_lock.tryLock(0):
+                break
+            time.sleep(0.1)
+        else:
+            logger.error("Another G3M instance holds the startup lock")
+            return 1
+    cast(Any, app)._g3m_instance_lock = instance_lock
     QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
     initial_external_game_process = (
         None if args.force_start else check_game_processes()
@@ -423,3 +457,14 @@ def run_app(argv: list[str] | None = None) -> int:
         logger.exception(f"STARTUP ERROR: {error_msg}")
         _safe_critical(tr("errors.startup_error_title"), error_msg)
         return 1
+
+
+def _forward_to_running_instance(socket: QLocalSocket, payload: str) -> bool:
+    data = payload.encode("utf-8")
+    if socket.writeData(data) != len(data):
+        logger.warning("Could not forward activation to the running G3M instance")
+        return False
+    if not socket.waitForBytesWritten(1000):
+        logger.warning("Timed out forwarding activation to the running G3M instance")
+        return False
+    return True

@@ -2918,7 +2918,8 @@ class TestGameLaunchController:
             "controllers.game_launch_controller.get_running_game_process_name",
             return_value=None,
         ):
-            controller.refresh_external_game_process()
+            for _ in range(4):
+                controller.refresh_external_game_process()
 
         assert app_state.external_game_process_name is None
         assert app_state.action_button_enabled is True

@@ -30,6 +30,37 @@ def _process_identity(process: psutil.Process) -> ProcessIdentity | None:
         return None
 
 
+def _matching_process_name(
+    process: psutil.Process, names: tuple[str, ...] | list[str] | set[str]
+) -> str | None:
+    normalized_names = {candidate.casefold() for candidate in names if candidate}
+    name = process.info.get("name")
+    if not name:
+        return None
+    normalized_name = name.casefold()
+    if normalized_name != "runner":
+        return name if normalized_name in normalized_names else None
+    game_names = normalized_names - {"runner"}
+    if not game_names:
+        return None
+    try:
+        command_names = {
+            os.path.basename(arg.replace("\\", "/")).casefold()
+            for arg in process.cmdline()
+        }
+        return next(
+            (
+                candidate
+                for candidate in names
+                if candidate.casefold() != "runner"
+                and candidate.casefold() in command_names
+            ),
+            None,
+        )
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return None
+
+
 def get_matching_process_identities(
     process_names: tuple[str, ...] | list[str] | set[str] | None = None,
 ) -> set[ProcessIdentity]:
@@ -41,8 +72,7 @@ def get_matching_process_identities(
         return identities
     for process in psutil.process_iter(["name"]):
         try:
-            name = process.info.get("name")
-            if name and name.casefold() in normalized_names:
+            if _matching_process_name(process, names):
                 identity = _process_identity(process)
                 if identity is not None:
                     identities.add(identity)
@@ -129,12 +159,11 @@ def is_game_running(pid: object | None = None):
 
 
 def get_running_game_process_name(process_names: tuple[str, ...] | list[str] | None = None) -> str | None:
-    normalized_names = {name.casefold() for name in (process_names or get_all_process_names()) if name}
+    process_names = process_names or get_all_process_names()
     for proc in psutil.process_iter(["name"]):
         try:
-            name = proc.info["name"]
-            if name and name.casefold() in normalized_names:
-                return name
+            if match := _matching_process_name(proc, process_names or get_all_process_names()):
+                return match
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     return None
