@@ -467,6 +467,13 @@
       "added": "2026-10-22"
     },
     {
+      "id": "gb_mod_732378",
+      "name": "Switch 2 Mike Content in PC Version",
+      "game": "deltarune",
+      "game_version": "v0.0.253",
+      "added": "2026-10-26"
+    },
+    {
       "id": "gb_mod_661496",
       "name": "Noise's funny longjump (G3M/G3MPatch Compatible)",
       "game": "pizzatower",
