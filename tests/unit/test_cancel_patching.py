@@ -12,6 +12,7 @@ from adapters.g3mtool_adapter import G3MToolManager
 from services.mod_operation_executor import (
     ModOperationCancelledError,
     ModOperationExecutor,
+    _discard_temporary,
 )
 from services.mod_operation_support import create_g3mtool_patcher
 from utils.mod.operation_plan import ModOperationPlan, PlannedModOperation
@@ -41,3 +42,22 @@ def test_cancel_during_a_running_patch_restores_the_target(tmp_path, monkeypatch
 
     assert time.monotonic() - started < 10
     assert Path(target).read_bytes() == b"original"
+
+
+def test_temp_file_removal_retries_while_the_killed_tool_still_holds_it(tmp_path, monkeypatch):
+    temp = tmp_path / ".data.win.x.win"
+    temp.write_bytes(b"x")
+    real_unlink, calls = Path.unlink, []
+
+    def locked_twice(self, *args, **kwargs):
+        calls.append(1)
+        if len(calls) <= 2:
+            raise PermissionError
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", locked_twice)
+    monkeypatch.setattr("services.mod_operation_executor.time.sleep", lambda _s: None)
+
+    _discard_temporary(temp)
+
+    assert not temp.exists()

@@ -9,6 +9,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 from collections.abc import Callable
 from contextlib import ExitStack, suppress
 from dataclasses import asdict, dataclass
@@ -326,6 +327,21 @@ class ModOperationJournal:
                 os.unlink(temporary_name)
 
 
+def _discard_temporary(path: Path) -> None:
+    """Remove a temp file; a just-killed backend may still hold it for a moment."""
+    for attempt in range(10):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(0.2)
+        else:
+            return
+
+
 def _accepts_progress(backend: Callable[..., object]) -> bool:
     try:
         parameters = inspect.signature(backend).parameters
@@ -510,8 +526,7 @@ class ModOperationExecutor:
                     )
                 os.replace(output, resolved_target)
             finally:
-                with suppress(FileNotFoundError):
-                    output.unlink()
+                _discard_temporary(output)
             if isinstance(target, ArchiveVirtualPath):
                 if archive_root is None:
                     raise ModOperationExecutionError("archive merge workspace is unavailable")
@@ -610,8 +625,7 @@ class ModOperationExecutor:
                 raise ModOperationExecutionError("patch backend did not produce an output file")
             os.replace(temporary, target)
         finally:
-            with suppress(FileNotFoundError):
-                temporary.unlink()
+            _discard_temporary(temporary)
 
     def _apply_overwrite(self, operation: PlannedModOperation, source: Path, target: Path) -> None:
         soft = operation.type == "soft-overwrite"
