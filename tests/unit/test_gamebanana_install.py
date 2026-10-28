@@ -10,7 +10,7 @@ import requests
 from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import QDialog, QWidget
 
-from adapters.gamebanana_adapter import GameBananaAPI
+from adapters.gamebanana_adapter import G3MConfirmedMod, GameBananaAPI
 from app.protocol_handler import _enqueue_g3m_url
 from controllers.mod.operations_controller import ModOperationsController
 from models.download_models import TargetKind
@@ -38,6 +38,7 @@ def profile(monkeypatch):
         ],
     }
     monkeypatch.setattr(GameBananaAPI, "get_mod_profile_page", Mock(return_value=data))
+    monkeypatch.setattr(GameBananaAPI, "g3m_confirmed", {"gb_mod_42": G3MConfirmedMod(), "gb_wip_42": G3MConfirmedMod()})
     return data
 
 

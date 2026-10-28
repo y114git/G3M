@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from adapters.gamebanana_adapter import G3MConfirmedMod, GameBananaAPI
+from config.config import GAMEBANANA_TOOL_ID_DELTAMOD
 from models.game_modes import get_game
 from services.mod.filter_service import filter_and_sort_mods
 
@@ -113,3 +114,28 @@ def test_game_of_a_mod_is_read_from_its_profile(monkeypatch):
 
     monkeypatch.setattr(api, "get_mod_profile_page", lambda *_a, **_k: None)
     assert api.get_mod_game_id(1) is None
+
+
+@pytest.mark.parametrize(
+    ("tool_ids", "confirmed", "expected"),
+    [
+        ([20615], True, "g3m"),
+        ([20615], False, ""),
+        ([20615, 12345], False, ""),
+        ([], True, ""),
+    ],
+)
+def test_only_confirmed_or_deltamod_files_install_automatically(tool_ids, confirmed, expected):
+    GameBananaAPI.g3m_confirmed = {"gb_mod_1": G3MConfirmedMod()} if confirmed else {}
+    entry = {"_aModManagerIntegrations": [{"_idToolRow": tool_id} for tool_id in tool_ids]}
+
+    file = GameBananaAPI()._build_file_metadata(5, entry, "gb_mod_1")
+
+    assert file["compatibility"] == expected
+
+
+def test_deltamod_file_installs_automatically_without_the_confirmed_list():
+    GameBananaAPI.g3m_confirmed = {}
+    entry = {"_aModManagerIntegrations": [{"_idToolRow": GAMEBANANA_TOOL_ID_DELTAMOD}]}
+
+    assert GameBananaAPI()._build_file_metadata(5, entry, "gb_mod_1")["compatibility"] == "deltamod"

@@ -12,6 +12,7 @@
 - Fixed an installed local mod showing up in Mods Browser as a second card next to the same mod from GameBanana.
 - Fixed Cancel not stopping a patch in progress and a deleted mod blocking the next launch; a mod can no longer be deleted while it is being patched or analyzed.
 - Fixed long warning and error lists making dialogs taller than the screen. They now show the first lines and point to the log for the rest.
+- **Auto-install** in the GameBanana file list is now **Yes** only for DeltaMod files and mods on the **G3M Verified** list; every other file is installed manually in Downloads.
 
 </details>
 

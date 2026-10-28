@@ -295,7 +295,7 @@ class GameBananaAPI:
         for entry in files.values() if isinstance(files, dict) else files:
             if not isinstance(entry, dict) or not (file_id := self._safe_int(entry.get("_idRow"))) or not entry.get("_bHasContents", True) or entry.get("_bIsArchived"):
                 continue
-            mod.gamebanana_supported_files.append(self._build_file_metadata(file_id, entry))
+            mod.gamebanana_supported_files.append(self._build_file_metadata(file_id, entry, f"gb_{item_type.lower()}_{mod_id}"))
         if not mod.gamebanana_supported_files:
             raise AppError("errors.mod_no_files", mod_name=mod.name)
         return mod
@@ -385,7 +385,9 @@ class GameBananaAPI:
                     file_id := self._safe_int(file_entry.get("_idRow"))
                 ):
                     continue
-                file_payload = self._build_file_metadata(file_id, file_entry)
+                file_payload = self._build_file_metadata(
+                    file_id, file_entry, f"gb_{itemtype.lower()}_{mod_id}"
+                )
                 compatibility_label = file_payload["compatibility"]
                 if compatibility_label == "g3m":
                     compatibility["has_g3m_file"] = True
@@ -645,6 +647,7 @@ class GameBananaAPI:
         self,
         file_id: int,
         profile_entry: dict[str, Any],
+        mod_key: str = "",
     ) -> dict[str, Any]:
         integrations = [
             (tool_id, integration.get("_sName", str(tool_id)))
@@ -678,7 +681,12 @@ class GameBananaAPI:
             "has_contents": bool(self._first_value(sources, "_bHasContents", False)),
             "tool_ids": tool_ids,
             "tool_names": [name for _, name in integrations],
-            "compatibility": "g3m" if GAMEBANANA_TOOL_ID_G3M in tool_ids else "deltamod" if GAMEBANANA_TOOL_ID_DELTAMOD in tool_ids else "",
+            # Every GameBanana mod can carry the G3M tool, so only mods from the confirmed list install by themselves.
+            "compatibility": (
+                "g3m"
+                if GAMEBANANA_TOOL_ID_G3M in tool_ids and mod_key in self.g3m_confirmed
+                else "deltamod" if GAMEBANANA_TOOL_ID_DELTAMOD in tool_ids else ""
+            ),
         }
 
     def search_mods(
