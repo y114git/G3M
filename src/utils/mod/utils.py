@@ -1,11 +1,27 @@
 """Mod data extraction utilities."""
 
 import os
+import re
 from collections.abc import Mapping
 from typing import TypeGuard
 from urllib.parse import urlparse
 
 from utils.mod.config import mod_local_relative_path
+
+# "[https://]gamebanana.com/mmdl/{fileId}[,{Mod|Wip},{modId}]", with or without the colon and a trailing query
+_GB_DOWNLOAD_LINK = re.compile(
+    r"(?:https?:?//)?(?:www\.)?gamebanana\.com/mmdl/(\d+)(?:\?[^,]*)?(?:,(Mod|Wip),(\d+))?(?:\?.*)?/?",
+    re.IGNORECASE | re.ASCII,
+)
+
+
+def parse_gamebanana_download_link(text: str) -> tuple[str, tuple[str, str] | None] | None:
+    """Split a GameBanana 1-click link into (file id, ("Mod"/"Wip", mod id)); the mod part may be missing."""
+    match = _GB_DOWNLOAD_LINK.fullmatch(text.strip())
+    if not match:
+        return None
+    file_id, item_type, mod_id = match.groups()
+    return file_id, (item_type.capitalize(), mod_id) if item_type and mod_id else None
 
 
 def parse_gamebanana_mod_url(url: str) -> tuple[str, int] | None:
@@ -125,10 +141,13 @@ def resolve_mod_icon(config_data: dict, mod_folder_path: str):
     return None
 
 
+_MANUAL_PACKAGE = re.compile(r"xdelta|vcdiff|manual")
+
+
 def sort_gamebanana_files_by_priority(files: list[dict]) -> list[dict]:
     """Sort GameBanana files by compatibility priority (g3m > deltamod > others)."""
 
-    def _priority(file_info: dict) -> tuple[int, int, int, str]:
+    def _priority(file_info: dict) -> tuple[int, int, int, int, str]:
         compatibility = str(file_info.get("compatibility") or "").lower()
         if compatibility == "g3m":
             rank = 0
@@ -144,6 +163,9 @@ def sort_gamebanana_files_by_priority(files: list[dict]) -> list[dict]:
             file_id = int(file_info.get("id") or file_info.get("_idRow") or 0)
         except (TypeError, ValueError):
             file_id = 0
-        return (rank, -timestamp, -file_id, str(file_info.get("name") or "").casefold())
+        # Authors label packages by name: a G3M package installs by itself, a bare XDELTA or manual one never does.
+        label = f"{file_info.get('name') or file_info.get('_sFile') or ''} {file_info.get('description') or ''}".casefold()
+        kind = 2 if _MANUAL_PACKAGE.search(label) else 0 if "g3m" in label else 1
+        return (rank, kind, -timestamp, -file_id, str(file_info.get("name") or "").casefold())
 
     return sorted(files or [], key=_priority)

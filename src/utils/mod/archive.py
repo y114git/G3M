@@ -105,6 +105,24 @@ def archive_format(path: str | Path) -> str | None:
     return None
 
 
+_ARCHIVE_SIGNATURES = (
+    (b"PK\x03\x04", ".zip"),
+    (b"PK\x05\x06", ".zip"),
+    (b"7z\xbc\xaf\x27\x1c", ".7z"),
+    (b"Rar!\x1a\x07", ".rar"),
+)
+
+
+def archive_suffix_from_content(path: str | Path) -> str | None:
+    """Name the archive type of a file by its first bytes, for downloads whose name has no extension."""
+    try:
+        with open(path, "rb") as source:
+            head = source.read(8)
+    except OSError:
+        return None
+    return next((suffix for signature, suffix in _ARCHIVE_SIGNATURES if head.startswith(signature)), None)
+
+
 def split_archive_virtual_path(path: str | Path) -> ArchiveVirtualPath | None:
     """Split ``archive.ext/member`` without treating ordinary files as archives."""
     value = os.fspath(path).replace("\\", "/")

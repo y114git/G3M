@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 
 from services.localization_service import tr
 from ui.common.dialog_theme import DynamicDialog
+from utils.mod.utils import sort_gamebanana_files_by_priority
 from utils.native_integration import open_url_native
 
 
@@ -82,9 +83,11 @@ class GameBananaFilePickerDialog(DynamicDialog):
         self._on_selection_changed()
 
     def _populate(self):
-        self.files.sort(key=lambda f: f.get("timestamp") or 0, reverse=True)
+        self.files = sort_gamebanana_files_by_priority(self.files)
         for file_data in self.files:
             display_text = file_data.get("name", "file")
+            if description := str(file_data.get("description") or "").strip():
+                display_text = f"{display_text} ({description.splitlines()[0][:60]})"
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, file_data)
             self.list_widget.addItem(item)

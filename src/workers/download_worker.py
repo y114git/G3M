@@ -11,6 +11,7 @@ from PyQt6.QtCore import pyqtSignal
 
 from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.thread_lifetime import safe_emit as _safe_emit
+from utils.mod.archive import archive_format, archive_suffix_from_content
 from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,19 @@ class DownloadWorker(ManagedQThread):
                 f"DownloadWorker.cancel: failed to close active response: {e}",
                 exc_info=True,
             )
+
+    def _name_archive_by_content(self) -> None:
+        """A 1-click link such as gamebanana.com/mmdl/123 has no file extension; without one the archive is never opened."""
+        if archive_format(self._target_path) is not None:
+            return
+        from utils.file_utils import safe_move
+
+        if suffix := archive_suffix_from_content(self._target_path):
+            renamed = self._target_path + suffix
+            if safe_move(self._target_path, renamed):
+                self._target_path = renamed
+            else:
+                logger.warning("DownloadWorker: could not add %s to %s", suffix, self._target_path)
 
     def _checksum_warning(self) -> str:
         """Describe a verified checksum mismatch, or return an empty string."""
@@ -127,6 +141,7 @@ class DownloadWorker(ManagedQThread):
                     "",
                 )
                 return
+            self._name_archive_by_content()
             warning = self._checksum_warning()
             if self._cancelled:
                 raise RuntimeError("download_cancelled")

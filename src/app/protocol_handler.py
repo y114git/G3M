@@ -14,7 +14,7 @@ from config.config import (
 from services.game_detection_service import is_game_running
 from services.localization_service import tr
 from ui.common.feedback import safe_show_message
-from utils.mod.utils import parse_gamebanana_mod_url
+from utils.mod.utils import parse_gamebanana_download_link, parse_gamebanana_mod_url
 
 _PAIR_URL = re.compile(rf"(?:{'|'.join(URL_PROTOCOL_SCHEMES)})://gb_pair/([\w-]+)/([\w-]+)/?", re.ASCII | re.IGNORECASE)
 
@@ -77,6 +77,19 @@ def _enqueue_g3m_url(w, url: str):
         return
     if parse_gamebanana_mod_url(download_url):
         w.mod_service.install_from_url(download_url)
+        return
+    link = parse_gamebanana_download_link(url.partition("://")[2])
+    if link and link[1]:
+        file_id, (item_type, mod_id) = link[0], link[1]
+        w.downloads_manager.enqueue_with_feedback(
+            w.feedback_service,
+            display_name=f"GameBanana mod {mod_id}",
+            source_kind=SourceKind.GAMEBANANA,
+            target_kind=TargetKind.MOD,
+            source_url=f"https://gamebanana.com/dl/{file_id}",
+            canonical_key=f"gb_{item_type.lower()}_{mod_id}_{file_id}",
+            metadata={"gb_mod_id": int(mod_id), "item_type": item_type.lower(), "gb_file_id": int(file_id)},
+        )
         return
     if local_path:
         w.downloads_manager.enqueue_with_feedback(

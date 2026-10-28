@@ -256,7 +256,7 @@ class UseWorker(ManagedQThread):
             "icon": self._metadata.get("icon"),
             "tags": self._metadata.get("tags") or [],
             "category": self._metadata.get("category"),
-            "game": self._metadata.get("game", "deltarune"),
+            "game": self._metadata.get("game") or self._gamebanana_game(),
         }
         metadata.update(GameBananaAPI().get_install_metadata(metadata))
         return metadata
@@ -431,6 +431,17 @@ class UseWorker(ManagedQThread):
             self._gamebanana_game_id,
             lambda: self._cancelled,
         )
+
+    def _gamebanana_game(self) -> str:
+        """The game id of the GameBanana game this download is listed under."""
+        from models.game_modes import get_gamebanana_reverse_map
+
+        try:
+            game_id = self._gamebanana_game_id()
+        except Exception:
+            logger.warning("UseWorker: could not look up the GameBanana game of the download", exc_info=True)
+            game_id = None
+        return get_gamebanana_reverse_map().get(game_id or 0, "deltarune")
 
     def _gamebanana_game_id(self) -> int | None:
         """The GameBanana game this download came from, when it came from GameBanana."""

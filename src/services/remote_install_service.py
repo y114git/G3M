@@ -1,13 +1,13 @@
 """GameBanana Remote Install: polls the paired member's queue and queues each mod for download."""
 
 import logging
-import re
 import threading
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from adapters.gamebanana_adapter import GameBananaAPI
 from config.config import GAMEBANANA_API_BASE, NETWORK_TIMEOUT_MEDIUM
+from utils.mod.utils import parse_gamebanana_download_link
 from utils.network_utils import get_session
 
 logger = logging.getLogger(__name__)
@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 APP_ID = "G3M"
 CONFIG_KEY = "gb_remote_install"
 POLL_INTERVAL_MS = 60_000
-# "{downloadURL},{modType},{modID}", the same shape as a 1-click link, with or without the protocol
-_ENTRY = re.compile(r"(?:https?:?//)?(?:www\.)?gamebanana\.com/mmdl/(\d+),(Mod|Wip),(\d+)", re.IGNORECASE)
 
 
 class RemoteInstallService(QObject):
@@ -68,13 +66,14 @@ class RemoteInstallService(QObject):
             self._busy = False
 
     def _queue(self, entry: object) -> None:
-        match = _ENTRY.fullmatch(entry) if isinstance(entry, str) else None
-        if not match:
+        # "{downloadURL},{modType},{modID}", the same shape as a 1-click link
+        link = parse_gamebanana_download_link(entry) if isinstance(entry, str) else None
+        if not link or not link[1]:
             logger.warning("Remote install: ignored entry %r", entry)
             return
-        file_id, item_type, mod_id = match.groups()
+        file_id, (item_type, mod_id) = link[0], link[1]
         try:
-            mod = GameBananaAPI().get_installable_mod(int(mod_id), item_type.capitalize())
+            mod = GameBananaAPI().get_installable_mod(int(mod_id), item_type)
             file = next(f for f in mod.gamebanana_supported_files if str(f["id"]) == file_id)
         except Exception as error:
             logger.warning("Remote install: could not queue %s: %s", entry, error)
