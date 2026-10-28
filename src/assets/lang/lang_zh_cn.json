@@ -1547,7 +1547,10 @@
       "merge_failed": "合并失败",
       "steam_launch_with_mods": "Steam 可能会启动其他游戏文件夹",
       "patching_warning": "其他补丁警告",
-      "direct_absolute_operation_paths": "模组使用了直接绝对路径"
+      "direct_absolute_operation_paths": "模组使用了直接绝对路径",
+      "missing_dependencies": "缺少所需模组",
+      "inactive_dependencies": "所需模组未启用",
+      "mod_order_suggestion": "可以优化模组顺序"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1581,7 +1584,10 @@
       "merge_failed": "当 G3MTool 无法合并所选模组或补丁时显示。",
       "steam_launch_with_mods": "当 Steam 可能打开的游戏文件夹不是 G3M 刚修补的文件夹时显示。",
       "patching_warning": "用于尚未分类的修补/合并风险。",
-      "direct_absolute_operation_paths": "当模组操作使用字面文件系统路径而不是占位符根目录时显示。"
+      "direct_absolute_operation_paths": "当模组操作使用字面文件系统路径而不是占位符根目录时显示。",
+      "missing_dependencies": "当所选模组需要未安装的模组，或安装这些模组失败时，在启动前显示。",
+      "inactive_dependencies": "当所选模组需要已安装但未选择的模组时，在启动前显示。G3M 会建议启用它们。",
+      "mod_order_suggestion": "当所选模组的顺序与作者推荐的顺序不同时，在启动前显示。"
     }
   },
   "data_root": {

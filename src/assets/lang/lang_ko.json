@@ -1552,7 +1552,10 @@
       "merge_failed": "병합 실패",
       "steam_launch_with_mods": "Steam이 다른 게임 폴더를 실행할 수 있음",
       "patching_warning": "기타 패치 경고",
-      "direct_absolute_operation_paths": "모드가 직접 절대 경로를 사용함"
+      "direct_absolute_operation_paths": "모드가 직접 절대 경로를 사용함",
+      "missing_dependencies": "필요한 모드가 없음",
+      "inactive_dependencies": "필요한 모드가 활성화되지 않음",
+      "mod_order_suggestion": "모드 순서를 개선할 수 있음"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1586,7 +1589,10 @@
       "merge_failed": "G3MTool이 선택한 모드나 패치를 병합할 수 없을 때 표시됩니다.",
       "steam_launch_with_mods": "Steam이 G3M이 패치한 폴더와 다른 게임 폴더를 열 수 있을 때 표시됩니다.",
       "patching_warning": "아직 분류되지 않은 패치/병합 위험에 표시됩니다.",
-      "direct_absolute_operation_paths": "모드 작업이 플레이스홀더 루트 대신 직접 파일 시스템 경로를 사용할 때 표시됩니다."
+      "direct_absolute_operation_paths": "모드 작업이 플레이스홀더 루트 대신 직접 파일 시스템 경로를 사용할 때 표시됩니다.",
+      "missing_dependencies": "선택한 모드에 설치되지 않은 모드가 필요하거나 설치에 실패했을 때 실행 전에 표시됩니다.",
+      "inactive_dependencies": "선택한 모드에 설치되어 있지만 선택되지 않은 모드가 필요할 때 실행 전에 표시됩니다. G3M이 활성화를 제안합니다.",
+      "mod_order_suggestion": "선택한 모드의 순서가 제작자가 권장하는 순서와 다를 때 실행 전에 표시됩니다."
     }
   },
   "data_root": {

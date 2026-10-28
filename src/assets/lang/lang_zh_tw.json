@@ -1547,7 +1547,10 @@
       "merge_failed": "合併失敗",
       "steam_launch_with_mods": "Steam 可能會啟動其他遊戲資料夾",
       "patching_warning": "其他補丁警告",
-      "direct_absolute_operation_paths": "模組使用直接絕對路徑"
+      "direct_absolute_operation_paths": "模組使用直接絕對路徑",
+      "missing_dependencies": "缺少所需模組",
+      "inactive_dependencies": "所需模組未啟用",
+      "mod_order_suggestion": "可以最佳化模組順序"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1581,7 +1584,10 @@
       "merge_failed": "當 G3MTool 無法合併所選模組或補丁時顯示。",
       "steam_launch_with_mods": "當 Steam 可能開啟的遊戲資料夾不是 G3M 剛修補的資料夾時顯示。",
       "patching_warning": "用於尚未分類的修補/合併風險。",
-      "direct_absolute_operation_paths": "當模組操作使用字面檔案系統路徑而非佔位符根目錄時顯示。"
+      "direct_absolute_operation_paths": "當模組操作使用字面檔案系統路徑而非佔位符根目錄時顯示。",
+      "missing_dependencies": "當所選模組需要未安裝的模組，或安裝這些模組失敗時，在啟動前顯示。",
+      "inactive_dependencies": "當所選模組需要已安裝但未選擇的模組時，在啟動前顯示。G3M 會建議啟用它們。",
+      "mod_order_suggestion": "當所選模組的順序與作者建議的順序不同時，在啟動前顯示。"
     }
   },
   "data_root": {

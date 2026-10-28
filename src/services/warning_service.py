@@ -69,6 +69,14 @@ WARNING_DEFINITIONS: dict[str, WarningDefinition] = {
         "warnings.messages.steam_launch_with_mods.body",
         "warnings.tooltips.steam_launch_with_mods",
     ),
+    "missing_dependencies": WarningDefinition(
+        "missing_dependencies",
+        WarningSeverity.MAJOR,
+        "warnings.items.missing_dependencies",
+        "dialogs.patching_warning.title",
+        "dialogs.patching_warning.dependency_manual_required",
+        "warnings.tooltips.missing_dependencies",
+    ),
     "patching_warning": WarningDefinition(
         "patching_warning",
         WarningSeverity.MAJOR,
@@ -85,7 +93,24 @@ WARNING_DEFINITIONS: dict[str, WarningDefinition] = {
         "warnings.messages.direct_absolute_operation_paths.body",
         "warnings.tooltips.direct_absolute_operation_paths",
     ),
+    "inactive_dependencies": WarningDefinition(
+        "inactive_dependencies",
+        WarningSeverity.MINOR,
+        "warnings.items.inactive_dependencies",
+        "dialogs.patching_warning.title",
+        "dialogs.patching_warning.dependency_activation",
+        "warnings.tooltips.inactive_dependencies",
+    ),
+    "mod_order_suggestion": WarningDefinition(
+        "mod_order_suggestion",
+        WarningSeverity.MINOR,
+        "warnings.items.mod_order_suggestion",
+        "dialogs.patching_warning.title",
+        "dialogs.patching_warning.relation_review",
+        "warnings.tooltips.mod_order_suggestion",
+    ),
 }
+
 
 def iter_warning_definitions() -> tuple[WarningDefinition, ...]:
     return tuple(WARNING_DEFINITIONS.values())

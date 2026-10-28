@@ -1574,7 +1574,10 @@
       "merge_failed": "Merge failed",
       "steam_launch_with_mods": "Steam may launch a different game folder",
       "patching_warning": "Other patching warning",
-      "direct_absolute_operation_paths": "Mod uses direct absolute paths"
+      "direct_absolute_operation_paths": "Mod uses direct absolute paths",
+      "missing_dependencies": "Required mods are missing",
+      "inactive_dependencies": "Required mods are not active",
+      "mod_order_suggestion": "Mod order can be improved"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1608,7 +1611,10 @@
       "merge_failed": "Shown when G3MTool cannot merge the selected mods or patches.",
       "steam_launch_with_mods": "Shown when Steam launch may open a different game folder than the one G3M patched.",
       "patching_warning": "Shown for uncategorized patching and merging risks.",
-      "direct_absolute_operation_paths": "Shown when a mod operation uses a literal filesystem path instead of a placeholder root."
+      "direct_absolute_operation_paths": "Shown when a mod operation uses a literal filesystem path instead of a placeholder root.",
+      "missing_dependencies": "Shown before launch when a selected mod needs mods that are not installed, and when installing them did not work.",
+      "inactive_dependencies": "Shown before launch when a selected mod needs installed mods that are not selected. G3M offers to activate them.",
+      "mod_order_suggestion": "Shown before launch when the order of the selected mods differs from the order their authors recommend."
     }
   },
   "data_root": {

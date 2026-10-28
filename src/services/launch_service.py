@@ -1380,6 +1380,8 @@ class GameLauncher(QObject):
     ) -> bool:
         from utils.mod.utils import get_mod_id
 
+        if not is_warning_enabled("mod_order_suggestion", self.app_state.local_config):
+            return True
         game_id = str(getattr(getattr(self.app_state, "game_mode", None), "game_id", "") or "")
         scopes, _configs, source_steps, recommendations = self._operation_relation_recommendations(
             selections, patch_steps, game_id
@@ -1496,7 +1498,7 @@ class GameLauncher(QObject):
         self._pending_dependency_launch = None
         self._clear_pending_dependency_downloads()
         self._finish_background_launch_operation()
-        if details:
+        if details and is_warning_enabled("missing_dependencies", self.app_state.local_config):
             ask = getattr(self.feedback_service, "ask_patching_warning", None)
             warning_key = (
                 "dialogs.patching_warning.dependency_manual_required"
@@ -1692,8 +1694,17 @@ class GameLauncher(QObject):
             }
             for scope, scope_findings in findings.items()
         }
-        inactive = {scope: ids for scope, ids in inactive.items() if ids}
-        missing = {scope: ids for scope, ids in missing.items() if ids}
+        config = self.app_state.local_config
+        inactive = {
+            scope: ids
+            for scope, ids in inactive.items()
+            if ids and is_warning_enabled("inactive_dependencies", config)
+        }
+        missing = {
+            scope: ids
+            for scope, ids in missing.items()
+            if ids and is_warning_enabled("missing_dependencies", config)
+        }
         if not inactive and not missing:
             return True
         installed = {

@@ -1561,7 +1561,10 @@
       "merge_failed": "Falló la fusión",
       "steam_launch_with_mods": "Steam puede iniciar otra carpeta del juego",
       "patching_warning": "Otra advertencia de parcheo",
-      "direct_absolute_operation_paths": "El mod usa rutas absolutas directas"
+      "direct_absolute_operation_paths": "El mod usa rutas absolutas directas",
+      "missing_dependencies": "Faltan mods requeridos",
+      "inactive_dependencies": "Los mods requeridos no están activos",
+      "mod_order_suggestion": "El orden de los mods se puede mejorar"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1595,7 +1598,10 @@
       "merge_failed": "Se muestra cuando G3MTool no puede fusionar los mods o parches seleccionados.",
       "steam_launch_with_mods": "Se muestra cuando Steam puede abrir una carpeta de juego distinta de la que G3M parcheó.",
       "patching_warning": "Se muestra para riesgos aún no clasificados de parcheo y fusión.",
-      "direct_absolute_operation_paths": "Se muestra cuando una operación de mod usa una ruta literal del sistema de archivos en lugar de una raíz con marcador de posición."
+      "direct_absolute_operation_paths": "Se muestra cuando una operación de mod usa una ruta literal del sistema de archivos en lugar de una raíz con marcador de posición.",
+      "missing_dependencies": "Se muestra antes de iniciar cuando un mod seleccionado necesita mods que no están instalados, y cuando no se pudieron instalar.",
+      "inactive_dependencies": "Se muestra antes de iniciar cuando un mod seleccionado necesita mods instalados que no están seleccionados. G3M ofrece activarlos.",
+      "mod_order_suggestion": "Se muestra antes de iniciar cuando el orden de los mods seleccionados difiere del que recomiendan sus autores."
     }
   },
   "data_root": {

@@ -657,3 +657,72 @@ def test_launch_checkpoints_plugin_changes_before_starting_game(qtbot, tmp_path)
     launcher._finalize_launch_after_plugin_hooks.assert_called_once_with(
         {}, False, journal_checkpointed=True
     )
+
+
+def _relation_launcher(tmp_path, dependencies, installed, disabled_warning):
+    game_root = tmp_path / "game"
+    game_root.mkdir()
+    main = _config([])
+    main["dependencies"] = dependencies
+    service = Mock()
+    service.get_mod_config.side_effect = lambda mod_id: {"main": main, "base": _config([])}.get(mod_id, {})
+    service.get_mod_folder_path.return_value = str(tmp_path)
+    feedback = Mock()
+    parent = QObject()
+    vars(parent)["used_mods_service"] = Mock()
+    main_mod, base_mod = SimpleNamespace(id="main"), SimpleNamespace(id="base")
+    vars(parent)["used_mods_service"].get_mod_steps.return_value = [[main_mod, base_mod] if installed == "ordered" else [main_mod]]
+    app_state = _app_state(tmp_path, game_root)
+    app_state.all_mods = [main_mod, base_mod]
+    app_state.local_config = {"warning_preferences": {"warning_overrides": {disabled_warning: False}}}
+    launcher = GameLauncher(app_state, feedback, service, parent)
+    return launcher, feedback, main_mod, base_mod, parent
+
+
+def test_the_order_suggestion_can_be_turned_off(qapp, tmp_path):
+    launcher, feedback, main_mod, base_mod, _parent = _relation_launcher(tmp_path, ["base:before"], "ordered", "mod_order_suggestion")
+
+    assert launcher._offer_operation_relation_recommendations(
+        {"deltarune": [main_mod, base_mod]}, {"deltarune": [[main_mod, base_mod]]}
+    )
+    feedback.ask_relation_arrangement.assert_not_called()
+
+
+def test_the_inactive_dependency_prompt_can_be_turned_off(qapp, tmp_path):
+    launcher, feedback, main_mod, _base_mod, _parent = _relation_launcher(tmp_path, ["base"], "single", "inactive_dependencies")
+
+    assert launcher._offer_dependency_activation({"deltarune": [main_mod]}, {"deltarune": [[main_mod]]})
+    feedback.ask_dependency_activation.assert_not_called()
+
+
+def test_the_missing_dependency_prompt_can_be_turned_off_on_its_own(qapp, tmp_path):
+    launcher, feedback, main_mod, _base_mod, _parent = _relation_launcher(tmp_path, ["gb_mod_123"], "single", "missing_dependencies")
+
+    assert launcher._offer_dependency_activation({"deltarune": [main_mod]}, {"deltarune": [[main_mod]]})
+    feedback.ask_dependency_resolution.assert_not_called()
+
+
+def test_every_warning_has_a_section_and_text_in_every_language():
+    import json
+    from pathlib import Path
+
+    from services.warning_service import WarningSeverity, iter_warning_definitions
+
+    definitions = iter_warning_definitions()
+    assert {item.severity for item in definitions} == set(WarningSeverity)
+    for path in sorted(Path("src/assets/lang").glob("lang_*.json")):
+        warnings = json.loads(path.read_text(encoding="utf-8"))["warnings"]
+        for item in definitions:
+            assert item.warning_id in warnings["items"], (path.name, item.warning_id)
+            assert item.warning_id in warnings["tooltips"], (path.name, item.warning_id)
+
+
+def test_turning_off_missing_dependencies_still_offers_to_activate_inactive_ones(qapp, tmp_path):
+    launcher, feedback, main_mod, _base_mod, _parent = _relation_launcher(
+        tmp_path, ["base", "gb_mod_123"], "single", "missing_dependencies"
+    )
+    feedback.ask_dependency_activation.return_value = "continue"
+
+    assert launcher._offer_dependency_activation({"deltarune": [main_mod]}, {"deltarune": [[main_mod]]})
+    feedback.ask_dependency_resolution.assert_not_called()
+    feedback.ask_dependency_activation.assert_called_once()

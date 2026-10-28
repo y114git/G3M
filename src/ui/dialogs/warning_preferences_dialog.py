@@ -49,6 +49,14 @@ class WarningPreferencesDialog(DynamicDialog):
         self._load_preferences()
         self._apply_state()
         apply_dialog_theme(self, self.app_state)
+        self._fit_to_content()
+
+    def _fit_to_content(self) -> None:
+        """Open tall enough to show every option without scrolling, as far as the screen allows."""
+        screen = self.screen()
+        room = screen.availableGeometry().height() - 200 if screen else 600
+        self._scroll.setMinimumHeight(min(self._content.sizeHint().height() + 4, room))
+        self.adjustSize()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -75,6 +83,7 @@ class WarningPreferencesDialog(DynamicDialog):
         self.sections_layout.setContentsMargins(0, 0, 0, 0)
         scroll.setWidget(content)
         layout.addWidget(scroll, stretch=1)
+        self._scroll, self._content = scroll, content
 
         for severity in (
             WarningSeverity.CRITICAL,
