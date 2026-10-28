@@ -969,10 +969,9 @@ class GameLaunchController(QObject):
                 outcomes.append(
                     ("mod_updates.manual_required", {"names": join_limited(batch["manual"])})
                 )
+            self._mod_update_dialog.set_progress(batch["total"], batch["total"])
             if outcomes:
                 self._mod_update_dialog.set_outcome_messages(outcomes)
-            else:
-                self._mod_update_dialog.set_progress(batch["total"], batch["total"])
         self.mod_service.invalidate_mods_cache()
         self.mod_service.load_local_mods()
         self.mod_service.mod_list_updated.emit()
