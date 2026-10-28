@@ -474,6 +474,13 @@
       "added": "2026-10-26"
     },
     {
+      "id": "gb_mod_733383",
+      "name": "Deltarune But CRT Screen",
+      "game": "deltarune",
+      "game_version": "v0.0.253",
+      "added": "2026-10-28"
+    },
+    {
       "id": "gb_mod_661496",
       "name": "Noise's funny longjump (G3M/G3MPatch Compatible)",
       "game": "pizzatower",
