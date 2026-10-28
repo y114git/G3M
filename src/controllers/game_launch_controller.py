@@ -32,6 +32,9 @@ from workers.install.full_install_worker import FullInstallThread
 
 logger = logging.getLogger(__name__)
 
+# How much of one update's progress is its download; installing the files is the rest.
+DOWNLOAD_SHARE = 0.85
+
 
 class GameLaunchController(QObject):
     """Manages game launch operations, installations, and related UI state."""
@@ -887,7 +890,9 @@ class GameLaunchController(QObject):
             metadata = resolution.get("metadata")
             source_url = resolution.get("source_url")
             if isinstance(metadata, dict) and isinstance(source_url, str):
-                files.append({**metadata, "download_url": source_url})
+                files.append(
+                    {**metadata, "name": metadata.get("file_name") or metadata.get("name"), "download_url": source_url}
+                )
         if len(files) < 2:
             return resolutions[0] if resolutions else None
         dialog = GameBananaFilePickerDialog(
@@ -918,6 +923,7 @@ class GameLaunchController(QObject):
         if not isinstance(metadata, dict) or metadata.get("update_batch_id") != batch["id"]:
             return
         status = str(getattr(record, "use_status", ""))
+        self._show_mod_update_progress(batch, record, status)
         if status == "ready_to_use" and getattr(record, "ever_installed", False):
             batch["completed"] += 1
             batch["record_id"] = None
@@ -932,6 +938,20 @@ class GameLaunchController(QObject):
             batch["completed"] += 1
             batch["record_id"] = None
             QTimer.singleShot(0, self._start_next_mod_update)
+
+    def _show_mod_update_progress(self, batch: dict[str, Any], record, status: str) -> None:
+        """Show how far the current mod is, so even a single update fills the bar gradually."""
+        if status in {"ready_to_use", "needs_manual_install", "failed", "cancelled"}:
+            return
+        dialog = self._mod_update_dialog
+        if dialog is None:
+            return
+        downloading = str(getattr(record, "download_status", "")) in {"queued", "downloading"}
+        percent = min(max(int(getattr(record, "progress", 0) or 0), 0), 100)
+        fraction = DOWNLOAD_SHARE * percent / 100 if downloading else DOWNLOAD_SHARE
+        dialog.set_progress(
+            batch["completed"], batch["total"], str(getattr(record, "display_name", "")), fraction, not downloading
+        )
 
     def _finish_mod_updates(self) -> None:
         batch = self._mod_update_batch

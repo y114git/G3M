@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +22,9 @@ from services.localization_service import tr
 from ui.common.dialog_theme import DynamicDialog, build_dialog_theme_stylesheet
 from ui.common.localized_label import LocalizedLabel
 from ui.utils.ui_utils import UIAnimator
+
+PROGRESS_STEPS = 1000
+INSTALL_CREEP_LIMIT = 0.99
 
 
 class ModUpdatesDialog(DynamicDialog):
@@ -84,9 +87,14 @@ class ModUpdatesDialog(DynamicDialog):
         layout.addWidget(self._replace_current)
 
         self._progress = QProgressBar(self)
-        self._progress.setRange(0, 100)
+        self._progress.setRange(0, PROGRESS_STEPS)
         self._progress.setVisible(False)
         layout.addWidget(self._progress)
+        # While a mod installs there is no exact progress, so the bar keeps creeping toward the end of that mod's share.
+        self._installing_position: tuple[int, int, str, float] | None = None
+        self._creep = QTimer(self)
+        self._creep.setInterval(250)
+        self._creep.timeout.connect(self._creep_installing)
 
         button_row = QHBoxLayout()
         button_row.addStretch()
@@ -165,12 +173,35 @@ class ModUpdatesDialog(DynamicDialog):
             self._outcome.clear()
             self._outcome.setVisible(False)
 
-    def set_progress(self, completed: int, total: int, name: str = "") -> None:
+    def set_progress(
+        self, completed: int, total: int, name: str = "", fraction: float = 0.0, installing: bool = False
+    ) -> None:
+        """`fraction` is how far the current mod is (0..1) on top of the `completed` ones."""
         self._progress.setVisible(total > 0)
-        UIAnimator.progress_to(self._progress, int(completed * 100 / max(total, 1)), self._app_state)
+        value = int((completed + min(max(fraction, 0.0), 1.0)) * PROGRESS_STEPS / max(total, 1))
+        UIAnimator.progress_to(self._progress, value, self._app_state, duration=400)
         self._status.set_localized_text("mod_updates.progress", current=completed, total=total, name=name)
+        if installing:
+            self._installing_position = (completed, total, name, fraction)
+            self._creep.start()
+        else:
+            self._installing_position = None
+            self._creep.stop()
+
+    def _creep_installing(self) -> None:
+        if self._installing_position is None:
+            self._creep.stop()
+            return
+        completed, total, name, fraction = self._installing_position
+        fraction += (INSTALL_CREEP_LIMIT - fraction) * 0.06
+        self._installing_position = (completed, total, name, fraction)
+        value = int((completed + fraction) * PROGRESS_STEPS / max(total, 1))
+        UIAnimator.progress_to(self._progress, value, self._app_state, duration=400)
 
     def set_busy(self, busy: bool) -> None:
+        if not busy:
+            self._installing_position = None
+            self._creep.stop()
         self._profile_combo.setEnabled(not busy)
         self._tree.setEnabled(not busy)
         self._replace_current.setEnabled(not busy)

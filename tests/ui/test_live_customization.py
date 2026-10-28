@@ -139,7 +139,7 @@ def test_mod_update_customization_preserves_busy_progress_and_checks(qtbot, lang
     assert dialog._tree.currentItem() is second
     assert not game.isExpanded()
     assert not dialog._update_button.isEnabled()
-    assert dialog._progress.value() == 50
+    assert dialog._progress.value() == dialog._progress.maximum() // 2
     assert dialog._status.text() == tr("mod_updates.progress", current=1, total=2, name="Second")
 
 

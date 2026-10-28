@@ -75,4 +75,45 @@ def test_mod_updates_dialog_progress_reaches_the_final_value(qapp):
     dialog.set_progress(1, 4, "First")
     dialog.set_progress(4, 4, "Last")
 
-    assert dialog._progress.value() == 100
+    assert dialog._progress.value() == dialog._progress.maximum()
+
+
+def test_mod_updates_dialog_one_mod_fills_the_bar_in_many_small_steps(qapp):
+    dialog = ModUpdatesDialog(
+        SimpleNamespace(local_config={"disable_animations": True}), ["Default"], "Default"
+    )
+    values = []
+    for fraction in (0.0, 0.1, 0.35, 0.6, 0.85):
+        dialog.set_progress(0, 1, "Only mod", fraction)
+        values.append(dialog._progress.value())
+
+    assert values == sorted(set(values))
+    assert 0 < values[1] < values[2] < values[3] < values[4] < dialog._progress.maximum()
+
+
+def test_mod_updates_dialog_keeps_moving_while_a_mod_installs(qapp):
+    dialog = ModUpdatesDialog(
+        SimpleNamespace(local_config={"disable_animations": True}), ["Default"], "Default"
+    )
+    dialog.set_progress(1, 2, "Second", 0.85, installing=True)
+    start = dialog._progress.value()
+    for _ in range(20):
+        dialog._creep_installing()
+    creeping = dialog._progress.value()
+    dialog.set_progress(2, 2, "Done")
+
+    assert start < creeping < dialog._progress.maximum()
+    assert not dialog._creep.isActive()
+    assert dialog._progress.value() == dialog._progress.maximum()
+
+
+def test_mod_updates_dialog_stops_creeping_when_the_batch_ends(qapp):
+    dialog = ModUpdatesDialog(
+        SimpleNamespace(local_config={"disable_animations": True}), ["Default"], "Default"
+    )
+    dialog.set_progress(0, 1, "Only mod", 0.85, installing=True)
+    assert dialog._creep.isActive()
+
+    dialog.set_busy(False)
+
+    assert not dialog._creep.isActive()

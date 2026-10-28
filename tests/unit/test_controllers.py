@@ -247,7 +247,7 @@ def test_mod_update_picker_returns_the_selected_latest_file(monkeypatch):
             return QDialog.DialogCode.Accepted
 
         def get_selected_file(self):
-            return self.files[1]
+            return next(file for file in self.files if file["gb_file_id"] == 2)
 
     monkeypatch.setattr(game_launch_controller, "GameBananaFilePickerDialog", Picker)
     controller = GameLaunchController.__new__(GameLaunchController)
@@ -3155,3 +3155,20 @@ def test_mod_update_queue_advances_once_for_each_completed_record(qtbot, status)
     assert batch["record_id"] is None
     assert batch["manual"] == (["First mod"] if status == "needs_manual_install" else [])
     assert batch["failed"] == (["First mod"] if status in {"failed", "cancelled"} else [])
+
+
+@pytest.mark.parametrize(
+    ("download_status", "progress", "installing"),
+    [("downloading", 40, False), ("downloaded", 100, True)],
+)
+def test_mod_update_progress_follows_the_current_record(download_status, progress, installing):
+    from controllers.game_launch_controller import DOWNLOAD_SHARE, GameLaunchController
+
+    controller = GameLaunchController.__new__(GameLaunchController)
+    controller._mod_update_dialog = Mock()
+    record = SimpleNamespace(download_status=download_status, progress=progress, display_name="Mod")
+
+    controller._show_mod_update_progress({"completed": 1, "total": 3}, record, "using")
+
+    expected = DOWNLOAD_SHARE * progress / 100
+    controller._mod_update_dialog.set_progress.assert_called_once_with(1, 3, "Mod", expected, installing)
