@@ -71,10 +71,24 @@ class ResolveGameBananaUpdatesThread(ManagedQThread):
                 ):
                     candidate = {**candidate, "file_timestamp": timestamp}
                     break
-        return [resolution for resolution in resolutions if ResolveGameBananaUpdatesThread._is_newer(candidate, resolution)]
+        local_file_id = str(candidate.get("file_id") or "")
+        offered = {
+            str(resolution.get("metadata", {}).get("gb_file_id") or "")
+            for resolution in resolutions
+            if isinstance(resolution.get("metadata"), dict)
+        }
+        installed_offered = bool(local_file_id) and local_file_id in offered
+        return [
+            resolution
+            for resolution in resolutions
+            if ResolveGameBananaUpdatesThread._is_newer(candidate, resolution, installed_offered)
+        ]
 
     @staticmethod
-    def _is_newer(candidate: dict[str, Any], resolved: dict[str, Any]) -> bool:
+    def _is_newer(
+        candidate: dict[str, Any], resolved: dict[str, Any], installed_offered: bool = False
+    ) -> bool:
+        """`installed_offered`: the installed file is still listed at the newest version."""
         remote_metadata = resolved.get("metadata")
         remote_metadata = remote_metadata if isinstance(remote_metadata, dict) else {}
         remote_file_id = str(remote_metadata.get("gb_file_id") or "")
@@ -88,6 +102,8 @@ class ResolveGameBananaUpdatesThread(ManagedQThread):
             local_key = GameBananaAPI._gamebanana_version_key(local_version)
             if remote_key != local_key:
                 return remote_key > local_key
+            if installed_offered and remote_file_id != local_file_id:
+                return False  # another download of the release that is already installed
             return (
                 remote_timestamp is not None
                 and local_timestamp is not None
