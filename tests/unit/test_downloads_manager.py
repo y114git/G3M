@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from models.download_models import (
     DownloadRecord,
     DownloadStatus,
@@ -246,3 +248,54 @@ def test_installs_run_one_at_a_time(tmp_path, monkeypatch):
 
     assert waiting.use_status != UseStatus.USING
     assert len(retries) == 1
+
+
+def _finished_mod_record(**changes):
+    return DownloadRecord(id="old", display_name="Mod", canonical_key="gb_mod_1_2", download_status=DownloadStatus.DOWNLOADED,
+                          use_status=UseStatus.READY, file_exists=False, **changes)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"ever_installed": True},
+        {"use_status": UseStatus.NEEDS_MANUAL},
+        {"use_status": UseStatus.FAILED},
+        {"use_status": UseStatus.CANCELLED},
+    ],
+)
+def test_a_mod_can_be_downloaded_again_after_a_finished_attempt(tmp_path, monkeypatch, changes):
+    manager = DownloadsManager(str(tmp_path), lambda: {})
+    started = []
+    monkeypatch.setattr(manager, "_start_download", started.append)
+    previous = _finished_mod_record()
+    for name, value in changes.items():
+        setattr(previous, name, value)
+    manager.store.add(previous)
+
+    record_id, duplicate = manager.enqueue("Mod", canonical_key="gb_mod_1_2")
+
+    assert not duplicate
+    assert record_id != previous.id
+    assert manager.store.find(previous.id) is None
+    assert len(started) == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"download_status": DownloadStatus.DOWNLOADING},
+        {"use_status": UseStatus.USING},
+        {"use_status": UseStatus.PENDING_AUTO},
+        {"use_status": UseStatus.READY},  # downloaded and waiting for the user to install it
+    ],
+)
+def test_a_mod_that_is_active_or_waiting_is_not_queued_twice(tmp_path, monkeypatch, changes):
+    manager = DownloadsManager(str(tmp_path), lambda: {})
+    monkeypatch.setattr(manager, "_start_download", lambda _record: None)
+    previous = _finished_mod_record()
+    for name, value in changes.items():
+        setattr(previous, name, value)
+    manager.store.add(previous)
+
+    assert manager.enqueue("Mod", canonical_key="gb_mod_1_2") == (previous.id, True)

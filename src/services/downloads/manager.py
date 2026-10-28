@@ -110,10 +110,17 @@ class DownloadsManager(QObject):
                 fallback_mods_dir=self._mods_dir,
             )
             if existing:
-                if target_kind in (TargetKind.PLUGIN, TargetKind.THEME) and not existing.is_active:
-                    self._replace_existing_catalog_record(existing.id)
-                else:
+                # A finished attempt (installed before, failed, or left for a manual install) must not block asking again.
+                finished_attempt = existing.ever_installed or existing.use_status in (
+                    UseStatus.NEEDS_MANUAL,
+                    UseStatus.FAILED,
+                    UseStatus.CANCELLED,
+                )
+                if existing.is_active or not (
+                    finished_attempt or target_kind in (TargetKind.PLUGIN, TargetKind.THEME)
+                ):
                     return existing.id, True
+                self._replace_existing_record(existing.id)
 
         settings = self._settings()
         record = DownloadRecord(
@@ -138,7 +145,7 @@ class DownloadsManager(QObject):
         self._emit_badge()
         return record.id, False
 
-    def _replace_existing_catalog_record(self, record_id: str) -> None:
+    def _replace_existing_record(self, record_id: str) -> None:
         record = self._store.find(record_id)
         if not record:
             return
