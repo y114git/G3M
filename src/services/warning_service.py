@@ -69,6 +69,14 @@ WARNING_DEFINITIONS: dict[str, WarningDefinition] = {
         "warnings.messages.steam_launch_with_mods.body",
         "warnings.tooltips.steam_launch_with_mods",
     ),
+    "newer_mod_config": WarningDefinition(
+        "newer_mod_config",
+        WarningSeverity.MAJOR,
+        "warnings.items.newer_mod_config",
+        "warnings.messages.newer_mod_config.title",
+        "warnings.messages.newer_mod_config.body",
+        "warnings.tooltips.newer_mod_config",
+    ),
     "missing_dependencies": WarningDefinition(
         "missing_dependencies",
         WarningSeverity.MAJOR,

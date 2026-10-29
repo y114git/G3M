@@ -756,7 +756,7 @@ class TestLaunchManager:
 
         app_state.local_config = {"custom_border_color": "#654321"}
         launcher = GameLauncher(
-            app_state=app_state, feedback_service=feedback_service, mod_service=Mock()
+            app_state=app_state, feedback_service=feedback_service, mod_service=Mock(mods_needing_newer_g3m=Mock(return_value=[]))
         )
         emitted = []
         launcher.status_changed.connect(
@@ -980,7 +980,7 @@ class TestLaunchManager:
     ):
         from services.launch_service import GameLauncher
 
-        launcher = GameLauncher(app_state, feedback_service, Mock())
+        launcher = GameLauncher(app_state, feedback_service, Mock(mods_needing_newer_g3m=Mock(return_value=[])))
         journal = Mock(state="applied")
         launcher._operation_journal = journal
         launcher._has_selected_mods = Mock(return_value=False)
@@ -1002,7 +1002,7 @@ class TestLaunchManager:
         from services.mod_operation_executor import ModRecoveryConflictError
 
         feedback = Mock()
-        launcher = GameLauncher(app_state, feedback, Mock())
+        launcher = GameLauncher(app_state, feedback, Mock(mods_needing_newer_g3m=Mock(return_value=[])))
         journal = Mock(state="applied")
         journal.restore.side_effect = (
             [ModRecoveryConflictError("external changes"), None]

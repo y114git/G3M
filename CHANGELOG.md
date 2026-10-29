@@ -13,6 +13,8 @@
 - Fixed Cancel not stopping a patch in progress and a deleted mod blocking the next launch; a mod can no longer be deleted while it is being patched or analyzed.
 - Fixed long warning and error lists making dialogs taller than the screen. They now show the first lines and point to the log for the rest.
 - **Auto-install** in the GameBanana file list is now **Yes** only for DeltaMod files and mods on the **G3M Verified** list; every other file is installed manually in Downloads.
+- Added a **Major** warning before launch when installed mods were made for a newer version of G3M and are not shown; it asks you to update G3M.
+- Fixed the G3M update prompt not appearing when the server answered after the start-up check.
 
 </details>
 

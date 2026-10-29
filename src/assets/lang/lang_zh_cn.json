@@ -1550,7 +1550,8 @@
       "direct_absolute_operation_paths": "模组使用了直接绝对路径",
       "missing_dependencies": "缺少所需模组",
       "inactive_dependencies": "所需模组未启用",
-      "mod_order_suggestion": "可以优化模组顺序"
+      "mod_order_suggestion": "可以优化模组顺序",
+      "newer_mod_config": "模组需要更新的 G3M"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1576,6 +1577,10 @@
       "direct_absolute_operation_paths": {
         "title": "模组使用了直接绝对路径",
         "body": "此模组会访问配置的游戏和模组文件夹之外的路径。仅在信任该模组时继续。之后可以在模组编辑器中修改这些路径。"
+      },
+      "newer_mod_config": {
+        "title": "部分模组需要更新的 G3M",
+        "body": "部分已安装的模组是为更新版本的 G3M 制作的，不会显示在你的列表中。请将 G3M 更新到最新版本以使用它们。仍要启动吗？"
       }
     },
     "tooltips": {
@@ -1587,7 +1592,8 @@
       "direct_absolute_operation_paths": "当模组操作使用字面文件系统路径而不是占位符根目录时显示。",
       "missing_dependencies": "当所选模组需要未安装的模组，或安装这些模组失败时，在启动前显示。",
       "inactive_dependencies": "当所选模组需要已安装但未选择的模组时，在启动前显示。G3M 会建议启用它们。",
-      "mod_order_suggestion": "当所选模组的顺序与作者推荐的顺序不同时，在启动前显示。"
+      "mod_order_suggestion": "当所选模组的顺序与作者推荐的顺序不同时，在启动前显示。",
+      "newer_mod_config": "当已安装的模组使用了此 G3M 无法读取的更新格式时，在启动前显示。"
     }
   },
   "data_root": {

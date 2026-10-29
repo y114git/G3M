@@ -12,6 +12,7 @@ from config.config import MOD_CONFIG_FILENAME
 from utils.mod.config import (
     MOD_CONFIG_MAX_BYTES,
     load_mod_config,
+    newer_config_mod_name,
 )
 from utils.mod.config import (
     validate_mod_config as validate_current_mod_config,
@@ -51,8 +52,11 @@ def scan_mods_directory(
     old_cache: dict[str, ModFolderInfo] | None = None,
     *,
     is_cancelled: Callable[[], bool] | None = None,
+    newer_config_mods: list[str] | None = None,
 ) -> tuple[dict[str, ModFolderInfo], dict[str, str]]:
     """Scan the mods directory and return (cache, mods_by_name).
+
+    Names of mods saved in a newer config format than this G3M reads are added to `newer_config_mods`.
 
     Returns:
         Tuple of (mod cache dict, mods_by_name dict mapping lowercase name -> id)
@@ -149,6 +153,10 @@ def scan_mods_directory(
                         ValueError,
                         AttributeError,
                     ) as e:
+                        if newer_config_mods is not None and (
+                            name := newer_config_mod_name(config_path)
+                        ):
+                            newer_config_mods.append(name)
                         logger.warning(
                             f"scan_mods_directory: Config error in {config_path}: {e}",
                             extra={

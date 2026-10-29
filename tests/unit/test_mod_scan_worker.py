@@ -10,6 +10,7 @@ import pytest
 from PyQt6 import sip
 from PyQt6.QtCore import QObject
 
+from config.config import MOD_CONFIG_FILENAME
 from ui.utils.thread_lifetime import retire_qthread
 from utils.mod.scan_utils import scan_mods_directory
 from workers.mod.scan_worker import ModScanThread
@@ -192,3 +193,20 @@ def test_scan_mods_directory_stops_when_cancelled(tmp_path):
 
     assert cache == {}
     assert names == {}
+
+
+def _write_config(folder, **fields):
+    folder.mkdir()
+    (folder / MOD_CONFIG_FILENAME).write_text(json.dumps(fields), encoding="utf-8")
+
+
+def test_scan_reports_mods_saved_for_a_newer_g3m_and_keeps_the_rest(tmp_path):
+    _write_config(tmp_path / "future", config_version="3.0.0", id="future", name="Future Mod")
+    _write_config(tmp_path / "broken", config_version="2.0.0", id="broken")
+    _write_config(tmp_path / "old", config_version="1.0.0", id="old", name="Old Mod")
+    newer: list[str] = []
+
+    cache, _ = scan_mods_directory(str(tmp_path), newer_config_mods=newer)
+
+    assert newer == ["Future Mod"]
+    assert cache == {}

@@ -1555,7 +1555,8 @@
       "direct_absolute_operation_paths": "모드가 직접 절대 경로를 사용함",
       "missing_dependencies": "필요한 모드가 없음",
       "inactive_dependencies": "필요한 모드가 활성화되지 않음",
-      "mod_order_suggestion": "모드 순서를 개선할 수 있음"
+      "mod_order_suggestion": "모드 순서를 개선할 수 있음",
+      "newer_mod_config": "모드에 더 새로운 G3M이 필요함"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1581,6 +1582,10 @@
       "direct_absolute_operation_paths": {
         "title": "모드가 직접 절대 경로를 사용함",
         "body": "이 모드는 설정된 게임 및 모드 폴더 밖의 경로에 접근합니다. 모드를 신뢰하는 경우에만 계속하세요. 나중에 모드 편집기에서 이 경로를 수정할 수 있습니다."
+      },
+      "newer_mod_config": {
+        "title": "일부 모드에 더 새로운 G3M이 필요합니다",
+        "body": "설치된 일부 모드는 더 새로운 버전의 G3M용으로 만들어져 목록에 표시되지 않습니다. 사용하려면 G3M을 최신 버전으로 업데이트하세요. 그래도 실행할까요?"
       }
     },
     "tooltips": {
@@ -1592,7 +1597,8 @@
       "direct_absolute_operation_paths": "모드 작업이 플레이스홀더 루트 대신 직접 파일 시스템 경로를 사용할 때 표시됩니다.",
       "missing_dependencies": "선택한 모드에 설치되지 않은 모드가 필요하거나 설치에 실패했을 때 실행 전에 표시됩니다.",
       "inactive_dependencies": "선택한 모드에 설치되어 있지만 선택되지 않은 모드가 필요할 때 실행 전에 표시됩니다. G3M이 활성화를 제안합니다.",
-      "mod_order_suggestion": "선택한 모드의 순서가 제작자가 권장하는 순서와 다를 때 실행 전에 표시됩니다."
+      "mod_order_suggestion": "선택한 모드의 순서가 제작자가 권장하는 순서와 다를 때 실행 전에 표시됩니다.",
+      "newer_mod_config": "설치된 모드가 이 G3M이 읽을 수 없는 더 새로운 형식일 때 실행 전에 표시됩니다."
     }
   },
   "data_root": {

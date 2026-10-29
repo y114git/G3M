@@ -1577,7 +1577,8 @@
       "direct_absolute_operation_paths": "Mod uses direct absolute paths",
       "missing_dependencies": "Required mods are missing",
       "inactive_dependencies": "Required mods are not active",
-      "mod_order_suggestion": "Mod order can be improved"
+      "mod_order_suggestion": "Mod order can be improved",
+      "newer_mod_config": "Mods need a newer G3M"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1603,6 +1604,10 @@
       "direct_absolute_operation_paths": {
         "title": "Mod uses direct absolute paths",
         "body": "This mod accesses paths outside the configured game and mod roots. Only continue if you trust the mod. You can edit these paths later in the Mod Editor."
+      },
+      "newer_mod_config": {
+        "title": "Some mods need a newer G3M",
+        "body": "Some installed mods were made for a newer version of G3M and are not shown in your list. Update G3M to the latest version to use them. Launch anyway?"
       }
     },
     "tooltips": {
@@ -1614,7 +1619,8 @@
       "direct_absolute_operation_paths": "Shown when a mod operation uses a literal filesystem path instead of a placeholder root.",
       "missing_dependencies": "Shown before launch when a selected mod needs mods that are not installed, and when installing them did not work.",
       "inactive_dependencies": "Shown before launch when a selected mod needs installed mods that are not selected. G3M offers to activate them.",
-      "mod_order_suggestion": "Shown before launch when the order of the selected mods differs from the order their authors recommend."
+      "mod_order_suggestion": "Shown before launch when the order of the selected mods differs from the order their authors recommend.",
+      "newer_mod_config": "Shown before launch when installed mods use a newer mod format than this G3M reads."
     }
   },
   "data_root": {

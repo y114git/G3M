@@ -1556,7 +1556,8 @@
       "direct_absolute_operation_paths": "MOD が直接の絶対パスを使用しています",
       "missing_dependencies": "必要なMODが見つかりません",
       "inactive_dependencies": "必要なMODが有効ではありません",
-      "mod_order_suggestion": "MODの順序を改善できます"
+      "mod_order_suggestion": "MODの順序を改善できます",
+      "newer_mod_config": "MODに新しいG3Mが必要です"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1582,6 +1583,10 @@
       "direct_absolute_operation_paths": {
         "title": "MOD が直接の絶対パスを使用しています",
         "body": "このMODは設定済みのゲームおよびMODフォルダーの外にあるパスへアクセスします。MODを信頼できる場合にのみ続行してください。後でMODエディターからこれらのパスを編集できます。"
+      },
+      "newer_mod_config": {
+        "title": "新しいG3Mが必要なMODがあります",
+        "body": "インストール済みの一部のMODは新しいバージョンのG3M向けに作られており、一覧に表示されません。使用するにはG3Mを最新版に更新してください。このまま起動しますか？"
       }
     },
     "tooltips": {
@@ -1593,7 +1598,8 @@
       "direct_absolute_operation_paths": "MOD操作がプレースホルダーのルートではなく、直接のファイルシステムパスを使用するときに表示されます。",
       "missing_dependencies": "選択したMODが未インストールのMODを必要とする場合や、それらのインストールに失敗した場合に、起動前に表示されます。",
       "inactive_dependencies": "選択したMODが、インストール済みだが選択されていないMODを必要とする場合に、起動前に表示されます。G3Mは有効化を提案します。",
-      "mod_order_suggestion": "選択したMODの順序が、作者の推奨する順序と異なる場合に、起動前に表示されます。"
+      "mod_order_suggestion": "選択したMODの順序が、作者の推奨する順序と異なる場合に、起動前に表示されます。",
+      "newer_mod_config": "インストール済みのMODが、このG3Mでは読み込めない新しい形式の場合に、起動前に表示されます。"
     }
   },
   "data_root": {

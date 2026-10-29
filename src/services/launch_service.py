@@ -495,6 +495,9 @@ class GameLauncher(QObject):
         self._handle_launch_failure("restore")
 
     def _continue_launch_with_selections(self, selections: dict[str, Any]) -> None:
+        if not self._confirm_newer_mod_configs():
+            self._handle_launch_failure("newer-mod-config")
+            return
         has_selected_mods = self._launch_had_mods
         current_path = self._get_current_game_path()
         if not current_path or not os.path.exists(current_path):
@@ -558,6 +561,19 @@ class GameLauncher(QObject):
                 return
         else:
             self._continue_after_patching(selections, True, needs_multi_mod)
+
+    def _confirm_newer_mod_configs(self) -> bool:
+        """Tell the user which installed mods need a newer G3M; they are missing from the mod list."""
+        if not is_warning_enabled("newer_mod_config", self.app_state.local_config):
+            return True
+        names = self.mod_service.mods_needing_newer_g3m()
+        if not names:
+            return True
+        return bool(
+            self.feedback_service.ask_patching_warning(
+                create_warning_event("newer_mod_config", details=join_limited(names, "\n"))
+            )
+        )
 
     def _handle_launch_failure(self, reason: str = "unknown"):
         self._notify_pre_launch_plugin_cancellation(reason)

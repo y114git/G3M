@@ -1564,7 +1564,8 @@
       "direct_absolute_operation_paths": "El mod usa rutas absolutas directas",
       "missing_dependencies": "Faltan mods requeridos",
       "inactive_dependencies": "Los mods requeridos no están activos",
-      "mod_order_suggestion": "El orden de los mods se puede mejorar"
+      "mod_order_suggestion": "El orden de los mods se puede mejorar",
+      "newer_mod_config": "Los mods necesitan un G3M más nuevo"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1590,6 +1591,10 @@
       "direct_absolute_operation_paths": {
         "title": "El mod usa rutas absolutas directas",
         "body": "Este mod accede a rutas fuera de las carpetas configuradas del juego y del mod. Continúa solo si confías en el mod. Puedes editar estas rutas después en el editor de mods."
+      },
+      "newer_mod_config": {
+        "title": "Algunos mods necesitan un G3M más nuevo",
+        "body": "Algunos mods instalados se crearon para una versión más nueva de G3M y no aparecen en tu lista. Actualiza G3M a la última versión para usarlos. ¿Iniciar de todos modos?"
       }
     },
     "tooltips": {
@@ -1601,7 +1606,8 @@
       "direct_absolute_operation_paths": "Se muestra cuando una operación de mod usa una ruta literal del sistema de archivos en lugar de una raíz con marcador de posición.",
       "missing_dependencies": "Se muestra antes de iniciar cuando un mod seleccionado necesita mods que no están instalados, y cuando no se pudieron instalar.",
       "inactive_dependencies": "Se muestra antes de iniciar cuando un mod seleccionado necesita mods instalados que no están seleccionados. G3M ofrece activarlos.",
-      "mod_order_suggestion": "Se muestra antes de iniciar cuando el orden de los mods seleccionados difiere del que recomiendan sus autores."
+      "mod_order_suggestion": "Se muestra antes de iniciar cuando el orden de los mods seleccionados difiere del que recomiendan sus autores.",
+      "newer_mod_config": "Se muestra antes de iniciar cuando hay mods instalados con un formato más nuevo del que lee este G3M."
     }
   },
   "data_root": {

@@ -726,3 +726,30 @@ def test_turning_off_missing_dependencies_still_offers_to_activate_inactive_ones
     assert launcher._offer_dependency_activation({"deltarune": [main_mod]}, {"deltarune": [[main_mod]]})
     feedback.ask_dependency_resolution.assert_not_called()
     feedback.ask_dependency_activation.assert_called_once()
+
+
+def test_launch_warns_about_mods_that_need_a_newer_g3m_and_can_be_declined(qapp, tmp_path):
+    service = Mock()
+    service.mods_needing_newer_g3m.return_value = ["Future Mod"]
+    feedback = Mock()
+    feedback.ask_patching_warning.return_value = False
+    launcher = GameLauncher(_app_state(tmp_path, tmp_path), feedback, service)
+
+    assert launcher._confirm_newer_mod_configs() is False
+
+    event = feedback.ask_patching_warning.call_args.args[0]
+    assert (event.warning_id, event.details) == ("newer_mod_config", "Future Mod")
+
+
+def test_launch_skips_the_newer_g3m_warning_when_disabled_or_not_needed(qapp, tmp_path):
+    service = Mock()
+    service.mods_needing_newer_g3m.return_value = []
+    feedback = Mock()
+    launcher = GameLauncher(_app_state(tmp_path, tmp_path), feedback, service)
+
+    assert launcher._confirm_newer_mod_configs() is True
+
+    service.mods_needing_newer_g3m.return_value = ["Future Mod"]
+    launcher.app_state.local_config["warning_preferences"] = {"warning_overrides": {"newer_mod_config": False}}
+    assert launcher._confirm_newer_mod_configs() is True
+    feedback.ask_patching_warning.assert_not_called()

@@ -1550,7 +1550,8 @@
       "direct_absolute_operation_paths": "模組使用直接絕對路徑",
       "missing_dependencies": "缺少所需模組",
       "inactive_dependencies": "所需模組未啟用",
-      "mod_order_suggestion": "可以最佳化模組順序"
+      "mod_order_suggestion": "可以最佳化模組順序",
+      "newer_mod_config": "模組需要更新的 G3M"
     },
     "messages": {
       "xdelta_apply_failed": {
@@ -1576,6 +1577,10 @@
       "direct_absolute_operation_paths": {
         "title": "模組使用直接絕對路徑",
         "body": "此模組會存取設定的遊戲和模組資料夾以外的路徑。只有在信任此模組時才繼續。稍後可在模組編輯器中修改這些路徑。"
+      },
+      "newer_mod_config": {
+        "title": "部分模組需要更新的 G3M",
+        "body": "部分已安裝的模組是為較新版本的 G3M 製作的，不會顯示在你的清單中。請將 G3M 更新到最新版本以使用它們。仍要啟動嗎？"
       }
     },
     "tooltips": {
@@ -1587,7 +1592,8 @@
       "direct_absolute_operation_paths": "當模組操作使用字面檔案系統路徑而非佔位符根目錄時顯示。",
       "missing_dependencies": "當所選模組需要未安裝的模組，或安裝這些模組失敗時，在啟動前顯示。",
       "inactive_dependencies": "當所選模組需要已安裝但未選擇的模組時，在啟動前顯示。G3M 會建議啟用它們。",
-      "mod_order_suggestion": "當所選模組的順序與作者建議的順序不同時，在啟動前顯示。"
+      "mod_order_suggestion": "當所選模組的順序與作者建議的順序不同時，在啟動前顯示。",
+      "newer_mod_config": "當已安裝的模組使用了此 G3M 無法讀取的較新格式時，在啟動前顯示。"
     }
   },
   "data_root": {

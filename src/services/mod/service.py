@@ -153,6 +153,12 @@ class ModManager(QObject):
             self._mods_cache_valid = False
             self._mods_by_name.clear()
 
+    def mods_needing_newer_g3m(self) -> list[str]:
+        """Names of installed mods whose config format is newer than this G3M reads."""
+        names: list[str] = []
+        scan_mods_directory(self.app_state.mods_dir, self._mods_cache, newer_config_mods=names)
+        return names
+
     def _on_scan_completed(self, cache_dict: dict):
         with self._cache_lock:
             cache = {}
