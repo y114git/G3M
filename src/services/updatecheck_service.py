@@ -43,6 +43,8 @@ class UpdateChecker(QObject):
         super().__init__(parent)
         self.app_state = app_state
         self.feedback_service = feedback_service
+        # The first check can run before the server settings arrive; it is repeated once they do.
+        self.awaiting_settings = False
 
     def _safe_update_status(self, message: str, color: str) -> None:
         try:
@@ -104,6 +106,7 @@ class UpdateChecker(QObject):
             )
         launcher_files_key = "launcher_beta_files" if beta_enabled else "launcher_files"
         launcher_files = self.app_state.global_settings.get(launcher_files_key)
+        self.awaiting_settings = not isinstance(launcher_files, dict)
         if not isinstance(launcher_files, dict):
             self._safe_update_status(
                 tr("status.update_info_not_found"), UI_COLORS["status_warning"]

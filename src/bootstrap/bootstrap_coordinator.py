@@ -332,6 +332,8 @@ class BootstrapCoordinator:
                     UI_COLORS["status_warning"],
                 )
             elif has_internet:
+                if window.update_checker.awaiting_settings and not is_game_running():
+                    window.update_checker.check_for_updates()
                 window.app_state.pending_announce_check = True
                 if (
                     window.app_state.initialization_completed

@@ -257,3 +257,18 @@ def test_windows_update_keeps_installer_staging_for_its_helper(
 
     checker._launch_windows_installer.assert_called_once_with(str(staging_dir / "extracted"))
     assert staging_dir.is_dir()
+
+
+def test_update_check_before_server_settings_is_repeated_when_they_arrive(app_state):
+    from services.updatecheck_service import UpdateChecker
+
+    checker = UpdateChecker(app_state=app_state, feedback_service=Mock())
+    app_state.global_settings = {}
+
+    assert checker.get_update_info(system="Linux", beta_enabled=False) is None
+    assert checker.awaiting_settings
+
+    app_state.global_settings = {"launcher_files": {"version": APP_VERSION, "urls": {}}}
+    checker.get_update_info(system="Linux", beta_enabled=False)
+
+    assert not checker.awaiting_settings
