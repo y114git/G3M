@@ -38,11 +38,11 @@ def _terminate_tree(process: subprocess.Popen) -> None:
     for child in children:
         with contextlib.suppress(psutil.Error):
             child.kill()
-    psutil.wait_procs(children, timeout=5)
     if suspended:
         process.kill()  # a stopped process would leave a polite SIGTERM pending
     else:
         terminate_process(process)
+    psutil.wait_procs(children, timeout=5)
 
 
 class G3MToolManager:
