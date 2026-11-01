@@ -82,7 +82,7 @@ class ModOperationJournal:
             previous = self.load(self.root)
             if previous.state not in {"restored", "retired"}:
                 raise ModOperationExecutionError("a previous operation session requires recovery")
-            _rmtree(self.backups, ignore_errors=True)
+            remove_tree(self.backups, ignore_errors=True)
         self.root.mkdir(parents=True, exist_ok=True)
         self.backups.mkdir(exist_ok=True)
         self.entries: list[JournalEntry] = []
@@ -222,7 +222,7 @@ class ModOperationJournal:
                 else:
                     _remove_controlled_paths(target, entry.controlled_paths)
                 continue
-            _remove_path(target)
+            remove_path(target)
             if entry.kind == "file":
                 backup = self.root / str(entry.backup)
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -254,11 +254,11 @@ class ModOperationJournal:
     def retire(self) -> None:
         """Keep external changes and mark this recovery session as resolved."""
         self._write_manifest("retired")
-        _rmtree(self.backups, ignore_errors=True)
+        remove_tree(self.backups, ignore_errors=True)
 
     def discard(self) -> None:
         """Forget a successfully committed permanent operation and its backups."""
-        _rmtree(self.root)
+        remove_tree(self.root)
 
     def _capture_one(
         self,
@@ -279,7 +279,7 @@ class ModOperationJournal:
             return
         backup_relative = f"backups/{len(self.entries):08d}"
         backup = self.root / backup_relative
-        _rmtree(backup, ignore_errors=True)  # a leftover from an earlier session must not block this copy
+        remove_tree(backup, ignore_errors=True)  # a leftover from an earlier session must not block this copy
         if _path_exists(target):
             if _is_link(target):
                 backup.parent.mkdir(parents=True, exist_ok=True)
@@ -640,7 +640,7 @@ class ModOperationExecutor:
             destination = target / source.name if operation.target_is_directory else target
             if hard:
                 if operation.target_is_directory:
-                    _remove_path(destination)
+                    remove_path(destination)
                 else:
                     self._clear_hard_root(operation, target.parent)
             _copy_tree(source, destination, soft=soft)
@@ -717,7 +717,7 @@ def _copy_file(source: Path, target: Path, *, soft: bool) -> None:
     if _path_exists(target):
         if soft:
             return
-        _remove_path(target)
+        remove_path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
 
@@ -753,13 +753,13 @@ def _extract_tree(source: Path, target: Path, *, soft: bool) -> None:
 def _clear_directory(path: Path) -> None:
     _assert_target_parents_safe(path)
     if _is_link(path) or (_path_exists(path) and not path.is_dir()):
-        _remove_path(path)
+        remove_path(path)
     path.mkdir(parents=True, exist_ok=True)
     for child in path.iterdir():
-        _remove_path(child)
+        remove_path(child)
 
 
-def _remove_path(path: Path) -> None:
+def remove_path(path: Path) -> None:
     if not _path_exists(path):
         return
     _assert_target_parents_safe(path)
@@ -767,7 +767,7 @@ def _remove_path(path: Path) -> None:
         _unlink_link(path)
         return
     if path.is_dir():
-        _rmtree(path)
+        remove_tree(path)
         return
     try:
         path.unlink()
@@ -776,7 +776,7 @@ def _remove_path(path: Path) -> None:
         path.unlink()
 
 
-def _rmtree(path: Path, *, ignore_errors: bool = False) -> None:
+def remove_tree(path: Path, *, ignore_errors: bool = False) -> None:
     """Remove a tree whose folders may be read-only, as Windows game folders often are."""
 
     def clear_read_only(function: Callable[[str], object], name: str, error: BaseException) -> None:
@@ -806,7 +806,7 @@ def _restore_directory_preserving_external(
     if not _path_exists(target):
         shutil.copytree(backup, target, symlinks=True)
     elif _is_link(target) or not target.is_dir():
-        _remove_path(target)
+        remove_path(target)
         shutil.copytree(backup, target, symlinks=True)
     else:
         for source in backup.iterdir():
@@ -814,7 +814,7 @@ def _restore_directory_preserving_external(
             if source.is_dir() and not _is_link(source) and destination.is_dir() and not _is_link(destination):
                 _restore_directory_preserving_external(source, destination, ())
             else:
-                _remove_path(destination)
+                remove_path(destination)
                 if _is_link(source):
                     _copy_link(source, destination)
                 elif source.is_dir():
@@ -849,7 +849,7 @@ def _controlled_paths(source: Path, destination: Path, root: Path) -> tuple[str,
 
 def _remove_controlled_paths(target: Path, controlled_paths: tuple[str, ...]) -> None:
     for relative_path in controlled_paths:
-        _remove_path(target / relative_path)
+        remove_path(target / relative_path)
 
 
 def _path_hash(path: Path) -> str | None:
@@ -870,7 +870,7 @@ def _ensure_directory(path: Path, *, soft: bool) -> bool:
     if _is_link(path) or (_path_exists(path) and not path.is_dir()):
         if soft:
             return False
-        _remove_path(path)
+        remove_path(path)
     path.mkdir(parents=True, exist_ok=True)
     return True
 

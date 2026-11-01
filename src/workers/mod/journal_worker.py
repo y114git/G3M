@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
 
 from PyQt6.QtCore import pyqtSignal
 
-from services.mod_operation_executor import ModOperationJournal
+from services.mod_operation_executor import (
+    ModOperationJournal,
+    remove_path,
+    remove_tree,
+)
 from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.thread_lifetime import safe_emit as _safe_emit
 
@@ -79,14 +81,13 @@ class ModOperationJournalThread(ManagedQThread):
         if journal_restored and self.action in {"restore", "retire"}:
             for folder in self.cleanup_info.get("mus_folders", []):
                 try:
-                    if os.path.isdir(folder):
-                        shutil.rmtree(folder)
+                    remove_tree(Path(folder))
                 except OSError as error:
                     errors.append(f"music folder {folder}: {error}")
             target_exe = self.cleanup_info.get("target_exe")
             try:
-                if target_exe and os.path.exists(target_exe):
-                    os.remove(target_exe)
+                if target_exe:
+                    remove_path(Path(target_exe))
             except OSError as error:
                 errors.append(f"direct launch exe: {error}")
         self.result = (journal_restored, errors)
