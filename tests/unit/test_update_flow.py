@@ -284,11 +284,13 @@ def _app(settings, monkeypatch, *, game_running=False, initialized=True):
     from presentation import update_presenter
 
     monkeypatch.setattr(update_presenter, "is_game_running", lambda: game_running)
-    monkeypatch.setattr(update_presenter, "check_and_show_announce", Mock())
-    return SimpleNamespace(
+    announce = Mock()
+    monkeypatch.setattr(update_presenter, "check_and_show_announce", announce)
+    app = SimpleNamespace(
         app_state=SimpleNamespace(global_settings=settings, initialization_completed=initialized),
         update_checker=Mock(),
     )
+    return app, announce
 
 
 @pytest.mark.parametrize(
@@ -305,7 +307,7 @@ def test_new_launcher_entry_from_a_settings_sync_triggers_an_update_check(
 ):
     from presentation import update_presenter
 
-    app = _app(old, monkeypatch, game_running=game_running, initialized=initialized)
+    app, _ = _app(old, monkeypatch, game_running=game_running, initialized=initialized)
 
     update_presenter.apply_synced_global_settings(app, new)
 
@@ -317,10 +319,10 @@ def test_new_launcher_entry_from_a_settings_sync_triggers_an_update_check(
 def test_refresh_checks_for_an_update_once_the_server_settings_are_loaded(monkeypatch, game_running, checks):
     from presentation import update_presenter
 
-    app = _app(_settings("9.9.9"), monkeypatch, game_running=game_running)
+    app, announce = _app(_settings("9.9.9"), monkeypatch, game_running=game_running)
 
     update_presenter.on_refresh_settings_loaded(app, True)
     update_presenter.on_refresh_settings_loaded(app, False)
 
     assert app.update_checker.check_for_updates.call_count == checks * 2
-    update_presenter.check_and_show_announce.assert_called_once_with(app, force_check=True)
+    announce.assert_called_once_with(app, force_check=True)
