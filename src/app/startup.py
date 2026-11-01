@@ -207,14 +207,16 @@ def install_excepthook(show_message_callback=None):
     sys.excepthook = _hook
 
 
-def register_url_protocol():
+def _protocol_executable() -> str:
     if getattr(sys, "frozen", False):
-        executable_path = f'"{sys.executable}"'
-    else:
-        main_script_path = os.path.abspath(
-            os.path.join(get_launcher_dir(), "..", "src", "main.py")
-        )
-        executable_path = f'"{sys.executable}" "{main_script_path}"'
+        return f'"{sys.executable}"'
+    # get_launcher_dir() is src/utils when running from source, so main.py sits one level up
+    main_script_path = os.path.abspath(os.path.join(get_launcher_dir(), "..", "main.py"))
+    return f'"{sys.executable}" "{main_script_path}"'
+
+
+def register_url_protocol():
+    executable_path = _protocol_executable()
     system = platform.system()
     try:
         if system == "Windows":

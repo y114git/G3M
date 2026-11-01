@@ -299,3 +299,13 @@ def test_malformed_pair_link_is_not_a_pair(question, url):
 
     question.assert_not_called()
     w.remote_install_service.pair.assert_not_called()
+
+
+def test_source_run_registers_the_real_main_script():
+    from pathlib import Path
+
+    from app import startup
+
+    command = startup._protocol_executable()
+
+    assert Path(command.split('" "')[-1].rstrip('"')).is_file()
