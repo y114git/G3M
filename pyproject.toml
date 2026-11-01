@@ -11,6 +11,7 @@ requires-python = ">=3.14"
 license = { text = "GPL-3.0" }
 authors = [{ name = "Y114" }]
 dependencies = [
+    # Do not update: Qt 6.12 needs macOS 14 and drops older Macs.
     "PyQt6==6.11.0",
     "defusedxml==0.7.1",
     "playsound3==3.3.2",
