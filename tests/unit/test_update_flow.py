@@ -7,6 +7,8 @@ import types
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from config.config import APP_VERSION
 
 
@@ -272,3 +274,30 @@ def test_update_check_before_server_settings_is_repeated_when_they_arrive(app_st
     checker.get_update_info(system="Linux", beta_enabled=False)
 
     assert not checker.awaiting_settings
+
+
+def _settings(version):
+    return {"launcher_files": {"version": version, "urls": {}}}
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "game_running", "checks"),
+    [
+        (_settings("1.0.0"), _settings("9.9.9"), False, 1),
+        (_settings("9.9.9"), {**_settings("9.9.9"), "announce": {"version": 2}}, False, 0),
+        (_settings("1.0.0"), _settings("9.9.9"), True, 0),
+    ],
+)
+def test_new_launcher_entry_from_the_server_triggers_an_update_check(monkeypatch, old, new, game_running, checks):
+    from presentation import update_presenter
+
+    monkeypatch.setattr(update_presenter, "is_game_running", lambda: game_running)
+    app = SimpleNamespace(
+        app_state=SimpleNamespace(global_settings=old, initialization_completed=True),
+        update_checker=Mock(),
+    )
+
+    update_presenter.store_global_settings(app, new)
+
+    assert app.app_state.global_settings == new
+    assert app.update_checker.check_for_updates.call_count == checks

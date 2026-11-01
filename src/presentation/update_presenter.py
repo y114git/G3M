@@ -8,6 +8,7 @@ from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 
 from config.config import CLOUD_FUNCTIONS_BASE_URL
+from services.game_detection_service import is_game_running
 from services.localization_service import tr
 from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from utils.network_utils import cloud_function_request, get_session
@@ -71,12 +72,25 @@ def _safe_warning(parent, title: str, message: str) -> None:
         logger.exception("Update presenter: warning dialog failed")
 
 
+def store_global_settings(app, data: dict) -> bool:
+    """Keep freshly loaded server settings and check for an app update when its entry changed."""
+    state = app.app_state
+    old = state.global_settings or {}
+    state.global_settings = data
+    state.global_settings_loaded_at = time.time()
+    launcher_changed = any(
+        data.get(key) != old.get(key) for key in ("launcher_files", "launcher_beta_files")
+    )
+    if launcher_changed and state.initialization_completed and not is_game_running():
+        # A version published after start-up reaches users on refresh and on every settings sync.
+        app.update_checker.check_for_updates()
+    return data != old
+
+
 def apply_synced_global_settings(app, data: dict) -> None:
     if not isinstance(data, dict):
         return
-    changed = data != app.app_state.global_settings
-    app.app_state.global_settings = data
-    app.app_state.global_settings_loaded_at = time.time()
+    changed = store_global_settings(app, data)
     if changed and app.app_state.initialization_completed:
         check_and_show_announce(app, force_check=True)
 
@@ -131,8 +145,7 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
             )
             success = bool(response and response.status_code == 200)
             if success and response is not None:
-                app.app_state.global_settings = response.json() or {}
-                app.app_state.global_settings_loaded_at = time.time()
+                store_global_settings(app, response.json() or {})
         except Exception as e:
             logger.warning("reload_global_settings: %s", e)
             success = False
@@ -146,8 +159,7 @@ def reload_global_settings(app, callback=None, *, force_refresh: bool = False):
     def _on_finished(success, data):
         try:
             if success:
-                dynamic_app.app_state.global_settings = data
-                dynamic_app.app_state.global_settings_loaded_at = time.time()
+                store_global_settings(dynamic_app, data)
             _run_global_settings_callback(callback, success)
         finally:
             dynamic_app.app_state.global_settings_load_in_progress = False
