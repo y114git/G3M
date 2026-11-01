@@ -20,7 +20,7 @@
 - Fixed an older copy of a mod replacing a newer one in the Library when two folders hold the same mod. The newest version is shown.
 - Fixed patching sometimes failing right after a patch tool was stopped, because its temporary files were still in use.
 - The GameBanana file list no longer repeats the file description after the file name.
-- Updated the FRICKG3M theme with new background music and font by Kirby.
+- Updated the FRICKG3M theme with new background music and font by KirbyKid.
 
 ### Version 3.4.3 — 21.10.26
 
