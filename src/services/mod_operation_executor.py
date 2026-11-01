@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import os
 import shutil
 import stat
@@ -34,6 +35,7 @@ ProgressFunction = Callable[[int, int, PlannedModOperation], None]
 # overall fraction 0..1, operations finished before the step, total operations, the step's first
 # operation, percent of the step the patch backend has reported
 StepProgressFunction = Callable[[float, int, int, PlannedModOperation, int], None]
+logger = logging.getLogger(__name__)
 _MERGEABLE_DATA_SUFFIXES = frozenset({".win", ".ios", ".droid", ".unx"})
 
 
@@ -337,7 +339,9 @@ def _discard_temporary(path: Path) -> None:
             return
         except PermissionError:
             if attempt == 9:
-                raise
+                # the real failure (a cancel or a backend error) is already propagating
+                logger.warning("Could not remove the temporary file %s", path)
+                return
             time.sleep(0.2)
         else:
             return
@@ -775,17 +779,24 @@ def _remove_path(path: Path) -> None:
 def _rmtree(path: Path, *, ignore_errors: bool = False) -> None:
     """Remove a tree whose folders may be read-only, as Windows game folders often are."""
 
-    def clear_read_only(function: Callable[[str], object], name: str, _error: BaseException) -> None:
-        os.chmod(name, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-        function(name)
+    def clear_read_only(function: Callable[[str], object], name: str, error: BaseException) -> None:
+        try:
+            os.chmod(name, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            function(name)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            if not ignore_errors:
+                raise error from None
 
-    if not _path_exists(path):
-        return
-    if ignore_errors:
-        with suppress(OSError):
-            shutil.rmtree(path, onexc=clear_read_only)
-        return
-    shutil.rmtree(path, onexc=clear_read_only)
+    if _is_link(path):
+        try:
+            _unlink_link(path)
+        except OSError:
+            if not ignore_errors:
+                raise
+    elif path.exists():
+        shutil.rmtree(path, onexc=clear_read_only)
 
 
 def _restore_directory_preserving_external(
