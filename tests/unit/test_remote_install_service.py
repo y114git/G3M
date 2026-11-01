@@ -11,7 +11,8 @@ CREDENTIALS = {"member_id": "4242", "secret_key": "TopSecret"}
 
 
 @pytest.fixture
-def service(qapp):
+def service(qapp, monkeypatch):
+    monkeypatch.setattr(remote_install_service, "APP_IDS", ("G3M",))
     state = SimpleNamespace(local_config={CONFIG_KEY: CREDENTIALS})
     return RemoteInstallService(state, Mock())
 
@@ -116,12 +117,43 @@ def test_one_broken_entry_does_not_stop_the_rest(service):
     assert not service._busy
 
 
-def test_poll_asks_the_member_queue_for_this_app(service):
+def test_poll_asks_the_member_queue_of_every_app_id(service, monkeypatch):
+    monkeypatch.setattr(remote_install_service, "APP_IDS", ("G3M", "GameMakerModManager"))
     with patch.object(remote_install_service, "get_session") as session:
         session.return_value.get.return_value = _reply()
         service._fetch(CREDENTIALS)
 
-    assert session.return_value.get.call_args.args[0].endswith("/RemoteInstall/4242/TopSecret/G3M")
+    urls = [call.args[0] for call in session.return_value.get.call_args_list]
+    assert [url.rsplit("/", 4)[1:] for url in urls] == [
+        ["RemoteInstall", "4242", "TopSecret", "G3M"],
+        ["RemoteInstall", "4242", "TopSecret", "GameMakerModManager"],
+    ]
+
+
+def test_a_rejected_app_id_does_not_stop_the_other_queue(service, monkeypatch):
+    monkeypatch.setattr(remote_install_service, "APP_IDS", ("G3M", "GameMakerModManager"))
+    emitted = []
+    service.mod_ready.connect(lambda mod, file: emitted.append(file))
+    service._timer.start()
+    replies = {
+        "G3M": _reply(status=404),
+        "GameMakerModManager": _reply(payload=["https://gamebanana.com/mmdl/9001,Mod,111"]),
+    }
+
+    with (
+        patch.object(remote_install_service, "get_session") as session,
+        patch.object(remote_install_service.GameBananaAPI, "get_installable_mod", return_value=_mod(9001)),
+    ):
+        session.return_value.get.side_effect = lambda url, **_: replies[url.rsplit("/", 1)[1]]
+        service._fetch(CREDENTIALS)
+        session.return_value.get.reset_mock()
+        service._fetch(CREDENTIALS)
+
+    assert emitted == [{"id": 9001}, {"id": 9001}]
+    assert service._rejected == {"G3M"}
+    assert service._timer.isActive()
+    assert [call.args[0].rsplit("/", 1)[1] for call in session.return_value.get.call_args_list] == ["GameMakerModManager"]
+    service._timer.stop()
 
 
 def test_rejected_key_stops_the_polling(service):
@@ -132,7 +164,7 @@ def test_rejected_key_stops_the_polling(service):
 
     service.poll()
 
-    assert service._rejected
+    assert service._rejected == {"G3M"}
     assert not service._timer.isActive()
 
 
@@ -163,7 +195,7 @@ def test_unpaired_service_does_not_poll(service):
 
 
 def test_refresh_polls_now_restarts_the_interval_and_retries_a_rejected_key(service):
-    service._rejected = True
+    service._rejected = {"G3M"}
     service._timer.start()
 
     with patch.object(service, "poll") as poll:
