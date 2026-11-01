@@ -241,3 +241,27 @@ def test_scan_keeps_the_newest_version_when_two_folders_share_a_mod_id(tmp_path,
         assert result["gb_mod_1"].folder_name == newest_folder
         assert result["gb_mod_1"].config_data["version"] == "3.0"
     assert mods_by_name == {"kaizo knight": "gb_mod_1"}
+
+
+def test_scan_forgets_the_old_name_of_a_mod_replaced_by_a_newer_copy(tmp_path):
+    for folder, name, version in (("Old", "Old Name", "1.0"), ("New", "New Name", "2.0")):
+        mod = tmp_path / folder
+        mod.mkdir()
+        (mod / MOD_CONFIG_FILENAME).write_text(
+            json.dumps(
+                {
+                    "config_version": "2.0.0",
+                    "id": "gb_mod_2",
+                    "name": name,
+                    "version": version,
+                    "authors": [],
+                    "game": "deltarune",
+                    "files": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    _, mods_by_name = scan_mods_directory(str(tmp_path))
+
+    assert mods_by_name == {"new name": "gb_mod_2"}

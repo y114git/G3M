@@ -40,7 +40,7 @@ def _add_to_cache(
     """Add a mod; of two folders with one id (a leftover copy) the newer version wins, not the scan order."""
 
     def rank(item: ModFolderInfo):
-        return version_sort_key(str(item.config_data.get("version") or "")), item.config_mtime
+        return version_sort_key(str(item.config_data.get("version") or "")), item.folder_name.casefold()
 
     kept = cache.get(info.id)
     if kept is not None:
@@ -52,6 +52,8 @@ def _add_to_cache(
         )
         if not keep_new:
             return
+        for name in [name for name, mod_id in mods_by_name.items() if mod_id == info.id]:
+            del mods_by_name[name]
     cache[info.id] = info
     if mod_name := str(info.config_data.get("name") or ""):
         mods_by_name[mod_name.lower()] = info.id
