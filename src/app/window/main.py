@@ -114,6 +114,7 @@ if TYPE_CHECKING:
     from services.launch_service import GameLauncher
     from services.mod.service import ModManager
     from services.profile_service import ProfileService
+    from services.remote_install_service import RemoteInstallService
     from services.settings_service import SettingsManager
     from services.used_mods_service import UsedModsManager
     from session.session_manager import SessionManager
@@ -131,6 +132,7 @@ class AppWindow(QWidget):
     profile_service: ProfileService
     used_mods_service: UsedModsManager
     session_manager: SessionManager
+    remote_install_service: RemoteInstallService
     library_display: Any
     search_display: Any
     game_launch: Any
