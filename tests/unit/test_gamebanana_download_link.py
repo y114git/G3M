@@ -133,7 +133,7 @@ def test_file_picker_prefers_the_g3m_package_over_deltamod_xdelta_and_manual_one
     assert [f["id"] for f in sort_gamebanana_files_by_priority(files)] == [1, 2, 4, 3]
 
 
-def test_file_picker_preselects_the_g3m_package_and_names_each_file(qapp):
+def test_file_picker_preselects_the_g3m_package_and_lists_plain_file_names(qapp):
     from ui.dialogs.file_picker_dialog import GameBananaFilePickerDialog
 
     xdelta = {"id": 2, "name": "dojoplus_xdelta_96734.zip", "description": "XDELTA Package", "compatibility": "g3m", "timestamp": 200}
@@ -145,6 +145,6 @@ def test_file_picker_preselects_the_g3m_package_and_names_each_file(qapp):
     assert selected is not None
     assert selected["id"] == 1
     assert [cast(QListWidgetItem, dialog.list_widget.item(i)).text() for i in range(2)] == [
-        "dojoplus_8b527.zip (G3M Package)",
-        "dojoplus_xdelta_96734.zip (XDELTA Package)",
+        "dojoplus_8b527.zip",
+        "dojoplus_xdelta_96734.zip",
     ]

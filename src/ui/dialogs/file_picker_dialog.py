@@ -85,10 +85,7 @@ class GameBananaFilePickerDialog(DynamicDialog):
     def _populate(self):
         self.files = sort_gamebanana_files_by_priority(self.files)
         for file_data in self.files:
-            display_text = file_data.get("name", "file")
-            if description := str(file_data.get("description") or "").strip():
-                display_text = f"{display_text} ({description.splitlines()[0][:60]})"
-            item = QListWidgetItem(display_text)
+            item = QListWidgetItem(file_data.get("name", "file"))
             item.setData(Qt.ItemDataRole.UserRole, file_data)
             self.list_widget.addItem(item)
         if self.list_widget.count() > 0:
