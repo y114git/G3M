@@ -160,3 +160,52 @@ def test_unpaired_service_does_not_poll(service):
         service.poll()
 
     thread.assert_not_called()
+
+
+def test_refresh_polls_now_restarts_the_interval_and_retries_a_rejected_key(service):
+    service._rejected = True
+    service._timer.start()
+
+    with patch.object(service, "poll") as poll:
+        service.refresh()
+
+    poll.assert_called_once()
+    assert not service._rejected
+    assert service._timer.isActive()
+    service._timer.stop()
+
+
+def test_refresh_without_pairing_does_nothing(service):
+    service.app_state.local_config = {}
+    with patch.object(service, "poll") as poll:
+        service.refresh()
+
+    poll.assert_not_called()
+
+
+def test_repairing_to_another_account_ignores_the_old_accounts_answer(service):
+    emitted = []
+    service.mod_ready.connect(lambda mod, file: emitted.append(file))
+    old = dict(CREDENTIALS)
+
+    with patch.object(remote_install_service, "get_session") as session, patch.object(service, "start"):
+        session.return_value.get.side_effect = lambda *a, **k: (
+            service.pair("7", "other"),
+            _reply(status=404),
+        )[1]
+        service._busy = True
+        service._fetch(old)
+
+    assert not service._rejected
+    assert not emitted
+    assert service.app_state.local_config[CONFIG_KEY] == {"member_id": "7", "secret_key": "other"}
+    assert not service._busy
+
+
+def test_repairing_the_same_account_keeps_the_running_poll(service):
+    service._busy = True
+
+    with patch.object(service, "start"):
+        service.pair(CREDENTIALS["member_id"], CREDENTIALS["secret_key"])
+
+    assert service._busy

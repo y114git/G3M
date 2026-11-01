@@ -31,7 +31,10 @@ class RemoteInstallService(QObject):
         self._timer.timeout.connect(self.poll)
 
     def pair(self, member_id: str, secret_key: str) -> None:
-        self.app_state.local_config[CONFIG_KEY] = {"member_id": member_id, "secret_key": secret_key}
+        credentials = {"member_id": member_id, "secret_key": secret_key}
+        if self.app_state.local_config.get(CONFIG_KEY) != credentials:
+            self._busy = False  # a poll still running for the previous account must not block the new one
+        self.app_state.local_config[CONFIG_KEY] = credentials
         self.settings_service.write_local_config()
         self._rejected = False
         self.start()
@@ -40,6 +43,11 @@ class RemoteInstallService(QObject):
         if self.app_state.local_config.get(CONFIG_KEY):
             self._timer.start()
             self.poll()
+
+    def refresh(self) -> None:
+        """Poll now and restart the interval; a refresh also retries a key that was rejected."""
+        self._rejected = False
+        self.start()
 
     def poll(self) -> None:
         credentials = self.app_state.local_config.get(CONFIG_KEY)
@@ -53,6 +61,8 @@ class RemoteInstallService(QObject):
         url = f"{GAMEBANANA_API_BASE}/RemoteInstall/{credentials['member_id']}/{credentials['secret_key']}/{APP_ID}"
         try:
             response = get_session().get(url, timeout=NETWORK_TIMEOUT_MEDIUM)
+            if self._is_stale(credentials):
+                return
             if 400 <= response.status_code < 500:
                 self._rejected = True  # a revoked key would only be retried every minute
             response.raise_for_status()
@@ -63,7 +73,12 @@ class RemoteInstallService(QObject):
             # The URL carries the secret key, so never log the exception text.
             logger.warning("Remote install poll failed: %s", type(error).__name__)
         finally:
-            self._busy = False
+            if not self._is_stale(credentials):
+                self._busy = False
+
+    def _is_stale(self, credentials: dict) -> bool:
+        """True once the member was re-paired: the old account's answer must not queue mods or reject the new key."""
+        return self.app_state.local_config.get(CONFIG_KEY) != credentials
 
     def _queue(self, entry: object) -> None:
         # "{downloadURL},{modType},{modID}", the same shape as a 1-click link

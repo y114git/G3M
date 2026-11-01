@@ -1471,6 +1471,7 @@ class AppWindow(QWidget):
         if hasattr(self, "theme") and self.theme:
             self.theme.init_theme_list()
         if not is_initial and self.app_state.has_internet:
+            self.remote_install_service.refresh()
             reload_global_settings(
                 self,
                 force_refresh=True,
