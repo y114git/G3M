@@ -1,5 +1,4 @@
-<details>
-<summary><h3>Version 3.4.4 — Unreleased</h3></summary>
+### Version 3.4.4 — 01.11.26
 
 - Fixed G3M not starting when a saved mod version in the Library is a damaged archive. G3M now skips that file and reports it by name.
 - Messages about damaged archives, game launch, shortcuts, exports, and imports now name the affected file, folder, or value.
@@ -14,9 +13,13 @@
 - Fixed long warning and error lists making dialogs taller than the screen. They now show the first lines and point to the log for the rest.
 - **Auto-install** in the GameBanana file list is now **Yes** only for DeltaMod files and mods on the **G3M Verified** list; every other file is installed manually in Downloads.
 - Added a **Major** warning before launch when installed mods were made for a newer version of G3M and are not shown; it asks you to update G3M.
-- Fixed the G3M update prompt not appearing when the server answered after the start-up check.
-
-</details>
+- Fixed the G3M update prompt not appearing when the server answered after the start-up check, or when an update was published while G3M was open. The refresh button now checks for it too.
+- Refresh now also checks the GameBanana Remote Install queue right away. Pairing G3M with another GameBanana account replaces the previous pairing.
+- Fixed folders made read-only by Windows blocking the restore of game files after the game closed, and then every following launch.
+- Fixed an older copy of a mod replacing a newer one in the Library when two folders hold the same mod. The newest version is shown.
+- Fixed patching sometimes failing right after a patch tool was stopped, because its temporary files were still in use.
+- The GameBanana file list no longer repeats the file description after the file name.
+- Updated the FRICKG3M theme with new background music and font by Kirby.
 
 ### Version 3.4.3 — 21.10.26
 
