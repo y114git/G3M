@@ -80,7 +80,7 @@ class ModOperationJournal:
             previous = self.load(self.root)
             if previous.state not in {"restored", "retired"}:
                 raise ModOperationExecutionError("a previous operation session requires recovery")
-            shutil.rmtree(self.backups, ignore_errors=True)
+            _rmtree(self.backups, ignore_errors=True)
         self.root.mkdir(parents=True, exist_ok=True)
         self.backups.mkdir(exist_ok=True)
         self.entries: list[JournalEntry] = []
@@ -252,11 +252,11 @@ class ModOperationJournal:
     def retire(self) -> None:
         """Keep external changes and mark this recovery session as resolved."""
         self._write_manifest("retired")
-        shutil.rmtree(self.backups, ignore_errors=True)
+        _rmtree(self.backups, ignore_errors=True)
 
     def discard(self) -> None:
         """Forget a successfully committed permanent operation and its backups."""
-        shutil.rmtree(self.root)
+        _rmtree(self.root)
 
     def _capture_one(
         self,
@@ -277,6 +277,7 @@ class ModOperationJournal:
             return
         backup_relative = f"backups/{len(self.entries):08d}"
         backup = self.root / backup_relative
+        _rmtree(backup, ignore_errors=True)  # a leftover from an earlier session must not block this copy
         if _path_exists(target):
             if _is_link(target):
                 backup.parent.mkdir(parents=True, exist_ok=True)
@@ -762,9 +763,29 @@ def _remove_path(path: Path) -> None:
         _unlink_link(path)
         return
     if path.is_dir():
-        shutil.rmtree(path)
-    else:
+        _rmtree(path)
+        return
+    try:
         path.unlink()
+    except PermissionError:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+        path.unlink()
+
+
+def _rmtree(path: Path, *, ignore_errors: bool = False) -> None:
+    """Remove a tree whose folders may be read-only, as Windows game folders often are."""
+
+    def clear_read_only(function: Callable[[str], object], name: str, _error: BaseException) -> None:
+        os.chmod(name, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        function(name)
+
+    if not _path_exists(path):
+        return
+    if ignore_errors:
+        with suppress(OSError):
+            shutil.rmtree(path, onexc=clear_read_only)
+        return
+    shutil.rmtree(path, onexc=clear_read_only)
 
 
 def _restore_directory_preserving_external(
