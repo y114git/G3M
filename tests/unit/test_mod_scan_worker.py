@@ -210,3 +210,34 @@ def test_scan_reports_mods_saved_for_a_newer_g3m_and_keeps_the_rest(tmp_path):
 
     assert newer == ["Future Mod"]
     assert cache == {}
+
+
+@pytest.mark.parametrize("newest_folder", ["Kaizo Knight", "Kaizo Knight_1"])
+def test_scan_keeps_the_newest_version_when_two_folders_share_a_mod_id(tmp_path, newest_folder):
+    versions = {"Kaizo Knight": "2.3.3", "Kaizo Knight_1": "2.3.3"}
+    versions[newest_folder] = "3.0"
+    for folder, version in versions.items():
+        mod = tmp_path / folder
+        mod.mkdir()
+        (mod / MOD_CONFIG_FILENAME).write_text(
+            json.dumps(
+                {
+                    "config_version": "2.0.0",
+                    "id": "gb_mod_1",
+                    "name": "Kaizo Knight",
+                    "version": version,
+                    "authors": [],
+                    "game": "deltarune",
+                    "files": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    cache, mods_by_name = scan_mods_directory(str(tmp_path))
+    rescanned, _ = scan_mods_directory(str(tmp_path), cache)
+
+    for result in (cache, rescanned):
+        assert result["gb_mod_1"].folder_name == newest_folder
+        assert result["gb_mod_1"].config_data["version"] == "3.0"
+    assert mods_by_name == {"kaizo knight": "gb_mod_1"}
