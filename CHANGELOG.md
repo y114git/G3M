@@ -1,5 +1,6 @@
 ### Version 3.4.4 — 01.11.26
 
+- **Adjustment:** the Linux builds need glibc 2.38 or newer (Ubuntu 24.04, Debian 13, Fedora 39), not 2.34 as the 3.4.0 notes said. On older systems G3M does not start.
 - Fixed G3M not starting when a saved mod version in the Library is a damaged archive. G3M now skips that file and reports it by name.
 - Messages about damaged archives, game launch, shortcuts, exports, and imports now name the affected file, folder, or value.
 - Declining **Force restore** after an interrupted game session now keeps your files as they are, removes the leftover backup, and no longer blocks the next launch.
