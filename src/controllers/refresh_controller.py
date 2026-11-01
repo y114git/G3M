@@ -172,8 +172,9 @@ class RefreshController:
             except Exception as e:
                 logger.debug(f"RefreshController: Error checking fetch thread: {e}")
                 self.fetch_thread = None
-            if not is_game_running():
+            if not is_game_running() and (is_initial or not self.app_state.has_internet):
                 # An app update must not restart G3M while it still has to restore the game's files.
+                # A refresh with a connection checks once the fresh server settings have arrived.
                 self.update_checker.check_for_updates()
 
             class FetchContext:

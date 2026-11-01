@@ -78,7 +78,7 @@ from config.config import (
     UI_COLORS,
 )
 from presentation.update_presenter import (
-    check_and_show_announce,
+    on_refresh_settings_loaded,
     prompt_for_update,
     reload_global_settings,
 )
@@ -1477,9 +1477,7 @@ class AppWindow(QWidget):
             reload_global_settings(
                 self,
                 force_refresh=True,
-                callback=lambda success: (
-                    check_and_show_announce(self, force_check=True) if success else None
-                ),
+                callback=lambda success: on_refresh_settings_loaded(self, success),
             )
             self.session_manager.request_presence_refresh()
 

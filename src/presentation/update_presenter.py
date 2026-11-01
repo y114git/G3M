@@ -73,28 +73,41 @@ def _safe_warning(parent, title: str, message: str) -> None:
 
 
 def store_global_settings(app, data: dict) -> bool:
-    """Keep freshly loaded server settings and check for an app update when its entry changed."""
+    """Keep freshly loaded server settings; returns whether they differ from the previous ones."""
     if not isinstance(data, dict):
         return False
     state = app.app_state
-    old = state.global_settings or {}
+    changed = data != state.global_settings
     state.global_settings = data
     state.global_settings_loaded_at = time.time()
-    launcher_changed = any(
-        data.get(key) != old.get(key) for key in ("launcher_files", "launcher_beta_files")
-    )
-    if launcher_changed and state.initialization_completed and not is_game_running():
-        # A version published after start-up reaches users on refresh and on every settings sync.
-        app.update_checker.check_for_updates()
-    return data != old
+    return changed
 
 
 def apply_synced_global_settings(app, data: dict) -> None:
     if not isinstance(data, dict):
         return
+    old = app.app_state.global_settings or {}
     changed = store_global_settings(app, data)
-    if changed and app.app_state.initialization_completed:
+    if not app.app_state.initialization_completed:
+        return
+    if changed:
         check_and_show_announce(app, force_check=True)
+    if any(data.get(key) != old.get(key) for key in ("launcher_files", "launcher_beta_files")):
+        # An update published while G3M is open reaches users with the next settings sync.
+        _check_for_app_update(app)
+
+
+def on_refresh_settings_loaded(app, success: bool) -> None:
+    """Refresh finished loading the server settings: show a new announce, then look for an update."""
+    if success:
+        check_and_show_announce(app, force_check=True)
+    _check_for_app_update(app)
+
+
+def _check_for_app_update(app) -> None:
+    # An app update must not restart G3M while it still has to restore the game's files.
+    if not is_game_running():
+        app.update_checker.check_for_updates()
 
 
 def handle_update_info(app, update_info, retry_count=0):

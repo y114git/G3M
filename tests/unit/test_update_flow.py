@@ -280,24 +280,47 @@ def _settings(version):
     return {"launcher_files": {"version": version, "urls": {}}}
 
 
-@pytest.mark.parametrize(
-    ("old", "new", "game_running", "checks"),
-    [
-        (_settings("1.0.0"), _settings("9.9.9"), False, 1),
-        (_settings("9.9.9"), {**_settings("9.9.9"), "announce": {"version": 2}}, False, 0),
-        (_settings("1.0.0"), _settings("9.9.9"), True, 0),
-    ],
-)
-def test_new_launcher_entry_from_the_server_triggers_an_update_check(monkeypatch, old, new, game_running, checks):
+def _app(settings, monkeypatch, *, game_running=False, initialized=True):
     from presentation import update_presenter
 
     monkeypatch.setattr(update_presenter, "is_game_running", lambda: game_running)
-    app = SimpleNamespace(
-        app_state=SimpleNamespace(global_settings=old, initialization_completed=True),
+    monkeypatch.setattr(update_presenter, "check_and_show_announce", Mock())
+    return SimpleNamespace(
+        app_state=SimpleNamespace(global_settings=settings, initialization_completed=initialized),
         update_checker=Mock(),
     )
 
-    update_presenter.store_global_settings(app, new)
+
+@pytest.mark.parametrize(
+    ("old", "new", "game_running", "initialized", "checks"),
+    [
+        (_settings("1.0.0"), _settings("9.9.9"), False, True, 1),
+        (_settings("9.9.9"), {**_settings("9.9.9"), "announce": {"version": 2}}, False, True, 0),
+        (_settings("1.0.0"), _settings("9.9.9"), True, True, 0),
+        (_settings("1.0.0"), _settings("9.9.9"), False, False, 0),
+    ],
+)
+def test_new_launcher_entry_from_a_settings_sync_triggers_an_update_check(
+    monkeypatch, old, new, game_running, initialized, checks
+):
+    from presentation import update_presenter
+
+    app = _app(old, monkeypatch, game_running=game_running, initialized=initialized)
+
+    update_presenter.apply_synced_global_settings(app, new)
 
     assert app.app_state.global_settings == new
     assert app.update_checker.check_for_updates.call_count == checks
+
+
+@pytest.mark.parametrize(("game_running", "checks"), [(False, 1), (True, 0)])
+def test_refresh_checks_for_an_update_once_the_server_settings_are_loaded(monkeypatch, game_running, checks):
+    from presentation import update_presenter
+
+    app = _app(_settings("9.9.9"), monkeypatch, game_running=game_running)
+
+    update_presenter.on_refresh_settings_loaded(app, True)
+    update_presenter.on_refresh_settings_loaded(app, False)
+
+    assert app.update_checker.check_for_updates.call_count == checks * 2
+    update_presenter.check_and_show_announce.assert_called_once_with(app, force_check=True)

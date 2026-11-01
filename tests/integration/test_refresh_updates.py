@@ -3,6 +3,8 @@
 from collections.abc import Callable
 from unittest.mock import Mock, patch
 
+import pytest
+
 
 class TestRefreshModList:
     """Tests for refresh updates."""
@@ -277,3 +279,25 @@ class TestRefreshMetadataLoading:
         factory.return_value.start.assert_called_once()
         update_checker.check_for_updates.assert_not_called()
         mod_service.load_local_mods.assert_not_called()
+
+
+
+@pytest.mark.parametrize(
+    ("is_initial", "has_internet", "checks"),
+    [(True, True, 1), (False, False, 1), (False, True, 0)],
+)
+def test_refresh_leaves_the_update_check_to_the_fresh_server_settings(app_state, is_initial, has_internet, checks):
+    from controllers.refresh_controller import RefreshController
+
+    app_state.has_internet = has_internet
+    update_checker = Mock()
+    controller = RefreshController(
+        app_state, Mock(), Mock(), Mock(), Mock(), update_checker, app_window=Mock()
+    )
+
+    with patch("controllers.refresh_controller.FetchModsThread"), patch(
+        "controllers.refresh_controller.is_game_running", return_value=False
+    ):
+        controller.refresh_mods_list(is_initial=is_initial)
+
+    assert update_checker.check_for_updates.call_count == checks
