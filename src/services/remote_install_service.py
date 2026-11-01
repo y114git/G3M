@@ -33,8 +33,8 @@ class RemoteInstallService(QObject):
     def pair(self, member_id: str, secret_key: str) -> None:
         credentials = {"member_id": member_id, "secret_key": secret_key}
         if self.app_state.local_config.get(CONFIG_KEY) != credentials:
+            self.app_state.local_config[CONFIG_KEY] = credentials
             self._busy = False  # a poll still running for the previous account must not block the new one
-        self.app_state.local_config[CONFIG_KEY] = credentials
         self.settings_service.write_local_config()
         self._rejected = False
         self.start()
@@ -77,8 +77,8 @@ class RemoteInstallService(QObject):
                 self._busy = False
 
     def _is_stale(self, credentials: dict) -> bool:
-        """True once the member was re-paired: the old account's answer must not queue mods or reject the new key."""
-        return self.app_state.local_config.get(CONFIG_KEY) != credentials
+        """True once another pairing replaced these credentials: their answer must not queue mods or reject the new key."""
+        return self.app_state.local_config.get(CONFIG_KEY) is not credentials
 
     def _queue(self, entry: object) -> None:
         # "{downloadURL},{modType},{modID}", the same shape as a 1-click link

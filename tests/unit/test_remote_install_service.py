@@ -12,7 +12,7 @@ CREDENTIALS = {"member_id": "4242", "secret_key": "TopSecret"}
 
 @pytest.fixture
 def service(qapp):
-    state = SimpleNamespace(local_config={CONFIG_KEY: dict(CREDENTIALS)})
+    state = SimpleNamespace(local_config={CONFIG_KEY: CREDENTIALS})
     return RemoteInstallService(state, Mock())
 
 
@@ -186,7 +186,7 @@ def test_refresh_without_pairing_does_nothing(service):
 def test_repairing_to_another_account_ignores_the_old_accounts_answer(service):
     emitted = []
     service.mod_ready.connect(lambda mod, file: emitted.append(file))
-    old = dict(CREDENTIALS)
+    old = service.app_state.local_config[CONFIG_KEY]
 
     with patch.object(remote_install_service, "get_session") as session, patch.object(service, "start"):
         session.return_value.get.side_effect = lambda *a, **k: (
@@ -207,5 +207,20 @@ def test_repairing_the_same_account_keeps_the_running_poll(service):
 
     with patch.object(service, "start"):
         service.pair(CREDENTIALS["member_id"], CREDENTIALS["secret_key"])
+
+    assert service._busy
+
+
+def test_pairing_back_to_the_first_account_does_not_revive_its_old_poll(service):
+    first = service.app_state.local_config[CONFIG_KEY]
+    service._busy = True
+
+    with patch.object(service, "start"):
+        service.pair("7", "other")
+        service.pair(first["member_id"], first["secret_key"])
+        service._busy = True  # the poll started for the second pairing is running
+        with patch.object(remote_install_service, "get_session") as session:
+            session.return_value.get.return_value = _reply()
+            service._fetch(first)
 
     assert service._busy
