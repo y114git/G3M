@@ -74,6 +74,8 @@ def _safe_warning(parent, title: str, message: str) -> None:
 
 def store_global_settings(app, data: dict) -> bool:
     """Keep freshly loaded server settings and check for an app update when its entry changed."""
+    if not isinstance(data, dict):
+        return False
     state = app.app_state
     old = state.global_settings or {}
     state.global_settings = data
