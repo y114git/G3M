@@ -100,6 +100,27 @@ def test_entry_for_a_file_the_mod_does_not_have_is_dropped(service):
     assert emitted == []
 
 
+def test_a_dropped_entry_is_logged_by_its_type_and_never_by_its_text(service, caplog):
+    with caplog.at_level(logging.WARNING):
+        service._queue("https://evil.example.com/x.zip,Mod,1")
+        service._queue(42)
+
+    assert "entry of type str" in caplog.text
+    assert "entry of type int" in caplog.text
+    assert "evil.example.com" not in caplog.text
+
+
+def test_a_failed_lookup_is_logged_by_mod_and_file_id(service, caplog):
+    with (
+        caplog.at_level(logging.WARNING),
+        patch.object(remote_install_service.GameBananaAPI, "get_installable_mod", return_value=_mod(1)),
+    ):
+        service._queue("https://gamebanana.com/mmdl/9001,Wip,111")
+
+    assert "could not queue wip 111, file 9001" in caplog.text
+    assert "gamebanana.com" not in caplog.text
+
+
 def test_one_broken_entry_does_not_stop_the_rest(service):
     emitted = []
     service.mod_ready.connect(lambda mod, file: emitted.append(file))

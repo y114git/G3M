@@ -93,13 +93,17 @@ class RemoteInstallService(QObject):
         # "{downloadURL},{modType},{modID}", the same shape as a 1-click link
         link = parse_gamebanana_download_link(entry) if isinstance(entry, str) else None
         if not link or not link[1]:
-            logger.warning("Remote install: ignored entry %r", entry)
+            # Entries come back from a request whose URL carries the secret key, so their text stays out of the log.
+            logger.warning("Remote install: ignored an entry of type %s that is not '{downloadURL},{modType},{modID}'", type(entry).__name__)
             return
         file_id, (item_type, mod_id) = link[0], link[1]
         try:
             mod = GameBananaAPI().get_installable_mod(int(mod_id), item_type)
             file = next(f for f in mod.gamebanana_supported_files if str(f["id"]) == file_id)
         except Exception as error:
-            logger.warning("Remote install: could not queue %s: %s", entry, error)
+            logger.warning(
+                "Remote install: could not queue %s %d, file %d: %r",
+                "wip" if item_type == "Wip" else "mod", int(mod_id), int(file_id), error,
+            )
             return
         self.mod_ready.emit(mod, file)
