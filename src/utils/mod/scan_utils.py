@@ -20,6 +20,7 @@ from utils.mod.config import (
 from utils.path_utils import version_sort_key
 
 logger = logging.getLogger(__name__)
+_reported_duplicates: set[tuple[str, str, str]] = set()  # a leftover copy is found on every scan; say so once
 
 
 @dataclass(slots=True)
@@ -45,11 +46,14 @@ def _add_to_cache(
     kept = cache.get(info.id)
     if kept is not None:
         keep_new = rank(info) > rank(kept)
-        logger.warning(
-            "scan_mods_directory: folders %s and %s share the mod id %s, using %s",
-            kept.folder_path, info.folder_path, info.id,
-            info.folder_path if keep_new else kept.folder_path,
-        )
+        pair = (*sorted((kept.folder_path, info.folder_path)), info.id)
+        if pair not in _reported_duplicates:
+            _reported_duplicates.add(pair)
+            logger.warning(
+                "scan_mods_directory: folders %s and %s share the mod id %s, using %s",
+                kept.folder_path, info.folder_path, info.id,
+                info.folder_path if keep_new else kept.folder_path,
+            )
         if not keep_new:
             return
         for name in [name for name, mod_id in mods_by_name.items() if mod_id == info.id]:

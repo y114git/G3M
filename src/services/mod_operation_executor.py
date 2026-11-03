@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import logging
@@ -51,6 +52,15 @@ def _is_mergeable_target(target: Path | ArchiveVirtualPath | None) -> bool:
 
 class ModOperationExecutionError(RuntimeError):
     """An operation cannot safely be applied."""
+
+
+class ModPatchMismatchError(ModOperationExecutionError):
+    """A patch was made for another file than the one it met: another game version or another mod's earlier patch."""
+
+    def __init__(self, mod_id: str | None, patch: str) -> None:
+        super().__init__(f"{mod_id or 'a mod'}: patch {patch} does not match the file it was applied to")
+        self.mod_id = mod_id
+        self.patch = patch
 
 
 class ModOperationCancelledError(ModOperationExecutionError):
@@ -529,7 +539,7 @@ class ModOperationExecutor:
                     raise ModOperationExecutionError(
                         "patch merge backend did not produce an output file"
                     )
-                os.replace(output, resolved_target)
+                replace_file(output, resolved_target)
             finally:
                 _discard_temporary(output)
             if isinstance(target, ArchiveVirtualPath):
@@ -625,10 +635,15 @@ class ModOperationExecutor:
         temporary = Path(temporary_name)
         try:
             temporary.unlink()
-            result = self._call_backend(self.patcher, target, source, temporary)
+            try:
+                result = self._call_backend(self.patcher, target, source, temporary)
+            except ModOperationExecutionError as error:
+                if "checksum mismatch" in str(error):  # xdelta3: the patch expects a different source file
+                    raise ModPatchMismatchError(operation.mod_id, source.name) from error
+                raise
             if result is False or not temporary.is_file():
                 raise ModOperationExecutionError("patch backend did not produce an output file")
-            os.replace(temporary, target)
+            replace_file(temporary, target)
         finally:
             _discard_temporary(temporary)
 
@@ -776,6 +791,20 @@ def remove_path(path: Path) -> None:
         path.unlink()
 
 
+def replace_file(source: Path, target: Path) -> None:
+    """os.replace that copes with a read-only target and a file another program holds for a moment."""
+    for attempt in range(4):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == 3:
+                raise
+            with contextlib.suppress(OSError):
+                os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+            time.sleep(0.2 * (attempt + 1))
+
+
 def remove_tree(path: Path, *, ignore_errors: bool = False) -> None:
     """Remove a tree whose folders may be read-only, as Windows game folders often are."""
 
@@ -784,7 +813,7 @@ def remove_tree(path: Path, *, ignore_errors: bool = False) -> None:
             os.chmod(name, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
             function(name)
         except FileNotFoundError:
-            pass
+            return
         except OSError:
             if not ignore_errors:
                 raise error from None

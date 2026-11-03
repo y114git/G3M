@@ -265,3 +265,23 @@ def test_scan_forgets_the_old_name_of_a_mod_replaced_by_a_newer_copy(tmp_path):
     _, mods_by_name = scan_mods_directory(str(tmp_path))
 
     assert mods_by_name == {"new name": "gb_mod_2"}
+
+
+def test_scan_reports_two_folders_with_one_mod_id_only_once(tmp_path, caplog, monkeypatch):
+    monkeypatch.setattr("utils.mod.scan_utils._reported_duplicates", set())
+    for folder in ("Twin", "Twin_1"):
+        mod = tmp_path / folder
+        mod.mkdir()
+        (mod / MOD_CONFIG_FILENAME).write_text(
+            json.dumps(
+                {"config_version": "2.0.0", "id": "gb_twin", "name": "Twin", "version": "1.0",
+                 "authors": [], "game": "deltarune", "files": []}
+            ),
+            encoding="utf-8",
+        )
+    caplog.set_level("WARNING", logger="utils.mod.scan_utils")
+
+    for _ in range(3):
+        scan_mods_directory(str(tmp_path))
+
+    assert caplog.text.count("share the mod id gb_twin") == 1

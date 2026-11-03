@@ -739,6 +739,7 @@
     "unexpected_startup_error": "予期しない起動エラー: {details}",
     "modpack_creation_failed": "modpackの作成に失敗しました",
     "mod_patching_failed": "Modの操作に失敗しました。詳しくはログを確認してください。",
+    "mod_patch_mismatch": "{mod} のパッチ {patch} はゲームファイルに合いません。別のゲームバージョン用か、別の Mod がすでに変更した元ファイル用に作られています。同じファイルにパッチを当てる Mod は同じステップにまとめるか、対応するゲームバージョンを入れてください。",
     "plugin_hook_failed": "プラグインの処理に失敗しました。詳しくはログを確認してください。",
     "changelog_load_failed": "変更ログのロードに失敗しました",
     "deletion_error": "削除エラー",

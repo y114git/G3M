@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 import sys
 import zipfile
@@ -14,6 +15,7 @@ from services.mod_operation_executor import (
     ModOperationExecutionError,
     ModOperationExecutor,
     ModOperationJournal,
+    ModPatchMismatchError,
     ModRecoveryConflictError,
 )
 from utils.mod.archive import materialize_archive
@@ -745,6 +747,29 @@ def test_executor_restores_after_failed_patch(tmp_path):
     assert target.read_text(encoding="utf-8") == "original"
 
 
+def test_executor_names_the_mod_whose_patch_does_not_fit_and_restores(tmp_path):
+    mod_root, game_root, _ = _plan(tmp_path, [])
+    (mod_root / "change.xdelta").write_text("patch", encoding="utf-8")
+    target = game_root / "data.win"
+    target.write_text("original", encoding="utf-8")
+    plan = build_mod_operation_plan(
+        _config([{"source": "${mod_path}/change.xdelta", "target": "${game_path}/data.win", "type": "patch"}]),
+        ModPathContext.create(
+            mod_path=mod_root, game_path=game_root, game_data_path=None, user_path=tmp_path / "user"
+        ),
+    )
+    plan = replace(plan, operations=tuple(replace(o, mod_id="test_mod") for o in plan.operations))
+
+    def patcher(*_args):
+        raise ModOperationExecutionError("patch backend failed: xdelta3: target window checksum mismatch")
+
+    with pytest.raises(ModPatchMismatchError) as caught:
+        ModOperationExecutor(tmp_path / "session", patcher=patcher).execute(plan)
+
+    assert (caught.value.mod_id, caught.value.patch) == ("test_mod", "change.xdelta")
+    assert target.read_text(encoding="utf-8") == "original"
+
+
 def test_executor_passes_a_nonexistent_output_path_to_patchers(tmp_path):
     mod_root, game_root, _ = _plan(tmp_path, [])
     (mod_root / "change.patch").write_text("patch", encoding="utf-8")
@@ -1008,3 +1033,17 @@ def test_read_only_target_file_is_overwritten_and_restored(tmp_path):
     journal.restore()
 
     assert target.read_text(encoding="utf-8") == "original"
+
+
+def test_replace_file_replaces_a_read_only_target(tmp_path):
+    from services.mod_operation_executor import replace_file
+
+    target = tmp_path / "data.win"
+    target.write_text("old", encoding="utf-8")
+    os.chmod(target, stat.S_IREAD)
+    source = tmp_path / "new.tmp"
+    source.write_text("new", encoding="utf-8")
+
+    replace_file(source, target)
+
+    assert target.read_text(encoding="utf-8") == "new"

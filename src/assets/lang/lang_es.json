@@ -739,6 +739,7 @@
     "unexpected_startup_error": "Error inesperado al iniciar: {details}",
     "modpack_creation_failed": "Error al crear modpack",
     "mod_patching_failed": "Error en la operación del mod. Consulta el registro para más detalles.",
+    "mod_patch_mismatch": "El parche {patch} de {mod} no corresponde al archivo del juego. Se hizo para otra versión del juego, o para el archivo original cuando otro mod ya lo había cambiado. Pon los mods que parchean el mismo archivo en un solo paso, o instala la versión del juego adecuada.",
     "plugin_hook_failed": "Error en la acción del plugin. Consulta el registro para más detalles.",
     "changelog_load_failed": "Error al cargar registro de cambios",
     "deletion_error": "Error de Eliminación",

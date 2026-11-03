@@ -6,7 +6,10 @@ import logging
 from dataclasses import replace
 from types import SimpleNamespace
 
-from services.mod_operation_executor import ModOperationCancelledError
+from services.mod_operation_executor import (
+    ModOperationCancelledError,
+    ModPatchMismatchError,
+)
 from utils.mod.operation_plan import ModOperationPlan, PlannedModOperation
 
 
@@ -192,3 +195,33 @@ def test_operation_worker_shows_percent_inside_a_running_step(qapp, tmp_path):
         (0, "Applying G3MPatch to data.win (1/1)..."),
         (40, "Applying G3MPatch to data.win (1/1)... 40%"),
     ]
+
+
+def test_operation_worker_explains_a_patch_that_does_not_fit_without_traceback(
+    monkeypatch, qapp, tmp_path, caplog
+):
+    from workers.mod.operation_worker import ModOperationThread
+
+    class _Executor:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def execute(self, *_args, **_kwargs):
+            raise ModPatchMismatchError("dynamic_equips", "chapter1.xdelta")
+
+    monkeypatch.setattr("workers.mod.operation_worker.ModOperationExecutor", _Executor)
+    worker = ModOperationThread(
+        SimpleNamespace(), ModOperationPlan((), ()), tmp_path / "journal"
+    )
+    results, messages = [], []
+    worker.result_ready.connect(results.append)
+    worker.status_update.connect(lambda message, _kind: messages.append(message))
+    caplog.set_level(logging.INFO, logger="workers.mod.operation_worker")
+
+    worker.run()
+    qapp.processEvents()
+
+    assert results == [False]
+    assert "dynamic_equips" in messages[0] and "chapter1.xdelta" in messages[0]
+    assert "Mod operation plan failed" in caplog.text
+    assert "Traceback" not in caplog.text

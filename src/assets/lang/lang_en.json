@@ -739,6 +739,7 @@
     "unexpected_startup_error": "Unexpected startup error: {details}",
     "modpack_creation_failed": "Failed to create modpack",
     "mod_patching_failed": "Mod operation failed. Check the log for details.",
+    "mod_patch_mismatch": "The patch {patch} of {mod} does not fit the game file. It was made for another game version, or for the original file while another mod already changed it. Put mods that patch the same file into one step, or install the matching game version.",
     "plugin_hook_failed": "Plugin action failed. Check the log for details.",
     "changelog_load_failed": "Failed to load changelog",
     "deletion_error": "Deletion Error",

@@ -10,8 +10,10 @@ from PyQt6.QtCore import pyqtSignal
 from services.localization_service import tr
 from services.mod_operation_executor import (
     ModOperationCancelledError,
+    ModOperationExecutionError,
     ModOperationExecutor,
     ModOperationJournal,
+    ModPatchMismatchError,
 )
 from services.mod_operation_support import create_g3mtool_merger, create_g3mtool_patcher
 from ui.utils.thread_lifetime import ManagedQThread
@@ -198,8 +200,25 @@ class ModOperationThread(ManagedQThread):
                 step_progress=self._on_step_progress,
             )
             success = not self._is_cancelled()
-        except ModOperationCancelledError:
-            logger.info("Mod operation plan cancelled; applied files were restored")
+        except ModOperationCancelledError as error:
+            logger.info("Mod operation plan cancelled; applied files were restored (%s)", error)
+        except ModPatchMismatchError as error:
+            # An expected, user-fixable failure: the executor already restored the files, so no traceback.
+            logger.error("Mod operation plan failed: %s", error)
+            _safe_emit(
+                self.__class__.__name__,
+                self.status_update,
+                tr("errors.mod_patch_mismatch", mod=error.mod_id or "?", patch=error.patch),
+                "error",
+            )
+        except ModOperationExecutionError as error:
+            logger.error("Mod operation plan failed: %s", error)
+            _safe_emit(
+                self.__class__.__name__,
+                self.status_update,
+                tr("errors.mod_patching_failed"),
+                "error",
+            )
         except Exception as error:
             logger.error("Mod operation plan failed: %s", error, exc_info=True)
             _safe_emit(

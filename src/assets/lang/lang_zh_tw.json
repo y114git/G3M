@@ -739,6 +739,7 @@
     "unexpected_startup_error": "啟動時發生未預期錯誤：{details}",
     "modpack_creation_failed": "建立模組包失敗",
     "mod_patching_failed": "模組操作失敗。請查看日誌以瞭解詳細資訊。",
+    "mod_patch_mismatch": "{mod} 的修補檔 {patch} 與遊戲檔案不符。它是為另一個遊戲版本製作，或是為原始檔案製作而其他 Mod 已修改該檔案。請將修改同一檔案的 Mod 放入同一步驟，或安裝相符的遊戲版本。",
     "plugin_hook_failed": "外掛操作失敗。請查看日誌以瞭解詳細資訊。",
     "changelog_load_failed": "加載更新日誌失敗",
     "deletion_error": "刪除錯誤",

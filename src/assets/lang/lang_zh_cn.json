@@ -739,6 +739,7 @@
     "unexpected_startup_error": "启动时发生意外错误：{details}",
     "modpack_creation_failed": "创建模组包失败",
     "mod_patching_failed": "模组操作失败。请查看日志了解详情。",
+    "mod_patch_mismatch": "{mod} 的补丁 {patch} 与游戏文件不匹配。它是为另一个游戏版本制作的，或是为原始文件制作而其他 Mod 已修改了该文件。请将修改同一文件的 Mod 放入同一步骤，或安装匹配的游戏版本。",
     "plugin_hook_failed": "插件操作失败。请查看日志了解详情。",
     "changelog_load_failed": "加载更新日志失败",
     "deletion_error": "删除错误",
