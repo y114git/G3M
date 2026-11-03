@@ -24,9 +24,12 @@ PACKAGED_BINARY_STARTUP_GRACE_SECONDS = 4
 
 
 @pytest.fixture(autouse=True)
-def restore_startup_diagnostics():
+def restore_startup_diagnostics(monkeypatch, tmp_path):
     from app import startup as startup_module
 
+    # a failed startup shows a modal dialog and writes a file in %TEMP%; neither may happen in tests
+    monkeypatch.setattr(startup_module, '_safe_critical', lambda *_args: None)
+    monkeypatch.setattr(startup_module.tempfile, 'gettempdir', lambda: str(tmp_path))
     exception_hook = sys.excepthook
     unraisable_hook = sys.unraisablehook
     thread_hook = threading.excepthook

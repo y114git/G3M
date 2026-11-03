@@ -123,7 +123,7 @@ class BootstrapCoordinator:
                 )
             server = self.server_factory(self.instance)
             if not server.listen(SINGLE_INSTANCE_KEY):
-                logger.info("Another G3M instance claimed the local server")
+                logger.warning("Could not listen for other G3M instances: %s", server.errorString())
                 self._close_splash()
                 QTimer.singleShot(0, self.app.quit)
                 return
