@@ -749,11 +749,11 @@ def test_executor_restores_after_failed_patch(tmp_path):
 
 def test_executor_names_the_mod_whose_patch_does_not_fit_and_restores(tmp_path):
     mod_root, game_root, _ = _plan(tmp_path, [])
-    (mod_root / "change.xdelta").write_text("patch", encoding="utf-8")
-    target = game_root / "data.win"
+    (mod_root / "change.patch").write_text("patch", encoding="utf-8")
+    target = game_root / "target.bin"
     target.write_text("original", encoding="utf-8")
     plan = build_mod_operation_plan(
-        _config([{"source": "${mod_path}/change.xdelta", "target": "${game_path}/data.win", "type": "patch"}]),
+        _config([{"source": "${mod_path}/change.patch", "target": "${game_path}/target.bin", "type": "patch"}]),
         ModPathContext.create(
             mod_path=mod_root, game_path=game_root, game_data_path=None, user_path=tmp_path / "user"
         ),
@@ -766,7 +766,7 @@ def test_executor_names_the_mod_whose_patch_does_not_fit_and_restores(tmp_path):
     with pytest.raises(ModPatchMismatchError) as caught:
         ModOperationExecutor(tmp_path / "session", patcher=patcher).execute(plan)
 
-    assert (caught.value.mod_id, caught.value.patch) == ("test_mod", "change.xdelta")
+    assert (caught.value.mod_id, caught.value.patch) == ("test_mod", "change.patch")
     assert target.read_text(encoding="utf-8") == "original"
 
 
