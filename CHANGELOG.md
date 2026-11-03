@@ -19,6 +19,11 @@
 - Fixed folders made read-only by Windows blocking the restore of game files after the game closed, and then every following launch.
 - Fixed an older copy of a mod replacing a newer one in the Library when two folders hold the same mod. The newest version is shown.
 - Fixed patching sometimes failing right after a patch tool was stopped, because its temporary files were still in use.
+- When a mod's patch does not fit the game file, because it was made for another game version or another mod already changed that file, G3M now names the mod and the patch and explains what to do. The game files are restored as before.
+- Fixed G3M closing without any message when it could not start because of a locked folder or an unusable instance lock. It now shows the reason and saves it to a file in the temporary folder.
+- Fixed playtime saving wiping the mods' data when the file was locked for a moment, a profile file being left empty after a crash, and an uninstall reporting success while a locked file kept the mod folder.
+- Fixed one failing step at close or when the game exits skipping the restore of game files, and a failed batch import blocking the next drag and drop.
+- The log no longer repeats the same two-folders-one-mod warning on every scan or prints a long error trace for a patch that does not fit.
 - The GameBanana file list no longer repeats the file description after the file name.
 - Updated the FRICKG3M theme with new background music and font by KirbyKid.
 
