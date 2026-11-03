@@ -1,5 +1,6 @@
 """Mod management and installation."""
 
+import json
 import logging
 import os
 import shutil
@@ -589,6 +590,9 @@ class ModManager(QObject):
             logger.warning(
                 f"delete_mod_files: safe_rmtree returned False for {folder_path}"
             )
+            if os.path.exists(folder_path):
+                # a locked file kept the folder: report it instead of announcing a finished uninstall
+                raise PermissionError(13, "Folder could not be fully removed", folder_path)
         except Exception as e:
             logger.error(
                 f"delete_mod_files: Failed to delete folder {folder_path}: {e}",
@@ -844,7 +848,11 @@ class ModManager(QObject):
                 metadata = {}
             else:
                 try:
-                    metadata = load_json(self.app_state.mods_metadata_path)
+                    # load_json answers {} for a locked file, and saving that would wipe every mod's metadata
+                    with open(self.app_state.mods_metadata_path, encoding="utf-8") as handle:
+                        metadata = json.load(handle)
+                except json.JSONDecodeError:
+                    metadata = load_json(self.app_state.mods_metadata_path)  # backs the corrupt file up
                 except Exception as e:
                     logger.warning(f"add_playtime_hours: failed to read metadata: {e}")
                     return

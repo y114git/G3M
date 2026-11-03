@@ -822,9 +822,14 @@ class GameLauncher(QObject):
 
     def _check_game_running(self, vanilla_mode):
         logger.info("[LAUNCH] Game is no longer running, starting cleanup")
-        if self.restore_window_callback:
-            self.restore_window_callback()
-        self._record_launch_playtime()
+        # neither step may stop the restore of the game files below
+        for step in (self.restore_window_callback, self._record_launch_playtime):
+            if step is None:
+                continue
+            try:
+                step()
+            except Exception:
+                logger.warning("Game exit step %s failed", getattr(step, "__name__", step), exc_info=True)
         if not self._selected_launch_mode.restores_after_game:
             if self._operation_journal is not None and not self._permanent_committed:
                 logger.warning("Game was not detected; restoring uncommitted changes")
@@ -861,7 +866,7 @@ class GameLauncher(QObject):
         if journal is not None:
             try:
                 journal.retire()
-            except OSError as error:
+            except Exception as error:
                 logger.error("Could not commit permanent operation journal: %s", error)
                 self._run_journal_operation(
                     "retire",

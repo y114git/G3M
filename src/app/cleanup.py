@@ -119,11 +119,18 @@ def _iter_shutdown_threads(w):
 def perform_close_cleanup(w):
     """Perform cleanup during closeEvent. `w` is the AppWindow instance."""
     try:
-        w.customization_service.stop_background_music()
-        if getattr(w, "discord_rich_presence_service", None):
-            w.discord_rich_presence_service.shutdown()
-        if getattr(w, "session_manager", None):
-            w.session_manager.stop()
+        # one failing service must not skip restoring the game files further down
+        for stop in (
+            w.customization_service.stop_background_music,
+            getattr(getattr(w, "discord_rich_presence_service", None), "shutdown", None),
+            getattr(getattr(w, "session_manager", None), "stop", None),
+        ):
+            if stop is None:
+                continue
+            try:
+                stop()
+            except Exception:
+                logger.warning("Cleanup step %s failed", getattr(stop, "__qualname__", stop), exc_info=True)
         if getattr(w, "search_display", None) and w.search_display:
             with contextlib.suppress(Exception):
                 w.search_display.cleanup()

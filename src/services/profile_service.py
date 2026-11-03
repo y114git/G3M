@@ -121,7 +121,10 @@ class ProfileService(QObject):
         path = self._profile_path(name)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+            # replace, not truncate: a kill or lock mid-write must not leave an empty profile
+            temporary = path.with_name(path.name + ".tmp")
+            temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+            os.replace(temporary, path)
         except Exception as e:
             logger.error("ProfileService: failed to write %s: %s", path, e)
 

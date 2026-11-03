@@ -701,7 +701,10 @@ class ModImportExportController:
             QTimer.singleShot(100, self._process_next_import)
             return
         if self._manual_import_batches:
-            self._show_manual_import_batch(self._manual_import_batches.pop(0))
+            try:
+                self._show_manual_import_batch(self._manual_import_batches.pop(0))
+            except Exception as error:
+                logger.error("[DND IMPORT] Manual import batch failed: %s", error, exc_info=True)
             QTimer.singleShot(0, self._process_next_import)
             return
         self._importing = False

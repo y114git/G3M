@@ -142,3 +142,35 @@ def test_record_playtime_quarantines_corrupt_metadata(app_state):
     manager.add_playtime_hours(["mod"], 1.0)
 
     assert load_json(app_state.mods_metadata_path) == {"mod": {"playtime_hours": 1.0}}
+
+
+def test_record_playtime_keeps_metadata_when_the_file_is_locked(app_state, monkeypatch):
+    manager = ModManager.__new__(ModManager)
+    manager.app_state = app_state
+    with open(app_state.mods_metadata_path, "w", encoding="utf-8") as file:
+        file.write('{"other": {"playtime_hours": 5}}')
+    real_open = open
+
+    def locked(path, *args, **kwargs):
+        if str(path) == str(app_state.mods_metadata_path):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", locked)
+    manager.add_playtime_hours(["mod"], 1.0)
+    monkeypatch.undo()
+
+    assert load_json(app_state.mods_metadata_path) == {"other": {"playtime_hours": 5}}
+
+
+def test_uninstall_reports_a_folder_that_could_not_be_removed(app_state, feedback_service, monkeypatch, tmp_path):
+    folder = tmp_path / "stuck_mod"
+    folder.mkdir()
+    manager = ModManager(app_state, feedback_service)
+    monkeypatch.setattr("utils.file_utils.safe_rmtree", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(feedback_service, "show_message", lambda *_args: None)
+
+    with pytest.raises(ModUninstallationError):
+        manager.uninstall_mod(SimpleNamespace(id="stuck_mod", name="Stuck", folder_path=str(folder)))
+
+    assert folder.exists()
