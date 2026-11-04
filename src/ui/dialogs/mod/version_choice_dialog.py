@@ -47,7 +47,7 @@ def _version_info(version: dict) -> str:
         parts.append(format_size(version["size"]))
     if version.get("mtime"):
         parts.append(format_timestamp(version["mtime"]))
-    return " · ".join(filter(None, parts))
+    return " · ".join(parts)
 
 
 class _VersionRow(QFrame):

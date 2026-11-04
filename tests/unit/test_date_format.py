@@ -46,8 +46,8 @@ def test_the_untouched_system_locale_gives_a_date(qapp):
 
 
 @pytest.mark.parametrize("timestamp", [-1e12, 1e18, float("inf")])
-def test_a_timestamp_the_os_cannot_convert_gives_empty_text(qapp, timestamp):
-    assert format_timestamp(timestamp) == ""
+def test_a_timestamp_the_os_cannot_convert_shows_the_nearest_date(qapp, timestamp):
+    assert format_timestamp(timestamp).strip()
 
 
 def test_an_aware_date_is_converted_to_local_time(qapp):

@@ -1,10 +1,13 @@
 """Show dates in the format chosen in the system region settings."""
 
+import math
 from datetime import datetime
 
 from PyQt6.QtCore import QDate, QDateTime, QLocale, QTime
 
 # Shapes G3M stores: GameBanana "dd.mm.yy HH:MM", local installs "YYYY-MM-DD HH:MM:SS".
+# Windows cannot convert timestamps outside this span (1970-01-02 .. year 3000) to local time.
+_MIN_TIMESTAMP, _MAX_TIMESTAMP = 86400, 32503680000
 _STORED_FORMATS = ("%d.%m.%y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M")
 
 
@@ -21,11 +24,10 @@ def format_local_datetime(value: datetime) -> str:
 
 
 def format_timestamp(timestamp: float) -> str:
-    """Empty text when the timestamp is outside what the OS can convert."""
-    try:
-        return format_local_datetime(datetime.fromtimestamp(timestamp))
-    except (ValueError, OSError, OverflowError):
-        return ""
+    """A timestamp outside what the OS can convert shows the nearest date it can."""
+    if not math.isfinite(timestamp):
+        timestamp = _MIN_TIMESTAMP
+    return format_local_datetime(datetime.fromtimestamp(min(max(timestamp, _MIN_TIMESTAMP), _MAX_TIMESTAMP)))
 
 
 def format_stored_date(text: str | None) -> str | None:
