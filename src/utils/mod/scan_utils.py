@@ -46,7 +46,8 @@ def _add_to_cache(
     kept = cache.get(info.id)
     if kept is not None:
         keep_new = rank(info) > rank(kept)
-        pair = (*sorted((kept.folder_path, info.folder_path)), info.id)
+        first, second = sorted((kept.folder_path, info.folder_path))
+        pair = (first, second, info.id)
         if pair not in _reported_duplicates:
             _reported_duplicates.add(pair)
             logger.warning(

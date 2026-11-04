@@ -313,4 +313,6 @@ def test_a_mod_that_needs_manual_install_is_tried_automatically_unless_the_setti
     manager._on_use_finished("manual", False, True, "")
 
     assert manager._auto_manual_queue == queued
-    assert manager._store.find("manual").use_status == UseStatus.NEEDS_MANUAL
+    stored = manager._store.find("manual")
+    assert stored is not None
+    assert stored.use_status == UseStatus.NEEDS_MANUAL

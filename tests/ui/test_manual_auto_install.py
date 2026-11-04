@@ -21,11 +21,12 @@ DATA_FILE = {"win32": "data.win", "darwin": "game.ios"}.get(sys.platform, "game.
 @pytest.fixture
 def parent(qtbot, tmp_path):
     widget = QWidget()
-    vars(widget)["app_state"] = SimpleNamespace(local_config={}, mods_dir=str(tmp_path / "mods"))
+    game = get_game("undertale")
+    assert game is not None
+    state = SimpleNamespace(local_config={game.path_config_key: str(tmp_path / "game")}, mods_dir=str(tmp_path / "mods"))
+    vars(widget)["app_state"] = state
     vars(widget)["mod_service"] = object()
     qtbot.addWidget(widget)
-    game = get_game("undertale")
-    widget.app_state.local_config[game.path_config_key] = str(tmp_path / "game")
     return widget
 
 
