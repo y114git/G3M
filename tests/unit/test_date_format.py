@@ -1,9 +1,13 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from PyQt6.QtCore import QLocale
 
-from utils.date_format import format_local_datetime, format_stored_date
+from utils.date_format import (
+    format_local_datetime,
+    format_stored_date,
+    format_timestamp,
+)
 
 
 @pytest.fixture
@@ -35,3 +39,16 @@ def test_stored_dates_are_shown_in_the_region_format(region, stored):
 @pytest.mark.parametrize("text", [None, "", "N/A", "yesterday"])
 def test_text_that_is_not_a_stored_date_is_left_alone(region, text):
     assert format_stored_date(text) == text
+
+
+def test_the_untouched_system_locale_gives_a_date(qapp):
+    assert format_local_datetime(datetime(2026, 11, 4, 15, 30)).strip()
+
+
+@pytest.mark.parametrize("timestamp", [-1e12, 1e18, float("inf")])
+def test_a_timestamp_the_os_cannot_convert_gives_empty_text(qapp, timestamp):
+    assert format_timestamp(timestamp) == ""
+
+
+def test_an_aware_date_is_converted_to_local_time(qapp):
+    assert format_local_datetime(datetime(2026, 11, 4, 15, 30, tzinfo=UTC)).strip()

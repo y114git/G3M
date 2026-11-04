@@ -196,7 +196,7 @@ class _VersionItemWidget(QFrame):
             parts.append(format_size(self._info["size"]))
         if self._info.get("mtime"):
             parts.append(format_timestamp(self._info["mtime"]))
-        self._info_label = QLabel(" · ".join(parts))
+        self._info_label = QLabel(" · ".join(filter(None, parts)))
         self._info_label.setObjectName("mod_version_info")
         left.addWidget(self._info_label)
         layout.addLayout(left, 1)

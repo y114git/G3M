@@ -10,7 +10,10 @@ _STORED_FORMATS = ("%d.%m.%y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M")
 
 def format_local_datetime(value: datetime) -> str:
     """Qt reads the short date and time patterns the user picked in the system settings, custom ones included."""
-    local = value.astimezone() if value.tzinfo else value
+    try:
+        local = value.astimezone() if value.tzinfo else value
+    except (ValueError, OSError, OverflowError):  # the OS cannot convert very old or far dates to local time
+        local = value
     return QLocale().toString(
         QDateTime(QDate(local.year, local.month, local.day), QTime(local.hour, local.minute)),
         QLocale.FormatType.ShortFormat,
@@ -18,7 +21,11 @@ def format_local_datetime(value: datetime) -> str:
 
 
 def format_timestamp(timestamp: float) -> str:
-    return format_local_datetime(datetime.fromtimestamp(timestamp))
+    """Empty text when the timestamp is outside what the OS can convert."""
+    try:
+        return format_local_datetime(datetime.fromtimestamp(timestamp))
+    except (ValueError, OSError, OverflowError):
+        return ""
 
 
 def format_stored_date(text: str | None) -> str | None:

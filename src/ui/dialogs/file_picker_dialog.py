@@ -142,10 +142,7 @@ class GameBananaFilePickerDialog(DynamicDialog):
     def _format_timestamp(timestamp: int | None) -> str:
         if not timestamp:
             return tr("defaults.not_specified")
-        try:
-            return format_timestamp(timestamp)
-        except (ValueError, OSError, OverflowError):
-            return tr("defaults.not_specified")
+        return format_timestamp(timestamp) or tr("defaults.not_specified")
 
     @staticmethod
     def _format_auto_install(format_key: str | None) -> str:
