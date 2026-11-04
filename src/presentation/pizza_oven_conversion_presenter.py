@@ -76,6 +76,40 @@ class PizzaOvenConversionPresenter:
             logger.debug("PO inspection failed for %s: %s", prepared_path, e, exc_info=True)
             return False
 
+    def try_auto_install(
+        self,
+        parent,
+        *,
+        prepared_path: str,
+        source_file_path: str | None,
+        initial_game_type: str | None,
+        gamebanana_metadata: dict | None,
+        target_mods_dir: str | None,
+    ) -> bool:
+        """Install without asking when every file sets itself up; False leaves the manual choice to the user."""
+        if self.should_offer_conversion(prepared_path, gamebanana_metadata):
+            return False  # Pizza Oven mods are offered a conversion instead
+        try:
+            from ui.dialogs.manual_install.auto import auto_manual_install
+
+            installed = auto_manual_install(
+                parent,
+                prepared_path,
+                gamebanana_metadata=gamebanana_metadata or {},
+                source_file_path=source_file_path,
+                initial_game_type=initial_game_type,
+                target_mods_dir=target_mods_dir,
+            )
+        except Exception as error:
+            logger.warning("Automatic installation was skipped: %s", error)
+            return False
+        logger.info(
+            "Automatic installation of %s: %s",
+            os.path.basename(source_file_path or prepared_path),
+            "installed" if installed else "needs manual installation",
+        )
+        return installed
+
     def prompt_with_manual_options(
         self,
         parent,

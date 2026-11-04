@@ -299,3 +299,18 @@ def test_a_mod_that_is_active_or_waiting_is_not_queued_twice(tmp_path, monkeypat
     manager.store.add(previous)
 
     assert manager.enqueue("Mod", canonical_key="gb_mod_1_2") == (previous.id, True)
+
+
+@pytest.mark.parametrize(("always_manual", "queued"), [(False, ["manual"]), (True, [])])
+def test_a_mod_that_needs_manual_install_is_tried_automatically_unless_the_setting_forbids_it(
+    tmp_path, qapp, monkeypatch, always_manual, queued
+):
+    manager = DownloadsManager(str(tmp_path), lambda: {"manual_install_always": always_manual})
+    record = DownloadRecord(id="manual", display_name="Mod", target_kind=TargetKind.MOD)
+    manager._store.add(record)
+    monkeypatch.setattr(manager, "_next_auto_manual", Mock())
+
+    manager._on_use_finished("manual", False, True, "")
+
+    assert manager._auto_manual_queue == queued
+    assert manager._store.find("manual").use_status == UseStatus.NEEDS_MANUAL

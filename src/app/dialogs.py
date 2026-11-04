@@ -2,9 +2,12 @@
 
 import logging
 
+from PyQt6.QtCore import QTimer
+
 from app.game_ui import refresh_game_lists, update_checkbox_visibility
 from config.config import UI_COLORS
 from models.game_modes import DeltaruneGame, get_game
+from services.game_detection_service import get_chapter_id_for_game_mode
 from services.localization_service import tr
 from ui.dialogs.community_dialog import CommunityDialog
 
@@ -34,6 +37,26 @@ def on_downloads_record_updated(w, record):
             UI_COLORS["status_warning"],
         )
     refresh_mod_card_buttons(w)
+
+
+def on_mods_added(w, mod_ids: list[str]) -> None:
+    """Turn on freshly installed mods for the current game when 'Use a mod right after it is installed' is set."""
+    if w.app_state.local_config.get("use_mod_after_install", False):
+        QTimer.singleShot(0, lambda: _use_new_mods(w, mod_ids))
+
+
+def _use_new_mods(w, mod_ids: list[str]) -> None:
+    try:
+        library = w.library_display
+        game = library._current_game_type()
+        chapter_id = get_chapter_id_for_game_mode(w.app_state.game_mode)
+        installed = {mod.get("id"): mod for mod in w.mod_service.get_installed_mods_list()}
+        for mod_id in mod_ids:
+            mod = installed.get(mod_id)
+            if mod and mod.get("game", game) == game and not library.used_mods_service.is_mod_used_for_chapter(mod, chapter_id):
+                library.on_mod_use(mod)
+    except Exception as error:
+        logger.warning("Could not turn on the new mods: %s", error)
 
 
 def on_downloads_use_completed(w):

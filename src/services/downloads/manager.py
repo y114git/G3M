@@ -66,6 +66,8 @@ class DownloadsManager(QObject):
         self._plugin_install_service = None
         self._themes_dir: str | None = None
         self._progress_emit_state: dict[str, tuple[int, int, int, float]] = {}
+        self._auto_manual_queue: list[str] = []
+        self._auto_manual_active: str | None = None
 
     def set_app_context(self, *, mods_dir: str, plugin_install_service=None, themes_dir: str | None = None):
         self._mods_dir = mods_dir
@@ -338,11 +340,14 @@ class DownloadsManager(QObject):
             self.record_updated.emit(record)
         self._emit_badge()
 
+    def _installing_with_worker(self) -> bool:
+        return any(other.use_status == UseStatus.USING and other.id in self._workers for other in self._store.records)
+
     def _start_use(self, record_id: str):
         record = self._store.find(record_id)
         if not record or not record.file_exists or not record.file_path:
             return
-        if any(other.use_status == UseStatus.USING and other.id in self._workers for other in self._store.records):
+        if self._auto_manual_active or self._installing_with_worker():
             # Installs write into the same mods folder, so they run one at a time.
             QTimer.singleShot(500, lambda: self._start_use(record_id))
             return
@@ -419,6 +424,9 @@ class DownloadsManager(QObject):
             self._store.update(record)
             self.record_updated.emit(record)
             self._emit_badge()
+            if record.target_kind == TargetKind.MOD and not self._settings().get("manual_install_always", False):
+                self._auto_manual_queue.append(record.id)
+                QTimer.singleShot(0, self._next_auto_manual)
             return
         self._remember_gamebanana_file(record)
         record.ever_installed = True
@@ -569,9 +577,86 @@ class DownloadsManager(QObject):
             not record
             or record.target_kind != TargetKind.MOD
             or record.use_status != UseStatus.NEEDS_MANUAL
+            or record.id == self._auto_manual_active
+            or record.id in self._auto_manual_queue
         ):
             return
         self._open_manual_install_dialog(record, parent_widget)
+
+    def _next_auto_manual(self) -> None:
+        """Try the queued downloads one at a time; a mod that cannot set itself up stays in Needs manual install."""
+        if self._auto_manual_active or not self._auto_manual_queue:
+            return
+        if self._installing_with_worker():
+            QTimer.singleShot(500, self._next_auto_manual)
+            return
+        record = self._store.find(self._auto_manual_queue.pop(0))
+        if record and record.use_status == UseStatus.NEEDS_MANUAL and record.file_path:
+            self._auto_manual_active = record.id
+            try:
+                self._auto_manual_install(record)
+            except Exception as error:
+                logger.warning(
+                    "DownloadsManager: automatic installation of %s was skipped: %s",
+                    record.display_name or record.id, format_filesystem_error(error, path=record.file_path or ""),
+                )
+            finally:
+                self._auto_manual_active = None
+        if self._auto_manual_queue:
+            QTimer.singleShot(0, self._next_auto_manual)
+
+    def _auto_manual_install(self, record: DownloadRecord) -> None:
+        parent, presenter = self._resolve_presenter_parent(self.parent())
+        if presenter is None:
+            return
+        temp_dir, content_path, gb_metadata, game_type = self._extract_for_manual(record)
+        try:
+            installed = presenter.try_auto_install(
+                parent,
+                prepared_path=content_path,
+                source_file_path=record.file_path,
+                initial_game_type=game_type,
+                gamebanana_metadata=gb_metadata,
+                target_mods_dir=self._mod_target_dir(record),
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        if installed:
+            self._complete_manual_install(record)
+
+    def _extract_for_manual(self, record: DownloadRecord) -> tuple[str, str, dict, str | None]:
+        import tempfile
+
+        from utils.archive_utils import extract_archive, unwrap_single_directory_chain
+
+        if not record.file_path:
+            raise FileNotFoundError("Downloaded archive path is missing")
+        temp_dir = tempfile.mkdtemp(prefix="g3m_manual_")
+        try:
+            extract_archive(record.file_path, temp_dir)
+            content_path = unwrap_single_directory_chain(temp_dir)
+        except BaseException:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
+        game_type = (record.metadata.get("game") or "deltarune") if record.metadata else None
+        return temp_dir, content_path, self._build_dialog_metadata(record), game_type
+
+    def _complete_manual_install(self, record: DownloadRecord) -> None:
+        self._remember_gamebanana_file(record)
+        if self._store.find(record.id) is None:  # the user removed it while the install ran
+            self.use_completed.emit()
+            return
+        record.ever_installed = True
+        record.use_status = UseStatus.READY
+        if record.delete_after_use:
+            self._store.delete_file_for_record(record)
+            self._store.remove(record.id)
+            self.record_removed.emit(record.id)
+        else:
+            self._store.update(record)
+            self.record_updated.emit(record)
+        self._emit_badge()
+        self.use_completed.emit()
 
     def _resolve_presenter_parent(self, parent_widget=None):
         current = parent_widget or self.parent()
@@ -598,25 +683,8 @@ class DownloadsManager(QObject):
     def _open_manual_install_dialog(self, record: DownloadRecord, parent_widget=None):
         temp_dir = None
         try:
-            import tempfile
-
-            from utils.archive_utils import (
-                extract_archive,
-                unwrap_single_directory_chain,
-            )
-
             parent = parent_widget or self.parent()
-            if not record.file_path:
-                raise FileNotFoundError("Downloaded archive path is missing")
-            temp_dir = tempfile.mkdtemp(prefix="g3m_manual_")
-            extract_archive(record.file_path, temp_dir)
-            content_path = unwrap_single_directory_chain(temp_dir)
-            gb_metadata = self._build_dialog_metadata(record)
-            initial_game_type = (
-                (record.metadata.get("game") or "deltarune")
-                if record.metadata
-                else None
-            )
+            temp_dir, content_path, gb_metadata, initial_game_type = self._extract_for_manual(record)
             parent, presenter = self._resolve_presenter_parent(parent)
             if presenter is None:
                 logger.warning(
@@ -627,18 +695,7 @@ class DownloadsManager(QObject):
                 return
 
             def _on_success():
-                self._remember_gamebanana_file(record)
-                record.ever_installed = True
-                record.use_status = UseStatus.READY
-                if record.delete_after_use:
-                    self._store.delete_file_for_record(record)
-                    self._store.remove(record.id)
-                    self.record_removed.emit(record.id)
-                else:
-                    self._store.update(record)
-                    self.record_updated.emit(record)
-                self._emit_badge()
-                self.use_completed.emit()
+                self._complete_manual_install(record)
 
             presenter.prompt_with_manual_options(
                 parent,
@@ -654,8 +711,9 @@ class DownloadsManager(QObject):
                 on_success=_on_success,
             )
         except Exception as e:
-            logger.error(
-                "DownloadsManager: manual install dialog failed: %s", e, exc_info=True
+            logger.warning(
+                "DownloadsManager: manual install dialog failed: %s",
+                format_filesystem_error(e, path=record.file_path or ""),
             )
             if temp_dir:
                 with contextlib.suppress(Exception):

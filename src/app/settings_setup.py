@@ -387,6 +387,8 @@ def setup_settings_tab(w):
             "downloads_no_auto_use_checkbox",
             "downloads_delete_after_use_checkbox",
             "downloads_save_local_imports_checkbox",
+            "manual_install_always_checkbox",
+            "use_mod_after_install_checkbox",
             "catalog_installed_only_checkbox",
             "catalog_theme_tag_checkboxes",
             "catalog_theme_filters_widget",
@@ -926,6 +928,17 @@ def setup_settings_tab(w):
                 ),
             )
         )
+    for checkbox, key, toggle in (
+        (w.manual_install_always_checkbox, "manual_install_always", w.settings_service.on_toggle_manual_install_always),
+        (w.use_mod_after_install_checkbox, "use_mod_after_install", w.settings_service.on_toggle_use_mod_after_install),
+    ):
+        if checkbox:
+            checkbox.setChecked(w.app_state.local_config.get(key, False))
+            checkbox.stateChanged.connect(
+                lambda s, checkbox=checkbox, toggle=toggle: _guarded_trigger(
+                    checkbox, lambda: _run_actions(lambda: toggle(bool(s)))
+                )
+            )
     if hasattr(w, "catalog_ui") and w.catalog_ui:
         w.settings_tab_widget.currentChanged.connect(w.catalog_ui.on_tab_changed)
         w.catalog_type_tabs.currentChanged.connect(w.catalog_ui.on_catalog_type_changed)

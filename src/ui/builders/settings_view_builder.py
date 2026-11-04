@@ -825,6 +825,22 @@ class SettingsViewBuilder:
         cl.addWidget(
             downloads_save_local_imports_cb, alignment=Qt.AlignmentFlag.AlignCenter
         )
+        manual_install_always_cb = self._styled_checkbox(
+            tr("downloads.settings_manual_install_always"),
+            tr("downloads.settings_manual_install_always_tip"),
+            config_key="manual_install_always",
+        )
+        cl.addWidget(
+            manual_install_always_cb, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        use_mod_after_install_cb = self._styled_checkbox(
+            tr("downloads.settings_use_after_install"),
+            tr("downloads.settings_use_after_install_tip"),
+            config_key="use_mod_after_install",
+        )
+        cl.addWidget(
+            use_mod_after_install_cb, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         layout.addWidget(sec)
 
         layout.addStretch()
@@ -837,6 +853,8 @@ class SettingsViewBuilder:
         self.widgets["downloads_save_local_imports_checkbox"] = (
             downloads_save_local_imports_cb
         )
+        self.widgets["manual_install_always_checkbox"] = manual_install_always_cb
+        self.widgets["use_mod_after_install_checkbox"] = use_mod_after_install_cb
         return self._wrap_in_scroll(page, parent)
 
     def _build_library_tab(self, parent: QWidget | None = None) -> QWidget:

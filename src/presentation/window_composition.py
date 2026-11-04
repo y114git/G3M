@@ -2,7 +2,11 @@
 
 from PyQt6.QtWidgets import QApplication
 
-from app.dialogs import on_downloads_record_updated, on_downloads_use_completed
+from app.dialogs import (
+    on_downloads_record_updated,
+    on_downloads_use_completed,
+    on_mods_added,
+)
 from app.game_ui import on_games_registry_changed, on_used_mods_updated
 from app.localization_utils import relocalize_texts, relocalize_ui
 from controllers.catalog_controller import CatalogController
@@ -256,6 +260,7 @@ class WindowComposition:
         window.settings_service.settings_changed.connect(
             window.search_display.update_filtered_mods
         )
+        window.mod_service.mods_added.connect(lambda ids: on_mods_added(window, ids))
         window.downloads_manager.use_completed.connect(
             lambda: on_downloads_use_completed(window)
         )

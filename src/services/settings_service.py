@@ -384,6 +384,12 @@ class SettingsManager(QObject):
     def on_toggle_downloads_save_local_imports(self, enabled: bool):
         self._toggle_setting("downloads_save_local_imports", enabled, None)
 
+    def on_toggle_manual_install_always(self, enabled: bool):
+        self._toggle_setting("manual_install_always", enabled, None)
+
+    def on_toggle_use_mod_after_install(self, enabled: bool):
+        self._toggle_setting("use_mod_after_install", enabled, None)
+
     def on_toggle_hide_update_mods_button(self, enabled: bool):
         self._toggle_setting("hide_update_mods_button", enabled, None)
 

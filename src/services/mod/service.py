@@ -56,6 +56,7 @@ class ModManager(QObject):
     progress_updated = pyqtSignal(int)
     status_changed = pyqtSignal(str, str)
     mod_list_updated = pyqtSignal()
+    mods_added = pyqtSignal(list)
 
     def __init__(
         self, app_state, feedback_service, settings_service=None, parent=None
@@ -70,6 +71,7 @@ class ModManager(QObject):
         self._mods_cache_valid = False
         self._scan_thread: ModScanThread | None = None
         self._scan_in_progress = False
+        self._seen_mod_ids: tuple[str, set[str]] | None = None
         self.migration_issues: tuple[ModConfigMigrationIssue, ...] = ()
 
     def _migrate_owned_mods(self) -> None:
@@ -258,11 +260,19 @@ class ModManager(QObject):
             self._mods_cache_valid = True
             return self._mods_cache.copy()
 
+    def _announce_new_mods(self, mod_ids: set[str]) -> None:
+        """Tell listeners which mods appeared since the previous scan of the same folder; a first scan or another profile only sets the baseline."""
+        previous, self._seen_mod_ids = self._seen_mod_ids, (self.app_state.mods_dir, mod_ids)
+        if previous is not None and previous[0] == self.app_state.mods_dir and (added := mod_ids - previous[1]):
+            self.mods_added.emit(sorted(added))
+
     def load_local_mods(self):
         if not os.path.exists(self.app_state.mods_dir):
             os.makedirs(self.app_state.mods_dir, exist_ok=True)
+            self._seen_mod_ids = (self.app_state.mods_dir, set())
             return False
         self._migrate_owned_mods()
+        scan_failed = False
         try:
             cache = self._get_mods_cache(use_async=False)
         except Exception as e:
@@ -270,6 +280,7 @@ class ModManager(QObject):
                 f"load_local_mods: Failed to get mods cache: {e}", exc_info=True
             )
             cache = {}
+            scan_failed = True
         from utils.mod.utils import parse_gamebanana_mod_id
 
         installed_mods = {}
@@ -292,6 +303,8 @@ class ModManager(QObject):
                         exc_info=True,
                     )
                     continue
+            if not scan_failed:
+                self._announce_new_mods(set(installed_mods))
             installed_gamebanana_by_id = {}
             for mod_id, config_data in installed_mods.items():
                 if is_gamebanana_id(mod_id):

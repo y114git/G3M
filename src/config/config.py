@@ -347,6 +347,10 @@ WIDGET_LOCALIZATIONS = [
         "setText",
         "downloads.settings_save_local_imports",
     ),
+    ("manual_install_always_checkbox", "setText", "downloads.settings_manual_install_always"),
+    ("manual_install_always_checkbox", "setToolTip", "downloads.settings_manual_install_always_tip"),
+    ("use_mod_after_install_checkbox", "setText", "downloads.settings_use_after_install"),
+    ("use_mod_after_install_checkbox", "setToolTip", "downloads.settings_use_after_install_tip"),
     ("mod_versions_export_mode_label", "setText", "mod_versions.settings_export"),
     (
         "mod_versions_export_mode_combo",
