@@ -86,6 +86,7 @@ class DetectionThread(ManagedQThread):
                     progress=lambda completed, total: safe_emit(
                         self.__class__.__name__, self.progress, completed, total
                     ),
+                    docs_as_info=self.config.get("manual_install_docs_as_info", True),
                 )
         except InterruptedError:
             pass

@@ -388,6 +388,7 @@ def setup_settings_tab(w):
             "downloads_delete_after_use_checkbox",
             "downloads_save_local_imports_checkbox",
             "manual_install_always_checkbox",
+            "manual_install_docs_as_info_checkbox",
             "use_mod_after_install_checkbox",
             "catalog_installed_only_checkbox",
             "catalog_theme_tag_checkboxes",
@@ -928,12 +929,13 @@ def setup_settings_tab(w):
                 ),
             )
         )
-    for checkbox, key, toggle in (
-        (w.manual_install_always_checkbox, "manual_install_always", w.settings_service.on_toggle_manual_install_always),
-        (w.use_mod_after_install_checkbox, "use_mod_after_install", w.settings_service.on_toggle_use_mod_after_install),
+    for checkbox, key, default, toggle in (
+        (w.manual_install_always_checkbox, "manual_install_always", False, w.settings_service.on_toggle_manual_install_always),
+        (w.manual_install_docs_as_info_checkbox, "manual_install_docs_as_info", True, w.settings_service.on_toggle_manual_install_docs_as_info),
+        (w.use_mod_after_install_checkbox, "use_mod_after_install", False, w.settings_service.on_toggle_use_mod_after_install),
     ):
         if checkbox:
-            checkbox.setChecked(w.app_state.local_config.get(key, False))
+            checkbox.setChecked(w.app_state.local_config.get(key, default))
             checkbox.stateChanged.connect(
                 lambda s, checkbox=checkbox, toggle=toggle: _guarded_trigger(
                     checkbox, lambda: _run_actions(lambda: toggle(bool(s)))

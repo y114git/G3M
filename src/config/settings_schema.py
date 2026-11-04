@@ -68,6 +68,7 @@ DEFAULT_APP_SETTINGS = {
     "downloads_save_local_imports": False,
     "manual_install_hide_configured": False,
     "manual_install_always": False,
+    "manual_install_docs_as_info": True,
     "use_mod_after_install": False,
     "hide_update_mods_button": False,
     "automatic_mod_updates": False,

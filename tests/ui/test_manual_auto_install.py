@@ -69,3 +69,23 @@ def test_a_mod_with_only_documents_is_left_to_the_user(parent, tmp_path):
     assert not auto_manual_install(parent, str(prepared), initial_game_type="undertale")
 
     assert not (tmp_path / "mods").exists()
+
+
+def test_documents_next_to_a_fitting_patch_become_info_files_and_the_mod_installs(parent, tmp_path):
+    prepared = _game_with_patch(tmp_path, valid_base=True)
+    (prepared / "README.md").write_text("Guide", encoding="utf-8")
+    (prepared / "notes.txt").write_text("Notes", encoding="utf-8")
+
+    assert auto_manual_install(parent, str(prepared), initial_game_type="undertale")
+
+    assert len(list((tmp_path / "mods").glob("*/mod_config.json"))) == 1
+
+
+def test_documents_keep_the_mod_in_manual_installation_when_the_setting_is_off(parent, tmp_path):
+    parent.app_state.local_config["manual_install_docs_as_info"] = False
+    prepared = _game_with_patch(tmp_path, valid_base=True)
+    (prepared / "README.md").write_text("Guide", encoding="utf-8")
+
+    assert not auto_manual_install(parent, str(prepared), initial_game_type="undertale")
+
+    assert not (tmp_path / "mods").exists()

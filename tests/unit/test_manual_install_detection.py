@@ -838,3 +838,18 @@ def test_native_patch_detection_save_execution_and_restore(tmp_path, kind, locat
     assert base.read_bytes() == modified.read_bytes()
     journal.restore()
     assert base.read_bytes() == original
+
+
+@pytest.mark.parametrize(("docs_as_info", "expected"), [(True, {"type": "info"}), (False, None)])
+def test_documents_are_marked_as_info_only_when_the_setting_is_on(tmp_path, docs_as_info, expected):
+    context = _context(tmp_path)
+    assert context.mod_path is not None
+    (context.mod_path / "README.md").write_text("Guide", encoding="utf-8")
+    (context.mod_path / "notes.txt").write_text("Notes", encoding="utf-8")
+
+    result = detect_operations(
+        scan_import_files(context.mod_path), context, lambda *_args: True, docs_as_info=docs_as_info
+    )
+
+    assert result.get("README.md") == expected
+    assert result.get("notes.txt") == expected

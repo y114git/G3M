@@ -1541,7 +1541,7 @@ def test_manual_install_can_close_and_delete_while_detection_runs(qtbot, manual_
     (tmp_path / "file.bin").write_bytes(b"payload")
     started, released = threading.Event(), threading.Event()
 
-    def detect(_files, _context, _apply, *, cancelled, progress):
+    def detect(_files, _context, _apply, *, cancelled, progress, **_options):
         started.set()
         try:
             assert released.wait(5)

@@ -297,6 +297,7 @@ def detect_operations(
     *,
     cancelled: Callable[[], bool] = lambda: False,
     progress: Callable[[int, int], None] = lambda _done, _total: None,
+    docs_as_info: bool = True,
 ) -> dict[str, dict]:
     assignments: dict[str, dict] = {}
     roots = list(dict.fromkeys(root for root in (context.game_path, context.game_data_path) if root))
@@ -467,7 +468,7 @@ def detect_operations(
                             "type": "overwrite",
                             "target": portable_operation_path(match, context),
                         }
-                    elif path.suffix.casefold() in MOD_DOCUMENTATION_EXTENSIONS:
+                    elif docs_as_info and path.suffix.casefold() in MOD_DOCUMENTATION_EXTENSIONS:
                         assignments[relative] = {"type": "info"}
             except InterruptedError:
                 if cancelled():

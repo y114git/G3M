@@ -570,7 +570,8 @@ class ManualModInstallDialog(DynamicDialog):
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
             self._items[relative] = item
             if (
-                not relative.endswith("/")
+                getattr(self.app_state, "local_config", {}).get("manual_install_docs_as_info", True)
+                and not relative.endswith("/")
                 and Path(relative).suffix.casefold() in MOD_DOCUMENTATION_EXTENSIONS
             ):
                 self._assignments[relative] = {"type": "info"}

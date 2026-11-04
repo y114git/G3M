@@ -833,6 +833,15 @@ class SettingsViewBuilder:
         cl.addWidget(
             manual_install_always_cb, alignment=Qt.AlignmentFlag.AlignCenter
         )
+        manual_install_docs_as_info_cb = self._styled_checkbox(
+            tr("downloads.settings_docs_as_info"),
+            tr("downloads.settings_docs_as_info_tip"),
+            config_key="manual_install_docs_as_info",
+            reset_value=True,
+        )
+        cl.addWidget(
+            manual_install_docs_as_info_cb, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         use_mod_after_install_cb = self._styled_checkbox(
             tr("downloads.settings_use_after_install"),
             tr("downloads.settings_use_after_install_tip"),
@@ -854,6 +863,7 @@ class SettingsViewBuilder:
             downloads_save_local_imports_cb
         )
         self.widgets["manual_install_always_checkbox"] = manual_install_always_cb
+        self.widgets["manual_install_docs_as_info_checkbox"] = manual_install_docs_as_info_cb
         self.widgets["use_mod_after_install_checkbox"] = use_mod_after_install_cb
         return self._wrap_in_scroll(page, parent)
 

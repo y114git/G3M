@@ -387,6 +387,9 @@ class SettingsManager(QObject):
     def on_toggle_manual_install_always(self, enabled: bool):
         self._toggle_setting("manual_install_always", enabled, None)
 
+    def on_toggle_manual_install_docs_as_info(self, enabled: bool):
+        self._toggle_setting("manual_install_docs_as_info", enabled, None)
+
     def on_toggle_use_mod_after_install(self, enabled: bool):
         self._toggle_setting("use_mod_after_install", enabled, None)
 
