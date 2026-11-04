@@ -306,7 +306,8 @@ jobs:
         run: |
           $ver = $env:RELEASE_VERSION.Trim()
           $content = Get-Content -Path builds/G3MWindowsInstaller.iss -Raw
-          $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")$', "`$1$ver`$2"
+          $newContent = $content -replace '(?m)^(#define\s+AppVersion\s+\").*?(\")(?=\r?$)', "`${1}$ver`${2}"
+          if ($newContent -notmatch ('(?m)^#define\s+AppVersion\s+"' + [regex]::Escape($ver) + '"')) { Write-Error "AppVersion in the installer script was not set to $ver"; exit 1 }
           $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::WriteAllText("$pwd\builds\G3MWindowsInstaller.iss", $newContent, $utf8NoBomEncoding)
 
