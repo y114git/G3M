@@ -747,17 +747,19 @@ class ManualModInstallDialog(DynamicDialog):
             return
         self._auto_started = True
         context = self._context()
-        if (
-            self._detection_error
-            or self.app_state is None
-            or not (context.game_path or context.game_data_path)
-            or not self._validate()
-            or any(not self._configured(relative) for relative in self._source_nodes)
-            or all(
-                self._assignments[relative].get("type") == "info"
-                for relative in self._configured_sources()
+        unconfigured = [relative for relative in self._source_nodes if not self._configured(relative)]
+        reason = (
+            f"detection failed: {self._detection_error}" if self._detection_error
+            else "no game folder is set" if not (context.game_path or context.game_data_path)
+            else "the file list is not valid" if self.app_state is None or not self._validate()
+            else f"{len(unconfigured)} of {len(self._source_nodes)} files are not set up" if unconfigured
+            else "it has no file that changes the game" if all(
+                self._assignments[relative].get("type") == "info" for relative in self._configured_sources()
             )
-        ):
+            else ""
+        )
+        if reason:
+            logger.info("Automatic installation declined: %s", reason)
             self.reject()
             return
         self._on_finish()
@@ -1367,6 +1369,7 @@ class ManualModInstallDialog(DynamicDialog):
         self._stop_detection()
         self._checking_save = False
         if error and self.auto_install:
+            logger.info("Automatic installation declined: %s", error)
             self.reject()
             return
         if error:
@@ -1455,6 +1458,7 @@ class ManualModInstallDialog(DynamicDialog):
             if self._configure_after_save:
                 self._open_editor(self._saved_config, folder)
         elif error and self.auto_install:
+            logger.info("Automatic installation could not save: %s", error)
             self.reject()
         elif error:
             self._set_busy(False)
