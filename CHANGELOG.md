@@ -1,6 +1,8 @@
 ### Version 3.4.5 — 04.11.26
 
 - Dates now follow your system region format (DD-MM-YYYY, MM/DD/YYYY, and so on).
+- A downloaded mod whose files all set themselves up now installs without Manual installation. The **Always install through Manual installation** checkbox turns this off.
+- Added the **Use a mod right after it is installed** checkbox: a new mod is turned on at once, with no need to select it and press Use.
 - Fixed several bugs and crashes.
 
 ### Version 3.4.4 — 01.11.26
