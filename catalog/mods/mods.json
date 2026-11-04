@@ -521,6 +521,13 @@
       "name": "Multiple Save Files (Infinite!)",
       "game": "undertaleyellow",
       "added": "2026-10-20"
+    },
+    {
+      "id": "gb_mod_735507",
+      "name": "DELTARUNE 60 FPS PT-BR",
+      "game": "deltarune",
+      "game_version": "v0.0.253",
+      "added": "2026-11-04"
     }
   ]
 }
