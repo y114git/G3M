@@ -35,6 +35,7 @@ from ui.common.dialog_theme import DynamicDialog
 from ui.common.localized_label import LocalizedLabel
 from ui.common.styling import load_mod_icon_universal
 from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
+from utils.date_format import format_local_datetime
 from utils.native_integration import open_url_native
 from utils.network_utils import get_session
 
@@ -168,7 +169,7 @@ class _FeedCard(QFrame):
         if content_type in ("", type_key, f"[{type_key}]"):
             content_type = self.item.content_type.replace("_", " ").title()
         date_text = (
-            self.item.published_at.astimezone().strftime("%Y-%m-%d %H:%M")
+            format_local_datetime(self.item.published_at)
             if self.item.published_at
             else tr("community_feed.featured")
         )

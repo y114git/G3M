@@ -21,6 +21,7 @@ from ui.common.styling import (
     get_widget_dimensions,
 )
 from ui.utils.ui_utils import UIAnimator
+from utils.date_format import format_stored_date
 from utils.mod.utils import get_mod_id, is_gamebanana_id
 from utils.path_utils import colored_icon
 
@@ -227,7 +228,7 @@ class ModCardWidget(BaseModWidget):
         self.likes_label.setToolTip(tr("ui.likes_tooltip"))
         self.likes_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.title_layout.addWidget(self.likes_label)
-        created_date_text = self.mod_data.created_date or "N/A"
+        created_date_text = format_stored_date(self.mod_data.created_date) or "N/A"
         created_container = QWidget(self)
         created_container_layout = QHBoxLayout(created_container)
         created_container_layout.setContentsMargins(0, 0, 0, 0)
@@ -240,7 +241,7 @@ class ModCardWidget(BaseModWidget):
         created_container_layout.addWidget(created_label_value)
         self.created_container = created_container
         self.created_label_title = created_label_title
-        updated_date_text = self.mod_data.last_updated or "N/A"
+        updated_date_text = format_stored_date(self.mod_data.last_updated) or "N/A"
         updated_container = QWidget(self)
         updated_container_layout = QHBoxLayout(updated_container)
         updated_container_layout.setContentsMargins(0, 0, 0, 0)

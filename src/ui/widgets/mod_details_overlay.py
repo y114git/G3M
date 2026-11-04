@@ -66,6 +66,7 @@ from ui.common.styling import (
 from ui.utils.image_loader import ImageLoaderRunnable, get_image_loader_pool
 from ui.utils.thread_lifetime import ManagedQThread
 from ui.utils.ui_utils import UIAnimator
+from utils.date_format import format_stored_date
 from utils.mod.utils import get_mod_id
 from utils.native_integration import open_url_native
 from workers import WorkerSignals
@@ -946,8 +947,8 @@ class ModDetailsOverlay(QWidget):
                 or "N/A",
             ),
             ("ui.authors_label", format_mod_authors(self.mod_data.authors)),
-            ("ui.updated_label", getattr(self.mod_data, "last_updated", None) or "N/A"),
-            ("ui.created_label", getattr(self.mod_data, "created_date", None)),
+            ("ui.updated_label", format_stored_date(getattr(self.mod_data, "last_updated", None)) or "N/A"),
+            ("ui.created_label", format_stored_date(getattr(self.mod_data, "created_date", None))),
             (
                 "ui.downloads_label",
                 "0" if downloads_value is None else str(downloads_value),

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
@@ -29,6 +28,7 @@ from ui.common.dialog_theme import (
 from ui.common.styling import get_ui_scale_factor
 from ui.utils.gui_thread import GuiThreadCall, dialog_parent
 from ui.utils.ui_utils import format_size
+from utils.date_format import format_timestamp
 from utils.mod.version_package import (
     ASK,
     VERSION_MODES,
@@ -46,7 +46,7 @@ def _version_info(version: dict) -> str:
     if version.get("size"):
         parts.append(format_size(version["size"]))
     if version.get("mtime"):
-        parts.append(time.strftime("%Y-%m-%d %H:%M", time.localtime(version["mtime"])))
+        parts.append(format_timestamp(version["mtime"]))
     return " · ".join(parts)
 
 

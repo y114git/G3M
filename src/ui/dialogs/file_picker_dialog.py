@@ -1,6 +1,5 @@
 """Dialog for choosing files from curated lists."""
 
-from datetime import datetime
 from typing import cast
 
 from PyQt6.QtCore import Qt
@@ -16,6 +15,7 @@ from PyQt6.QtWidgets import (
 
 from services.localization_service import tr
 from ui.common.dialog_theme import DynamicDialog
+from utils.date_format import format_timestamp
 from utils.mod.utils import sort_gamebanana_files_by_priority
 from utils.native_integration import open_url_native
 
@@ -143,8 +143,7 @@ class GameBananaFilePickerDialog(DynamicDialog):
         if not timestamp:
             return tr("defaults.not_specified")
         try:
-            dt = datetime.fromtimestamp(timestamp)
-            return dt.strftime("%d.%m.%Y %H:%M")
+            return format_timestamp(timestamp)
         except (ValueError, OSError, OverflowError):
             return tr("defaults.not_specified")
 

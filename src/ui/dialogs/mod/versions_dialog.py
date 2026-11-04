@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 import tempfile
-import time
 from typing import TYPE_CHECKING, cast
 
 from PyQt6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
@@ -45,6 +44,7 @@ from ui.common.dialog_theme import (
 )
 from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from ui.utils.ui_utils import UIAnimator, format_size
+from utils.date_format import format_timestamp
 from utils.mod.utils import is_gamebanana_id
 from utils.mod.version_utils import apply_version_zip as _apply_version_zip
 from utils.mod.version_utils import (
@@ -195,9 +195,7 @@ class _VersionItemWidget(QFrame):
         if self._info.get("size"):
             parts.append(format_size(self._info["size"]))
         if self._info.get("mtime"):
-            parts.append(
-                time.strftime("%Y-%m-%d %H:%M", time.localtime(self._info["mtime"]))
-            )
+            parts.append(format_timestamp(self._info["mtime"]))
         self._info_label = QLabel(" · ".join(parts))
         self._info_label.setObjectName("mod_version_info")
         left.addWidget(self._info_label)

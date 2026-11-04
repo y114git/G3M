@@ -37,6 +37,7 @@ from ui.common.styling import (
     load_mod_icon_universal,
     rgba_from_color,
 )
+from utils.date_format import format_stored_date
 from utils.mod.archive import ArchiveVirtualPath
 from utils.mod.config import (
     MOD_CONFIG_VERSION,
@@ -456,12 +457,12 @@ class ModSummaryPanel(QFrame):
         added = getattr(mod_data, "added_date", None)
         if added:
             parts.append(
-                f"<span style='color:{tc}'>{tr('ui.added_label')}</span> <span style='color:{sc}'>{added}</span>"
+                f"<span style='color:{tc}'>{tr('ui.added_label')}</span> <span style='color:{sc}'>{format_stored_date(added)}</span>"
             )
         updated = getattr(mod_data, "last_updated", None)
         if updated:
             parts.append(
-                f"<span style='color:{tc}'>{tr('ui.updated_label')}</span> <span style='color:{sc}'>{updated}</span>"
+                f"<span style='color:{tc}'>{tr('ui.updated_label')}</span> <span style='color:{sc}'>{format_stored_date(updated)}</span>"
             )
         if mod_folder and os.path.isdir(mod_folder):
             size_text = None

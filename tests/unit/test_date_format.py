@@ -1,0 +1,37 @@
+from datetime import datetime
+
+import pytest
+from PyQt6.QtCore import QLocale
+
+from utils.date_format import format_local_datetime, format_stored_date
+
+
+@pytest.fixture
+def region(qapp):
+    saved = QLocale()
+    yield lambda name: QLocale.setDefault(QLocale(name))
+    QLocale.setDefault(saved)
+
+
+def test_date_follows_the_system_region(region):
+    moment = datetime(2026, 11, 4, 15, 30)
+    region("en_US")
+    us = format_local_datetime(moment)
+    region("de_DE")
+    de = format_local_datetime(moment)
+
+    assert us.startswith("11/4/")
+    assert de.startswith("04.11.")
+    assert "15:30" in de
+
+
+@pytest.mark.parametrize("stored", ["04.11.26 15:30", "2026-11-04 15:30:09", "2026-11-04 15:30"])
+def test_stored_dates_are_shown_in_the_region_format(region, stored):
+    region("de_DE")
+
+    assert format_stored_date(stored) == format_local_datetime(datetime(2026, 11, 4, 15, 30))
+
+
+@pytest.mark.parametrize("text", [None, "", "N/A", "yesterday"])
+def test_text_that_is_not_a_stored_date_is_left_alone(region, text):
+    assert format_stored_date(text) == text

@@ -25,6 +25,7 @@ from ui.common.styling import (
     get_theme_color,
     load_mod_icon_universal,
 )
+from utils.date_format import format_stored_date
 from utils.mod.utils import get_mod_id, is_gamebanana_id
 from utils.path_utils import colored_icon
 
@@ -443,7 +444,7 @@ class SearchModCardWidget(ModCardWidget):
 
     def _update_updated_label(self):
         if hasattr(self, "updated_label"):
-            updated_text = str(getattr(self.mod_data, "last_updated", None) or "N/A")
+            updated_text = str(format_stored_date(getattr(self.mod_data, "last_updated", None)) or "N/A")
             self.updated_label.setText(updated_text)
 
     def _update_metadata_icons(self, color: str, size: int):
