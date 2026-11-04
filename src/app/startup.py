@@ -45,6 +45,7 @@ from config.config import (
 )
 from services.game_detection_service import get_running_game_process_name
 from services.localization_service import localization_service, tr
+from utils.log_format import ConciseFormatter
 from utils.path_utils import get_launcher_dir, resource_path
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ def configure_logging(app_name: str, user_data_root: str) -> str:
     root = logging.getLogger()
     had_handlers = bool(root.handlers)
     root.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    fmt = ConciseFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     has_log_file_handler = any(
         isinstance(handler, logging.FileHandler)
         and os.path.abspath(getattr(handler, "baseFilename", ""))

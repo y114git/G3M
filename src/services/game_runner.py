@@ -34,6 +34,7 @@ from services.plugins.shortcut_service import (
     build_headless_plugin_runtime,
     execute_shortcut_plugin_hook,
 )
+from utils.log_format import ConciseFormatter
 from utils.mod.archive import ArchiveVirtualPath
 from utils.native_integration import open_url_native
 from utils.path_utils import (
@@ -70,7 +71,7 @@ def _install_process_exit_logging() -> None:
 def _configure_logging():
     logs_dir = os.path.join(get_user_data_root(), "logs")
     os.makedirs(logs_dir, exist_ok=True)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    fmt = ConciseFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     fh = logging.FileHandler(
