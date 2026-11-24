@@ -7,6 +7,16 @@ on:
   pull_request:
     branches:
       - "*"
+  workflow_dispatch:
+    inputs:
+      attempt:
+        description: "Number of this try, set by the retry job"
+        required: false
+        default: "1"
+      previous:
+        description: "Run this one replaces, set by the retry job"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -174,3 +184,37 @@ jobs:
             test-collection.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # A runner that is never acquired (macOS capacity) cancels its job: start the same tests again, twice at most.
+  retry:
+    name: Start the tests again
+    needs: test
+    if: ${{ always() && needs.test.result != 'success' && github.event_name != 'pull_request' && fromJSON(github.event.inputs.attempt || '1') < 3 }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the next try
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ github.event.inputs.attempt || '1' }}
+        run: gh workflow run test-g3m.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }} -f attempt=$((ATTEMPT + 1)) -f previous=${{ github.run_id }}
+
+  # The run that was started again is removed, so its cancelled jobs do not leave a red mark on the commit.
+  replace:
+    name: Remove the run this one replaces
+    if: ${{ github.event.inputs.previous != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the previous run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS: ${{ github.event.inputs.previous }}
+        run: |
+          for _ in $(seq 1 60); do
+            [ "$(gh run view "$PREVIOUS" --repo ${{ github.repository }} --json status --jq .status)" = completed ] && break
+            sleep 10
+          done
+          gh run delete "$PREVIOUS" --repo ${{ github.repository }}
