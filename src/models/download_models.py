@@ -116,7 +116,8 @@ class DownloadRecord:
             return "needs_manual"
         if self.use_status == UseStatus.FAILED:
             return "failed"
-        if self.download_status == DownloadStatus.DOWNLOADED and self.file_exists:
+        # A plugin or theme archive is deleted once it is installed, so an installed item without its file is still installed.
+        if self.download_status == DownloadStatus.DOWNLOADED and (self.file_exists or self.ever_installed):
             return "installed" if self.ever_installed else "ready"
         if (
             self.download_status == DownloadStatus.CANCELLED

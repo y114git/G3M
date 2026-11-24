@@ -431,6 +431,8 @@ class DownloadsManager(QObject):
         self._remember_gamebanana_file(record)
         record.ever_installed = True
         record.error_message = None
+        # The archive of a plugin or theme is removed by its install.
+        record.file_exists = bool(record.file_path) and os.path.isfile(record.file_path)
         if record.delete_after_use:
             record.use_status = UseStatus.READY
             self.record_updated.emit(record)
@@ -481,9 +483,30 @@ class DownloadsManager(QObject):
 
     def action_install(self, record_id: str):
         record = self._store.find(record_id)
-        if not record or not record.file_exists or record.use_status != UseStatus.READY:
+        if not record or record.use_status != UseStatus.READY:
+            return
+        if not record.file_exists or not record.file_path or not os.path.isfile(record.file_path):
+            # Installed before and the archive is gone (a plugin or theme removes it): download it again and install it.
+            if record.ever_installed:
+                self._download_again(record, auto_use=True)
             return
         self._start_use(record_id)
+
+    def _download_again(self, record: DownloadRecord, *, auto_use: bool | None = None) -> None:
+        record.error_code = None
+        record.error_message = None
+        record.finished_at = None
+        record.download_status = DownloadStatus.QUEUED
+        record.use_status = UseStatus.NOT_STARTED
+        record.progress = 0
+        record.bytes_received = 0
+        record.file_exists = False
+        if auto_use is not None:
+            record.auto_use = auto_use
+        self._store.update(record)
+        self.record_updated.emit(record)
+        self._start_download(record)
+        self._emit_badge()
 
     def action_overwrite(self, record_id: str):
         record = self._store.find(record_id)
@@ -543,14 +566,7 @@ class DownloadsManager(QObject):
             self._start_use(record_id)
             self._emit_badge()
             return
-        record.download_status = DownloadStatus.QUEUED
-        record.use_status = UseStatus.NOT_STARTED
-        record.progress = 0
-        record.bytes_received = 0
-        self._store.update(record)
-        self.record_updated.emit(record)
-        self._start_download(record)
-        self._emit_badge()
+        self._download_again(record)
 
     def action_delete(self, record_id: str):
         record = self._store.find(record_id)

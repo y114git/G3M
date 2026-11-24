@@ -76,6 +76,12 @@ class DownloadsStore(BaseJsonStore):
             if r.file_path and not os.path.exists(r.file_path):
                 r.file_exists = False
                 changed = True
+                if r.download_status == DownloadStatus.DOWNLOADED and not r.ever_installed and r.use_status != UseStatus.FAILED:
+                    # Nothing was installed from it and it cannot be now: say so, so that Retry downloads it again.
+                    r.download_status = DownloadStatus.FAILED
+                    r.use_status = UseStatus.FAILED
+                    r.error_code = "file_missing"
+                    r.error_message = "The downloaded file is missing"
         if changed:
             self.save()
 
