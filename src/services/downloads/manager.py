@@ -489,6 +489,13 @@ class DownloadsManager(QObject):
             # Installed before and the archive is gone (a plugin or theme removes it): download it again and install it.
             if record.ever_installed:
                 self._download_again(record, auto_use=True)
+            else:
+                record.download_status = DownloadStatus.FAILED
+                record.use_status = UseStatus.FAILED
+                record.error_code = "file_missing"
+                record.error_message = "The downloaded file is missing"
+                self._store.update(record)
+                self.record_updated.emit(record)
             return
         self._start_use(record_id)
 

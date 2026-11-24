@@ -53,6 +53,16 @@ def test_reinstall_without_the_archive_downloads_it_again_and_installs(tmp_path,
     assert record.auto_use
 
 
+def test_install_of_a_never_installed_download_whose_file_vanished_fails_instead_of_doing_nothing(tmp_path):
+    manager = DownloadsManager(str(tmp_path), lambda: {})
+    record = _installed_plugin(tmp_path / "gone.zip")
+    record.ever_installed = False
+    manager.store.add(record)
+    manager.action_install(record.id)
+    assert record.effective_status_key == "failed"
+    assert record.error_code == "file_missing"
+
+
 def test_successful_plugin_install_records_that_its_archive_is_gone(tmp_path, monkeypatch):
     manager = DownloadsManager(str(tmp_path), lambda: {})
     record = _installed_plugin(tmp_path / "gone.zip")
