@@ -62,3 +62,19 @@ def test_modding_tools_tabs_and_actions_fit_small_screen(qtbot, app_state, monke
         assert dialog._close_btn.visibleRegion().boundingRect() == dialog._close_btn.rect()
     qtbot.mouseClick(dialog._close_btn, Qt.MouseButton.LeftButton)
     assert not dialog.isVisible()
+
+
+def test_open_in_studio_button_follows_the_file_and_the_setting(qtbot, app_state, tmp_path):
+    tab = _DiffTab(Mock(), app_state)
+    qtbot.addWidget(tab)
+    tab.show()
+    row = tab._file1_row
+    assert row._studio_btn is not None
+    assert row._studio_btn.isHidden()
+    data = tmp_path / "data.win"
+    data.write_bytes(b"x")
+    row.set_path(str(data))
+    assert not row._studio_btn.isHidden()
+    app_state.local_config["show_open_in_studio"] = False
+    row.set_path(str(data) + " ")
+    assert row._studio_btn.isHidden()

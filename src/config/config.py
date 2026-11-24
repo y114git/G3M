@@ -353,6 +353,8 @@ WIDGET_LOCALIZATIONS = [
     ("manual_install_docs_as_info_checkbox", "setToolTip", "downloads.settings_docs_as_info_tip"),
     ("use_mod_after_install_checkbox", "setText", "downloads.settings_use_after_install"),
     ("use_mod_after_install_checkbox", "setToolTip", "downloads.settings_use_after_install_tip"),
+    ("show_open_in_studio_checkbox", "setText", "studio_link.setting"),
+    ("show_open_in_studio_checkbox", "setToolTip", "studio_link.setting_tip"),
     ("mod_versions_export_mode_label", "setText", "mod_versions.settings_export"),
     (
         "mod_versions_export_mode_combo",

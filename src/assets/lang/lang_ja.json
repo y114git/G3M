@@ -1005,6 +1005,19 @@
     "url_required": "URLを入力してください。",
     "select_mod_archive": "MODアーカイブを選択"
   },
+  "studio_link": {
+    "button": "G3MStudioで開く",
+    "tooltip": "このデータファイルをG3MStudioで開きます。",
+    "setting": "「G3MStudioで開く」ボタンを表示",
+    "setting_tip": "データファイルの横に「G3MStudioで開く」ボタンを表示します。オフにすると、すべての場所でボタンが非表示になります。",
+    "title": "G3MStudioを開けませんでした",
+    "reason_missing": "ファイルが見つかりません: {path}",
+    "reason_not_registered": "g3mstudio:// リンクがこのシステムに登録されていないため、処理するプログラムがありません。",
+    "reason_failed": "システムが g3mstudio:// リンクを開けませんでした。",
+    "help": "G3MStudioは起動のたびにリンクを設定します。G3MStudioをダウンロードして一度起動してから、もう一度お試しください。すでにインストールしている場合は、一度起動し、システムやウイルス対策ソフトがブロックしていないか確認してください。",
+    "ok": "OK",
+    "download": "G3MStudioをダウンロード"
+  },
   "downloads": {
     "title": "ダウンロード",
     "clear_downloads": "ダウンロードをクリアする",

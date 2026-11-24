@@ -9,7 +9,7 @@ import threading
 import zipfile
 from contextlib import suppress
 from functools import partial
-from typing import cast
+from typing import cast, override
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QScreen
@@ -42,6 +42,7 @@ from ui.common.dialog_theme import (
 )
 from ui.common.feedback import FeedbackManager
 from ui.common.localized_label import LocalizedLabel, LocalizedMessage
+from ui.studio_link import is_data_file, open_in_studio, studio_button_enabled
 from ui.utils.thread_lifetime import ManagedQThread, retire_qthread
 from utils.file_utils import (
     cleanup_temporary_directory,
@@ -431,8 +432,10 @@ class _PathRow(QWidget):
         parent=None,
         save_mode: bool = False,
         dir_mode: bool = False,
+        studio_app_state=None,
     ) -> None:
         super().__init__(parent)
+        self._studio_app_state = studio_app_state
         self._filter = file_filter
         self._save_mode = save_mode
         self._dir_mode = dir_mode
@@ -454,6 +457,28 @@ class _PathRow(QWidget):
         self._btn.setToolTip(tr("tooltips.browse_file"))
         self._btn.clicked.connect(self._browse)
         lay.addWidget(self._btn)
+        self._studio_btn = None
+        if studio_app_state is not None:
+            self._studio_btn = QPushButton(tr("studio_link.button"))
+            self._studio_btn.setToolTip(tr("studio_link.tooltip"))
+            self._studio_btn.clicked.connect(
+                lambda: open_in_studio(self.path(), self)
+            )
+            lay.addWidget(self._studio_btn)
+            self._edit.textChanged.connect(self._update_studio_button)
+            self._update_studio_button()
+
+    def _update_studio_button(self, *_args) -> None:
+        if self._studio_btn is not None:
+            self._studio_btn.setVisible(
+                studio_button_enabled(self._studio_app_state)
+                and is_data_file(self.path())
+            )
+
+    @override
+    def showEvent(self, a0) -> None:
+        super().showEvent(a0)
+        self._update_studio_button()
 
     def _browse(self):
         if self._dir_mode:
@@ -492,6 +517,9 @@ class _PathRow(QWidget):
         self._btn.setText(tr("ui.browse_button"))
         self._edit.setToolTip(tr("tooltips.file_path_field"))
         self._btn.setToolTip(tr("tooltips.browse_file"))
+        if self._studio_btn is not None:
+            self._studio_btn.setText(tr("studio_link.button"))
+            self._studio_btn.setToolTip(tr("studio_link.tooltip"))
 
 
 class _ConvertWorkerThread(ManagedQThread):
@@ -686,9 +714,9 @@ class _PatchTab(QWidget):
         batch_row.addStretch()
         lay.addLayout(batch_row)
 
-        self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER)
+        self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER, studio_app_state=self._app_state)
         lay.addWidget(self._original_row)
-        self._second_row = _PathRow("modding_tools.modified_file", _DATA_FILTER)
+        self._second_row = _PathRow("modding_tools.modified_file", _DATA_FILTER, studio_app_state=self._app_state)
         lay.addWidget(self._second_row)
         self._batch_label = QLabel(tr("modding_tools.batch_inputs"))
         lay.addWidget(self._batch_label)
@@ -1830,7 +1858,7 @@ class _MergeTab(QWidget):
         lay.addLayout(cb_row)
         self._batch_cb.toggled.connect(self._update_batch_visibility)
 
-        self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER)
+        self._original_row = _PathRow("modding_tools.original_file", _DATA_FILTER, studio_app_state=self._app_state)
         lay.addWidget(self._original_row)
 
         list_label = QLabel(tr("modding_tools.merge_list"))
@@ -2131,7 +2159,7 @@ class _InfoTab(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
 
-        self._file_row = _PathRow("modding_tools.info_file", _DATA_PATCH_FILTER)
+        self._file_row = _PathRow("modding_tools.info_file", _DATA_PATCH_FILTER, studio_app_state=self._app_state)
         lay.addWidget(self._file_row)
 
         cb_row = QHBoxLayout()
@@ -2232,9 +2260,9 @@ class _DiffTab(QWidget):
         self._full_report_cb = QCheckBox(tr("modding_tools.diff_full_report"))
         lay.addWidget(self._full_report_cb)
 
-        self._file1_row = _PathRow("modding_tools.diff_file1", _DATA_PATCH_FILTER)
+        self._file1_row = _PathRow("modding_tools.diff_file1", _DATA_PATCH_FILTER, studio_app_state=self._app_state)
         lay.addWidget(self._file1_row)
-        self._file2_row = _PathRow("modding_tools.diff_file2", _DATA_PATCH_FILTER)
+        self._file2_row = _PathRow("modding_tools.diff_file2", _DATA_PATCH_FILTER, studio_app_state=self._app_state)
         lay.addWidget(self._file2_row)
 
         btn_row = QHBoxLayout()

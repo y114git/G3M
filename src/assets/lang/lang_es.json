@@ -1005,6 +1005,19 @@
     "url_required": "Por favor, introduce una URL.",
     "select_mod_archive": "Seleccionar archivo del mod"
   },
+  "studio_link": {
+    "button": "Abrir en G3MStudio",
+    "tooltip": "Abre este archivo de datos en G3MStudio.",
+    "setting": "Mostrar los botones Abrir en G3MStudio",
+    "setting_tip": "Muestra el botón Abrir en G3MStudio junto a los archivos de datos. Desactívalo para ocultar el botón en todas partes.",
+    "title": "G3MStudio no se abrió",
+    "reason_missing": "No se encontró el archivo: {path}",
+    "reason_not_registered": "El enlace g3mstudio:// no está registrado en este sistema, así que ningún programa lo gestiona.",
+    "reason_failed": "El sistema no pudo abrir el enlace g3mstudio://.",
+    "help": "G3MStudio configura el enlace cada vez que se inicia. Descarga G3MStudio e inícialo una vez, y vuelve a intentarlo. Si ya está instalado, inícialo una vez y comprueba que el sistema o el antivirus no lo bloquee.",
+    "ok": "Aceptar",
+    "download": "Descargar G3MStudio"
+  },
   "downloads": {
     "title": "Descargas",
     "clear_downloads": "Limpiar descargas",

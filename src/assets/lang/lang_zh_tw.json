@@ -1005,6 +1005,19 @@
     "url_required": "請輸入連結地址。",
     "select_mod_archive": "選擇模組壓縮檔"
   },
+  "studio_link": {
+    "button": "在 G3MStudio 中開啟",
+    "tooltip": "在 G3MStudio 中開啟此資料檔案。",
+    "setting": "顯示「在 G3MStudio 中開啟」按鈕",
+    "setting_tip": "在資料檔案旁顯示「在 G3MStudio 中開啟」按鈕。關閉後會在所有位置隱藏該按鈕。",
+    "title": "G3MStudio 未能開啟",
+    "reason_missing": "找不到檔案：{path}",
+    "reason_not_registered": "此系統未登錄 g3mstudio:// 連結，因此沒有程式可以處理它。",
+    "reason_failed": "系統無法開啟 g3mstudio:// 連結。",
+    "help": "G3MStudio 每次啟動時都會設定該連結。請下載 G3MStudio 並啟動一次，然後再試一次。如果已經安裝，請啟動一次，並確認系統或防毒軟體沒有封鎖它。",
+    "ok": "確定",
+    "download": "下載 G3MStudio"
+  },
   "downloads": {
     "title": "下載",
     "clear_downloads": "清除下載",
