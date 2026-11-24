@@ -25,6 +25,7 @@ def test_installed_item_whose_archive_was_removed_stays_installed_after_a_restar
     reloaded.load()
     reloaded.startup_recovery()
     record = reloaded.find("plugin")
+    assert record is not None
     assert not record.file_exists
     assert record.effective_status_key == "installed"
 

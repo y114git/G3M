@@ -1,3 +1,8 @@
+### Version 3.4.6 — 24.11.26
+
+- Fixed G3M crashing on Arch Linux and SteamOS when typing text and when a mod is installed through Manual installation. The Linux build now uses the keyboard, glib and font libraries of your system.
+- Fixed a plugin or theme showing **Failed** in Downloads after it was installed, after an update, or after a restart. Retry and Reinstall now download the file again when it is gone.
+
 ### Version 3.4.5 — 04.11.26
 
 - Dates now follow your system region format (DD-MM-YYYY, MM/DD/YYYY, and so on).
