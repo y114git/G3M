@@ -38,6 +38,7 @@
 
 - [What Is G3M](#what-is-g3m)
 - [Highlights](#highlights)
+- [A Closer Look](#a-closer-look)
 - [Features](#features)
 - [Supported Games](#supported-games)
 - [Catalog](#catalog)
@@ -63,6 +64,20 @@ Release downloads are available for Windows, Linux, and macOS on both x86_64 and
 - Create patches, merge mods, compare files, and prepare installs from the same application.
 - Download plugins and themes from the Catalog, manage saves, and customize G3M's appearance.
 - Keep download history, mod versions, and game restore points.
+
+## A Closer Look
+
+<p align="center">
+  <img src="screenshots/mods-browser.png" alt="The G3M mods browser" width="900">
+  <br>
+  <em>Browse GameBanana inside the app, with filters for game, tags and verified mods.</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/appearance.png" alt="The G3M appearance settings" width="900">
+  <br>
+  <em>Change background, logo, font, music, colors and border radius, or import and export a whole theme.</em>
+</p>
 
 ## Features
 
