@@ -2,6 +2,7 @@
 
 - Added the **Open in G3MStudio** button next to data files in Modding tools. It opens the file in G3MStudio, and a short message explains what to do when G3MStudio is missing. The **Show Open in G3MStudio buttons** checkbox in Settings hides the button everywhere.
 - Fixed G3M crashing on Arch Linux and SteamOS when typing text and when a mod is installed through Manual installation. The Linux build now uses the keyboard, glib and font libraries of your system.
+- Fixed **Diff** in Modding tools listing hundreds of untouched sprites and sounds as changed, which also made patches and merges carry things the mod never touched. Merging patches one after another also keeps the audio of every new sound.
 - Fixed a plugin or theme showing **Failed** in Downloads after it was installed, after an update, or after a restart. Retry and Reinstall now download the file again when it is gone.
 
 ### Version 3.4.5 — 04.11.26
