@@ -65,6 +65,7 @@ PLUGIN_API_VERSION = "1.3.0"
 PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/y114git/G3M/main/catalog/plugins/plugins.json"
 THEME_CATALOG_URL = "https://raw.githubusercontent.com/y114git/G3M/main/catalog/themes/themes.json"
 MOD_CATALOG_URL = "https://raw.githubusercontent.com/y114git/G3M/main/catalog/mods/mods.json"
+STUDIO_URL = "https://github.com/y114git/G3MStudio"
 PLUGIN_HOOKS = {
     "before_mod_apply",
     "after_mod_apply_before_launch",
@@ -353,8 +354,6 @@ WIDGET_LOCALIZATIONS = [
     ("manual_install_docs_as_info_checkbox", "setToolTip", "downloads.settings_docs_as_info_tip"),
     ("use_mod_after_install_checkbox", "setText", "downloads.settings_use_after_install"),
     ("use_mod_after_install_checkbox", "setToolTip", "downloads.settings_use_after_install_tip"),
-    ("show_open_in_studio_checkbox", "setText", "studio_link.setting"),
-    ("show_open_in_studio_checkbox", "setToolTip", "studio_link.setting_tip"),
     ("mod_versions_export_mode_label", "setText", "mod_versions.settings_export"),
     (
         "mod_versions_export_mode_combo",

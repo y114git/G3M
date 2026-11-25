@@ -1008,8 +1008,6 @@
   "studio_link": {
     "button": "在 G3MStudio 中打开",
     "tooltip": "在 G3MStudio 中打开此数据文件。",
-    "setting": "显示“在 G3MStudio 中打开”按钮",
-    "setting_tip": "在数据文件旁显示“在 G3MStudio 中打开”按钮。关闭后将在所有位置隐藏该按钮。",
     "title": "G3MStudio 未能打开",
     "reason_missing": "未找到文件：{path}",
     "reason_not_registered": "此系统未注册 g3mstudio:// 链接，因此没有程序可以处理它。",

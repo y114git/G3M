@@ -393,9 +393,6 @@ class SettingsManager(QObject):
     def on_toggle_use_mod_after_install(self, enabled: bool):
         self._toggle_setting("use_mod_after_install", enabled, None)
 
-    def on_toggle_show_open_in_studio(self, enabled: bool):
-        self._toggle_setting("show_open_in_studio", enabled, None)
-
     def on_toggle_hide_update_mods_button(self, enabled: bool):
         self._toggle_setting("hide_update_mods_button", enabled, None)
 

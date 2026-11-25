@@ -390,7 +390,6 @@ def setup_settings_tab(w):
             "manual_install_always_checkbox",
             "manual_install_docs_as_info_checkbox",
             "use_mod_after_install_checkbox",
-            "show_open_in_studio_checkbox",
             "catalog_installed_only_checkbox",
             "catalog_theme_tag_checkboxes",
             "catalog_theme_filters_widget",
@@ -934,7 +933,6 @@ def setup_settings_tab(w):
         (w.manual_install_always_checkbox, "manual_install_always", False, w.settings_service.on_toggle_manual_install_always),
         (w.manual_install_docs_as_info_checkbox, "manual_install_docs_as_info", True, w.settings_service.on_toggle_manual_install_docs_as_info),
         (w.use_mod_after_install_checkbox, "use_mod_after_install", False, w.settings_service.on_toggle_use_mod_after_install),
-        (w.show_open_in_studio_checkbox, "show_open_in_studio", True, w.settings_service.on_toggle_show_open_in_studio),
     ):
         if checkbox:
             checkbox.setChecked(w.app_state.local_config.get(key, default))

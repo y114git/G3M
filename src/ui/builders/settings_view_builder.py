@@ -511,13 +511,6 @@ class SettingsViewBuilder:
             tr("ui.fullscreen"), tr("tooltips.fullscreen_tooltip"), "fullscreen_enabled"
         )
         cl.addWidget(fullscreen_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
-        show_open_in_studio_cb = self._styled_checkbox(
-            tr("studio_link.setting"),
-            tr("studio_link.setting_tip"),
-            config_key="show_open_in_studio",
-            reset_value=True,
-        )
-        cl.addWidget(show_open_in_studio_cb, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ui_scale_container = QWidget(page)
         ui_scale_layout = QHBoxLayout(ui_scale_container)
@@ -583,7 +576,6 @@ class SettingsViewBuilder:
         self.widgets["language_combo"] = language_combo
         self.widgets["beta_updates_checkbox"] = beta_updates_checkbox
         self.widgets["fullscreen_checkbox"] = fullscreen_checkbox
-        self.widgets["show_open_in_studio_checkbox"] = show_open_in_studio_cb
         self.widgets["show_reset_buttons_checkbox"] = show_reset_buttons_checkbox
         self.widgets["ui_scale_label"] = ui_scale_label
         self.widgets["ui_scale_spinbox"] = ui_scale_spinbox

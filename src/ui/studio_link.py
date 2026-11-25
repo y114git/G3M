@@ -6,23 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl
-from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
+from config.config import GAME_DATA_FILE_EXTENSIONS, STUDIO_URL
 from services.localization_service import tr
-
-DATA_EXTENSIONS = (".win", ".ios", ".unx", ".droid")
-STUDIO_PAGE = "https://github.com/y114git/G3MStudio"
+from utils.native_integration import open_url_native
 
 
 def is_data_file(path: str) -> bool:
-    return path.lower().endswith(DATA_EXTENSIONS) and os.path.isfile(path)
-
-
-def studio_button_enabled(app_state) -> bool:
-    config = getattr(app_state, "local_config", None) or {}
-    return bool(config.get("show_open_in_studio", True))
+    return path.lower().endswith(GAME_DATA_FILE_EXTENSIONS) and os.path.isfile(path)
 
 
 def studio_link(path: str) -> str:
@@ -62,7 +54,7 @@ def open_in_studio(path: str, parent: QWidget | None = None) -> bool:
         reason = tr("studio_link.reason_missing", path=path)
     elif not _scheme_registered():
         reason = tr("studio_link.reason_not_registered")
-    elif not QDesktopServices.openUrl(QUrl.fromEncoded(studio_link(path).encode())):
+    elif not open_url_native(studio_link(path)):
         reason = tr("studio_link.reason_failed")
     else:
         return True
@@ -83,4 +75,4 @@ def _warn(reason: str, parent: QWidget | None) -> None:
     box.setDefaultButton(ok)
     box.exec()
     if box.clickedButton() is download:
-        QDesktopServices.openUrl(QUrl(STUDIO_PAGE))
+        open_url_native(STUDIO_URL)

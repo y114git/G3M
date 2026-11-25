@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -24,17 +23,12 @@ def test_only_existing_data_files_get_the_button(tmp_path, name, expected):
     assert studio_link.is_data_file(str(tmp_path / "missing.win")) is False
 
 
-def test_setting_defaults_to_on_and_hides_the_button_when_off():
-    assert studio_link.studio_button_enabled(SimpleNamespace(local_config={})) is True
-    assert studio_link.studio_button_enabled(SimpleNamespace(local_config={"show_open_in_studio": False})) is False
-
-
 def test_missing_handler_warns_and_does_not_open(tmp_path):
     data = tmp_path / "data.win"
     data.write_bytes(b"x")
     with (
         patch.object(studio_link, "_scheme_registered", return_value=False),
-        patch.object(studio_link.QDesktopServices, "openUrl") as open_url,
+        patch.object(studio_link, "open_url_native") as open_url,
         patch.object(studio_link, "_warn") as warn,
     ):
         assert studio_link.open_in_studio(str(data)) is False
@@ -47,7 +41,7 @@ def test_registered_handler_opens_the_link(tmp_path):
     data.write_bytes(b"x")
     with (
         patch.object(studio_link, "_scheme_registered", return_value=True),
-        patch.object(studio_link.QDesktopServices, "openUrl", return_value=True) as open_url,
+        patch.object(studio_link, "open_url_native", return_value=True) as open_url,
         patch.object(studio_link, "_warn") as warn,
     ):
         assert studio_link.open_in_studio(str(data)) is True

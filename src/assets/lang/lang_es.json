@@ -1008,8 +1008,6 @@
   "studio_link": {
     "button": "Abrir en G3MStudio",
     "tooltip": "Abre este archivo de datos en G3MStudio.",
-    "setting": "Mostrar los botones Abrir en G3MStudio",
-    "setting_tip": "Muestra el botón Abrir en G3MStudio junto a los archivos de datos. Desactívalo para ocultar el botón en todas partes.",
     "title": "G3MStudio no se abrió",
     "reason_missing": "No se encontró el archivo: {path}",
     "reason_not_registered": "El enlace g3mstudio:// no está registrado en este sistema, así que ningún programa lo gestiona.",

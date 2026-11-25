@@ -1008,8 +1008,6 @@
   "studio_link": {
     "button": "G3MStudioで開く",
     "tooltip": "このデータファイルをG3MStudioで開きます。",
-    "setting": "「G3MStudioで開く」ボタンを表示",
-    "setting_tip": "データファイルの横に「G3MStudioで開く」ボタンを表示します。オフにすると、すべての場所でボタンが非表示になります。",
     "title": "G3MStudioを開けませんでした",
     "reason_missing": "ファイルが見つかりません: {path}",
     "reason_not_registered": "g3mstudio:// リンクがこのシステムに登録されていないため、処理するプログラムがありません。",

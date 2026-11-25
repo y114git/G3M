@@ -70,7 +70,6 @@ DEFAULT_APP_SETTINGS = {
     "manual_install_always": False,
     "manual_install_docs_as_info": True,
     "use_mod_after_install": False,
-    "show_open_in_studio": True,
     "hide_update_mods_button": False,
     "automatic_mod_updates": False,
     "automatic_mod_updates_replace_current": False,

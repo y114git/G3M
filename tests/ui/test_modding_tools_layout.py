@@ -64,7 +64,7 @@ def test_modding_tools_tabs_and_actions_fit_small_screen(qtbot, app_state, monke
     assert not dialog.isVisible()
 
 
-def test_open_in_studio_button_follows_the_file_and_the_setting(qtbot, app_state, tmp_path):
+def test_open_in_studio_button_follows_the_file(qtbot, app_state, tmp_path):
     tab = _DiffTab(Mock(), app_state)
     qtbot.addWidget(tab)
     tab.show()
@@ -75,6 +75,5 @@ def test_open_in_studio_button_follows_the_file_and_the_setting(qtbot, app_state
     data.write_bytes(b"x")
     row.set_path(str(data))
     assert not row._studio_btn.isHidden()
-    app_state.local_config["show_open_in_studio"] = False
-    row.set_path(str(data) + " ")
+    row.set_path(str(data) + "x")
     assert row._studio_btn.isHidden()
