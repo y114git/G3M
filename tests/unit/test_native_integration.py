@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import types
 
 from utils import native_integration
@@ -85,3 +86,56 @@ def test_get_save_file_name_uses_qt_dialog_without_tkinter(monkeypatch):
     assert selected == "C:/Exports/mod.zip"
     assert chosen_filter == "ZIP Archives (*.zip)"
     assert calls == [(parent, "Export mod", "mod.zip", "ZIP Archives (*.zip)")]
+
+
+def _fake_dialogs(monkeypatch, chosen):
+    calls = []
+
+    def fake_open(_parent, _caption, directory, _filter):
+        calls.append(directory)
+        return (chosen, "")
+
+    monkeypatch.setattr(
+        native_integration,
+        "QFileDialog",
+        types.SimpleNamespace(getOpenFileName=fake_open, getSaveFileName=fake_open),
+    )
+    return calls
+
+
+def test_dialogs_start_in_the_folder_of_the_last_dialog(monkeypatch, tmp_path):
+    folder = tmp_path / "mods"
+    folder.mkdir()
+    calls = _fake_dialogs(monkeypatch, str(folder / "a.zip"))
+
+    native_integration.get_open_file_name(None, "x", "")
+    native_integration.get_open_file_name(None, "x", "")
+    native_integration.get_save_file_name(None, "x", "out.zip")
+    native_integration.get_open_file_name(None, "x", os.path.expanduser("~"))
+
+    assert calls == ["", str(folder), os.path.join(str(folder), "out.zip"), str(folder)]
+
+
+def test_a_folder_the_caller_names_wins_over_the_remembered_one(monkeypatch, tmp_path):
+    remembered = tmp_path / "remembered"
+    named = tmp_path / "named"
+    remembered.mkdir()
+    named.mkdir()
+    calls = _fake_dialogs(monkeypatch, str(remembered / "a.zip"))
+    native_integration.get_open_file_name(None, "x", "")
+
+    native_integration.get_open_file_name(None, "x", str(named))
+
+    assert calls[-1] == str(named)
+
+
+def test_a_remembered_folder_that_is_gone_is_ignored(monkeypatch, tmp_path):
+    folder = tmp_path / "gone"
+    folder.mkdir()
+    calls = _fake_dialogs(monkeypatch, str(folder / "a.zip"))
+    native_integration.get_open_file_name(None, "x", "")
+    folder.rmdir()
+
+    native_integration.get_open_file_name(None, "x", "")
+
+    assert calls[-1] == ""

@@ -10,7 +10,6 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -26,6 +25,7 @@ from services.localization_service import tr
 from services.support_package_service import SupportPackageService
 from ui.common.dialog_theme import DynamicDialog, apply_dialog_theme
 from ui.widgets.shared.custom_controls import SectionToggle
+from utils.native_integration import get_save_file_name
 from workers.support_package_worker import SupportPackageWorker
 
 
@@ -338,7 +338,7 @@ class SupportPackagerDialog(DynamicDialog):
 
     def _choose_destination(self) -> None:
         default = str(Path.home() / "G3M-Support.zip")
-        destination, _ = QFileDialog.getSaveFileName(
+        destination, _ = get_save_file_name(
             self, tr("support_packager.save_title"), default, "ZIP (*.zip)"
         )
         if not destination:
