@@ -1,4 +1,4 @@
-### Version 3.4.6 — 25.11.26
+### Version 3.4.6 — 26.11.26
 
 - Added the **Open in G3MStudio** button next to data files in Modding tools. It opens the file in G3MStudio, and a short message explains what to do when G3MStudio is missing.
 - File dialogs now open in the folder you used last, for importing, exporting and choosing files and folders.
