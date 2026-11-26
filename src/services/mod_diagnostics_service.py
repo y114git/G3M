@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from services.localization_service import tr
 from utils.mod.archive import ArchiveVirtualPath
 from utils.mod.config import ModConfigValidationError
 from utils.mod.operation_plan import (
@@ -19,6 +20,7 @@ from utils.mod.relations import (
     analyze_mod_relations,
     recommend_mod_arrangement,
 )
+from utils.problem_text import describe_finding
 
 
 @dataclass(frozen=True)
@@ -109,10 +111,10 @@ class ModDiagnosticsService:
                 issues.append(
                     DiagnosticIssue(
                         "error",
-                        "Selected mod is unavailable",
-                        f"G3M cannot resolve the current configuration or paths for {mod_id}.",
+                        tr("problems.diag.mod_unavailable"),
+                        tr("problems.diag.mod_unavailable_text", mod=mod_id),
                         (mod_id,),
-                        recommendation="Refresh the library or remove the unavailable mod from the profile.",
+                        recommendation=tr("problems.diag.mod_unavailable_fix"),
                     )
                 )
                 continue
@@ -182,10 +184,10 @@ class ModDiagnosticsService:
             issues.append(
                 DiagnosticIssue(
                     "warning",
-                    "Recommended dependency arrangement",
-                    "The active dependencies can be arranged without violating a declared conflict.",
+                    tr("problems.diag.arrangement"),
+                    tr("problems.diag.arrangement_text"),
                     tuple(mod_id for step in arrangement.steps for mod_id in step),
-                    recommendation="Apply the recommended priority steps before launching.",
+                    recommendation=tr("problems.diag.arrangement_fix"),
                     code="dependency_arrangement_recommended",
                     field_path="dependencies",
                 )
@@ -206,17 +208,17 @@ class ModDiagnosticsService:
 
     @staticmethod
     def unavailable_report(message: str) -> DiagnosticsReport:
-        issue = DiagnosticIssue("error", "Current configuration is unavailable", message, recommendation="Refresh the library and resolve the highlighted migration error.")
+        issue = DiagnosticIssue("error", tr("problems.diag.config_unavailable"), message, recommendation=tr("problems.diag.config_unavailable_fix"))
         return DiagnosticsReport(DiagnosticsSummary(issues=1), (), (), (issue,))
 
     @staticmethod
     def _plan_issue(name: str, mod_id: str, finding: PlanFinding) -> DiagnosticIssue:
         return DiagnosticIssue(
             finding.severity,
-            f"Operation {finding.operation_index}: {finding.code.replace('_', ' ')}",
-            f"{name}: {finding.message}",
+            tr("problems.plan.title"),
+            f"{name}: {describe_finding(finding)}",
             (mod_id,),
-            recommendation="Fix the listed source or target before launching.",
+            recommendation=tr("problems.plan.fix"),
             code=finding.code,
         )
 
@@ -255,11 +257,11 @@ class ModDiagnosticsService:
         issues = [
             DiagnosticIssue(
                 "error",
-                "File conflict",
-                "Multiple selected mods write to the same target path.",
+                tr("problems.diag.file_conflict"),
+                tr("problems.diag.file_conflict_text"),
                 tuple(impact.mod_name for impact in group),
                 target_path=group[0].target_path,
-                recommendation="Disable one mod for this run or adjust priority if overwriting is intended.",
+                recommendation=tr("problems.diag.file_conflict_fix"),
                 code="file_conflict",
             )
             for group in conflicts
@@ -274,11 +276,11 @@ class ModDiagnosticsService:
         return [
             DiagnosticIssue(
                 "warning",
-                "DATA patch sequence requires verification",
-                "Multiple DATA patches target the same file. Run the actual-result preflight before launching.",
+                tr("problems.diag.data_overlap"),
+                tr("problems.diag.data_overlap_text"),
                 tuple(impact.mod_name for impact in group),
                 target_path=group[0].target_data_path or "",
-                recommendation="Run Analyze Actual Launch Result and review the reported file changes.",
+                recommendation=tr("problems.diag.data_overlap_fix"),
                 code="data_overlap",
             )
             for group in by_target.values()

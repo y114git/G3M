@@ -5,6 +5,8 @@
 - Fixed G3M crashing on Arch Linux and SteamOS when typing text and when a mod is installed through Manual installation. The Linux build now uses the keyboard, glib and font libraries of your system.
 - Fixed **Diff** in Modding tools listing hundreds of untouched sprites and sounds as changed, which also made patches and merges carry things the mod never touched. Merging patches also keeps every edit when another patch deletes an object, and keeps the audio of every new sound.
 - Fixed a plugin or theme showing **Failed** in Downloads after it was installed, after an update, or after a restart. Retry and Reinstall now download the file again when it is gone.
+- Fixed the patching risk warning for files inside your game folder, game data folder or the mod folder. Only paths outside them are reported now, and a new file created there no longer counts as a risk.
+- Patch, merge, diagnostics and Modding tools messages now say what went wrong, which mod file and game file it is about, and what to do. The technical details stay in the log. The diagnostics report is translated too.
 
 ### Version 3.4.5 — 04.11.26
 

@@ -44,6 +44,7 @@ from utils.mod.operation_plan import (
     build_mod_operation_plan,
 )
 from utils.path_utils import resolve_execution_runtime, resolve_game_executable
+from utils.problem_text import describe_finding
 from workers.mod.operation_worker import describe_step
 
 logger = logging.getLogger(__name__)
@@ -332,7 +333,7 @@ class CreateModpackThread(ManagedQThread):
                 )
                 plan = build_mod_operation_plan(parsed, context)
                 if plan.has_errors:
-                    raise ModOperationExecutionError(plan.findings[0].message)
+                    raise ModOperationExecutionError(plan.findings[0].message, describe_finding(plan.findings[0]))
                 parsed_files = parsed["files"]
                 if not isinstance(parsed_files, list):
                     raise ModOperationExecutionError("mod files are invalid")

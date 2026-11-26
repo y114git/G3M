@@ -29,6 +29,7 @@ from ui.utils.thread_lifetime import safe_emit as _safe_emit
 from utils.mod.archive import ArchiveVirtualPath, list_archive_members
 from utils.network_utils import get_session
 from utils.path_utils import resolve_execution_runtime, resolve_game_executable
+from utils.problem_text import describe_finding
 from utils.process_utils import format_filesystem_error, format_network_error
 
 logger = logging.getLogger(__name__)
@@ -218,7 +219,9 @@ class CreatePatchedVersionWorker(ManagedQThread):
 
             operation_plan, skipped = self._build_operation_plan(Path(temp_game).resolve(strict=False))
             if operation_plan.has_errors:
-                raise ModOperationExecutionError(operation_plan.findings[0].message)
+                raise ModOperationExecutionError(
+                    operation_plan.findings[0].message, describe_finding(operation_plan.findings[0])
+                )
             ModOperationExecutor(
                 Path(self._temp_copy) / "journal", patcher=self._patcher, merger=self._merger
             ).execute(

@@ -17,6 +17,7 @@ from contextlib import ExitStack, suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from services.localization_service import tr
 from services.mod_usage import hold_mods
 from utils.mod.archive import (
     ArchiveVirtualPath,
@@ -51,7 +52,11 @@ def _is_mergeable_target(target: Path | ArchiveVirtualPath | None) -> bool:
 
 
 class ModOperationExecutionError(RuntimeError):
-    """An operation cannot safely be applied."""
+    """An operation cannot safely be applied. `user_message` is the localized text for dialogs and reports."""
+
+    def __init__(self, message: str = "", user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message
 
 
 class ModPatchMismatchError(ModOperationExecutionError):
@@ -613,7 +618,9 @@ class ModOperationExecutor:
 
     def _apply(self, operation: PlannedModOperation, source: Path, target: Path) -> None:
         if not source.exists():
-            raise ModOperationExecutionError(f"source does not exist: {source}")
+            raise ModOperationExecutionError(
+                f"source does not exist: {source}", tr("problems.plan.source_missing", detail=str(source))
+            )
         if operation.type == "patch":
             self._apply_patch(operation, source, target)
             return

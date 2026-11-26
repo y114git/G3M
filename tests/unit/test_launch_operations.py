@@ -87,7 +87,7 @@ def test_launch_builds_one_ordered_operation_plan_from_profile_steps(qapp, tmp_p
 
     assert plan is not None
     assert [operation.index for operation in plan.operations] == [1]
-    assert plan.findings[0].code == "target_missing"
+    assert [finding.code for finding in plan.findings] == ["profile_duplicate_mod"]
 
 
 def test_launch_preserves_simultaneous_mod_steps_for_merging():
@@ -217,7 +217,9 @@ def test_launch_confirms_direct_absolute_operation_paths(qapp, tmp_path):
     game_root.mkdir()
     source = mod_root / "replacement.txt"
     source.write_text("replacement", encoding="utf-8")
-    target = game_root / "target.txt"
+    outside = tmp_path / "outside"  # not the game, data or mod folder
+    outside.mkdir()
+    target = outside / "target.txt"
     target.write_text("original", encoding="utf-8")
     feedback = Mock()
     feedback.ask_patching_warning.return_value = True

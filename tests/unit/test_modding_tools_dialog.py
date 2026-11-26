@@ -985,7 +985,8 @@ def test_data_convert_reports_missing_source(tmp_path):
 
     worker.run()
 
-    assert result == [(False, f"source does not exist: {mod_folder / 'data.win'}")]
+    missing = tr("problems.plan.source_missing", detail=str(mod_folder / "data.win"))
+    assert result == [(False, tr("problems.plan.operation", n=1, text=missing))]
 
 
 def test_convert_worker_keeps_generated_patch_even_if_roundtrip_would_fail(tmp_path):

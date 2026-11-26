@@ -844,7 +844,9 @@ def test_plan_warns_about_direct_absolute_operation_paths(tmp_path):
     mod_root, game_root, _ = _plan(tmp_path, [])
     source = mod_root / "replacement.txt"
     source.write_text("replacement", encoding="utf-8")
-    target = game_root / "target.txt"
+    outside = tmp_path / "outside"  # not the game, data or mod folder
+    outside.mkdir()
+    target = outside / "target.txt"
     target.write_text("original", encoding="utf-8")
     direct_source = source.as_posix()
     direct_target = target.as_posix()
@@ -860,10 +862,25 @@ def test_plan_warns_about_direct_absolute_operation_paths(tmp_path):
         ),
     )
 
-    assert {finding.code for finding in plan.findings} >= {
-        "direct_absolute_source",
-        "direct_absolute_target",
-    }
+    # The source is in the mod folder, so only the target outside the chosen folders is a risk.
+    assert "direct_absolute_target" in {finding.code for finding in plan.findings}
+
+
+def test_plan_trusts_direct_paths_inside_the_chosen_folders(tmp_path):
+    mod_root, game_root, _ = _plan(tmp_path, [])
+    source = mod_root / "replacement.txt"
+    source.write_text("replacement", encoding="utf-8")
+    plan = build_mod_operation_plan(
+        _config([{"source": source.as_posix(), "target": (game_root / "new" / "added.ogg").as_posix(), "type": "overwrite"}]),
+        ModPathContext.create(
+            mod_path=mod_root,
+            game_path=game_root,
+            game_data_path=None,
+            user_path=tmp_path / "user",
+        ),
+    )
+
+    assert plan.findings == ()
 
 
 def test_journal_checkpoint_accepts_completed_g3m_work(tmp_path):

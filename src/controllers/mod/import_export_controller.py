@@ -146,14 +146,14 @@ class ModImportExportController:
                     )
                     self._safe_show_critical(
                         tr("ui.error"),
-                        f"Failed to load mod config: Failed to load {MOD_CONFIG_FILENAME}: {e}",
+                        tr("problems.mod_config_unreadable"),
                     )
                     return
 
         if not config_data:
             self._safe_show_critical(
                 tr("ui.error"),
-                f"Failed to load mod config: No valid config found in mod folder: {mod_folder}",
+                tr("problems.mod_config_missing", folder=mod_folder),
             )
             return
 
@@ -169,9 +169,9 @@ class ModImportExportController:
                 self.app_window, is_creating=False, mod_data=config_data
             )
             editor.exec()
-        except RuntimeError as e:
+        except RuntimeError:
             self._safe_show_critical(
-                tr("ui.error"), f"Failed to load mod config: {e}"
+                tr("ui.error"), tr("problems.mod_config_unreadable")
             )
 
     def _show_import_dialog(self):

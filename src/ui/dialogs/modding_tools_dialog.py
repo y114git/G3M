@@ -57,6 +57,11 @@ from utils.native_integration import (
     get_save_file_name,
 )
 from utils.path_utils import resolve_execution_runtime, resolve_game_executable
+from utils.problem_text import (
+    describe_finding,
+    friendly_patch_error,
+    friendly_tool_error,
+)
 from utils.process_utils import format_filesystem_error
 
 logger = logging.getLogger(__name__)
@@ -209,7 +214,7 @@ def _show_g3mtool_warning_failure(
     _set_g3mtool_failure_status(label, operation, rc, out, err)
     event = create_warning_event(
         _warning_id_for_g3mtool_failure(operation, details),
-        details=details,
+        details=friendly_tool_error(details),
         fallback_message=tr("modding_tools.failed_details_logged"),
     )
     feedback = FeedbackManager(parent)
@@ -1158,7 +1163,7 @@ class _DataConvertWorkerThread(ManagedQThread):
                 ),
             )
             if operation_plan.has_errors:
-                self.result_ready.emit(False, operation_plan.findings[0].message)
+                self.result_ready.emit(False, describe_finding(operation_plan.findings[0]))
                 return
             files = config_data.get("files")
             if not isinstance(files, list):
@@ -1354,7 +1359,8 @@ class _DataConvertWorkerThread(ManagedQThread):
                                     new_path,
                                 )
                             if rc != 0:
-                                self.result_ready.emit(False, err)
+                                logger.warning("Data convert failed: %s", err)
+                                self.result_ready.emit(False, friendly_patch_error(err, patch_path, staged_target))
                                 return
                     if os.path.normpath(new_path) != os.path.normpath(patch_path):
                         source_paths_to_remove.add(patch_path)

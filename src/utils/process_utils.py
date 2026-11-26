@@ -212,11 +212,21 @@ def format_external_process_error(
 
 def format_filesystem_error(error: Exception, *, path: str = "") -> str:
     error_path = str(getattr(error, "filename", "") or path or "?")
+    user_message = getattr(error, "user_message", None)
+    if user_message:
+        return str(user_message)
     if isinstance(error, PermissionError):
         return tr("errors.permission_denied", path=error_path)
     if isinstance(error, FileNotFoundError):
         return tr("errors.file_not_found", path=error_path)
-    return tr("errors.file_operation_failed", error=str(error))
+    if getattr(error, "errno", None) == errno.ENOSPC:
+        return tr("problems.tool.no_space")
+    from utils.problem_text import classify_tool_output, friendly_tool_error
+
+    if classify_tool_output(error) != "unknown":
+        return friendly_tool_error(error)
+    logger.warning("File operation failed: %s", error)
+    return tr("problems.tool.unknown")
 
 
 def format_network_error(error: Exception, *, url: str = "") -> str:

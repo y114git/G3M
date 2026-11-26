@@ -112,9 +112,7 @@ class DiagnosticsWorker(ManagedQThread):
     def run(self) -> None:
         if self._operation_inputs is None:
             self.result_ready.emit(
-                self._service.unavailable_report(
-                    "One or more selected mods do not have a current configuration."
-                )
+                self._service.unavailable_report(tr("problems.diag.config_unavailable_text"))
             )
             return
         configs, steps, contexts = self._operation_inputs

@@ -74,6 +74,24 @@ class ModPathContext:
         )
 
 
+def is_inside_trusted_root(path: str | Path | ArchiveVirtualPath | None, context: ModPathContext) -> bool:
+    """Whether a path lies in a folder the user chose: the game folder, the game data folder or the mod folder."""
+    if path is None:
+        return False
+    if isinstance(path, ArchiveVirtualPath):
+        path = path.archive
+    selected = Path(path).resolve(strict=False)
+    for root in (context.game_path, context.game_data_path, context.mod_path):
+        if root is None:
+            continue
+        try:
+            selected.relative_to(root.resolve(strict=False))
+        except ValueError:
+            continue
+        return True
+    return False
+
+
 def portable_operation_path(path: str | Path, context: ModPathContext) -> str:
     """Use the most specific standard root, matching complete path components."""
     selected = Path(path).resolve(strict=False)
@@ -102,6 +120,7 @@ class PlanFinding:
     code: str
     operation_index: int
     message: str
+    detail: str = ""  # the path, name or reason the localized text names
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,12 +181,12 @@ def build_profile_operation_plan(
         context = contexts.get(mod_id)
         if config is None:
             findings.append(
-                PlanFinding("error", "config_missing", 0, f"{mod_id}: configuration is unavailable")
+                PlanFinding("error", "config_missing", 0, f"{mod_id}: configuration is unavailable", mod_id)
             )
             continue
         if context is None:
             findings.append(
-                PlanFinding("error", "path_context_missing", 0, f"{mod_id}: path context is unavailable")
+                PlanFinding("error", "path_context_missing", 0, f"{mod_id}: path context is unavailable", mod_id)
             )
             continue
         try:
@@ -176,7 +195,7 @@ def build_profile_operation_plan(
             )
         except ModConfigValidationError as error:
             findings.extend(
-                PlanFinding("error", issue.code, 0, f"{mod_id}: {issue.path}: {issue.message}")
+                PlanFinding("error", issue.code, 0, f"{mod_id}: {issue.path}: {issue.message}", f"{mod_id}: {issue.message}")
                 for issue in error.issues
             )
             continue
@@ -441,17 +460,18 @@ def build_mod_operation_plan(
             is_target=False,
         )
         if source_error:
-            findings.append(PlanFinding("error", "source_root", index, source_error))
+            findings.append(PlanFinding("error", "source_root", index, source_error, source_error))
             continue
         if source is None:
             continue
-        if is_direct_absolute_path(source_value):
+        if is_direct_absolute_path(source_value) and not is_inside_trusted_root(source, context):
             findings.append(
                 PlanFinding(
                     "warning",
                     "direct_absolute_source",
                     index,
                     f"source uses a direct absolute path: {source_value}",
+                    source_value,
                 )
             )
         source_is_directory = source_value.endswith("/")
@@ -467,22 +487,23 @@ def build_mod_operation_plan(
                 is_target=True,
             )
             if target_error:
-                findings.append(PlanFinding("error", "target_root", index, target_error))
+                findings.append(PlanFinding("error", "target_root", index, target_error, target_error))
                 continue
             if target is None:
                 continue
-            if is_direct_absolute_path(target_value):
+            target = _rewrite_target_archive_path(
+                target, game=game, context=context
+            )
+            if is_direct_absolute_path(target_value) and not is_inside_trusted_root(target, context):
                 findings.append(
                     PlanFinding(
                         "warning",
                         "direct_absolute_target",
                         index,
                         f"target uses a direct absolute path: {target_value}",
+                        target_value,
                     )
                 )
-            target = _rewrite_target_archive_path(
-                target, game=game, context=context
-            )
             target_is_directory = target_value.endswith("/")
             overlap = _operation_overlap(
                 source,
@@ -491,12 +512,12 @@ def build_mod_operation_plan(
                 target_is_directory=target_is_directory,
             )
             if overlap:
-                findings.append(PlanFinding("error", "source_target_overlap", index, overlap))
+                findings.append(PlanFinding("error", "source_target_overlap", index, overlap, overlap))
 
         source_exists, source_kind, source_state_error = _resolved_path_state(source)
         if source_state_error:
             findings.append(
-                PlanFinding("error", "source_archive", index, source_state_error)
+                PlanFinding("error", "source_archive", index, source_state_error, source_state_error)
             )
         elif not source_exists:
             findings.append(
@@ -505,6 +526,7 @@ def build_mod_operation_plan(
                     "source_missing",
                     index,
                     f"source does not exist: {_resolved_path_text(source)}",
+                    _resolved_path_text(source),
                 )
             )
         elif source_is_directory != source_kind:
@@ -515,6 +537,7 @@ def build_mod_operation_plan(
                     "source_kind",
                     index,
                     f"source must be a {expected}: {_resolved_path_text(source)}",
+                    _resolved_path_text(source),
                 )
             )
         elif isinstance(source, Path) and source.is_symlink():
@@ -524,16 +547,17 @@ def build_mod_operation_plan(
                     "source_link",
                     index,
                     "source link will be copied as its resolved contents",
+                    _resolved_path_text(source),
                 )
             )
         if source_exists and source_is_directory == source_kind and isinstance(source_hash, str):
             try:
                 if resolved_sha256(source) != source_hash:
                     findings.append(
-                        PlanFinding("error", "source_hash", index, "source hash does not match")
+                        PlanFinding("error", "source_hash", index, "source hash does not match", _resolved_path_text(source))
                     )
             except (ArchiveValidationError, HashValidationError, OSError, ValueError) as error:
-                findings.append(PlanFinding("error", "source_hash", index, str(error)))
+                findings.append(PlanFinding("error", "source_hash", index, str(error), _resolved_path_text(source)))
         if target is not None:
             if isinstance(target, Path) and target.is_symlink():
                 findings.append(
@@ -542,6 +566,7 @@ def build_mod_operation_plan(
                         "target_link",
                         index,
                         "target link will be temporarily replaced and restored after the game closes",
+                        _resolved_path_text(target),
                     )
                 )
             if isinstance(target, ArchiveVirtualPath) and not archive_write_supported(target.archive):
@@ -551,6 +576,7 @@ def build_mod_operation_plan(
                         "target_archive_write",
                         index,
                         f"archive format cannot be written: {target.archive}",
+                        str(target.archive),
                     )
                 )
             target_was_produced = _planned_target_key(target) in produced_targets
@@ -558,27 +584,32 @@ def build_mod_operation_plan(
             target_exists = target_exists or target_was_produced
             if target_state_error:
                 findings.append(
-                    PlanFinding("error", "target_archive", index, target_state_error)
+                    PlanFinding("error", "target_archive", index, target_state_error, target_state_error)
                 )
+            elif not target_exists and operation_type != "patch" and not isinstance(target_hash, str) and is_inside_trusted_root(
+                target, context
+            ):
+                pass  # a new file in the game, data or mod folder is expected, not a risk
             elif not target_exists:
                 severity = "error" if operation_type == "patch" or isinstance(target_hash, str) else "warning"
                 action = "cannot patch" if operation_type == "patch" else "will be created"
                 findings.append(
                     PlanFinding(
                         severity,
-                        "target_missing",
+                        "target_missing" if severity == "error" else "target_created",
                         index,
                         f"target {action}: {_resolved_path_text(target)}",
+                        _resolved_path_text(target),
                     )
                 )
             elif isinstance(target_hash, str) and not target_was_produced:
                 try:
                     if resolved_sha256(target) != target_hash:
                         findings.append(
-                            PlanFinding("error", "target_hash", index, "target hash does not match")
+                            PlanFinding("error", "target_hash", index, "target hash does not match", _resolved_path_text(target))
                         )
                 except (ArchiveValidationError, HashValidationError, OSError, ValueError) as error:
-                    findings.append(PlanFinding("error", "target_hash", index, str(error)))
+                    findings.append(PlanFinding("error", "target_hash", index, str(error), _resolved_path_text(target)))
         operations.append(
             PlannedModOperation(
                 index=index,

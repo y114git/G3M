@@ -216,7 +216,7 @@ class ModOperationThread(ManagedQThread):
             _safe_emit(
                 self.__class__.__name__,
                 self.status_update,
-                tr("errors.mod_patching_failed"),
+                error.user_message or tr("errors.mod_patching_failed"),
                 "error",
             )
         except Exception as error:

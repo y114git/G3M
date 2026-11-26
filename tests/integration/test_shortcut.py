@@ -731,7 +731,9 @@ def test_shortcut_requires_explicit_direct_path_approval(
     source.write_text("replacement", encoding="utf-8")
     game_path = tmp_path / "game"
     game_path.mkdir()
-    target = game_path / "target.txt"
+    outside = tmp_path / "outside"  # a folder the user did not choose as the game or data folder
+    outside.mkdir()
+    target = outside / "target.txt"
     target.write_text("original", encoding="utf-8")
     write_mod_config(
         mod_dir / "mod_config.json",

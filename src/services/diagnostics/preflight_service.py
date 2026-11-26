@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -13,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+from services.localization_service import localization_service, tr
 from services.mod_operation_executor import (
     ModOperationCancelledError,
     ModOperationExecutionError,
@@ -22,6 +24,9 @@ from services.mod_operation_support import create_g3mtool_merger, create_g3mtool
 from utils.mod.archive import ArchiveVirtualPath
 from utils.mod.filesystem import DirectoryTraversalError, iter_directory_tree
 from utils.mod.operation_plan import ModOperationPlan, PlannedModOperation
+from utils.problem_text import describe_finding
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -78,10 +83,13 @@ def _report_html(report: PreflightReport) -> str:
     def esc(value) -> str:
         return html.escape(str(value), quote=True)
 
+    def yes_no(value) -> str:
+        return esc(tr("problems.report.yes" if value else "problems.report.no"))
+
     step_rows = "".join(
         "<tr>"
         f"<td>{esc(item.section_id)}</td><td>{esc(item.step_index)}</td>"
-        f"<td>{esc(', '.join(item.mod_ids))}</td><td>{esc(item.success)}</td>"
+        f"<td>{esc(', '.join(item.mod_ids))}</td><td>{yes_no(item.success)}</td>"
         f"<td>{esc(item.duration_seconds)}</td><td>{esc(item.error)}</td></tr>"
         for item in report.steps
     )
@@ -105,19 +113,24 @@ def _report_html(report: PreflightReport) -> str:
         for item in report.files
     )
     issues = "".join(f"<li>{esc(issue)}</li>" for issue in report.issues)
+
+    def head(*keys: str) -> str:
+        return "<tr>" + "".join(f"<th>{esc(tr('problems.report.' + key))}</th>" for key in keys) + "</tr>"
+
+    title = esc(tr("problems.report.title"))
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>G3M Diagnostics</title><style>
+<html lang="{esc(localization_service.current_language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>{title}</title><style>
 body{{font:14px system-ui,sans-serif;margin:24px;color:#202124;background:#fff}}
 h1,h2{{margin:.4em 0}} .summary{{display:flex;gap:16px;flex-wrap:wrap}}
 table{{border-collapse:collapse;width:100%;margin:12px 0 24px}}th,td{{border:1px solid #bbb;padding:7px;text-align:left;vertical-align:top}}
 th{{background:#eee;position:sticky;top:0}}code{{overflow-wrap:anywhere}}
-</style></head><body><h1>G3M Diagnostics</h1>
-<div class="summary"><b>Success: {esc(report.success)}</b><b>Cancelled: {esc(report.cancelled)}</b><b>Conflicts: {report.conflict_count}</b><b>Duration: {report.duration_seconds:.2f}s</b></div>
-<h2>Steps</h2><table><thead><tr><th>Section</th><th>Step</th><th>Mods</th><th>Success</th><th>Duration</th><th>Error</th></tr></thead><tbody>{step_rows}</tbody></table>
-<h2>Resources</h2><table><thead><tr><th>Section</th><th>Step</th><th>Type</th><th>Operation</th><th>Name</th><th>Mods</th><th>Files</th><th>Details</th></tr></thead><tbody>{resource_rows}</tbody></table>
-<h2>Files</h2><table><thead><tr><th>Path</th><th>Operation</th><th>Section</th><th>Step</th><th>Mods</th><th>Before</th><th>After</th><th>Before SHA-256</th><th>After SHA-256</th></tr></thead><tbody>{file_rows}</tbody></table>
-<h2>Issues</h2><ul>{issues}</ul></body></html>"""
+</style></head><body><h1>{title}</h1>
+<div class="summary"><b>{esc(tr("problems.report.success"))}: {yes_no(report.success)}</b><b>{esc(tr("problems.report.cancelled"))}: {yes_no(report.cancelled)}</b><b>{esc(tr("problems.report.conflicts"))}: {report.conflict_count}</b><b>{esc(tr("problems.report.duration"))}: {report.duration_seconds:.2f} s</b></div>
+<h2>{esc(tr("problems.report.steps"))}</h2><table><thead>{head("col_section", "col_step", "col_mods", "col_success", "col_duration", "col_error")}</thead><tbody>{step_rows}</tbody></table>
+<h2>{esc(tr("problems.report.resources"))}</h2><table><thead>{head("col_section", "col_step", "col_type", "col_operation", "col_name", "col_mods", "col_files", "col_details")}</thead><tbody>{resource_rows}</tbody></table>
+<h2>{esc(tr("problems.report.files"))}</h2><table><thead>{head("col_path", "col_operation", "col_section", "col_step", "col_mods", "col_before", "col_after", "col_before_hash", "col_after_hash")}</thead><tbody>{file_rows}</tbody></table>
+<h2>{esc(tr("problems.report.issues"))}</h2><ul>{issues}</ul></body></html>"""
 
 
 def export_preflight_report(report: PreflightReport, html_path: str) -> tuple[str, str]:
@@ -317,7 +330,7 @@ class DiagnosticsPreflightService:
         progress: Callable[[int, str], None] | None = None,
     ) -> PreflightReport:
         started = time.monotonic()
-        issues = [finding.message for finding in plan.findings]
+        issues = [describe_finding(finding) for finding in plan.findings]
         if self._cancelled:
             return PreflightReport(False, True, time.monotonic() - started)
         if plan.has_errors:
@@ -391,8 +404,10 @@ class DiagnosticsPreflightService:
                 except ModOperationExecutionError as error:
                     if self._cancelled or isinstance(error, ModOperationCancelledError):
                         return PreflightReport(False, True, time.monotonic() - started, tuple(steps), files=tuple(files), issues=tuple(issues))
-                    steps.append(PreflightStepResult(section, operation.index, mod_ids, False, time.monotonic() - step_started, str(error)))
-                    return PreflightReport(False, False, time.monotonic() - started, tuple(steps), files=tuple(files), issues=(*issues, str(error)))
+                    logger.error("Preflight step failed: %s", error)
+                    shown = error.user_message or str(error)
+                    steps.append(PreflightStepResult(section, operation.index, mod_ids, False, time.monotonic() - step_started, shown))
+                    return PreflightReport(False, False, time.monotonic() - started, tuple(steps), files=tuple(files), issues=(*issues, shown))
                 after, errors = self._snapshot_roots(root_pairs)
                 files.extend(_compare_snapshots(before, after, section_id=section, step_index=operation.index, mod_ids=mod_ids))
                 if errors:

@@ -27,6 +27,11 @@ from utils.mod.operation_plan import (
     build_profile_operation_plan,
 )
 from utils.mod.utils import get_mod_id
+from utils.problem_text import (
+    describe_finding,
+    friendly_merge_error,
+    friendly_patch_error,
+)
 from utils.process_utils import (
     SCROLL_DIALOG_MAX_CHARS,
     SCROLL_DIALOG_MAX_LINES,
@@ -115,18 +120,19 @@ def collect_profile_operation_inputs(
                     "config_version",
                     0,
                     f"{mod_id}: must be migrated to the current config format before use",
+                    mod_id,
                 )
             )
             continue
         if game_id and config.get("game") != game_id:
             findings.append(
-                PlanFinding("error", "game_mismatch", 0, f"{mod_id}: belongs to a different game")
+                PlanFinding("error", "game_mismatch", 0, f"{mod_id}: belongs to a different game", mod_id)
             )
             continue
         mod_path = mod_service.get_mod_folder_path(mod_id)
         if not mod_path:
             findings.append(
-                PlanFinding("error", "mod_path_missing", 0, f"{mod_id}: mod folder is unavailable")
+                PlanFinding("error", "mod_path_missing", 0, f"{mod_id}: mod folder is unavailable", mod_id)
             )
             continue
         configs[mod_id] = config
@@ -157,7 +163,7 @@ def format_direct_operation_paths(
 def format_direct_operation_plan_paths(plan: ModOperationPlan) -> str:
     return _bounded_warning_lines(
         [
-            f"Operation {finding.operation_index}: {finding.message}"
+            describe_finding(finding)
             for finding in plan.findings
             if finding.code in _DIRECT_ABSOLUTE_CODES
         ]
@@ -232,7 +238,7 @@ def confirm_operation_plan(
                 "patching_warning",
                 details=_bounded_warning_lines(
                     [
-                        f"Operation {finding.operation_index}: {finding.message}"
+                        describe_finding(finding)
                         for finding in review
                     ]
                 ),
@@ -288,8 +294,9 @@ def create_g3mtool_patcher(
         if is_cancelled is not None and is_cancelled():
             raise ModOperationCancelledError("operation cancelled")
         if returncode:
+            output = stderr or stdout or str(returncode)
             raise ModOperationExecutionError(
-                f"patch backend failed: {bounded_output_preview(stderr or stdout or str(returncode))}"
+                f"patch backend failed: {bounded_output_preview(output)}", friendly_patch_error(output, patch, target)
             )
         return True
 
@@ -332,8 +339,9 @@ def create_g3mtool_merger(
         if is_cancelled is not None and is_cancelled():
             raise ModOperationCancelledError("operation cancelled")
         if returncode:
+            output = stderr or stdout or str(returncode)
             raise ModOperationExecutionError(
-                f"patch merge failed: {bounded_output_preview(stderr or stdout or str(returncode))}"
+                f"patch merge failed: {bounded_output_preview(output)}", friendly_merge_error(output, patches, target)
             )
         return True
 

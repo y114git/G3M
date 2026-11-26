@@ -146,9 +146,8 @@ def test_profile_plan_carries_ordered_target_state_between_mod_configs(tmp_path)
         configs, contexts, ("first", "second")
     )
 
-    assert [(finding.code, finding.operation_index) for finding in plan.findings] == [
-        ("target_missing", 1)
-    ]
+    # A file the mod creates in the game folder is expected, so it is not a finding.
+    assert plan.findings == ()
 
 
 def test_profile_plan_reserves_indices_for_unresolved_operations(tmp_path):
@@ -177,7 +176,6 @@ def test_profile_plan_reserves_indices_for_unresolved_operations(tmp_path):
     assert [(operation.index, operation.mod_id) for operation in plan.operations] == [(2, "first"), (3, "second")]
     assert [(finding.operation_index, finding.code) for finding in plan.findings] == [
         (1, "target_root"),
-        (2, "target_missing"),
     ]
 
 
@@ -255,7 +253,6 @@ def test_planner_reports_missing_source_and_distinguishes_patch_target(tmp_path)
     assert [(finding.severity, finding.code, finding.operation_index) for finding in plan.findings] == [
         ("error", "source_missing", 1),
         ("error", "target_missing", 1),
-        ("warning", "target_missing", 2),
     ]
 
 
@@ -315,7 +312,7 @@ def test_planner_resolves_custom_path_aliases(tmp_path):
     )
 
     assert plan.operations[0].target == tmp_path / "user" / "AppData" / "Local" / "Test" / "settings.json"
-    assert plan.findings[0].code == "target_missing"
+    assert plan.findings[0].code == "target_created"
 
 
 @pytest.mark.parametrize(
@@ -511,9 +508,7 @@ def test_planner_accepts_patch_after_ordered_overwrite_to_new_target(tmp_path):
         ),
     )
 
-    assert [(finding.code, finding.operation_index) for finding in plan.findings] == [
-        ("target_missing", 1)
-    ]
+    assert plan.findings == ()
 
 
 def test_planner_rejects_source_target_overlap(tmp_path):

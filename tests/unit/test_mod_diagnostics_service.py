@@ -49,7 +49,6 @@ def test_operation_diagnostics_reuses_shared_plan_and_relation_results(tmp_path)
     assert report.summary.selected_mods == 1
     assert report.summary.new_files == 1
     assert {(issue.severity, issue.code) for issue in report.issues} == {
-        ("warning", "target_missing"),
         ("warning", "dependency_missing"),
     }
 

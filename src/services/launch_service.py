@@ -50,8 +50,10 @@ from utils.path_utils import (
     resolve_execution_runtime,
     resolve_game_executable,
 )
+from utils.problem_text import describe_finding
 from utils.process_utils import (
     build_external_process_env,
+    format_filesystem_error,
     join_limited,
     resolve_portproton_command,
     resolve_wine_command,
@@ -315,7 +317,7 @@ class GameLauncher(QObject):
                 file=os.path.basename(target_path or command_name),
             )
 
-        return tr("errors.game_launch_error", error=str(launch_error))
+        return tr("errors.game_launch_error", error=format_filesystem_error(launch_error))
 
     def _plugin_runtime_service(self):
         parent = self.parent()
@@ -1351,6 +1353,7 @@ class GameLauncher(QObject):
                         finding.code,
                         0,
                         f"{scope}: {name}: {finding.message} Related mod: {finding.related_id}.",
+                        f"{name}: {finding.message}",
                     )
                 )
         return tuple(findings)
@@ -1907,7 +1910,7 @@ class GameLauncher(QObject):
         if operation_plan is None:
             return False
         if operation_plan.has_errors:
-            message = operation_plan.findings[0].message
+            message = describe_finding(operation_plan.findings[0])
             self.status_changed.emit(message, UI_COLORS["status_error"])
             return False
         if not operation_plan.operations:
