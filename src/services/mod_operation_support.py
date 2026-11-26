@@ -294,9 +294,9 @@ def create_g3mtool_patcher(
         if is_cancelled is not None and is_cancelled():
             raise ModOperationCancelledError("operation cancelled")
         if returncode:
-            output = stderr or stdout or str(returncode)
+            failure = stderr or stdout or str(returncode)
             raise ModOperationExecutionError(
-                f"patch backend failed: {bounded_output_preview(output)}", friendly_patch_error(output, patch, target)
+                f"patch backend failed: {bounded_output_preview(failure)}", friendly_patch_error(failure, patch, target)
             )
         return True
 
@@ -339,9 +339,9 @@ def create_g3mtool_merger(
         if is_cancelled is not None and is_cancelled():
             raise ModOperationCancelledError("operation cancelled")
         if returncode:
-            output = stderr or stdout or str(returncode)
+            failure = stderr or stdout or str(returncode)
             raise ModOperationExecutionError(
-                f"patch merge failed: {bounded_output_preview(output)}", friendly_merge_error(output, patches, target)
+                f"patch merge failed: {bounded_output_preview(failure)}", friendly_merge_error(failure, patches, target)
             )
         return True
 
