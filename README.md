@@ -67,6 +67,9 @@ Release downloads are available for Windows, Linux, and macOS on both x86_64 and
 
 ## A Closer Look
 
+<details open>
+<summary><strong>Show or hide the screenshots</strong></summary>
+
 <p align="center">
   <img src="screenshots/mods-browser.png" alt="The G3M mods browser" width="900">
   <br>
@@ -76,8 +79,28 @@ Release downloads are available for Windows, Linux, and macOS on both x86_64 and
 <p align="center">
   <img src="screenshots/appearance.png" alt="The G3M appearance settings" width="900">
   <br>
-  <em>Change background, logo, font, music, colors and border radius, or import and export a whole theme.</em>
+  <em>Change background, logo, font, music, colors and border radius, pick a downloaded theme, or import and export one.</em>
 </p>
+
+<p align="center">
+  <img src="screenshots/themes-catalog.png" alt="The G3M theme catalog" width="900">
+  <br>
+  <em>Download themes and plugins from the built-in catalog and apply them in one click.</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/save-manager-plugin.png" alt="The DR Save Manager plugin" width="900">
+  <br>
+  <em>Plugins add their own tabs: DR Save Manager lists every DELTARUNE save slot by chapter.</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/save-editor.png" alt="Editing a DELTARUNE save" width="700">
+  <br>
+  <em>Edit a save slot in simple or advanced mode, with undo and redo.</em>
+</p>
+
+</details>
 
 ## Features
 
