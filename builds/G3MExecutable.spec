@@ -193,7 +193,7 @@ a.datas = [
 if sys.platform.startswith('linux'):
     # These libraries load their own plugins and data from the host by name (keymaps, gio modules, font configuration),
     # so a copy built on the CI image does not match them: it crashes G3M when typing and at exit on Arch and SteamOS.
-    host_libraries = ('libxkbcommon', 'libglib-2.0', 'libgobject-2.0', 'libgio-2.0', 'libgmodule-2.0', 'libfontconfig')
+    host_libraries = ('libxkbcommon.so', 'libglib-2.0', 'libgobject-2.0', 'libgio-2.0', 'libgmodule-2.0', 'libfontconfig')
     a.binaries = [entry for entry in a.binaries if not Path(entry[0]).name.startswith(host_libraries)]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
