@@ -189,7 +189,7 @@ jobs:
   retry:
     name: Start the tests again
     needs: test
-    if: ${{ always() && needs.test.result != 'success' && github.event_name != 'pull_request' && fromJSON(github.event.inputs.attempt || '1') < 3 }}
+    if: ${{ !cancelled() && needs.test.result == 'cancelled' && github.event_name != 'pull_request' && fromJSON(github.event.inputs.attempt || '1') < 3 }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -198,7 +198,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ATTEMPT: ${{ github.event.inputs.attempt || '1' }}
-        run: gh workflow run test-g3m.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }} -f attempt=$((ATTEMPT + 1)) -f previous=${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh workflow run test-g3m.yml --repo "$REPO" --ref "$REF" -f attempt=$((ATTEMPT + 1)) -f previous="$RUN_ID"
 
   # The run that was started again is removed, so its cancelled jobs do not leave a red mark on the commit.
   replace:
@@ -212,9 +215,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIOUS: ${{ github.event.inputs.previous }}
+          REPO: ${{ github.repository }}
         run: |
           for _ in $(seq 1 60); do
-            [ "$(gh run view "$PREVIOUS" --repo ${{ github.repository }} --json status --jq .status)" = completed ] && break
+            [ "$(gh run view "$PREVIOUS" --repo "$REPO" --json status --jq .status)" = completed ] && break
             sleep 10
           done
-          gh run delete "$PREVIOUS" --repo ${{ github.repository }}
+          gh run delete "$PREVIOUS" --repo "$REPO"
