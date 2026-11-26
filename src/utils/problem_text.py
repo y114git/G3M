@@ -16,7 +16,7 @@ _TOOL_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("tool_missing", re.compile(r"xdelta executable not found|no xdelta is bundled", re.I)),
     ("timeout", re.compile(r"timed out", re.I)),
     ("no_memory", re.compile(r"out of memory|malloc:|memoryerror|cannot allocate memory", re.I)),
-    ("no_space", re.compile(r"no space left|not enough space|disk full|write failed|close failed", re.I)),
+    ("no_space", re.compile(r"no space left|not enough space|disk full", re.I)),
     (
         "access_denied",
         re.compile(r"access to the path|permission denied|being used by another process|access is denied", re.I),
@@ -37,7 +37,7 @@ _TOOL_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "patch_invalid",
         re.compile(
-            r"not a vcdiff|invalid delta indicator|vcdiff input version|overflow|decode error|invalid patch|"
+            r"not a vcdiff|invalid delta indicator|vcdiff input version|overflow (in|while)|window overflows|decode error|invalid patch|"
             r"unsupported resource type in patch|secondary decoder|xd3_invalid|xd3_unimplemented",
             re.I,
         ),
@@ -87,7 +87,8 @@ def describe_finding(finding) -> str:
     """Localized text of a plan finding: the operation it is about, then what is wrong and what to do."""
     detail = getattr(finding, "detail", "") or ""
     key = f"problems.plan.{finding.code}"
-    text = tr(key, detail=detail)
+    known = "." not in finding.code and finding.code not in {"operation", "title", "fix", "generic"}
+    text = tr(key, detail=detail) if known else f"[{key}]"
     if text == f"[{key}]":  # no text for this code: the generic line carries the plain message
         text = tr("problems.plan.generic", detail=detail or finding.message)
     if finding.operation_index > 0:

@@ -89,7 +89,7 @@ def test_format_filesystem_error_reports_missing_file():
 
 
 def test_format_filesystem_error_falls_back_to_generic_message():
-    assert format_filesystem_error(OSError("odd failure")) == tr("problems.tool.unknown")
+    assert format_filesystem_error(OSError("odd failure")) == tr("errors.file_operation_failed", error="odd failure")
     assert format_filesystem_error(OSError("Disk full")) == tr("problems.tool.no_space")
 
 

@@ -170,6 +170,7 @@ class ModImportExportController:
             )
             editor.exec()
         except RuntimeError:
+            logger.error("Failed to open the mod editor for %s", mod_folder, exc_info=True)
             self._safe_show_critical(
                 tr("ui.error"), tr("problems.mod_config_unreadable")
             )

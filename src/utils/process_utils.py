@@ -225,8 +225,7 @@ def format_filesystem_error(error: Exception, *, path: str = "") -> str:
 
     if classify_tool_output(error) != "unknown":
         return friendly_tool_error(error)
-    logger.warning("File operation failed: %s", error)
-    return tr("problems.tool.unknown")
+    return tr("errors.file_operation_failed", error=str(error))
 
 
 def format_network_error(error: Exception, *, url: str = "") -> str:

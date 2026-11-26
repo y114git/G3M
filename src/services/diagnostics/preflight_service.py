@@ -119,7 +119,7 @@ def _report_html(report: PreflightReport) -> str:
 
     title = esc(tr("problems.report.title"))
     return f"""<!doctype html>
-<html lang="{esc(localization_service.current_language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<html lang="{esc(localization_service.current_language.replace("_", "-"))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{title}</title><style>
 body{{font:14px system-ui,sans-serif;margin:24px;color:#202124;background:#fff}}
 h1,h2{{margin:.4em 0}} .summary{{display:flex;gap:16px;flex-wrap:wrap}}
