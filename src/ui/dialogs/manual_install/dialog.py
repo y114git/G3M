@@ -114,11 +114,10 @@ _ACTIONS = (
 
 
 class _RowDelegate(QStyledItemDelegate):
-    def sizeHint(self, option, index):
-        size = super().sizeHint(option, index)
-        # the item text alone can be shorter than a line edit, which then squashes when a cell is edited
-        size.setHeight(max(size.height(), option.fontMetrics.height() + 10))
-        return size
+    def updateEditorGeometry(self, editor, option, index):  # noqa: N802
+        # the default editor rect is the text area, which the item padding shrinks until the text is clipped
+        if editor is not None:
+            editor.setGeometry(option.rect)
 
 
 class _ActionDelegate(_RowDelegate):
