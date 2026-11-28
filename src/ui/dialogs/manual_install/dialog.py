@@ -113,7 +113,15 @@ _ACTIONS = (
 )
 
 
-class _ActionDelegate(QStyledItemDelegate):
+class _RowDelegate(QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        # the item text alone can be shorter than a line edit, which then squashes when a cell is edited
+        size.setHeight(max(size.height(), option.fontMetrics.height() + 10))
+        return size
+
+
+class _ActionDelegate(_RowDelegate):
     def createEditor(self, parent, option, index):  # noqa: N802
         editor = QComboBox(parent)
         dialog = cast(ManualModInstallDialog, cast(QWidget, self.parent()).window())
@@ -140,7 +148,7 @@ class _ActionDelegate(QStyledItemDelegate):
         model.setData(index, editor.currentText(), Qt.ItemDataRole.EditRole)
 
 
-class _SourceDelegate(QStyledItemDelegate):
+class _SourceDelegate(_RowDelegate):
     def createEditor(self, parent, option, index):  # noqa: N802
         return None
 
@@ -339,6 +347,7 @@ class ManualModInstallDialog(DynamicDialog):
         )
         self.sources.setItemDelegateForColumn(1, _ActionDelegate(self.sources))
         self.sources.setItemDelegateForColumn(0, _SourceDelegate(self.sources))
+        self.sources.setItemDelegateForColumn(2, _RowDelegate(self.sources))
         cast(QHeaderView, self.sources.header()).setSectionResizeMode(
             0, QHeaderView.ResizeMode.Interactive
         )
