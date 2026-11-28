@@ -499,12 +499,16 @@ class SaveEditorDialog(DynamicDialog):
             QPushButton {{ background-color: {button}; border: 2px solid {border}; border-radius: {radius}px; color: {text}; padding: 6px 10px; }}
             QPushButton:hover {{ background-color: {button_hover}; }}
             QPushButton:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTableWidget:focus {{ border-color: {text}; }}
-            QLineEdit,
-    QListView,
-    QListView, QComboBox, QSpinBox, QTableWidget {{ background-color: rgba(0,0,0,0.16); border: 2px solid {border}; border-radius: {radius}px; color: {text}; padding: 6px 8px; }}
+            QLineEdit, QListView, QComboBox, QSpinBox, QTableWidget {{ background-color: rgba(0,0,0,0.16); border: 2px solid {border}; border-radius: {radius}px; color: {text}; padding: 6px 8px; }}
             QComboBox, QLineEdit, QSpinBox {{ min-height: 36px; }}
+            QTableWidget QLineEdit, QTableWidget QLineEdit:focus {{ border: none; border-radius: 0px; padding: 0px 4px; min-height: 0px; }}
             QScrollArea {{ border: none; background: transparent; }}
             """
+        )
+        # the header sizes rows from its own font, so a larger app font would clip the rows and their editor
+        self.table.ensurePolished()
+        cast(QHeaderView, self.table.verticalHeader()).setDefaultSectionSize(
+            self.table.fontMetrics().height() + 8
         )
 
     def _load_file(self) -> None:

@@ -1665,3 +1665,20 @@ def test_manual_install_hides_the_add_game_button_without_a_registry(manual_pare
 
     assert dialog.add_game_button.isHidden()
     dialog._stop_detection()
+
+
+def test_destination_editor_fits_its_row(qtbot, manual_parent, tmp_path):
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    (prepared / "payload.bin").write_bytes(b"payload")
+    dialog = ManualModInstallDialog(manual_parent, str(prepared))
+    qtbot.addWidget(dialog)
+    dialog._stop_detection()
+    dialog._assign("payload.bin", {"type": "overwrite", "target": "${game_path}/payload.bin"})
+    dialog.show()
+    dialog.sources.editItem(dialog._items["payload.bin"], 2)
+    viewport = cast(QWidget, dialog.sources.viewport())
+    qtbot.waitUntil(lambda: bool(viewport.findChildren(QLineEdit)))
+    editor = viewport.findChildren(QLineEdit)[0]
+    # the dialog-wide field padding must neither squash the in-row editor nor spill it over other rows
+    assert editor.sizeHint().height() <= editor.height() <= dialog.sources.visualItemRect(dialog._items["payload.bin"]).height()

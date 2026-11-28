@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 from PyQt6.QtCore import QThread, QTimer
-from PyQt6.QtWidgets import QComboBox, QFrame, QLabel, QVBoxLayout
+from PyQt6.QtWidgets import QComboBox, QFrame, QLabel, QLineEdit, QVBoxLayout
 
 PLUGIN_DIR = (
     Path(__file__).resolve().parents[3]
@@ -544,3 +544,19 @@ def test_operation_round_trip_preserves_extended_flag_tail():
     assert len(parsed["flags"]) == 2509
     assert parsed["flags"][-1] == 123
     assert module.serialize_save_data(parsed) == lines
+
+
+def test_save_editor_cell_editor_fits_its_row(tmp_path, qapp, qtbot):
+    module = _editor_module()
+    save_path = tmp_path / "filech1_0"
+    save_path.write_text("KRIS\n", encoding="utf-8")
+    dialog = module.SaveEditorDialog(str(save_path), SimpleNamespace(local_config={}))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.mode_tabs.setCurrentWidget(dialog._advanced_tab)
+    dialog.table.editItem(dialog.table.item(0, 2))
+    viewport = dialog.table.viewport()
+    qtbot.waitUntil(lambda: bool(viewport.findChildren(QLineEdit)))
+    editor = viewport.findChildren(QLineEdit)[0]
+    # the dialog-wide field padding and height must neither squash the in-cell editor nor spill it over other rows
+    assert editor.sizeHint().height() <= editor.height() <= dialog.table.rowHeight(0)

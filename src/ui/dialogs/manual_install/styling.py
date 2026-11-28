@@ -19,6 +19,7 @@ def apply_manual_install_theme(dialog) -> None:
         QTreeWidget::item:selected {{ background: {theme["hover"]}; color: {theme["main_text"]}; }}
         QHeaderView::section {{ background: {theme["background"]}; color: {theme["main_text"]}; border: 2px solid {theme["border"]}; padding: 6px; }}
         QLineEdit[invalid="true"] {{ border: 2px solid #F44336; }}
+        QTreeWidget QLineEdit, QTreeWidget QLineEdit:focus, QTreeWidget QComboBox {{ border: none; border-radius: 0px; padding: 0px 4px; min-height: 0px; }}
         QToolButton {{ background: {theme["elements"]}; color: {theme["main_text"]}; border: 2px solid {theme["border"]}; border-radius: {theme["button_radius"]}px; padding: 8px 36px 8px 10px; font-weight: bold; }}
         QToolButton:hover:enabled {{ background: {theme["hover"]}; }}
         QToolButton:disabled {{ color: #8f8f8f; border-color: #6f6f6f; }}
